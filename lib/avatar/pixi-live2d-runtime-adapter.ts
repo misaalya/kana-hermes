@@ -31,15 +31,22 @@ function renderResolution(): number {
   return Math.min(window.devicePixelRatio || 1, 2);
 }
 
-/** Frame pacing depends on device capability, never on render quality. */
-function lowPowerDevice(): boolean {
-  const capabilities = navigator as Navigator & { deviceMemory?: number };
-  return (
-    window.matchMedia("(max-width: 700px)").matches ||
-    (capabilities.deviceMemory !== undefined && capabilities.deviceMemory <= 4) ||
-    navigator.hardwareConcurrency <= 4
-  );
+/**
+ * Cubism renders clipping masks (hair, eyes, costume overlaps) into an
+ * offscreen framebuffer whose default size is only 256px. Raising it sharpens
+ * masked edges, but the fill cost grows quadratically, so the buffer is sized
+ * from the real backing resolution and capped: never sharper than the canvas
+ * itself, never below the SDK default.
+ */
+function clippingMaskBufferSize(width: number, height: number): number {
+  const backing = Math.ceil(Math.max(width, height) * renderResolution());
+  return Math.min(1024, Math.max(256, backing));
 }
+
+type MotionCurveList = {
+  at(index: number): { id?: unknown } | undefined;
+  getSize(): number;
+};
 
 type CubismInternals = {
   idManager: { getId(id: string): unknown };
@@ -48,6 +55,14 @@ type CubismInternals = {
   };
   motionManager?: {
     definitions?: Record<string, Array<{ Sound?: string }> | undefined>;
+    motionGroups?: Partial<Record<string, Array<unknown | undefined | null>>>;
+    on?(
+      event: string,
+      listener: (...args: unknown[]) => void,
+    ): unknown;
+  };
+  focusController?: {
+    focus(x: number, y: number, instant?: boolean): void;
   };
   renderer?: {
     setClippingMaskBufferSize?(size: number): void;
@@ -115,7 +130,10 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
       application = nextApplication
         .init({
           canvas,
-          antialias: true,
+          // MSAA is intentionally off: Live2D drawables are alpha-blended
+          // textured quads, so multisampling does not soften texture edges but
+          // still multiplies the fill cost of a fullscreen canvas on weak GPUs.
+          antialias: false,
           autoDensity: true,
           backgroundAlpha: 0,
           preference: "webgl",
@@ -136,7 +154,7 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
       throw error;
     }
     const { app } = canvasApplication;
-    app.ticker.maxFPS = lowPowerDevice() ? 30 : 60;
+    app.ticker.maxFPS = 60;
     // Reuse the renderer when a user replaces a model. Destroying and
     // immediately recreating a Pixi application on the same browser canvas
     // can stall WebGL; one weakly-held application also bounds context usage.
@@ -158,6 +176,12 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
         autoFocus: false,
         autoHitTest: false,
         crossOrigin: "anonymous",
+        // Drive Cubism updates from the application's own ticker instead of
+        // the uncapped global Ticker.shared. This keeps motion evaluation
+        // locked to rendered frames (no wasted updates on skipped frames or
+        // high-refresh displays) and stops it automatically whenever the
+        // stage pauses the ticker (hidden tab, offscreen stage, lost context).
+        ticker: app.ticker,
         // Keep the engine default full-mipmap texture strategy. Forcing a
         // downsampled "single-auto" atlas halved texture resolution and made
         // fine model edges look broken.
@@ -165,10 +189,10 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
     );
 
     const internals = model.internalModel as unknown as CubismInternals;
-    // Cubism renders clipping masks (hair, eyes, costume overlaps) into a
-    // framebuffer that defaults to only 256px, which fragments visible edges.
-    // Raise it once per load; the engine rebuilds its mask buffers for us.
-    internals.renderer?.setClippingMaskBufferSize?.(2048);
+    const hostBounds = host.getBoundingClientRect();
+    internals.renderer?.setClippingMaskBufferSize?.(
+      clippingMaskBufferSize(hostBounds.width, hostBounds.height),
+    );
     for (const definitions of Object.values(
       internals.motionManager?.definitions ?? {},
     )) {
@@ -211,6 +235,80 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
     );
     visibilityObserver.observe(host);
     document.addEventListener("visibilitychange", updatePlayback);
+
+    // --- Cursor focus (eye tracking), modeled on AIRI's Live2D stage -----
+    // The avatar watches the pointer while it moves and gently drifts its
+    // gaze around after a short pause. All of this lives in the runtime
+    // adapter closure: pointer movement must never re-render React
+    // components, and the presentation layer stays unaware of it.
+    let focusActive = true;
+    const focusController = internals.focusController;
+    const stripEyeballCurves = (motion: unknown) => {
+      const curves = (
+        motion as { _motionData?: { curves?: MotionCurveList } } | null
+      )?._motionData?.curves;
+      if (!curves || typeof curves.at !== "function") return;
+      const count = curves.getSize();
+      for (let index = 0; index < count; index += 1) {
+        const curve = curves.at(index);
+        if (!curve) continue;
+        const id = curve.id as
+          | { getString?(): { s?: string } }
+          | string
+          | undefined;
+        const name =
+          typeof id === "string" ? id : (id?.getString?.().s ?? null);
+        if (name !== "ParamEyeBallX" && name !== "ParamEyeBallY") continue;
+        // Rename the curve to an unknown parameter id. Cubism routes writes
+        // to unknown ids into dummy storage, so the motion's eyeball values
+        // never reach the real parameters and cannot fight the focus
+        // controller, which adds its gaze on top of motion values.
+        curve.id = internals.idManager.getId(`_kanaFocus${name}`);
+      }
+    };
+    const motionManager = internals.motionManager;
+    if (motionManager) {
+      for (const motions of Object.values(
+        motionManager.motionGroups ?? {},
+      )) {
+        for (const motion of motions ?? []) stripEyeballCurves(motion);
+      }
+      // Motions load lazily; strip each one as it finishes loading.
+      motionManager.on?.("motionLoaded", (_group, _index, motion) => {
+        if (focusActive) stripEyeballCurves(motion);
+      });
+    }
+    const POINTER_FOCUS_HOLD_MS = 1_000;
+    let lastPointerFocusAt = -Number.POSITIVE_INFINITY;
+    const handlePointerMove = (event: PointerEvent) => {
+      if (document.hidden) return;
+      const bounds = host.getBoundingClientRect();
+      // The canvas fills the host, so host-relative coordinates are the
+      // Pixi world coordinates that model.focus() expects.
+      model.focus(event.clientX - bounds.left, event.clientY - bounds.top);
+      lastPointerFocusAt = performance.now();
+    };
+    const handlePointerLeave = () => {
+      lastPointerFocusAt = -Number.POSITIVE_INFINITY;
+    };
+    host.addEventListener("pointermove", handlePointerMove, { passive: true });
+    host.addEventListener("pointerleave", handlePointerLeave);
+    let wanderClock = Math.random() * Math.PI * 2;
+    const wanderTick = (ticker: { deltaMS: number }) => {
+      if (!focusActive) return;
+      if (performance.now() - lastPointerFocusAt < POINTER_FOCUS_HOLD_MS) {
+        return;
+      }
+      wanderClock += ticker.deltaMS / 1000;
+      // A slow, small Lissajous drift keeps the avatar looking around
+      // while the cursor is idle or outside the stage.
+      focusController?.focus(
+        Math.sin(wanderClock * 0.31) * 0.34,
+        Math.sin(wanderClock * 0.19) * 0.22,
+      );
+    };
+    app.ticker.add(wanderTick);
+
     const handleContextLost = (event: Event) => {
       event.preventDefault();
       app.stop();
@@ -250,6 +348,10 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
 
     return {
       destroy() {
+        focusActive = false;
+        host.removeEventListener("pointermove", handlePointerMove);
+        host.removeEventListener("pointerleave", handlePointerLeave);
+        app.ticker.remove(wanderTick);
         observer.disconnect();
         visibilityObserver.disconnect();
         document.removeEventListener("visibilitychange", updatePlayback);

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { memo, useEffect, useRef } from "react";
 import type { KanaMessage } from "@/lib/conversation/types";
 
 type DialogueHistoryProps = {
@@ -12,7 +12,12 @@ function formatTime(timestamp: number): string {
   }).format(timestamp);
 }
 
-export function DialogueHistory({ messages }: DialogueHistoryProps) {
+/**
+ * Memoized: the message list can be long, and the composer draft state above it
+ * changes on every keystroke. The stored history itself only changes when a
+ * turn produces new messages.
+ */
+export const DialogueHistory = memo(function DialogueHistory({ messages }: DialogueHistoryProps) {
   const endRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -67,4 +72,4 @@ export function DialogueHistory({ messages }: DialogueHistoryProps) {
       </div>
     </section>
   );
-}
+});
