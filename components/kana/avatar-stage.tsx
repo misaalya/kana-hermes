@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type { AvatarSnapshot } from "@/lib/avatar/types";
 
 type AvatarStageProps = {
@@ -7,7 +8,12 @@ type AvatarStageProps = {
   onCanvasReady(canvas: HTMLCanvasElement | null): void;
 };
 
-export function AvatarStage({ avatar, status, busy, onCanvasReady }: AvatarStageProps) {
+/**
+ * Memoized: the stage hosts the WebGL canvas, so re-rendering it on every
+ * keystroke (draft state lives in KanaApp) would reconcile React against the
+ * animating canvas subtree for no benefit.
+ */
+export const AvatarStage = memo(function AvatarStage({ avatar, status, busy, onCanvasReady }: AvatarStageProps) {
   const isLive2D = avatar.renderMode === "live2d";
 
   return (
@@ -31,4 +37,4 @@ export function AvatarStage({ avatar, status, busy, onCanvasReady }: AvatarStage
       </div>
     </section>
   );
-}
+});

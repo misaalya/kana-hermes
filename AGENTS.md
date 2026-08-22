@@ -261,6 +261,11 @@ ornamental dashboard. This is a product direction, not a temporary theme.
   Hermes request.
 - A concrete Pixi/WebGL Live2D renderer, centered responsive canvas, emotion
   expressions, motions, talking state, and mouth-parameter updates.
+- AIRI-style cursor focus: the avatar watches the pointer and drifts its gaze
+  after a one-second pause. It lives entirely inside the Pixi runtime adapter
+  (pointer listeners plus a ticker callback, no React state), and eye-ball
+  curves are stripped from loaded motions so they cannot fight the focus
+  controller's additive gaze.
 - Official Haru is the default development avatar and official Mao is a second
   selectable sample with a different mouth binding (`ParamA`). Both load from
   one pinned commit of Live2D's official sample repository. The required

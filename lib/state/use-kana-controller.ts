@@ -233,6 +233,7 @@ export function useKanaController(appVersion: string) {
   }> | null>(null);
   const completionRequestRef = useRef(0);
   const avatarCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const lastErrorMessageRef = useRef<string | null>(null);
   const avatarKeyRef = useRef("");
   const connectionStartedAtRef = useRef<number | null>(null);
   const turnStartedAtRef = useRef<number | null>(null);
@@ -276,6 +277,17 @@ export function useKanaController(appVersion: string) {
       value: unknown,
       category?: KanaErrorCategory,
     ) => {
+      const message =
+        value instanceof Error
+          ? value.message
+          : typeof value === "string"
+            ? value
+            : "Something went wrong.";
+      // Repeated failures (for example every Hermes reconnect attempt while
+      // the gateway is down) must not mint a fresh error record each time;
+      // new object identities re-render the whole shell on every retry.
+      if (lastErrorMessageRef.current === message) return null;
+      lastErrorMessageRef.current = message;
       const record = classifyKanaError(value, source, category);
       setLastError(record);
       setError(record.message);
@@ -1247,8 +1259,8 @@ export function useKanaController(appVersion: string) {
     async (input: string) => {
       const requestId = ++completionRequestRef.current;
       if (!input.startsWith("/")) {
-        setCommandSuggestions([]);
-        setCommandSuggestionsLoading(false);
+        setCommandSuggestions((current) => (current.length ? [] : current));
+        setCommandSuggestionsLoading((current) => (current ? false : current));
         return;
       }
       const conversationId = activeConversationIdRef.current;
@@ -1301,8 +1313,11 @@ export function useKanaController(appVersion: string) {
 
   const clearCommandSuggestions = useCallback(() => {
     completionRequestRef.current += 1;
-    setCommandSuggestions([]);
-    setCommandSuggestionsLoading(false);
+    // Functional updates that return the current reference make React bail
+    // out, so clearing an already-empty menu (every keystroke while typing a
+    // normal message) costs no re-render at all.
+    setCommandSuggestions((current) => (current.length ? [] : current));
+    setCommandSuggestionsLoading((current) => (current ? false : current));
   }, []);
 
   const createConversation = useCallback(async () => {
@@ -1698,6 +1713,9 @@ export function useKanaController(appVersion: string) {
     previewAvatarEmotion,
     previewAvatarMotion,
     previewAvatarTalking,
-    clearError: () => setError(null),
+    clearError: () => {
+      lastErrorMessageRef.current = null;
+      setError(null);
+    },
   };
 }

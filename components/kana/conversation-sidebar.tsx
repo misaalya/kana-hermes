@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import type { Conversation } from "@/lib/conversation/types";
 
 type ConversationSidebarProps = {
@@ -19,7 +19,11 @@ function formatDate(timestamp: number): string {
   }).format(timestamp);
 }
 
-export function ConversationSidebar({
+/**
+ * Memoized: the conversation list is not affected by composer typing, but it
+ * re-renders with the whole shell on every keystroke unless isolated.
+ */
+export const ConversationSidebar = memo(function ConversationSidebar({
   conversations,
   activeId,
   disabled,
@@ -149,4 +153,4 @@ export function ConversationSidebar({
       </div>
     </aside>
   );
-}
+});

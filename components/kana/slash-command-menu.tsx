@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type { AgentCommandSuggestion } from "@/lib/agent/types";
 
 type SlashCommandMenuProps = {
@@ -8,7 +9,10 @@ type SlashCommandMenuProps = {
   onSelect(command: string): void;
 };
 
-export function SlashCommandMenu({
+/**
+ * Memoized: hidden while typing plain messages, and cheap to skip otherwise.
+ */
+export const SlashCommandMenu = memo(function SlashCommandMenu({
   suggestions,
   loading,
   selectedIndex,
@@ -82,4 +86,4 @@ export function SlashCommandMenu({
       </div>
     </div>
   );
-}
+});
