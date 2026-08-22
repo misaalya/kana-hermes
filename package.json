@@ -1,19 +1,61 @@
 {
-  "name": "kana-alya",
-  "version": "0.1.0",
-  "private": true,
+  "name": "kana",
+  "version": "0.2.0-alpha.1",
+  "private": false,
+  "description": "Local visual-novel interface and launcher for an existing Hermes Agent",
+  "bin": {
+    "kana": "bin/kana.mjs"
+  },
+  "files": [
+    ".npm-package",
+    "bin",
+    "README.md",
+    "CHANGELOG.md",
+    "PLAN.md",
+    "docs"
+  ],
+  "engines": {
+    "node": ">=20.9"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "package:local": "npm run build && node scripts/package-standalone.mjs",
+    "package:npm": "npm run build && node scripts/prepare-npm-package.mjs && npm pack --dry-run --ignore-scripts",
+    "prepack": "npm run build && node scripts/prepare-npm-package.mjs",
     "start": "next start",
-    "lint": "eslint"
+    "start:standalone": "HOSTNAME=127.0.0.1 PORT=3000 node .next/standalone/server.js",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "NEXT_PUBLIC_KANA_DEVELOPMENT_MODE=true node --import tsx --test tests/**/*.test.ts",
+    "test:e2e": "playwright test",
+    "test:live2d:official": "playwright test --config playwright.live2d.config.ts",
+    "test:pwa:built": "playwright test --config playwright.pwa.config.ts",
+    "test:pwa": "npm run package:local && npm run test:pwa:built",
+    "test:hermes:live": "node scripts/hermes-live-audit.mjs",
+    "test:hermes:restart": "node --import tsx scripts/hermes-restart-acceptance.ts",
+    "test:tts:acceptance-harness": "node scripts/qwen3-tts-acceptance.mjs --self-test",
+    "test:dogfood-harness": "node scripts/dogfood-check.mjs --self-test",
+    "test:dogfood-journal": "node scripts/dogfood-journal.mjs --self-test",
+    "test:hermes:active-check": "node scripts/hermes-active-restart-check.mjs --self-test",
+    "quality": "node scripts/quality-gate.mjs",
+    "dogfood:check": "node scripts/dogfood-check.mjs",
+    "dogfood:record": "node scripts/dogfood-journal.mjs record-day",
+    "dogfood:matrix": "node scripts/dogfood-journal.mjs mark-matrix",
+    "hermes:active-check": "node scripts/hermes-active-restart-check.mjs",
+    "tts:dev": "uv run --project services/qwen3-tts kana-qwen3-tts",
+    "tts:acceptance": "node scripts/qwen3-tts-acceptance.mjs",
+    "tts:test": "uv run --project services/qwen3-tts python -m unittest discover -s services/qwen3-tts/tests"
   },
   "dependencies": {
     "next": "16.3.1",
+    "pixi.js": "^8.20.0",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "untitled-pixi-live2d-engine": "^1.3.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -21,6 +63,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.1",
     "tailwindcss": "^4",
+    "tsx": "^4.20.6",
     "typescript": "^5"
   }
 }

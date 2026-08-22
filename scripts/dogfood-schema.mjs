@@ -1,0 +1,15 @@
+export const REQUIRED_DOGFOOD_MATRIX = [
+  "mock-only",
+  "hermes-only",
+  "hermes-qwen",
+  "offline-avatar-fallback",
+  "custom-live2d-model-a",
+  "custom-live2d-model-b",
+  "refresh-and-resume",
+  "hermes-restart-idle",
+  "hermes-restart-active",
+  "qwen-cancel-and-replay",
+  "mobile-installable-web-app",
+  "backup-restore",
+  "subtitle-history-preservation",
+];
