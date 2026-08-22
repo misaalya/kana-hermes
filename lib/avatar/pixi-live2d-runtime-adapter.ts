@@ -22,13 +22,23 @@ const canvasApplications = new WeakMap<
 >();
 let pluginRegistered = false;
 
-function rendererResolution(): number {
+/**
+ * Render at (close to) the display's native pixel density so Live2D edges stay
+ * crisp. Capping this well below devicePixelRatio was the main cause of
+ * jagged/fragmented model outlines on high-DPI screens.
+ */
+function renderResolution(): number {
+  return Math.min(window.devicePixelRatio || 1, 2);
+}
+
+/** Frame pacing depends on device capability, never on render quality. */
+function lowPowerDevice(): boolean {
   const capabilities = navigator as Navigator & { deviceMemory?: number };
-  const constrained =
+  return (
     window.matchMedia("(max-width: 700px)").matches ||
     (capabilities.deviceMemory !== undefined && capabilities.deviceMemory <= 4) ||
-    navigator.hardwareConcurrency <= 4;
-  return Math.min(window.devicePixelRatio || 1, constrained ? 1.25 : 1.75);
+    navigator.hardwareConcurrency <= 4
+  );
 }
 
 type CubismInternals = {
@@ -38,6 +48,9 @@ type CubismInternals = {
   };
   motionManager?: {
     definitions?: Record<string, Array<{ Sound?: string }> | undefined>;
+  };
+  renderer?: {
+    setClippingMaskBufferSize?(size: number): void;
   };
 };
 
@@ -106,7 +119,7 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
           autoDensity: true,
           backgroundAlpha: 0,
           preference: "webgl",
-          resolution: rendererResolution(),
+          resolution: renderResolution(),
           powerPreference: "high-performance",
         })
         .then(() => ({
@@ -123,7 +136,7 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
       throw error;
     }
     const { app } = canvasApplication;
-    app.ticker.maxFPS = rendererResolution() <= 1.25 ? 30 : 60;
+    app.ticker.maxFPS = lowPowerDevice() ? 30 : 60;
     // Reuse the renderer when a user replaces a model. Destroying and
     // immediately recreating a Pixi application on the same browser canvas
     // can stall WebGL; one weakly-held application also bounds context usage.
@@ -145,14 +158,17 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
         autoFocus: false,
         autoHitTest: false,
         crossOrigin: "anonymous",
-        textureOptions: {
-          lod: "single-auto",
-          lodMaxLevel: 1,
-        },
+        // Keep the engine default full-mipmap texture strategy. Forcing a
+        // downsampled "single-auto" atlas halved texture resolution and made
+        // fine model edges look broken.
       },
     );
 
     const internals = model.internalModel as unknown as CubismInternals;
+    // Cubism renders clipping masks (hair, eyes, costume overlaps) into a
+    // framebuffer that defaults to only 256px, which fragments visible edges.
+    // Raise it once per load; the engine rebuilds its mask buffers for us.
+    internals.renderer?.setClippingMaskBufferSize?.(2048);
     for (const definitions of Object.values(
       internals.motionManager?.definitions ?? {},
     )) {

@@ -1,16 +1,22 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Quicksand, M_PLUS_Rounded_1c } from "next/font/google";
 import { ServiceWorkerRegistration } from "./service-worker-registration";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// Rounded-terminal Latin typeface for the UI.
+const kanaSans = Quicksand({
+  variable: "--font-kana-sans",
   subsets: ["latin"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+// Rounded Japanese companion so subtitles in Japanese stay visually consistent.
+// Japanese coverage cannot be preloaded cheaply, so it loads on demand.
+const kanaJapanese = M_PLUS_Rounded_1c({
+  variable: "--font-kana-jp",
+  weight: ["400", "500", "700"],
+  preload: false,
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -27,7 +33,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#5a4b8f",
+  themeColor: "#232323",
   colorScheme: "light",
 };
 
@@ -35,7 +41,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${kanaSans.variable} ${kanaJapanese.variable} h-full antialiased`}
     >
       <body>
         <ServiceWorkerRegistration />
