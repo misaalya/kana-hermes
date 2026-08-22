@@ -103,7 +103,6 @@ const app = spawn(
       HOSTNAME: "127.0.0.1",
       PORT: String(port),
       KANA_LOCAL_RUNTIME_CONTROL: "1",
-      NEXT_PUBLIC_KANA_DEVELOPMENT_MODE: has("--dev-mocks") ? "true" : "false",
     },
     stdio: "inherit",
   },

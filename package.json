@@ -27,7 +27,7 @@
     "start:standalone": "HOSTNAME=127.0.0.1 PORT=3000 node .next/standalone/server.js",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "NEXT_PUBLIC_KANA_DEVELOPMENT_MODE=true node --import tsx --test tests/**/*.test.ts",
+    "test": "node --import tsx --test tests/**/*.test.ts",
     "test:e2e": "playwright test",
     "test:live2d:official": "playwright test --config playwright.live2d.config.ts",
     "test:pwa:built": "playwright test --config playwright.pwa.config.ts",
