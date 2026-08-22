@@ -225,7 +225,7 @@ export function KanaApp({ appVersion }: KanaAppProps) {
                 : "Hermes"}
             </button>
             <button
-              className="header-button"
+              className="header-button activity-button"
               onClick={() => setActivityOpen(!activityOpen)}
               aria-label="Open Hermes activity"
             >
@@ -235,7 +235,7 @@ export function KanaApp({ appVersion }: KanaAppProps) {
               ) : null}
             </button>
             <button
-              className="header-button"
+              className="header-button settings-button"
               onClick={() => setSettingsOpen(true)}
               aria-label="Open settings"
             >

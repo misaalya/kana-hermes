@@ -17,7 +17,7 @@ function responseFor(url: string): Response {
   if (url.endsWith("/v1/health")) {
     return json({
       service: "kana-qwen3-tts",
-      api_version: "1",
+      api_version: "2",
       status: "ready",
       model: "Qwen/test",
       revision: "pinned",
@@ -27,12 +27,14 @@ function responseFor(url: string): Response {
       languages: ["japanese"],
       default_voice_id: "ono_anna",
       supports_instruction: false,
+      supports_voice_clone: true,
+      model_type: "custom_voice",
     });
   }
   if (url.endsWith("/v1/setup")) {
     return json({
       service: "kana-qwen3-tts",
-      api_version: "1",
+      api_version: "2",
       cache_dir: "/srv/qwen-cache",
       cache_exists: true,
       model_cache_detected: true,
@@ -45,10 +47,10 @@ function responseFor(url: string): Response {
   if (url.endsWith("/v1/voices")) {
     return json({
       service: "kana-qwen3-tts",
-      api_version: "1",
+      api_version: "2",
       status: "ready",
       default_voice_id: "ono_anna",
-      voices: [{ id: "ono_anna", language: "multi" }],
+      voices: [{ id: "ono_anna", language: "multi", kind: "preset" }],
     });
   }
   return json({ detail: "not found" }, 404);

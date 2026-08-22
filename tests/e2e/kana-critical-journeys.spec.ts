@@ -198,13 +198,13 @@ test("keeps a separate draft per conversation and searches stored history", asyn
   await composer.fill("draft for the second conversation");
 
   await openHistoryIfNeeded();
-  await page.getByRole("button", { name: /First meeting/ }).click();
+  await page.getByRole("button", { name: /^First meeting/ }).click();
   await expect(composer).toHaveValue("draft for the first conversation");
 
   await openHistoryIfNeeded();
   const search = page.getByRole("searchbox", { name: "Search conversations" });
   await search.fill("First meeting");
-  await expect(page.getByRole("button", { name: /First meeting/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^First meeting/ })).toBeVisible();
   await expect(page.getByText("1 found")).toBeVisible();
   await search.fill("does not exist");
   await expect(page.getByText("No matching conversations.")).toBeVisible();

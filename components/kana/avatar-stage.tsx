@@ -55,6 +55,10 @@ export function AvatarStage({
           <span className="avatar-brow brow-right" />
           <span className="avatar-eye eye-left" />
           <span className="avatar-eye eye-right" />
+          <span className="avatar-highlight highlight-left" />
+          <span className="avatar-highlight highlight-right" />
+          <span className="avatar-blush blush-left" />
+          <span className="avatar-blush blush-right" />
           <span className="avatar-nose" />
           <span
             className="avatar-mouth"

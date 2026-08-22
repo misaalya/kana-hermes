@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Generated npm-package payload from scripts/prepare-npm-package.mjs.
+    ".npm-package/**",
   ]),
 ]);
 

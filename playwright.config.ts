@@ -1,8 +1,14 @@
-import { defineConfig, devices } from "@playwright/test";
+import { defineConfig, devices, chromium } from "@playwright/test";
+import { existsSync } from "node:fs";
 
 const baseURL = "http://127.0.0.1:3100";
-const executablePath =
+const systemChromePath =
   process.env.KANA_E2E_CHROME_PATH || "/usr/bin/google-chrome";
+// Fall back to the Playwright-bundled Chromium so acceptance journeys also run
+// on machines and CI containers without a system Google Chrome install.
+const executablePath = existsSync(systemChromePath)
+  ? systemChromePath
+  : chromium.executablePath();
 
 export default defineConfig({
   testDir: "./tests/e2e",
