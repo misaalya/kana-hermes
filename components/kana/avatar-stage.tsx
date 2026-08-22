@@ -18,14 +18,7 @@ export function AvatarStage({
 }: AvatarStageProps) {
   return (
     <section className={`avatar-stage emotion-${avatar.emotion}`} aria-label="Kana avatar stage">
-      <div className="stage-atmosphere" aria-hidden="true">
-        <span className="scene-sun" />
-        <span className="scene-cloud cloud-one" />
-        <span className="scene-cloud cloud-two" />
-        <span className="scene-hills" />
-        <span className="scene-campus" />
-        <span className="scene-terrace" />
-      </div>
+      <div className="stage-atmosphere" aria-hidden="true" />
 
       <canvas
         className={

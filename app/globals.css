@@ -212,7 +212,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 }
 
 .avatar-figure {
-  --figure-scale: 0.9;
+  --figure-scale: 1.3;
   width: 350px; height: 475px; position: absolute; bottom: 38px; left: 50%; z-index: 2;
   transform: translateX(-50%) scale(var(--figure-scale)); transform-origin: bottom center;
   filter: drop-shadow(0 18px 16px rgba(0, 0, 0, 0.12));
@@ -220,8 +220,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 }
 .avatar-figure.hidden { opacity: 0; pointer-events: none; }
 .live2d-avatar-canvas {
-  width: 100%; height: 100%; position: absolute; inset: 0; z-index: 3;
+  width: 100%; height: 100%; position: absolute; inset: 0; z-index: 4;
   opacity: 0; pointer-events: none; transition: opacity 180ms ease;
+  filter: drop-shadow(0 18px 16px rgba(44,54,87,.24));
 }
 .live2d-avatar-canvas.visible { opacity: 1; }
 .avatar-figure.is-talking { animation: breathe 1.8s ease-in-out infinite; }
@@ -727,8 +728,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .mobile-only, .mobile-sidebar, .mobile-sidebar-backdrop { display: none; }
 
 @keyframes breathe {
-  0%, 100% { transform: translateX(-50%) scale(var(--figure-scale, 0.9)) translateY(0); }
-  50% { transform: translateX(-50%) scale(var(--figure-scale, 0.9)) translateY(-4px); }
+  0%, 100% { transform: translateX(-50%) scale(var(--figure-scale, 1.3)) translateY(0); }
+  50% { transform: translateX(-50%) scale(var(--figure-scale, 1.3)) translateY(-4px); }
 }
 @keyframes pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
@@ -773,7 +774,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .conversation-canvas { padding: 12px 10px 140px; }
   .avatar-stage { height: min(56svh, 470px); min-height: 360px; border-radius: 13px; }
   .avatar-stage::before { width: 260px; height: 260px; }
-  .avatar-figure { bottom: 26px; --figure-scale: 0.76; }
+  .avatar-figure { bottom: 26px; --figure-scale: 1.05; }
   .avatar-figure.is-talking { animation-name: breathe-mobile; }
   .latest-dialogue { inset: auto 8px 8px; padding: 12px 13px; }
   .latest-dialogue p { font-size: 14px; }
@@ -817,8 +818,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 }
 
 @keyframes breathe-mobile {
-  0%, 100% { transform: translateX(-50%) scale(var(--figure-scale, 0.76)) translateY(0); }
-  50% { transform: translateX(-50%) scale(var(--figure-scale, 0.76)) translateY(-4px); }
+  0%, 100% { transform: translateX(-50%) scale(var(--figure-scale, 1.05)) translateY(0); }
+  50% { transform: translateX(-50%) scale(var(--figure-scale, 1.05)) translateY(-4px); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1012,82 +1013,15 @@ textarea:focus-visible {
   margin: 0;
   border: 0;
   border-radius: 0;
-  background: linear-gradient(180deg, var(--vn-sky) 0%, #c9edfb 62%, #eedbc1 100%);
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.15) 100%),
+    url('/kana-bg.png') center / cover no-repeat;
 }
 .avatar-stage::before {
-  width: 62vmin;
-  height: 16vmin;
-  bottom: 68px;
-  z-index: 1;
-  border-radius: 50%;
-  background: radial-gradient(ellipse, rgba(49,73,93,.2), transparent 68%);
-  filter: blur(8px);
+  display: none;
 }
 .avatar-stage::after { display: none; }
-.stage-atmosphere { z-index: 0; }
-.scene-sun {
-  width: 150px;
-  height: 150px;
-  position: absolute;
-  top: 12%;
-  right: 14%;
-  border-radius: 50%;
-  background: rgba(255,244,191,.86);
-  box-shadow: 0 0 70px 30px rgba(255,239,176,.38);
-}
-.scene-cloud {
-  width: 190px;
-  height: 52px;
-  position: absolute;
-  border-radius: 999px;
-  background: rgba(255,255,255,.62);
-  filter: blur(.2px);
-}
-.scene-cloud::before,
-.scene-cloud::after {
-  content: "";
-  position: absolute;
-  border-radius: 50%;
-  background: inherit;
-}
-.scene-cloud::before { width: 82px; height: 82px; left: 34px; bottom: 0; }
-.scene-cloud::after { width: 106px; height: 106px; right: 20px; bottom: 0; }
-.cloud-one { top: 18%; left: 8%; transform: scale(.8); }
-.cloud-two { top: 30%; right: 4%; transform: scale(.55); opacity: .72; }
-.scene-hills {
-  position: absolute;
-  right: -8%;
-  bottom: 18%;
-  left: -8%;
-  height: 32%;
-  background:
-    radial-gradient(ellipse at 15% 100%, #80c596 0 42%, transparent 43%),
-    radial-gradient(ellipse at 48% 100%, #73ba8b 0 48%, transparent 49%),
-    radial-gradient(ellipse at 84% 100%, #8dcba0 0 46%, transparent 47%);
-  opacity: .9;
-}
-.scene-campus {
-  width: 34%;
-  height: 15%;
-  position: absolute;
-  right: 3%;
-  bottom: 20.5%;
-  opacity: .18;
-  background: linear-gradient(180deg, #8b9ab0 0 18%, #a7b8c9 18% 100%);
-  clip-path: polygon(0 100%, 0 46%, 12% 46%, 16% 12%, 24% 12%, 27% 0, 33% 0, 36% 12%, 44% 12%, 47% 30%, 58% 30%, 62% 52%, 74% 52%, 78% 38%, 88% 38%, 92% 60%, 100% 60%, 100% 100%);
-}
-.scene-terrace {
-  position: absolute;
-  right: -5%;
-  bottom: 0;
-  left: -5%;
-  height: 21%;
-  background:
-    linear-gradient(177deg, transparent 0 18%, rgba(255,255,255,.72) 19% 23%, transparent 24%),
-    repeating-linear-gradient(102deg, rgba(255,255,255,.08) 0 28px, rgba(84,116,123,.08) 28px 30px),
-    #d7c8ac;
-  box-shadow: inset 0 18px 0 rgba(255,255,255,.4);
-}
+.stage-atmosphere { display: none; }
 
 .live2d-avatar-canvas {
   z-index: 4;
@@ -1446,12 +1380,9 @@ textarea:focus-visible {
   .header-button { min-height: 34px; }
   .connection-pill { min-height: 34px; }
   .stage-status { top: 70px; left: 10px; max-width: calc(100% - 20px); }
-  .scene-sun { width: 92px; height: 92px; top: 13%; right: 4%; }
-  .cloud-one { left: -12%; }
-  .scene-campus { width: 78%; }
   .avatar-figure {
     bottom: 196px;
-    --figure-scale: 0.58;
+    --figure-scale: 0.85;
     transform-origin: bottom center;
   }
   .latest-dialogue {
