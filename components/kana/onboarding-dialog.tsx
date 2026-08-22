@@ -2,7 +2,6 @@ import { useState } from "react";
 import { SUPPORTED_SUBTITLE_LANGUAGES } from "@/lib/presentation/languages";
 import type { KanaPreferences } from "@/lib/preferences/types";
 import { useDialogFocus } from "@/lib/accessibility/use-dialog-focus";
-import { KANA_DEVELOPMENT_MODE } from "@/lib/config/features";
 
 type OnboardingDialogProps = {
   preferences: KanaPreferences;
@@ -82,22 +81,6 @@ export function OnboardingDialog({
                 Kana connects to a separately running, unmodified <code>hermes serve</code>.
                 The npm launcher can start it for you from Settings after setup.
               </p>
-              {KANA_DEVELOPMENT_MODE ? <div className="segmented-control" aria-label="Onboarding agent mode">
-                <button
-                  type="button"
-                  className={draft.agentMode === "mock" ? "selected" : ""}
-                  onClick={() => setDraft({ ...draft, agentMode: "mock" })}
-                >
-                  Start with mock
-                </button>
-                <button
-                  type="button"
-                  className={draft.agentMode === "hermes" ? "selected" : ""}
-                  onClick={() => setDraft({ ...draft, agentMode: "hermes" })}
-                >
-                  Connect Hermes
-                </button>
-              </div> : null}
               {draft.agentMode === "hermes" ? (
                 <div className="onboarding-fields">
                   <label>
@@ -188,7 +171,6 @@ export function OnboardingDialog({
                       })
                     }
                   >
-                    {KANA_DEVELOPMENT_MODE ? <option value="mock">Mock lip sync</option> : null}
                     <option value="qwen3">Local Qwen3-TTS</option>
                   </select>
                   <small>Qwen runs as a separate local service.</small>
@@ -205,7 +187,6 @@ export function OnboardingDialog({
                     }
                   >
                     <option value="live2d">Official Live2D sample</option>
-                    {KANA_DEVELOPMENT_MODE ? <option value="mock">Offline CSS preview</option> : null}
                   </select>
                   <small>You can import another Cubism model later.</small>
                 </label>
@@ -234,23 +215,7 @@ export function OnboardingDialog({
         </div>
 
         <div className="onboarding-actions">
-          {step === 0 && KANA_DEVELOPMENT_MODE ? (
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={saving}
-              onClick={() =>
-                void finish({
-                  ...draft,
-                  agentMode: "mock",
-                  voiceMode: "mock",
-                  avatarMode: "mock",
-                })
-              }
-            >
-              Use offline defaults
-            </button>
-          ) : step > 0 ? (
+          {step > 0 ? (
             <button
               className="secondary-button"
               type="button"

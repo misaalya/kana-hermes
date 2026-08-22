@@ -21,7 +21,6 @@ import type {
   KanaPreferences,
   PreferencesStore,
 } from "./types";
-import { KANA_DEVELOPMENT_MODE } from "@/lib/config/features";
 
 const STORAGE_KEY = "kana.preferences.v5";
 const LEGACY_STORAGE_KEYS = [
@@ -45,9 +44,9 @@ type PersistentPreferences = Omit<KanaPreferences, "hermes"> & {
 export const DEFAULT_PREFERENCES: KanaPreferences = {
   onboardingCompleted: false,
   subtitleLanguage: DEFAULT_SUBTITLE_LANGUAGE,
-  agentMode: KANA_DEVELOPMENT_MODE ? "mock" : "hermes",
+  agentMode: "hermes",
   voiceEnabled: true,
-  voiceMode: KANA_DEVELOPMENT_MODE ? "mock" : "qwen3",
+  voiceMode: "qwen3",
   avatarMode: "live2d",
   hermes: {
     websocketUrl: "ws://127.0.0.1:9119/api/ws",
@@ -76,9 +75,9 @@ export function normalizeKanaPreferences(
   );
   return {
     ...preferences,
-    agentMode: KANA_DEVELOPMENT_MODE ? preferences.agentMode : "hermes",
-    voiceMode: KANA_DEVELOPMENT_MODE ? preferences.voiceMode : "qwen3",
-    avatarMode: KANA_DEVELOPMENT_MODE ? preferences.avatarMode : "live2d",
+agentMode: "hermes",
+      voiceMode: "qwen3",
+      avatarMode: "live2d",
     hermes: {
       ...preferences.hermes,
       websocketUrl: endpoint.endpoint,
