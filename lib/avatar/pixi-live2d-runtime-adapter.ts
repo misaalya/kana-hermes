@@ -187,9 +187,9 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
       model.scale.set(1);
       const baseWidth = Math.max(1, model.width);
       const baseHeight = Math.max(1, model.height);
-      const scale = Math.min((width * 0.9) / baseWidth, (height * 0.93) / baseHeight);
-      model.scale.set(scale);
-      model.position.set(width / 2, height / 2 + height * 0.04);
+      const fitScale = Math.min((width * 0.9) / baseWidth, (height * 0.93) / baseHeight);
+      model.scale.set(fitScale * 2);
+      model.position.set(width / 2, height * 0.75);
     };
     const resize = () => {
       cancelAnimationFrame(resizeFrame);

@@ -953,7 +953,19 @@ export function useKanaController(appVersion: string) {
 
   useEffect(() => {
     let mounted = true;
-    const unsubscribeAvatar = avatarProvider.subscribe(setAvatar);
+    const unsubscribeAvatar = avatarProvider.subscribe((snapshot) => {
+      setAvatar((prev) => {
+        if (
+          prev.emotion === snapshot.emotion &&
+          prev.talking === snapshot.talking &&
+          prev.loaded === snapshot.loaded &&
+          prev.renderMode === snapshot.renderMode
+        ) {
+          return prev;
+        }
+        return snapshot;
+      });
+    });
 
     initializationRef.current ??= (async () => {
       const storedPreferences = preferencesStore.load();
