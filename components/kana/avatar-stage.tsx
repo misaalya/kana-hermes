@@ -67,8 +67,8 @@ export function AvatarStage({
         {status}
       </div>
 
-      <div className="latest-dialogue">
-        <div className="speaker-name">
+      <div className="stage-subtitle" aria-live="polite">
+        <div className="subtitle-speaker">
           <span>Kana</span>
           {latestAssistant?.subtitle ? (
             <small>{latestAssistant.subtitle.language.toUpperCase()}</small>
@@ -76,13 +76,8 @@ export function AvatarStage({
         </div>
         <p>
           {latestAssistant?.subtitle?.text ||
-            "I’m ready. Say something whenever you like."}
+            "Say something whenever you like."}
         </p>
-        {latestAssistant?.speech_ja ? (
-          <small className="dialogue-japanese" lang="ja">
-            {latestAssistant.speech_ja}
-          </small>
-        ) : null}
       </div>
     </section>
   );
