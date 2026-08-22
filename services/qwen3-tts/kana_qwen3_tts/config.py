@@ -55,7 +55,10 @@ class ServiceSettings:
             # this model. Users with a suitable CUDA runtime can override it.
             device=os.getenv("KANA_TTS_DEVICE", "cpu").strip(),
             dtype=os.getenv("KANA_TTS_DTYPE", "auto").strip().lower(),
-            attention=os.getenv("KANA_TTS_ATTENTION", "eager").strip(),
+            # SDPA is measurably faster than eager on CPU and enables
+            # memory-friendlier kernels. Users can still force another
+            # implementation with KANA_TTS_ATTENTION.
+            attention=os.getenv("KANA_TTS_ATTENTION", "sdpa").strip(),
             cache_dir=Path(cache_value).expanduser() if cache_value else None,
             data_dir=Path(data_value).expanduser(),
             default_voice_id=os.getenv(

@@ -5,7 +5,7 @@ import process from "node:process";
 import { randomUUID } from "node:crypto";
 
 const SERVICE_NAME = "kana-qwen3-tts";
-const API_VERSION = "1";
+const API_VERSION = "2";
 const DEFAULT_URL = "http://127.0.0.1:7860";
 
 const PROFILES = [
