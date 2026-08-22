@@ -4,18 +4,53 @@ Kana is a local web presentation layer for an existing [Hermes Agent](https://gi
 
 Kana adds:
 
-- a visual-novel-style conversation surface;
+- a game-style visual-novel conversation surface: pastel sky stage, centered
+  avatar, and a named speech bubble in the manner of character games — without
+  copying any game's artwork, characters, or proprietary assets;
 - a Japanese-speaking presentation persona and structured response protocol;
 - user-selectable subtitle languages for future responses;
 - locally persistent conversation history that preserves the exact subtitle text and language originally displayed;
 - replaceable agent, voice, avatar, and conversation-store providers;
-- realistic mock mode for development without Hermes or Qwen3-TTS;
+- realistic mock mode for development without Hermes or Qwen3-TTS, compiled out
+  of production builds through `NEXT_PUBLIC_KANA_DEVELOPMENT_MODE`;
 - a responsive Live2D canvas with two official free sample avatars and
   replaceable, locally persistent URL/folder model sources;
-- a minimal white, mobile-safe workspace plus an installable offline app shell
-  and a standalone production package;
+- local Qwen3-TTS speech with voice cloning: create personal voice profiles
+  from consented reference audio and speak every response with them;
+- an npm global launcher (`npm install -g kana && kana`) that starts the web
+  app, offers first-run Qwen setup, and can supervise `hermes serve`;
+- a mobile-safe workspace plus an installable offline app shell and a
+  standalone production package;
 - first-run setup, safe local diagnostics, per-conversation drafts/search, and
   credential-free conversation backup/restore.
+
+## Install from npm
+
+```bash
+npm install -g kana
+kana
+```
+
+The package is a thin launcher plus the built web runtime. The multi-gigabyte
+Qwen3-TTS model, its Python environment, cloned voice profiles, and all Kana
+data live in user directories (`~/.local/share/kana`, `~/.cache/kana`,
+`~/.config/kana`), never inside the npm package. On first run, the launcher
+offers an explicit Qwen setup; declining it still starts Kana normally.
+
+Other commands:
+
+```bash
+kana setup        # configure or reconfigure optional Qwen3-TTS voice cloning
+kana doctor       # check Hermes/uv availability and data locations
+kana --port 4000  # choose the local web port
+```
+
+When Kana runs through this launcher it sets `KANA_LOCAL_RUNTIME_CONTROL=1`,
+which enables **Settings → Hermes control panel**: start, restart, and stop the
+official `hermes serve` gateway, enter its session token, and see live process
+status. Kana only ever spawns the unmodified Hermes binary and never edits the
+Hermes installation. Running `next dev` directly keeps process control off
+unless `.env.development` enables it.
 
 ## Run in mock mode
 
@@ -99,11 +134,25 @@ The first start downloads about 2.3 GB. When `/v1/health` reports `ready`, open
 `http://127.0.0.1:7860`, and click **Check service**. Kana discovers the live
 speaker catalog; `ono_anna` is the default Japanese voice.
 
+### Voice cloning
+
+The 0.6B CustomVoice model supports zero-shot speaker cloning. In
+**Settings → Japanese voice → Voice clone**, record or upload consented
+reference audio (up to 20 MB), name the profile, and optionally provide the
+reference transcript for higher fidelity. Kana sends the audio to the local
+service's clone endpoint, which embeds the speaker and stores the profile under
+the service's data directory; cloned voices then appear alongside preset
+speakers and can be selected like any other voice. Profiles are deletable, and
+only user-created `clone-*` profiles can ever be deleted. Cloning happens
+entirely on your machine: audio never leaves the local Qwen3-TTS service.
+
 The versioned API exposes:
 
 - `GET /v1/health`
 - `GET /v1/setup`
 - `GET /v1/voices`
+- `POST /v1/voices/clone`
+- `DELETE /v1/voices/{voice_id}` (cloned profiles only)
 - `POST /v1/speech`
 - `POST /v1/requests/{request_id}/cancel`
 
@@ -188,12 +237,14 @@ Kana UI
   │    └─ MockConversationStore
   ├─ VoiceProvider
   │    ├─ MockVoiceProvider
-  │    └─ Qwen3TTSProvider → local API v1 → official Qwen3-TTS
+  │    └─ Qwen3TTSProvider → local API v2 (speech + voice clones)
   │                         → AudioLipSyncController
-  └─ AvatarProvider
-       ├─ MockAvatarProvider
-       └─ Live2DAvatarProvider → PixiLive2DRuntimeAdapter → Cubism Web
-                                 └─ IndexedDbAvatarModelStore
+  ├─ AvatarProvider
+  │    ├─ MockAvatarProvider
+  │    └─ Live2DAvatarProvider → PixiLive2DRuntimeAdapter → Cubism Web
+  │                             └─ IndexedDbAvatarModelStore
+  └─ Hermes control panel
+       └─ /api/local-runtime/hermes → LocalHermesRuntime → `hermes serve`
 ```
 
 Hermes events are translated into Kana's stable internal event model. The current Hermes adapter maps session, message, status, tool, interruption, and input-request events. It does not infer a separate filesystem protocol from tool output.
@@ -204,12 +255,15 @@ Hermes events are translated into Kana's stable internal event model. The curren
 - Kana history and imported avatars are browser-local; there is no cloud sync
   or cross-browser model library. Hermes keeps its own independently managed
   session history.
-- Kana does not start Hermes or Qwen3-TTS itself. The standalone package is a
-  local web package, not an OS-native process manager or signed desktop binary.
+- The npm launcher supervises Qwen3-TTS and, when launched through it, the
+  official `hermes serve` process. It remains a local launcher, not an OS-native
+  signed desktop binary.
 
 In mock mode, send `mock approval`, `mock clarification`, `mock sudo`, or
 `mock secret` to exercise the corresponding Hermes input dialog without a
-running Hermes installation.
+running Hermes installation. Mock providers only exist in development builds:
+production bundles force the real agent, voice, and avatar modes regardless of
+stored preferences.
 
 ## Package for local production
 

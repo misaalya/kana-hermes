@@ -42,11 +42,18 @@ export function localRuntimeControlEnabled(): boolean {
 
 async function resolveHermesExecutable(): Promise<string | null> {
   const explicit = process.env.KANA_HERMES_BIN?.trim();
+  const windowsLocalAppData = process.env.LOCALAPPDATA?.trim();
+  const windowsUserProfile = process.env.USERPROFILE?.trim();
+  const unixHome = process.env.HOME?.trim();
   const candidates = [
     explicit,
-    path.join(process.env.LOCALAPPDATA || "", "hermes", "bin", "hermes.exe"),
-    path.join(process.env.USERPROFILE || "", ".local", "bin", "hermes.exe"),
-    path.join(process.env.HOME || "", ".local", "bin", "hermes"),
+    windowsLocalAppData
+      ? path.join(windowsLocalAppData, "hermes", "bin", "hermes.exe")
+      : undefined,
+    windowsUserProfile
+      ? path.join(windowsUserProfile, ".local", "bin", "hermes.exe")
+      : undefined,
+    unixHome ? path.join(unixHome, ".local", "bin", "hermes") : undefined,
     "/usr/local/bin/hermes",
     "/usr/bin/hermes",
   ].filter((value): value is string => Boolean(value));

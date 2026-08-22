@@ -1,16 +1,24 @@
 import { mkdtemp, rm } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { chromium, devices, expect, test } from "@playwright/test";
 
 const baseURL = "http://127.0.0.1:3101";
 
+// Fall back to the Playwright-bundled Chromium on machines without a system
+// Google Chrome install so the production PWA journey stays runnable.
+const systemChromePath =
+  process.env.KANA_E2E_CHROME_PATH || "/usr/bin/google-chrome";
+const executablePath = existsSync(systemChromePath)
+  ? systemChromePath
+  : chromium.executablePath();
+
 test("is installable on mobile and restores the local shell while offline", async () => {
   const profile = await mkdtemp(path.join(tmpdir(), "kana-pwa-profile-"));
   const pixel = devices["Pixel 5"];
   const context = await chromium.launchPersistentContext(profile, {
-    executablePath:
-      process.env.KANA_E2E_CHROME_PATH || "/usr/bin/google-chrome",
+    executablePath,
     headless: true,
     baseURL,
     viewport: pixel.viewport,
@@ -23,7 +31,17 @@ test("is installable on mobile and restores the local shell while offline", asyn
   try {
     const page = context.pages()[0] ?? (await context.newPage());
     await page.goto("/");
-    await page.getByRole("button", { name: "Use offline defaults" }).click();
+    // Production builds gate mock mode behind development mode, so the
+    // onboarding wizard has no "Use offline defaults" shortcut there. Walk
+    // the wizard like a real first-run user instead.
+    for (let step = 0; step < 8; step += 1) {
+      const enter = page.getByRole("button", { name: "Enter Kana" });
+      if (await enter.isVisible().catch(() => false)) {
+        await enter.click();
+        break;
+      }
+      await page.getByRole("button", { name: "Continue" }).click();
+    }
     await expect(page.getByRole("textbox", { name: "Message Kana" })).toBeVisible();
 
     await page.evaluate(async () => {
