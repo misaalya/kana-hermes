@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import os
+from pathlib import Path
 import threading
 import time
 from typing import Any
@@ -53,6 +54,30 @@ class RuntimeSnapshot:
         value["speakers"] = list(self.speakers)
         value["languages"] = list(self.languages)
         return value
+
+
+def _cpu_supports_bf16(torch: Any, cpuinfo_path: Path) -> bool:
+    supported = getattr(getattr(torch, "cpu", None), "is_bf16_supported", None)
+    if callable(supported):
+        try:
+            return bool(supported())
+        except Exception:
+            pass
+    backends_cpu = getattr(getattr(torch, "backends", None), "cpu", None)
+    get_capability = getattr(backends_cpu, "get_cpu_capability", None)
+    if callable(get_capability):
+        try:
+            if "BF16" in str(get_capability()).upper():
+                return True
+        except Exception:
+            pass
+    # torch's runtime capability string can lag the actual hardware flags;
+    # fall back to the Linux CPUID exposure before giving up.
+    try:
+        flags = cpuinfo_path.read_text(encoding="ascii", errors="ignore")
+    except OSError:
+        return False
+    return "avx512_bf16" in flags or "amx_bf16" in flags
 
 
 class Qwen3TTSRuntime:
@@ -281,7 +306,16 @@ class Qwen3TTSRuntime:
     def _resolve_dtype(self, torch: Any) -> Any:
         requested = self.settings.dtype
         if requested == "auto":
-            requested = "float32" if self.settings.device == "cpu" else "float16"
+            if self.settings.device != "cpu":
+                requested = "float16"
+            elif _cpu_supports_bf16(torch, Path("/proc/cpuinfo")):
+                # Halves weight memory versus float32 and is significantly
+                # faster on CPUs with native BF16 support. Measured on a
+                # 4-vCPU EPYC host: RTF ~2.5 versus ~8+ for float32, which
+                # also avoided out-of-memory kills on medium/long text.
+                requested = "bfloat16"
+            else:
+                requested = "float32"
         choices = {
             "float32": torch.float32,
             "float16": torch.float16,
