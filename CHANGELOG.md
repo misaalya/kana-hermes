@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.2.0-alpha.1 — unreleased
+
+### Added
+
+- Qwen3-TTS API v2 with local voice cloning: consented reference audio becomes
+  a selectable, deletable voice profile; cloned voices speak every response and
+  drive Live2D lip sync like preset speakers.
+- Global npm launcher (`kana`, `kana setup`, `kana doctor`) that runs the web
+  app from user directories, supervises the optional Qwen3-TTS service, keeps
+  the multi-gigabyte model out of the package, and gates local Hermes process
+  control behind `KANA_LOCAL_RUNTIME_CONTROL`.
+- Settings → Hermes control panel: start/restart/stop the official
+  `hermes serve` gateway, token entry, live process status, and honest
+  unavailability messaging when control is not enabled.
+- Visual-novel theme: pastel sky stage with scene art, HUD-style header,
+  purple conversation rail, named speech bubble with coral name plate, and a
+  floating composer — replacing the white minimal workspace.
+- Quick Hermes controls in settings for `/model` and related configuration
+  commands, using the live registry rather than copied command lists.
+
+### Changed
+
+- Mock providers are compiled out of production builds via
+  `NEXT_PUBLIC_KANA_DEVELOPMENT_MODE`; production preferences always resolve to
+  the real agent/voice/avatar modes.
+- Live2D switching now uses a load-generation guard so a slow previous model
+  can never stack on top of the newly selected one, pauses rendering when the
+  stage is hidden or the tab is backgrounded, and caps renderer resolution by
+  device capability.
+- Real Hermes approval/clarification requests surface directly in dedicated
+  dialogs as before; `/approve` and `/deny` resolve them without text parsing.
+
+### Fixed
+
+- Stacked double-avatar bug when switching Live2D models quickly.
+- `.env.example` no longer enables development mocks by default.
+
 ## 0.1.0-alpha — unreleased
 
 ### Added

@@ -9,7 +9,39 @@ Terakhir diperbarui: 2026-08-22.
 
 ## Posisi Kana sekarang
 
-Fondasi utama sudah tersedia:
+### Hasil permatangan lanjutan 2026-08-22 (goal 12 poin)
+
+Status jujur terhadap goal permatangan terbaru:
+
+1. **Voice cloning Qwen3-TTS** — selesai di sisi kontrak (API v2), service
+   Python, dan UI settings. Validasi suara asli tetap butuh host target.
+2. **Performa web/Live2D** — generation guard pergantian model, pause render
+   saat stage/tab tersembunyi, cap resolusi per kemampuan perangkat.
+3. **Paket npm launcher** — `bin/kana.mjs` + `scripts/prepare-npm-package.mjs`;
+   model besar diunduh terpisah saat setup. Publikasi ke registry sendiri masih
+   langkah rilis manual.
+4. **Katalog slash** — tetap dibaca live dari `commands.catalog` Hermes; quick
+   controls (`/model`, konfigurasi) memakai registry, bukan daftar statis.
+5. **Ganti model LLM** — mengikuti konfigurasi Hermes pengguna melalui
+   `/model` dan perintah konfigurasi resmi; Kana tidak menyimpan model sendiri.
+6. **Mock gating** — `NEXT_PUBLIC_KANA_DEVELOPMENT_MODE=false` menghilangkan
+   seluruh mock dari build produksi.
+7. **Hermes control panel** — start/restart/stop `hermes serve` + token via UI,
+   hanya aktif lewat launcher (`KANA_LOCAL_RUNTIME_CONTROL=1`).
+8. **Bug Live2D bertumpuk** — generation guard; perlu satu verifikasi manual
+   pada WebGL nyata dengan dua model berat.
+9. **Approve/deny asli** — dialog approval Hermes diteruskan ke UI (sudah ada
+   sejak fase 1; tidak ada perubahan perilaku).
+10. **Tema visual-novel** — langit pastel, avatar tengah, balon dialog
+    bernama, HUD, composer mengambang; diverifikasi via screenshot desktop +
+    mobile terhadap tiga gambar referensi.
+11. **Loop verifikasi visual** — 6+ putaran screenshot Playwright dengan
+    perbaikan (mata avatar, ekor balon, siluet scene, ikon mobile, skala
+    avatar). Referensi asli pemilik produk tetap hakim akhir.
+12. **PLAN.md** — bagian ini adalah pembaruannya; item gate eksternal di bawah
+    tetap menjadi syarat beta.
+
+### Fondasi utama sudah tersedia:
 
 - koneksi nyata ke Hermes melalui `hermes serve`, termasuk sesi, event,
   approval, clarification, reconnect, dan katalog slash command dinamis;
