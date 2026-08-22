@@ -9,6 +9,7 @@ import { SettingsDialog } from "./settings-dialog";
 import { SlashCommandMenu } from "./slash-command-menu";
 import { OnboardingDialog } from "./onboarding-dialog";
 import { useKanaController } from "@/lib/state/use-kana-controller";
+import type { KanaMessage } from "@/lib/conversation/types";
 
 
 function destructiveCommandPrompt(input: string): string | null {
@@ -20,6 +21,8 @@ function destructiveCommandPrompt(input: string): string | null {
   if (/^rollback\s+(restore|rewind)\b/.test(normalized)) return "Restore a Hermes filesystem checkpoint? This can overwrite current files.";
   return null;
 }
+
+const NO_MESSAGES: KanaMessage[] = [];
 
 type KanaAppProps = { appVersion: string };
 
@@ -35,10 +38,13 @@ export function KanaApp({ appVersion }: KanaAppProps) {
 
   const activeConversationId = kana.activeConversation?.id;
   const message = activeConversationId ? drafts[activeConversationId] ?? "" : "";
-  const setMessage = (value: string) => {
-    if (!activeConversationId) return;
-    setDrafts((current) => ({ ...current, [activeConversationId]: value }));
-  };
+  const setMessage = useCallback((value: string) => {
+    setDrafts((current) => {
+      if (!activeConversationId) return current;
+      if (current[activeConversationId] === value) return current;
+      return { ...current, [activeConversationId]: value };
+    });
+  }, [activeConversationId]);
 
   const latestAssistant = useMemo(
     () => kana.activeConversation?.messages.filter((item) => item.role === "assistant").at(-1),
@@ -52,13 +58,29 @@ export function KanaApp({ appVersion }: KanaAppProps) {
   const connectionInTransition = kana.connectionState === "connecting" || kana.connectionState === "reconnecting";
   const activeCommandIndex = Math.min(selectedCommandIndex, Math.max(0, kana.commandSuggestions.length - 1));
   const showGate = kana.ready && kana.preferences.agentMode === "hermes" && kana.connectionState === "disconnected";
+  const hermesConfigKey = `${kana.preferences.hermes.websocketUrl}:${kana.preferences.hermes.token}`;
+  const gateConnectAttemptsRef = useRef(0);
+
+  // A reachable Hermes is normally auto-connected right away. When the gateway
+  // is down, retrying on every gate appearance remounts the whole shell (and
+  // the WebGL canvas) in a tight loop and starves the UI thread, so bound the
+  // automatic attempts and leave further retries to the manual button.
+  useEffect(() => {
+    gateConnectAttemptsRef.current = 0;
+  }, [hermesConfigKey]);
 
   useEffect(() => {
     if (!showGate) return;
-    const timer = setTimeout(() => void kana.connectAgent(), 300);
+    const attempt = gateConnectAttemptsRef.current;
+    if (attempt >= 3) return;
+    const delay = [300, 4_000, 15_000][attempt];
+    const timer = setTimeout(() => {
+      gateConnectAttemptsRef.current += 1;
+      void kana.connectAgent();
+    }, delay);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showGate]);
+  }, [showGate, hermesConfigKey]);
 
   useEffect(() => {
     if (!message.startsWith("/")) { clearCommandSuggestions(); return; }
@@ -66,15 +88,35 @@ export function KanaApp({ appVersion }: KanaAppProps) {
     return () => window.clearTimeout(timer);
   }, [clearCommandSuggestions, completeCommands, message]);
 
-  const highlightCommand = (index: number) => {
+  const highlightCommand = useCallback((index: number) => {
     selectedCommandIndexRef.current = index;
     setSelectedCommandIndex(index);
-  };
+  }, []);
 
-  const selectCommand = (command: string) => {
+  const selectCommand = useCallback((command: string) => {
     setMessage(`${command} `);
-    kana.clearCommandSuggestions();
-  };
+    clearCommandSuggestions();
+  }, [clearCommandSuggestions, setMessage]);
+
+  const closeHistory = useCallback(() => setHistoryOpen(false), []);
+  const createConversation = kana.createConversation;
+  const selectConversation = kana.selectConversation;
+  const renameConversation = kana.renameConversation;
+  const deleteConversation = kana.deleteConversation;
+  const createConversationFromSidebar = useCallback(() => {
+    void createConversation();
+    setHistoryOpen(false);
+  }, [createConversation]);
+  const selectConversationFromSidebar = useCallback((id: string) => {
+    selectConversation(id);
+    setHistoryOpen(false);
+  }, [selectConversation]);
+  const renameConversationFromSidebar = useCallback((id: string, title: string) => {
+    void renameConversation(id, title);
+  }, [renameConversation]);
+  const deleteConversationFromSidebar = useCallback((id: string) => {
+    void deleteConversation(id);
+  }, [deleteConversation]);
 
   const submit = useCallback(async () => {
     const text = message.trim();
@@ -87,27 +129,33 @@ export function KanaApp({ appVersion }: KanaAppProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [message, connectionInTransition, kana.busy, canSubmitWhileBusy, kana.sendMessage, setMessage]);
 
+  const commandSuggestions = kana.commandSuggestions;
+  const commandSuggestionsRef = useRef(commandSuggestions);
+  useEffect(() => {
+    commandSuggestionsRef.current = commandSuggestions;
+  }, [commandSuggestions]);
+
   const onKeyDown = useCallback((event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "ArrowDown" && kana.commandSuggestions.length > 0) {
+    const suggestions = commandSuggestionsRef.current;
+    if (event.key === "ArrowDown" && suggestions.length > 0) {
       event.preventDefault();
-      highlightCommand((selectedCommandIndexRef.current + 1) % kana.commandSuggestions.length);
+      highlightCommand((selectedCommandIndexRef.current + 1) % suggestions.length);
       return;
     }
-    if (event.key === "ArrowUp" && kana.commandSuggestions.length > 0) {
+    if (event.key === "ArrowUp" && suggestions.length > 0) {
       event.preventDefault();
-      highlightCommand((selectedCommandIndexRef.current - 1 + kana.commandSuggestions.length) % kana.commandSuggestions.length);
+      highlightCommand((selectedCommandIndexRef.current - 1 + suggestions.length) % suggestions.length);
       return;
     }
-    if ((event.key === "Tab" || event.key === "Enter") && kana.commandSuggestions.length > 0) {
+    if ((event.key === "Tab" || event.key === "Enter") && suggestions.length > 0) {
       event.preventDefault();
-      const selectedIndex = Math.min(selectedCommandIndexRef.current, kana.commandSuggestions.length - 1);
-      selectCommand(kana.commandSuggestions[selectedIndex]?.text ?? kana.commandSuggestions[0].text);
+      const selectedIndex = Math.min(selectedCommandIndexRef.current, suggestions.length - 1);
+      selectCommand(suggestions[selectedIndex]?.text ?? suggestions[0].text);
       return;
     }
-    if (event.key === "Escape") { kana.clearCommandSuggestions(); return; }
+    if (event.key === "Escape") { clearCommandSuggestions(); return; }
     if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void submit(); }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kana.commandSuggestions, kana.clearCommandSuggestions, submit]);
+  }, [clearCommandSuggestions, highlightCommand, selectCommand, submit]);
 
   if (!kana.ready) {
     return (
@@ -207,28 +255,28 @@ export function KanaApp({ appVersion }: KanaAppProps) {
       <div className={`history-panel${historyOpen ? " open" : ""}`} aria-hidden={!historyOpen} inert={historyOpen ? undefined : true}>
         <div className="history-panel-header">
           <span>Messages</span>
-          <button className="icon-btn" aria-label="Close history" onClick={() => setHistoryOpen(false)}>×</button>
+          <button className="icon-btn" aria-label="Close history" onClick={closeHistory}>×</button>
         </div>
         <div className="history-panel-body">
-          <DialogueHistory messages={kana.activeConversation?.messages ?? []} />
+          <DialogueHistory messages={kana.activeConversation?.messages ?? NO_MESSAGES} />
         </div>
       </div>
-      {historyOpen ? <button className="sidebar-backdrop" aria-label="Close" onClick={() => setHistoryOpen(false)} /> : null}
+      {historyOpen ? <button className="sidebar-backdrop" aria-label="Close" onClick={closeHistory} /> : null}
 
       <div className={`conv-panel${historyOpen ? " open" : ""}`} aria-hidden={!historyOpen} inert={historyOpen ? undefined : true}>
         <div className="conv-panel-header">
           <span>Conversations</span>
-          <button className="icon-btn" aria-label="Close" onClick={() => setHistoryOpen(false)}>×</button>
+          <button className="icon-btn" aria-label="Close" onClick={closeHistory}>×</button>
         </div>
         <ConversationSidebar
           conversations={kana.conversations}
           activeId={kana.activeConversation?.id}
           disabled={kana.busy}
-          onCreate={() => { void kana.createConversation(); setHistoryOpen(false); }}
-          onSelect={(id) => { kana.selectConversation(id); setHistoryOpen(false); }}
-          onRename={(id, title) => void kana.renameConversation(id, title)}
-          onDelete={(id) => void kana.deleteConversation(id)}
-          onClose={() => setHistoryOpen(false)}
+          onCreate={createConversationFromSidebar}
+          onSelect={selectConversationFromSidebar}
+          onRename={renameConversationFromSidebar}
+          onDelete={deleteConversationFromSidebar}
+          onClose={closeHistory}
         />
       </div>
 
