@@ -1,4 +1,6 @@
-import { useState } from "react";
+"use client";
+
+import { useEffect, useState } from "react";
 import type { KanaPreferences } from "@/lib/preferences/types";
 import type { Emotion } from "@/lib/presentation/types";
 import type { AvatarModelSummary } from "@/lib/avatar/indexed-db-avatar-model-store";
@@ -6,14 +8,19 @@ import type { VoiceProviderStatus } from "@/lib/voice/types";
 import type { VoiceDescriptor } from "@/lib/voice/types";
 import type { CreateVoiceCloneInput } from "@/lib/voice/qwen3-tts-contract";
 import type { HermesRuntimeStatus } from "@/lib/runtime/hermes-control-client";
-import { SUPPORTED_SUBTITLE_LANGUAGES } from "@/lib/presentation/languages";
+import {
+  changeAccessPassword,
+  fetchAuthStatus,
+  logoutAccessSession,
+  type AuthStatus,
+} from "@/lib/runtime/auth-client";
 import { useDialogFocus } from "@/lib/accessibility/use-dialog-focus";
+import { HermesControlPanel } from "./hermes-control-panel";
+import { SubtitleLanguagePicker } from "./subtitle-language-picker";
+import { btnGhost, btnPrimary, btnSecondary, bentoCard, btnDangerGhost, inputBase, fieldLabel } from "./ui";
 
 type SettingsDialogProps = {
   preferences: KanaPreferences;
-  diagnostics: string;
-  voiceRuntimeState: string;
-  voiceCanReplay: boolean;
   onSave(preferences: KanaPreferences): Promise<void>;
   onImportAvatar(files: File[]): Promise<AvatarModelSummary>;
   onListAvatarModels(): Promise<AvatarModelSummary[]>;
@@ -26,18 +33,113 @@ type SettingsDialogProps = {
   onInspectVoice(baseUrl: string): Promise<VoiceProviderStatus>;
   onCloneVoice(baseUrl: string, input: CreateVoiceCloneInput): Promise<VoiceDescriptor>;
   onDeleteClonedVoice(baseUrl: string, voiceId: string): Promise<VoiceProviderStatus>;
-  onInspectHermesControl(): Promise<HermesRuntimeStatus>;
+  onInspectHermesControl(preferredPort?: number): Promise<HermesRuntimeStatus>;
   onStartHermesControl(options: { port: number; token: string; cwd?: string; restart?: boolean }): Promise<HermesRuntimeStatus>;
   onStopHermesControl(): Promise<HermesRuntimeStatus>;
-  onPrepareHermesCommand(command: string): void;
-  onReplayVoice(): Promise<void>;
-  onStopVoice(): void;
-  onExportBackup(): string;
-  onImportBackup(text: string): Promise<{ importedConversations: number; totalConversations: number }>;
   onClose(): void;
 };
 
-export function SettingsDialog({ preferences, onSave, onClose }: SettingsDialogProps) {
+function SecuritySection() {
+  const [status, setStatus] = useState<AuthStatus | null>(null);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetchAuthStatus()
+      .then((next) => { if (active) setStatus(next); })
+      .catch(() => { if (active) setStatus({ authEnabled: false, authenticated: false }); });
+    return () => { active = false; };
+  }, []);
+
+  if (!status) {
+    return <p className="text-[11px] text-faint">Checking security status…</p>;
+  }
+
+  if (!status.authEnabled) {
+    return (
+      <p className="text-[11px] leading-relaxed text-faint">
+        Password protection is off. Set <code className="font-mono text-muted">KANA_ACCESS_PASSWORD</code> and
+        restart Kana to require login on this machine.
+      </p>
+    );
+  }
+
+  const submit = async () => {
+    setError(null);
+    setSuccess(null);
+    if (newPassword.length < 8) {
+      setError("The new password must contain at least 8 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError("The new passwords do not match.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await changeAccessPassword(currentPassword, newPassword);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setSuccess("Password updated. Use it on your next login.");
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Could not change the password.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-2.5">
+      <label className="flex flex-col gap-1">
+        <span className={fieldLabel}>Current password</span>
+        <input type="password" autoComplete="current-password" className={inputBase}
+          value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} />
+      </label>
+      <div className="grid gap-2.5 sm:grid-cols-2">
+        <label className="flex flex-col gap-1">
+          <span className={fieldLabel}>New password</span>
+          <input type="password" autoComplete="new-password" className={inputBase}
+            value={newPassword} onChange={(event) => setNewPassword(event.target.value)} />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className={fieldLabel}>Confirm new password</span>
+          <input type="password" autoComplete="new-password" className={inputBase}
+            value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} />
+        </label>
+      </div>
+      {error ? <p className="text-[11px] font-semibold text-danger" role="alert">{error}</p> : null}
+      {success ? <p className="text-[11px] font-semibold text-accent-strong" role="status">{success}</p> : null}
+      <div className="flex items-center gap-3 pt-1">
+        <button
+          type="button"
+          className={btnSecondary}
+          disabled={busy || !currentPassword || !newPassword || !confirmPassword}
+          onClick={() => void submit()}
+        >
+          {busy ? "Updating…" : "Update password"}
+        </button>
+        <button type="button" className={btnDangerGhost} onClick={() => void logoutAccessSession()}>
+          Log out
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function SettingsDialog({
+  preferences,
+  onSave,
+  onClose,
+  onInspectHermesControl,
+  onStartHermesControl,
+  onStopHermesControl,
+}: SettingsDialogProps) {
   const { dialogRef, onDialogKeyDown } = useDialogFocus(onClose);
   const [draft, setDraft] = useState(() => ({ ...preferences }));
   const [saving, setSaving] = useState(false);
@@ -50,72 +152,107 @@ export function SettingsDialog({ preferences, onSave, onClose }: SettingsDialogP
   const toggleVoice = () => setDraft((prev) => ({ ...prev, voiceEnabled: !prev.voiceEnabled }));
 
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Settings">
-      <div className="settings-dialog" ref={dialogRef as React.Ref<HTMLDivElement>} onKeyDown={onDialogKeyDown}>
-        <div className="settings-header">
-          <h2>Settings</h2>
-          <button className="icon-btn" onClick={onClose} aria-label="Close settings">×</button>
+    <div className="fixed inset-0 z-40 grid place-items-center bg-bg/80 p-3" role="dialog" aria-modal="true" aria-label="Settings">
+      <div
+        className="max-h-[90dvh] w-[min(680px,100%)] overflow-y-auto rounded-3xl border border-line bg-bg p-3"
+        ref={dialogRef as React.Ref<HTMLDivElement>}
+        onKeyDown={onDialogKeyDown}
+      >
+        {/* Bento header tile */}
+        <div className={`mb-2 flex items-center justify-between ${bentoCard}`}>
+          <h2 className="text-sm font-bold tracking-wide text-ink uppercase">Settings</h2>
+          <button type="button" className="px-1.5 text-xl leading-none text-muted transition-colors hover:text-accent-strong" onClick={onClose} aria-label="Close settings">×</button>
         </div>
 
-        <div className="settings-body">
-          <div className="setting-row">
-            <label>Subtitle language</label>
-            <select
-              value={draft.subtitleLanguage}
-              onChange={(e) => setDraft((prev) => ({ ...prev, subtitleLanguage: e.target.value }))}
-            >
-              {SUPPORTED_SUBTITLE_LANGUAGES.map((lang) => (
-                <option key={lang.code} value={lang.code}>{lang.nativeLabel}</option>
-              ))}
-            </select>
+        <div className="grid gap-2 lg:grid-cols-2">
+          {/* Presentation tiles */}
+          <div className={`${bentoCard} flex flex-col gap-4`}>
+            <div>
+              <h3 className="mb-2.5 text-[11px] font-bold tracking-wider text-ink-dim uppercase">Subtitle language</h3>
+              <SubtitleLanguagePicker
+                value={draft.subtitleLanguage}
+                onChange={(subtitleLanguage) => setDraft((prev) => ({ ...prev, subtitleLanguage }))}
+              />
+            </div>
           </div>
 
-          <div className="setting-row">
-            <label>Voice</label>
-            <div
-              className={`toggle-switch${draft.voiceEnabled ? " on" : ""}`}
-              onClick={toggleVoice}
-              role="switch"
-              aria-checked={draft.voiceEnabled}
-              tabIndex={0}
-              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") toggleVoice(); }}
-            />
+          <div className="flex flex-col gap-2">
+            <div className={`${bentoCard} flex items-center justify-between`}>
+              <div>
+                <p className="text-xs font-bold text-ink">Japanese voice</p>
+                <p className="text-[10px] text-faint">Qwen3-TTS local service</p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={draft.voiceEnabled}
+                onClick={toggleVoice}
+                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") toggleVoice(); }}
+                className={`relative h-5.5 w-10 shrink-0 rounded-full border transition-colors ${draft.voiceEnabled ? "border-accent bg-accent" : "border-line-strong bg-transparent"}`}
+              >
+                <span className={`absolute top-1/2 size-3.5 -translate-y-1/2 rounded-full transition-all ${draft.voiceEnabled ? "left-[22px] bg-on-accent" : "left-1 bg-muted"}`} />
+              </button>
+            </div>
+
+            <div className={`${bentoCard} flex items-center justify-between`}>
+              <div>
+                <p className="text-xs font-bold text-ink">Avatar</p>
+                <p className="text-[10px] text-faint">{preferences.avatarMode === "live2d" ? "Live2D model" : "Offline placeholder"}</p>
+              </div>
+              <span className="rounded-full border border-line-strong px-2 py-0.5 text-[10px] font-bold tracking-wide text-muted uppercase">
+                {preferences.avatarMode === "live2d" ? "Live2D" : "Offline"}
+              </span>
+            </div>
+
+            {/* Security tile */}
+            <details className={`${bentoCard}`}>
+              <summary className="cursor-pointer text-xs font-bold text-ink-dim marker:content-none [&::-webkit-details-marker]:hidden">
+                Security
+              </summary>
+              <div className="pt-3">
+                <SecuritySection />
+              </div>
+            </details>
           </div>
 
-          <div className="setting-row">
-            <label>Avatar</label>
-            <span className="value">{preferences.avatarMode === "live2d" ? "Live2D" : "Offline"}</span>
-          </div>
-
-          <details className="details-toggle">
-            <summary>Connection</summary>
-            <div className="details-body">
-              <label>
-                WebSocket URL
+          {/* Hermes gateway tile */}
+          <details className={`${bentoCard} lg:col-span-2`} open>
+            <summary className="cursor-pointer text-xs font-bold text-ink-dim marker:content-none [&::-webkit-details-marker]:hidden">
+              Hermes gateway
+            </summary>
+            <div className="flex flex-col gap-3 pt-3">
+              <label className="flex flex-col gap-1">
+                <span className={fieldLabel}>WebSocket URL</span>
                 <input
                   type="text"
+                  className={`${inputBase} font-mono`}
                   value={draft.hermes.websocketUrl}
                   onChange={(e) => setDraft((prev) => ({ ...prev, hermes: { ...prev.hermes, websocketUrl: e.target.value } }))}
                 />
               </label>
-              <label>
-                Session token
-                <input
-                  type="password"
-                  value={draft.hermes.token}
-                  autoComplete="off"
-                  onChange={(e) => setDraft((prev) => ({ ...prev, hermes: { ...prev.hermes, token: e.target.value } }))}
-                />
-              </label>
+              <HermesControlPanel
+                websocketUrl={draft.hermes.websocketUrl}
+                token={draft.hermes.token}
+                cwd={draft.hermes.cwd ?? ""}
+                onConnectionChange={({ websocketUrl, token }) =>
+                  setDraft((prev) => ({ ...prev, hermes: { ...prev.hermes, websocketUrl, token } }))
+                }
+                onInspect={() => onInspectHermesControl()}
+                onStart={onStartHermesControl}
+                onStop={onStopHermesControl}
+              />
             </div>
           </details>
         </div>
 
-        <div className="settings-footer">
-          <span>Kana · v{preferences.live2d.modelUrl ? "Live2D" : "base"}</span>
-          <div className="settings-footer-actions">
-            <button className="secondary-button" onClick={onClose}>Cancel</button>
-            <button className="primary-button" onClick={() => void save()} disabled={saving}>{saving ? "Saving…" : "Done"}</button>
+        {/* Footer tile */}
+        <div className={`mt-2 flex items-center justify-between ${bentoCard}`}>
+          <span className="text-[10px] text-faint">Kana · Hermes, with a face and a voice</span>
+          <div className="flex items-center gap-2">
+            <button type="button" className={btnGhost} onClick={onClose}>Cancel</button>
+            <button type="button" className={btnPrimary} onClick={() => void save()} disabled={saving}>
+              {saving ? "Saving…" : "Done"}
+            </button>
           </div>
         </div>
       </div>

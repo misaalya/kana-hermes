@@ -102,7 +102,6 @@ const app = spawn(
       ...process.env,
       HOSTNAME: "127.0.0.1",
       PORT: String(port),
-      KANA_LOCAL_RUNTIME_CONTROL: "1",
     },
     stdio: "inherit",
   },

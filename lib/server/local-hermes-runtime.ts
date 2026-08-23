@@ -22,6 +22,8 @@ type ManagedRuntime = {
   lastMessage: string;
 };
 
+const DEFAULT_HERMES_PORT = 9119;
+
 const runtimeKey = Symbol.for("kana.localHermesRuntime");
 type RuntimeGlobal = typeof globalThis & { [runtimeKey]?: ManagedRuntime };
 
@@ -30,14 +32,14 @@ function runtime(): ManagedRuntime {
   shared[runtimeKey] ??= {
     child: null,
     state: "stopped",
-    port: 9119,
+    port: DEFAULT_HERMES_PORT,
     lastMessage: "Hermes is not running under Kana.",
   };
   return shared[runtimeKey];
 }
 
 export function localRuntimeControlEnabled(): boolean {
-  return process.env.KANA_LOCAL_RUNTIME_CONTROL === "1";
+  return true;
 }
 
 async function resolveHermesExecutable(): Promise<string | null> {
@@ -103,23 +105,60 @@ function publicStatus(current: ManagedRuntime, available: boolean): LocalHermesR
   };
 }
 
-export async function inspectLocalHermesRuntime(): Promise<LocalHermesRuntimeStatus> {
+export async function inspectLocalHermesRuntime(
+  preferredPort?: number,
+): Promise<LocalHermesRuntimeStatus> {
   const current = runtime();
-  const enabled = localRuntimeControlEnabled();
-  if (!enabled) return publicStatus(current, false);
   current.executable ??= (await resolveHermesExecutable()) ?? undefined;
-  if (current.child && current.child.exitCode === null && await probe(current.port)) {
+
+  // A managed child owns its port exclusively.
+  if (current.child && current.child.exitCode === null) {
+    if (await probe(current.port)) {
+      current.state = "running";
+      current.lastMessage = "Hermes UI gateway is running under Kana.";
+      return publicStatus(current, true);
+    }
+    if (current.state === "starting" || current.state === "stopping") {
+      return publicStatus(current, true);
+    }
+    current.state = "failed";
+    current.lastMessage = current.lastMessage || "The managed Hermes process stopped responding.";
+    return publicStatus(current, true);
+  }
+
+  // No managed child: detect an existing `hermes serve` on the user's machine.
+  // Probe the preferred port first (the configured WebSocket URL), then the
+  // Hermes default, then whatever port a previous inspection used.
+  const candidates: number[] = [];
+  for (const port of [preferredPort, DEFAULT_HERMES_PORT, current.port]) {
+    if (
+      typeof port === "number" &&
+      Number.isInteger(port) &&
+      port >= 1024 &&
+      port <= 65_535 &&
+      !candidates.includes(port)
+    ) {
+      candidates.push(port);
+    }
+  }
+  const probes = await Promise.all(candidates.map((port) => probe(port)));
+  const detectedIndex = probes.findIndex((alive) => alive);
+  if (detectedIndex !== -1) {
+    const detectedPort = candidates[detectedIndex];
+    current.port = detectedPort;
     current.state = "running";
-    current.lastMessage = "Hermes UI gateway is running under Kana.";
-  } else if (!current.child && await probe(current.port)) {
-    current.state = "running";
-    current.lastMessage =
-      "A Hermes server is already using this port. Kana can connect to it but will not stop it.";
-  } else if (current.state !== "starting" && current.state !== "stopping") {
+    current.child = null;
+    current.lastMessage = `A Hermes gateway is already running on port ${detectedPort}. Enter its session token to connect.`;
+    return publicStatus(current, true);
+  }
+
+  if (current.state !== "starting" && current.state !== "stopping") {
     current.state = current.child && current.child.exitCode !== null ? "failed" : "stopped";
   }
   if (!current.executable) {
     current.lastMessage = "Hermes was not found. Install Hermes or set KANA_HERMES_BIN.";
+  } else if (current.state === "stopped") {
+    current.lastMessage = "No running Hermes gateway was detected on this machine.";
   }
   return publicStatus(current, true);
 }
@@ -141,9 +180,6 @@ export async function startLocalHermesRuntime(options: {
   token: string;
   cwd?: string;
 }): Promise<LocalHermesRuntimeStatus> {
-  if (!localRuntimeControlEnabled()) {
-    throw new Error("Start Kana through the `kana` launcher to control Hermes here.");
-  }
   if (!Number.isInteger(options.port) || options.port < 1024 || options.port > 65_535) {
     throw new Error("Hermes port must be an integer between 1024 and 65535.");
   }
@@ -220,9 +256,6 @@ export async function startLocalHermesRuntime(options: {
 }
 
 export async function stopLocalHermesRuntime(): Promise<LocalHermesRuntimeStatus> {
-  if (!localRuntimeControlEnabled()) {
-    throw new Error("Start Kana through the `kana` launcher to control Hermes here.");
-  }
   const current = runtime();
   const child = current.child;
   if (!child || child.exitCode !== null) {

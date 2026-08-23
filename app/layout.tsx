@@ -43,7 +43,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       lang="en"
       className={`${kanaSans.variable} ${kanaJapanese.variable} h-full antialiased`}
     >
-      <body>
+      <body className={`${kanaSans.variable} ${kanaJapanese.variable} bg-bg font-sans text-ink antialiased`}>
         <ServiceWorkerRegistration />
         {children}
       </body>

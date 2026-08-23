@@ -59,96 +59,118 @@ export const ConversationSidebar = memo(function ConversationSidebar({
   };
 
   return (
-    <aside className="conversation-sidebar" aria-label="Conversation history">
-      <div className="sidebar-brand">
-        <div className="kana-mark" aria-hidden="true">
-          か
-        </div>
-        <div>
-          <h1>Kana</h1>
-          <p>Hermes interface</p>
+    <aside className="flex h-full min-h-0 flex-col gap-3" aria-label="Conversation history">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-sm font-bold text-ink">Kana</h1>
+          <p className="text-[10px] tracking-wide text-muted uppercase">Hermes interface</p>
         </div>
         {onClose ? (
-          <button className="icon-button sidebar-close" onClick={onClose} aria-label="Close history">
+          <button type="button" className="text-lg leading-none text-muted transition-colors hover:text-accent-strong" onClick={onClose} aria-label="Close history">
             ×
           </button>
         ) : null}
       </div>
 
-      <button className="new-conversation-button" onClick={onCreate} disabled={disabled}>
+      <button
+        type="button"
+        className="flex min-h-9 items-center justify-center gap-1.5 rounded-full bg-accent text-xs font-bold text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
+        onClick={onCreate}
+        disabled={disabled}
+      >
         <span aria-hidden="true">＋</span>
         New conversation
       </button>
 
-      <label className="conversation-search">
+      <label className="relative block">
         <span className="sr-only">Search conversations</span>
-        <span aria-hidden="true">⌕</span>
+        <span aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-faint">⌕</span>
         <input
           type="search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Search history"
+          className="min-h-9 w-full rounded-full border border-line-strong bg-transparent pl-8 pr-3 text-xs text-ink placeholder:text-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15"
         />
       </label>
 
-      <div className="conversation-list">
-        <p className="section-label">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        <p className="px-1 pb-2 text-[10px] font-bold tracking-wider text-faint uppercase">
           {query ? `${visibleConversations.length} found` : "Recent"}
         </p>
-        {visibleConversations.map((conversation) => {
-          const latest = conversation.messages.at(-1);
-          const preview =
-            latest?.role === "assistant"
-              ? latest.subtitle?.text
-              : latest?.text;
+        <div className="flex flex-col gap-1.5">
+          {visibleConversations.map((conversation) => {
+            const latest = conversation.messages.at(-1);
+            const preview =
+              latest?.role === "assistant"
+                ? latest.subtitle?.text
+                : latest?.text;
+            const active = conversation.id === activeId;
 
-          return (
-            <article
-              className={`conversation-item ${conversation.id === activeId ? "active" : ""}`}
-              key={conversation.id}
-            >
-              <button
-                className="conversation-select"
-                onClick={() => onSelect(conversation.id)}
-                disabled={disabled}
-              >
-                <span className="conversation-title">{conversation.title}</span>
-                {conversation.agent ? (
-                  <span
-                    className={`conversation-session ${
-                      conversation.agent.status === "missing" ? "missing" : "linked"
-                    }`}
-                  >
-                    {conversation.agent.status === "missing"
-                      ? "Session missing"
-                      : conversation.agent.relationship === "branch"
-                        ? "Hermes branch"
-                        : "Hermes linked"}
+            return (
+              <article key={conversation.id} className="group relative">
+                <button
+                  type="button"
+                  onClick={() => onSelect(conversation.id)}
+                  disabled={disabled}
+                  className={`w-full rounded-xl border px-3 py-2.5 text-left transition-colors disabled:opacity-50 ${
+                    active
+                      ? "border-accent/40 bg-accent/10"
+                      : "border-line bg-surface hover:border-line-strong"
+                  }`}
+                >
+                  <span className="block truncate pr-14 text-xs font-semibold text-ink">{conversation.title}</span>
+                  {conversation.agent ? (
+                    <span
+                      className={`mt-0.5 inline-block rounded-full border px-1.5 py-px text-[9px] font-bold tracking-wide uppercase ${
+                        conversation.agent.status === "missing"
+                          ? "border-danger/40 text-danger"
+                          : "border-line-strong text-muted"
+                      }`}
+                    >
+                      {conversation.agent.status === "missing"
+                        ? "Session missing"
+                        : conversation.agent.relationship === "branch"
+                          ? "Hermes branch"
+                          : "Hermes linked"}
+                    </span>
+                  ) : null}
+                  <span className="mt-0.5 block truncate text-[11px] text-muted">
+                    {preview || "A quiet new beginning"}
                   </span>
-                ) : null}
-                <span className="conversation-preview">
-                  {preview || "A quiet new beginning"}
-                </span>
-                <span className="conversation-date">{formatDate(conversation.updatedAt)}</span>
-              </button>
-              <div className="conversation-actions">
-                <button onClick={() => rename(conversation)} aria-label={`Rename ${conversation.title}`}>
-                  Rename
+                  <span className="absolute right-3 top-2.5 text-[10px] text-faint">{formatDate(conversation.updatedAt)}</span>
                 </button>
-                <button onClick={() => remove(conversation)} aria-label={`Delete ${conversation.title}`}>
-                  Delete
-                </button>
-              </div>
-            </article>
-          );
-        })}
-        {visibleConversations.length === 0 ? (
-          <p className="conversation-empty">No matching conversations.</p>
-        ) : null}
+                <div className={`absolute bottom-2 right-2 flex gap-1 ${active ? "" : "hidden group-hover:flex"}`}>
+                  <button
+                    type="button"
+                    className="rounded-full border border-line-strong bg-raised px-2 py-0.5 text-[10px] font-semibold text-muted transition-colors hover:text-accent-strong"
+                    onClick={() => rename(conversation)}
+                    aria-label={`Rename ${conversation.title}`}
+                  >
+                    Rename
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-full border border-line-strong bg-raised px-2 py-0.5 text-[10px] font-semibold text-muted transition-colors hover:text-danger"
+                    onClick={() => remove(conversation)}
+                    aria-label={`Delete ${conversation.title}`}
+                  >
+                    Delete
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+          {!visibleConversations.length ? (
+            <p className="rounded-xl border border-dashed border-line py-6 text-center text-[11px] text-faint">
+              No matching conversations.
+            </p>
+          ) : null}
+        </div>
       </div>
 
-      <div className="sidebar-note">
-        <span className="note-dot" />
+      <div className="flex items-center gap-2 border-t border-line pt-3 text-[10px] text-faint">
+        <span className="size-1.5 rounded-full bg-accent/70" />
         History stays on this device
       </div>
     </aside>
