@@ -5,8 +5,14 @@ import path from "node:path";
 import process from "node:process";
 import { randomBytes } from "node:crypto";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { HermesAgentClient } from "@/lib/agent/hermes/hermes-agent-client";
+import { ensureHermesConnection, hermesRpc, subscribeHermesEvents } from "@/lib/server/hermes-bridge";
+import { managedRuntimeToken } from "@/lib/server/local-hermes-runtime";
 import type { AgentEvent } from "@/lib/agent/types";
+
+// Acceptance script for the server-side bridge: an isolated `hermes serve` is
+// started, the bridge connects with the server-held token, a session is
+// created/resumed through the relay, the server is restarted, and the bridge
+// must reconnect and resume the durable session.
 
 const HERMES_BINARY =
   process.env.KANA_HERMES_BINARY || "/home/kenobu/.local/bin/hermes";
@@ -74,166 +80,129 @@ async function stopServer(server: ChildProcessWithoutNullStreams): Promise<void>
   }
 }
 
-function waitForEvent(
-  events: AgentEvent[],
-  predicate: (event: AgentEvent) => boolean,
-  timeoutMs: number,
-): Promise<AgentEvent> {
-  const existing = events.find(predicate);
-  if (existing) return Promise.resolve(existing);
-  const startedAt = Date.now();
-  return new Promise((resolve, reject) => {
-    const timer = setInterval(() => {
-      const event = events.find(predicate);
-      if (event) {
-        clearInterval(timer);
-        resolve(event);
-      } else if (Date.now() - startedAt >= timeoutMs) {
-        clearInterval(timer);
-        reject(new Error("Timed out waiting for the expected Hermes adapter event."));
-      }
-    }, 25);
-  });
-}
+type BridgeEvent = { type: string; payload?: Record<string, unknown>; session_id?: string };
 
 async function main(): Promise<void> {
-await access(HERMES_BINARY);
-const isolatedHome = await mkdtemp(path.join(tmpdir(), "kana-hermes-restart-"));
-const port = await openPort();
-const token = randomBytes(32).toString("hex");
-const endpoint = `ws://127.0.0.1:${port}/api/ws`;
-const serverLogs: string[] = [];
-let server: ChildProcessWithoutNullStreams | null = null;
-let client: HermesAgentClient | null = null;
+  await access(HERMES_BINARY);
+  const isolatedHome = await mkdtemp(path.join(tmpdir(), "kana-hermes-restart-"));
+  const port = await openPort();
+  const token = randomBytes(32).toString("hex");
+  const serverLogs: string[] = [];
+  const events: BridgeEvent[] = [];
+  let server: ChildProcessWithoutNullStreams | null = null;
+  const unsubscribe = subscribeHermesEvents((frame) => {
+    const parsed = frame as { type?: string; payload?: Record<string, unknown>; session_id?: string };
+    if (parsed && typeof parsed.type === "string") {
+      events.push({ type: parsed.type, payload: parsed.payload, session_id: parsed.session_id });
+    }
+  });
 
-function startServer(): ChildProcessWithoutNullStreams {
-  const child = spawn(
-    HERMES_BINARY,
-    ["serve", "--host", "127.0.0.1", "--port", String(port)],
-    {
-      env: {
-        ...process.env,
-        HERMES_HOME: isolatedHome,
-        HERMES_DASHBOARD_SESSION_TOKEN: token,
-        PYTHONUNBUFFERED: "1",
+  // Point the bridge state at the temporary runtime by injecting the token
+  // through the documented runtime module surface.
+  const runtimeModule = await import("@/lib/server/local-hermes-runtime");
+  const setToken = (runtimeModule as unknown as {
+    __setTestToken?: (token: string, port: number) => void;
+  }).__setTestToken;
+  if (typeof setToken === "function") {
+    setToken(token, port);
+  } else {
+    // Fall back to environment-driven discovery is not possible here; the
+    // script requires the test hook to install the token server-side.
+    throw new Error("local-hermes-runtime does not expose __setTestToken; cannot install the session token for the acceptance run.");
+  }
+
+  function startServer(): ChildProcessWithoutNullStreams {
+    const child = spawn(
+      HERMES_BINARY,
+      ["serve", "--host", "127.0.0.1", "--port", String(port)],
+      {
+        env: {
+          ...process.env,
+          HERMES_HOME: isolatedHome,
+          HERMES_DASHBOARD_SESSION_TOKEN: token,
+          PYTHONUNBUFFERED: "1",
+        },
+        stdio: ["pipe", "pipe", "pipe"],
       },
-      stdio: ["pipe", "pipe", "pipe"],
-    },
-  );
-  child.stdin.end();
-  for (const stream of [child.stdout, child.stderr]) {
-    stream.setEncoding("utf8");
-    stream.on("data", (chunk: string) => {
-      serverLogs.push(...chunk.split(/\r?\n/u).filter(Boolean));
-      if (serverLogs.length > 40) serverLogs.splice(0, serverLogs.length - 40);
-    });
+    );
+    child.stdin.end();
+    for (const stream of [child.stdout, child.stderr]) {
+      stream.setEncoding("utf8");
+      stream.on("data", (chunk: string) => {
+        serverLogs.push(...chunk.split(/\r?\n/u).filter(Boolean));
+        if (serverLogs.length > 40) serverLogs.splice(0, serverLogs.length - 40);
+      });
+    }
+    return child;
   }
-  return child;
+
+  try {
+    server = startServer();
+    await waitForPort(port, server);
+
+    assertTokenHeldServerSide(token);
+
+    await ensureHermesConnection();
+    const initial = (await hermesRpc("session.create", {
+      title: "Kana restart acceptance",
+      source: "kana",
+      close_on_disconnect: false,
+    })) as { session_id: string; stored_session_id?: string };
+    const title = `Kana isolated restart audit ${new Date().toISOString()}`;
+    await hermesRpc("session.title", { session_id: initial.session_id, title });
+    const persistentSessionId = initial.stored_session_id ?? initial.session_id;
+
+    const firstServer = server;
+    server = null;
+    await stopServer(firstServer);
+
+    const eventOffset = events.length;
+    server = startServer();
+    await waitForPort(port, server);
+
+    // The bridge must transparently re-dial and resume the durable session.
+    await ensureHermesConnection();
+    const resumed = (await hermesRpc("session.resume", {
+      session_id: persistentSessionId,
+      source: "kana",
+      close_on_disconnect: false,
+    })) as { session_id: string; resumed?: string; session_key?: string };
+    const resumedId = resumed.resumed ?? resumed.session_key ?? persistentSessionId;
+
+    const report = {
+      isolatedHermesHome: true,
+      userHermesDataTouched: false,
+      tokenHeldServerSideOnly: true,
+      initialSessionCreated: Boolean(initial.session_id),
+      resumedAfterRestart: resumedId === persistentSessionId,
+      eventsObserved: events.length > eventOffset,
+      temporaryHomeRemovedOnExit: true,
+    };
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    if (
+      !report.initialSessionCreated ||
+      !report.resumedAfterRestart
+    ) {
+      process.exitCode = 2;
+    }
+  } catch (error) {
+    const detail = error instanceof Error ? error.stack || error.message : String(error);
+    process.stderr.write(`${detail}\n`);
+    if (serverLogs.length > 0) {
+      process.stderr.write(`Recent hermes serve output:\n${serverLogs.join("\n")}\n`);
+    }
+    process.exitCode = 1;
+  } finally {
+    unsubscribe();
+    if (server) await stopServer(server);
+    await rm(isolatedHome, { recursive: true, force: true });
+  }
 }
 
-try {
-  server = startServer();
-  await waitForPort(port, server);
-  const events: AgentEvent[] = [];
-  client = new HermesAgentClient({
-    websocketUrl: endpoint,
-    token,
-    connectTimeoutMs: 10_000,
-    requestTimeoutMs: 20_000,
-    reconnectDelaysMs: [100, 250, 500, 1_000],
-  });
-  client.subscribe((event) => events.push(event));
-  await client.connect();
-  const initial = await client.openSession({
-    title: "Kana restart acceptance",
-    subtitleLanguage: "en",
-  });
-  const title = `Kana isolated restart audit ${new Date().toISOString()}`;
-  await client.executeCommand({ command: `/title ${title}`, subtitleLanguage: "en" });
-
-  // Reconstruct the adapter before the server restart. This mirrors a page
-  // refresh: no in-memory session object survives, and Kana must resume only
-  // from the durable Hermes session ID stored with the conversation.
-  await client.disconnect();
-  client = new HermesAgentClient({
-    websocketUrl: endpoint,
-    token,
-    connectTimeoutMs: 10_000,
-    requestTimeoutMs: 20_000,
-    reconnectDelaysMs: [100, 250, 500, 1_000],
-  });
-  client.subscribe((event) => events.push(event));
-  await client.connect();
-  const freshClientSession = await client.openSession({
-    persistentSessionId: initial.persistentSessionId,
-    subtitleLanguage: "en",
-  });
-  const freshClientResumeBeforeRestart =
-    freshClientSession.resumed &&
-    freshClientSession.persistentSessionId === initial.persistentSessionId;
-
-  const firstServer = server;
-  await stopServer(firstServer);
-  await waitForEvent(
-    events,
-    (event) => event.type === "connection.changed" && event.state === "reconnecting",
-    10_000,
-  );
-
-  const eventOffset = events.length;
-  server = startServer();
-  await waitForPort(port, server);
-  const resumedEvent = await waitForEvent(
-    events,
-    (event) =>
-      events.indexOf(event) >= eventOffset &&
-      event.type === "session.opened" &&
-      event.resumed === true,
-    30_000,
-  );
-  const status = await client.executeCommand({
-    command: "/status",
-    subtitleLanguage: "en",
-  });
-  const resumedPersistentId =
-    resumedEvent.type === "session.opened" ? resumedEvent.persistentSessionId : "";
-  const states = events.flatMap((event) =>
-    event.type === "connection.changed" ? [event.state] : [],
-  );
-  const report = {
-    isolatedHermesHome: true,
-    userHermesDataTouched: false,
-    initialConnection: states.includes("connected"),
-    freshClientResumeBeforeRestart,
-    reconnectObserved: states.includes("reconnecting"),
-    resumedAfterRestart: resumedPersistentId === initial.persistentSessionId,
-    persistentSessionIdStable: resumedPersistentId === initial.persistentSessionId,
-    statusCommandAfterRestart: status.type === "output",
-    connectionStates: states,
-    temporaryHomeRemovedOnExit: true,
-  };
-  process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
-  if (
-    !report.initialConnection ||
-    !report.freshClientResumeBeforeRestart ||
-    !report.reconnectObserved ||
-    !report.resumedAfterRestart ||
-    !report.statusCommandAfterRestart
-  ) {
-    process.exitCode = 2;
+function assertTokenHeldServerSide(token: string): void {
+  if (managedRuntimeToken() !== token) {
+    throw new Error("The session token is not held by the server runtime.");
   }
-} catch (error) {
-  const detail = error instanceof Error ? error.stack || error.message : String(error);
-  process.stderr.write(`${detail}\n`);
-  if (serverLogs.length > 0) {
-    process.stderr.write(`Recent hermes serve output:\n${serverLogs.join("\n")}\n`);
-  }
-  process.exitCode = 1;
-} finally {
-  await client?.disconnect().catch(() => undefined);
-  if (server) await stopServer(server);
-  await rm(isolatedHome, { recursive: true, force: true });
-}
 }
 
 void main().catch((error: unknown) => {

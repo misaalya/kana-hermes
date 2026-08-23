@@ -46,6 +46,8 @@ import {
   controlHermesRuntime,
   inspectHermesRuntime,
 } from "@/lib/runtime/hermes-control-client";
+// websocketUrl/token imports retired: the browser reaches Hermes only through
+// the Kana server relay and holds no credentials.
 import { useAvatarController } from "./use-avatar-controller";
 import { useVoiceController } from "./use-voice-controller";
 
@@ -678,37 +680,14 @@ export function useKanaController(appVersion: string) {
   // ---- Agent lifecycle ----
   const ensureAgent = useCallback(
     async (conversation: Conversation): Promise<AgentClient> => {
-      const prefs = preferencesRef.current;
-      // Remote access: a browser page served from a non-loopback origin cannot
-      // dial the server's ws://127.0.0.1 endpoint. Route through the same-origin
-      // nginx proxy (/hermes-ws/ -> Hermes serve) so the connection still works.
-      let websocketUrl = prefs.hermes.websocketUrl;
-      if (typeof window !== "undefined") {
-        const pageHost = window.location.hostname.toLowerCase();
-        const pageIsLoopback =
-          pageHost === "127.0.0.1" || pageHost === "localhost" || pageHost === "::1";
-        const urlIsLocal = (() => {
-          try {
-            const host = new URL(websocketUrl).hostname.toLowerCase();
-            return host === "127.0.0.1" || host === "localhost" || host === "::1" || host === "[::1]";
-          } catch {
-            return false;
-          }
-        })();
-        if (!pageIsLoopback && urlIsLocal) {
-          const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-          websocketUrl = `${proto}//${window.location.host}/hermes-ws/api/ws`;
-        }
-      }
-      const key = `hermes:${websocketUrl}:${prefs.hermes.token}`;
+      // The agent connects through the Kana server relay: the browser never
+      // dials a Hermes WebSocket and never holds a session token.
+      const key = "hermes:relay";
 
       if (!agentRef.current || agentKeyRef.current !== key) {
         unsubscribeAgentRef.current?.();
         await agentRef.current?.disconnect();
-        agentRef.current = new HermesAgentClient({
-          websocketUrl,
-          token: prefs.hermes.token,
-        });
+        agentRef.current = new HermesAgentClient();
         agentKeyRef.current = key;
         openedConversationRef.current = null;
         unsubscribeAgentRef.current =
@@ -721,9 +700,9 @@ export function useKanaController(appVersion: string) {
         openingConversationRef.current = conversation.id;
         await agent.openSession({
           title: conversation.title,
-          subtitleLanguage: prefs.subtitleLanguage,
+          subtitleLanguage: preferencesRef.current.subtitleLanguage,
           persistentSessionId: conversation.agent?.persistentSessionId,
-          cwd: prefs.hermes.cwd || undefined,
+          cwd: preferencesRef.current.hermes.cwd || undefined,
         });
       }
       return agent;
@@ -1244,26 +1223,9 @@ export function useKanaController(appVersion: string) {
   const savePreferences = useCallback(
     async (next: KanaPreferences) => {
       next = normalizeKanaPreferences(next);
-      const oldAgentKey = `hermes:${preferencesRef.current.hermes.websocketUrl}:${preferencesRef.current.hermes.token}`;
-      const nextAgentKey = `hermes:${next.hermes.websocketUrl}:${next.hermes.token}`;
       preferencesRef.current = next;
       setPreferences(next);
       preferencesStore.save(next);
-      if (oldAgentKey !== nextAgentKey) {
-        unsubscribeAgentRef.current?.();
-        unsubscribeAgentRef.current = null;
-        await agentRef.current?.disconnect();
-        agentRef.current = null;
-        agentKeyRef.current = "";
-        openedConversationRef.current = null;
-        openingConversationRef.current = null;
-        turnConversationRef.current = null;
-        setBusy(false);
-        setPendingInput(null);
-        setRespondingToInput(false);
-        setStatus("Ready when you are");
-        setConnectionState("disconnected");
-      }
       cleanupVoice();
       await configureAvatar(next, undefined, true);
     },
@@ -1292,10 +1254,6 @@ export function useKanaController(appVersion: string) {
       const next = {
         ...backup.preferences,
         onboardingCompleted: true,
-        hermes: {
-          ...backup.preferences.hermes,
-          token: preferencesRef.current.hermes.token,
-        },
       };
       preferencesRef.current = next;
       setPreferences(next);
@@ -1418,16 +1376,14 @@ export function useKanaController(appVersion: string) {
   );
 
   const testAgentConnection = useCallback(
-    async (next: KanaPreferences) => {
+    async () => {
       const client = new HermesAgentClient({
-        websocketUrl: next.hermes.websocketUrl,
-        token: next.hermes.token,
         reconnectDelaysMs: [],
         connectTimeoutMs: 10_000,
       });
       try {
         await client.connect();
-        return "Hermes gateway.ready received. The connection is compatible.";
+        return "Hermes relay connected. The gateway is reachable through the Kana server.";
       } finally {
         await client.disconnect();
       }
@@ -1445,7 +1401,7 @@ export function useKanaController(appVersion: string) {
         agent: {
           mode: preferences.agentMode,
           state: connectionState,
-          websocketUrl: preferences.hermes.websocketUrl,
+          websocketUrl: "kana-relay",
         },
         voice: {
           mode: preferences.voiceMode,
@@ -1537,14 +1493,12 @@ export function useKanaController(appVersion: string) {
     inspectHermesControl: (preferredPort?: number) => inspectHermesRuntime(preferredPort),
     startHermesControl: (options: {
       port: number;
-      token: string;
       cwd?: string;
       restart?: boolean;
     }) =>
       controlHermesRuntime({
         action: options.restart ? "restart" : "start",
         port: options.port,
-        token: options.token,
         cwd: options.cwd,
       }),
     stopHermesControl: () => controlHermesRuntime({ action: "stop" }),

@@ -12,10 +12,6 @@ import { ActivityStack } from "./activity-stack";
 import { useKanaController } from "@/lib/state/use-kana-controller";
 import { useTheme } from "@/lib/state/use-theme";
 import type { KanaMessage } from "@/lib/conversation/types";
-import {
-  generatedSessionToken,
-  hermesPortFromWebSocketUrl,
-} from "@/lib/runtime/hermes-control-client";
 import type { HermesRuntimeStatus } from "@/lib/runtime/hermes-control-client";
 import { btnPrimary, btnSecondary } from "./ui";
 
@@ -27,19 +23,6 @@ function destructiveCommandPrompt(input: string): string | null {
   if (normalized === "update" || normalized.startsWith("update ")) return "Allow Hermes to update its own installation?";
   if (/^rollback\s+(restore|rewind)\b/.test(normalized)) return "Restore a Hermes filesystem checkpoint? This can overwrite current files.";
   return null;
-}
-
-function hermesPortFromUrl(url: string): number {
-  return hermesPortFromWebSocketUrl(url);
-}
-
-function hermesUrlIsLocal(url: string): boolean {
-  try {
-    const host = new URL(url).hostname.toLowerCase();
-    return host === "127.0.0.1" || host === "localhost" || host === "::1" || host === "[::1]";
-  } catch {
-    return false;
-  }
 }
 
 const NO_MESSAGES: KanaMessage[] = [];
@@ -91,7 +74,6 @@ export function KanaApp({ appVersion }: KanaAppProps) {
   const connectionInTransition = kana.connectionState === "connecting" || kana.connectionState === "reconnecting";
   const activeCommandIndex = Math.min(selectedCommandIndex, Math.max(0, kana.commandSuggestions.length - 1));
   const showGate = kana.ready && kana.connectionState !== "connected";
-  const hermesConfigKey = `${kana.preferences.hermes.websocketUrl}:${kana.preferences.hermes.token}`;
   const gateConnectAttemptsRef = useRef(0);
   const detectedExternalGateway = Boolean(
     hermesRuntime?.state === "running" && !hermesRuntime.managed,
@@ -103,24 +85,14 @@ export function KanaApp({ appVersion }: KanaAppProps) {
     connectionStateRef.current = kana.connectionState;
   });
 
-  const [connectPhase, setConnectPhase] = useState<"idle" | "connecting" | "auto_starting" | "token_needed">("idle");
+  const [connectPhase, setConnectPhase] = useState<"idle" | "connecting" | "auto_starting">("idle");
 
   const startHermesGateway = useCallback(async () => {
     setHermesRuntimeBusy(true);
     setHermesRuntimeNotice(null);
     try {
-      const preferences = kana.preferences;
-      let token = preferences.hermes.token.trim();
-      if (!token) {
-        token = generatedSessionToken();
-        await kana.savePreferences({
-          ...preferences,
-          hermes: { ...preferences.hermes, token },
-        });
-      }
       const status = await kana.startHermesControl({
-        port: hermesPortFromUrl(kana.preferences.hermes.websocketUrl),
-        token,
+        port: hermesRuntime?.port ?? 9119,
         cwd: kana.preferences.hermes.cwd || undefined,
       });
       setHermesRuntime(status);
@@ -131,19 +103,19 @@ export function KanaApp({ appVersion }: KanaAppProps) {
         error instanceof Error ? error.message : "Could not start the Hermes gateway.",
       );
       try {
-        setHermesRuntime(await kana.inspectHermesControl(hermesPortFromUrl(kana.preferences.hermes.websocketUrl)));
+        setHermesRuntime(await kana.inspectHermesControl());
       } catch {}
     } finally {
       setHermesRuntimeBusy(false);
     }
-  }, [kana]);
+  }, [kana, hermesRuntime?.port]);
 
   const handleConnectHermes = useCallback(async () => {
     if (connectionInTransition) return;
     gateConnectAttemptsRef.current = 100;
     setConnectPhase("connecting");
 
-    // Step 1: try a direct connection first
+    // Step 1: try the relay first — the server may already run Hermes.
     await kana.connectAgent();
 
     // Step 2: wait for React to flush the connection-state update
@@ -155,11 +127,7 @@ export function KanaApp({ appVersion }: KanaAppProps) {
       return;
     }
 
-    // Step 4: smart flow — discover, auto-start, or request a token
-    if (detectedExternalGateway && (!kana.preferences.hermes.token || connectionStateRef.current === "authentication_failed")) {
-      setConnectPhase("token_needed");
-      return;
-    }
+    // Step 4: smart flow — auto-start the managed gateway when installed
     if (hermesRuntime?.executable && hermesRuntime.state !== "running") {
       setConnectPhase("auto_starting");
       try {
@@ -171,15 +139,15 @@ export function KanaApp({ appVersion }: KanaAppProps) {
       return;
     }
     setConnectPhase("idle");
-  }, [kana, connectionInTransition, detectedExternalGateway, hermesRuntime, startHermesGateway]);
+  }, [kana, connectionInTransition, hermesRuntime, startHermesGateway]);
 
-  // A reachable Hermes is normally auto-connected right away. When the gateway
-  // is down, retrying on every gate appearance remounts the whole shell (and
-  // the WebGL canvas) in a tight loop and starves the UI thread, so bound the
-  // automatic attempts and leave further retries to the manual button.
+  // A reachable Hermes relay is normally auto-connected right away. When the
+  // gateway is down, retrying on every gate appearance remounts the whole shell
+  // (and the WebGL canvas) in a tight loop and starves the UI thread, so bound
+  // the automatic attempts and leave further retries to the manual button.
   useEffect(() => {
     gateConnectAttemptsRef.current = 0;
-  }, [hermesConfigKey]);
+  }, []);
 
   useEffect(() => {
     if (!showGate) return;
@@ -192,38 +160,20 @@ export function KanaApp({ appVersion }: KanaAppProps) {
     }, delay);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showGate, hermesConfigKey]);
+  }, [showGate]);
 
-  // Local gateway control: when Kana runs against a local WebSocket URL, the
-  // gate first checks whether a `hermes serve` process is already listening.
-  // A detected external gateway only needs the user's session token; if none
-  // is running, Kana can start one itself and connect automatically.
+  // Local gateway control: the gate checks whether the server-side Hermes
+  // runtime is already listening; if not, Kana can start one itself and the
+  // relay connects automatically. No token entry — the server holds it.
   useEffect(() => {
     if (!showGate) return;
     let active = true;
-    kana.inspectHermesControl(hermesPortFromUrl(kana.preferences.hermes.websocketUrl))
+    kana.inspectHermesControl()
       .then((status) => { if (active) setHermesRuntime(status); })
       .catch(() => { if (active) setHermesRuntime(null); });
     return () => { active = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showGate]);
-
-  useEffect(() => {
-    if (!detectedExternalGateway || !hermesRuntime) return;
-    if (!hermesUrlIsLocal(kana.preferences.hermes.websocketUrl)) return;
-    const next = { ...kana.preferences };
-    let changed = false;
-    if (kana.preferences.hermes.websocketUrl !== hermesRuntime.websocketUrl) {
-      next.hermes = { ...next.hermes, websocketUrl: hermesRuntime.websocketUrl };
-      changed = true;
-    }
-    if (hermesRuntime.token && kana.preferences.hermes.token !== hermesRuntime.token) {
-      next.hermes = { ...next.hermes, token: hermesRuntime.token };
-      changed = true;
-    }
-    if (changed) void kana.savePreferences(next);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [detectedExternalGateway, hermesRuntime]);
 
   useEffect(() => {
     if (!message.startsWith("/")) { clearCommandSuggestions(); return; }
@@ -259,42 +209,18 @@ export function KanaApp({ appVersion }: KanaAppProps) {
   }, [renameConversation]);
   const deleteConversationFromSidebar = useCallback((id: string) => {
     void deleteConversation(id);
+    setHistoryOpen(false);
   }, [deleteConversation]);
 
-  const submit = useCallback(async () => {
+  const submitMessage = useCallback(async () => {
     const text = message.trim();
-    if (!text || connectionInTransition || (kana.busy && !canSubmitWhileBusy)) return;
+    if (!text) return;
     const confirmation = destructiveCommandPrompt(text);
     if (confirmation && !window.confirm(confirmation)) return;
     setMessage("");
     const prefill = await kana.sendMessage(text);
     if (prefill) setMessage(prefill);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [message, connectionInTransition, kana.busy, canSubmitWhileBusy, kana.sendMessage, setMessage]);
-
-  const commandSuggestions = kana.commandSuggestions;
-
-  const onKeyDown = useCallback((event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    const suggestions = commandSuggestions;
-    if (event.key === "ArrowDown" && suggestions.length > 0) {
-      event.preventDefault();
-      highlightCommand((selectedCommandIndexRef.current + 1) % suggestions.length);
-      return;
-    }
-    if (event.key === "ArrowUp" && suggestions.length > 0) {
-      event.preventDefault();
-      highlightCommand((selectedCommandIndexRef.current - 1 + suggestions.length) % suggestions.length);
-      return;
-    }
-    if ((event.key === "Tab" || event.key === "Enter") && suggestions.length > 0) {
-      event.preventDefault();
-      const selectedIndex = Math.min(selectedCommandIndexRef.current, suggestions.length - 1);
-      selectCommand(suggestions[selectedIndex]?.text ?? suggestions[0].text);
-      return;
-    }
-    if (event.key === "Escape") { clearCommandSuggestions(); return; }
-    if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void submit(); }
-  }, [clearCommandSuggestions, highlightCommand, selectCommand, submit, commandSuggestions]);
+  }, [kana, message, setMessage]);
 
   const topActionIcon =
     "grid size-8 place-items-center rounded-full border border-line bg-raised text-ink-dim transition-colors hover:border-accent hover:text-accent-strong";
@@ -358,90 +284,70 @@ export function KanaApp({ appVersion }: KanaAppProps) {
       {kana.activities.length > 0 || latestAssistant?.subtitle?.text || kana.busy ? (
         <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 flex w-[min(92%,720px)] -translate-x-1/2 flex-col items-center gap-2 max-md:bottom-20">
           <ActivityStack activities={kana.activities} />
-          {latestAssistant?.subtitle?.text || kana.busy ? (
-            <>
-              <div className="inline-block max-w-full rounded-xl border border-line bg-raised px-4 py-2 text-center">
-                <p className={`font-jp text-lg leading-snug md:text-[22px] ${latestAssistant?.subtitle?.text ? "text-ink" : "animate-kana-pulse text-faint"}`}>
-                  {latestAssistant?.subtitle?.text ?? "Kana is listening…"}
-                </p>
-              </div>
-              {latestAssistant?.subtitle ? (
-                <span className="-mt-1 inline-block rounded-full border border-line bg-raised px-2 py-px text-[9px] font-bold tracking-wider text-muted uppercase">
-                  {latestAssistant.subtitle.language.toUpperCase()}
-                </span>
-              ) : null}
-            </>
+          {kana.busy ? (
+            <p className="flex items-center gap-1.5 rounded-full border border-line bg-surface/80 px-3 py-1 text-[11px] font-semibold text-ink-dim backdrop-blur">
+              <span className="size-1.5 animate-kana-pulse rounded-full bg-accent-strong" />
+              {kana.status}
+            </p>
           ) : null}
         </div>
       ) : null}
 
       {/* Composer */}
-      <div className="absolute bottom-5 left-1/2 z-20 w-[min(560px,calc(100%-32px))] -translate-x-1/2 max-md:bottom-3">
-        <div className="relative">
-          <SlashCommandMenu
-            suggestions={kana.commandSuggestions}
-            loading={kana.commandSuggestionsLoading}
-            selectedIndex={activeCommandIndex}
-            onHighlight={highlightCommand}
-            onSelect={selectCommand}
+      <section className="absolute inset-x-0 bottom-0 z-20 px-4 pb-4">
+        <div className="mx-auto flex w-full max-w-3xl items-end gap-2 rounded-3xl border border-line bg-raised/85 p-2 backdrop-blur-md">
+          <textarea
+            ref={inputRef}
+            value={message}
+            rows={1}
+            placeholder="Tulis pesan…"
+            aria-label="Message Kana"
+            className="max-h-36 min-h-11 flex-1 resize-none bg-transparent px-2 py-2.5 text-[15px] leading-snug text-ink placeholder:text-faint focus:outline-none"
+            onChange={(event) => setMessage(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                event.preventDefault();
+                void submitMessage();
+              }
+            }}
           />
-          <div className="flex items-center rounded-full border border-line-strong bg-raised transition-colors focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/15 max-md:h-10">
-            <form className="contents" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
-              <textarea
-                id="kana-message"
-                aria-label="Message Kana"
-                ref={inputRef}
-                value={message}
-                aria-activedescendant={kana.commandSuggestions.length ? `kana-command-option-${activeCommandIndex}` : undefined}
-                aria-controls={kana.commandSuggestions.length ? "kana-command-menu" : undefined}
-                aria-autocomplete="list"
-                onChange={(event) => { highlightCommand(0); setMessage(event.target.value); }}
-                onKeyDown={onKeyDown}
-                placeholder={connectionInTransition ? "Reconnecting…" : kana.busy ? "Use /approve, /deny…" : "Type a message…"}
-                rows={1}
-                className="max-h-22 min-h-10 flex-1 resize-none bg-transparent py-2 pl-4 pr-1 text-sm leading-relaxed text-ink caret-accent placeholder:text-faint focus:outline-none max-md:min-h-10 max-md:text-[13px]"
-              />
-            </form>
-            <div className="flex flex-none items-center gap-1 pr-1.5">
-              {kana.busy ? (
-                <>
-                  {canSubmitWhileBusy ? <button className="rounded-full bg-accent-dim px-3.5 py-1.5 text-xs font-bold text-on-accent transition-colors hover:bg-accent" type="button" onClick={() => void submit()}>Run</button> : null}
-                  <button className="inline-flex min-h-8 items-center gap-1.5 rounded-full px-3 text-xs font-semibold text-ink-dim transition-colors hover:bg-surface hover:text-danger" type="button" onClick={() => void kana.abort()}>
-                    <span className="size-2 rounded-sm bg-current" /> Stop
-                  </button>
-                </>
-              ) : (
-                <button
-                  className="grid size-8 place-items-center rounded-full bg-accent text-on-accent transition-transform hover:scale-105 active:scale-95 disabled:opacity-25 disabled:hover:scale-100"
-                  type="button"
-                  onClick={() => void submit()}
-                  disabled={!message.trim() || connectionInTransition}
-                  aria-label="Send message"
-                >
-                  <svg viewBox="0 0 16 16" fill="none" className="size-4">
-                    <path d="M2 8L14 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-                    <path d="M9 3L14 8L9 13" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </button>
-              )}
-            </div>
-          </div>
+          {kana.busy ? (
+            <button
+              type="button"
+              aria-label="Stop"
+              className="grid size-10 shrink-0 place-items-center rounded-2xl border border-line-strong text-muted transition-colors hover:border-danger hover:text-danger"
+              onClick={() => void kana.abort()}
+            >
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="3" width="10" height="10" rx="2" /></svg>
+            </button>
+          ) : (
+            <button
+              type="button"
+              aria-label="Send"
+              disabled={!message.trim() || (kana.busy && !canSubmitWhileBusy)}
+              className="grid size-10 shrink-0 place-items-center rounded-2xl bg-accent text-on-accent transition-opacity disabled:opacity-40"
+              onClick={() => void submitMessage()}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M2.5 8L13.5 2.5 10.5 8l3 5.5L2.5 8z"/></svg>
+            </button>
+          )}
         </div>
-      </div>
-
-      {/* Messages panel (right drawer) */}
-      <section
-        className={`fixed inset-y-0 right-0 z-30 flex w-[min(420px,100vw)] flex-col border-l border-line bg-bg p-4 transition-transform duration-200 ${historyOpen ? "translate-x-0" : "translate-x-[102%]"}`}
-        aria-label="Message history"
-        aria-hidden={!historyOpen}
-        inert={historyOpen ? undefined : true}
-      >
-        <header className="mb-2 flex items-center justify-between">
-          <span className="text-[11px] font-bold tracking-wider text-ink-dim uppercase">Messages</span>
-          <button type="button" className={topActionIcon} aria-label="Close history" onClick={closeHistory}>×</button>
-        </header>
-        <DialogueHistory messages={kana.activeConversation?.messages ?? NO_MESSAGES} />
       </section>
+
+      {/* Message history (bottom sheet) */}
+      {historyOpen ? (
+        <section
+          className="fixed inset-x-0 bottom-0 z-30 flex h-[70dvh] flex-col rounded-t-3xl border-t border-line bg-raised p-4"
+          role="dialog"
+          aria-label="Message history"
+        >
+          <header className="mb-2 flex items-center justify-between">
+            <span className="text-[11px] font-bold tracking-wider text-ink-dim uppercase">Messages</span>
+            <button type="button" className={topActionIcon} aria-label="Close history" onClick={closeHistory}>×</button>
+          </header>
+          <DialogueHistory messages={kana.activeConversation?.messages ?? NO_MESSAGES} />
+        </section>
+      ) : null}
 
       {/* Conversations panel (right drawer, layered above messages) */}
       <aside
@@ -481,7 +387,7 @@ export function KanaApp({ appVersion }: KanaAppProps) {
                 : kana.connectionState === "reconnecting"
                   ? "Menghubungkan ulang…"
                   : kana.connectionState === "authentication_failed"
-                    ? "Token tidak cocok"
+                    ? "Sesi Kana tidak valid"
                     : kana.connectionState === "incompatible"
                       ? "Versi Hermes tidak kompatibel"
                       : kana.connectionState === "error"
@@ -498,36 +404,8 @@ export function KanaApp({ appVersion }: KanaAppProps) {
               {connectButtonLabel}
             </button>
 
-            {/* Token input when authentication failed or external gateway needs it */}
-            {connectPhase === "token_needed" || (detectedExternalGateway && (!kana.preferences.hermes.token || kana.connectionState === "authentication_failed")) ? (
-              <div className="flex w-full flex-col items-start gap-1.5">
-                <label className="w-full">
-                  <span className="text-[10px] font-semibold text-muted">Token sesi</span>
-                  <input
-                    type="password"
-                    value={kana.preferences.hermes.token}
-                    placeholder="HERMES_DASHBOARD_SESSION_TOKEN"
-                    autoComplete="off"
-                    autoFocus={kana.connectionState === "authentication_failed"}
-                    onChange={(event) => void kana.savePreferences({ ...kana.preferences, hermes: { ...kana.preferences.hermes, token: event.target.value } })}
-                    className={gateInputClass}
-                  />
-                </label>
-                <button
-                  className={`${btnSecondary} w-full`}
-                  disabled={!kana.preferences.hermes.token.trim()}
-                  onClick={() => {
-                    setConnectPhase("connecting");
-                    void kana.connectAgent();
-                  }}
-                >
-                  Hubungkan
-                </button>
-              </div>
-            ) : null}
-
             {/* Runtime detection feedback */}
-            {hermesRuntime?.controlAvailable && hermesUrlIsLocal(kana.preferences.hermes.websocketUrl) ? (
+            {hermesRuntime?.controlAvailable ? (
               <div className="flex w-full flex-col items-center gap-1.5 text-[10px] leading-relaxed">
                 {detectedExternalGateway ? (
                   <p className="text-faint">{`Hermes gateway terdeteksi di port ${hermesRuntime.port}.`}</p>
@@ -541,25 +419,9 @@ export function KanaApp({ appVersion }: KanaAppProps) {
                 {hermesRuntimeNotice ? (
                   <p role="status" className="max-w-full break-words text-faint">{hermesRuntimeNotice}</p>
                 ) : null}
+                <p className="text-faint">Koneksi diproses di server Kana — token tidak diperlukan di browser.</p>
               </div>
             ) : null}
-
-            {/* Manual connection settings */}
-            <details className="w-full rounded-2xl border border-line px-4 py-3 text-left">
-              <summary className="cursor-pointer text-[11px] font-semibold text-muted marker:content-none [&::-webkit-details-marker]:hidden hover:text-accent-strong">
-                Pengaturan koneksi
-              </summary>
-              <div className="mt-3 flex flex-col gap-2.5">
-                <label className="flex flex-col gap-1">
-                  <span className="text-[10px] font-semibold text-muted">WebSocket URL</span>
-                  <input type="text" value={kana.preferences.hermes.websocketUrl} placeholder="ws://127.0.0.1:9119/api/ws" className={gateInputClass} onChange={(event) => void kana.savePreferences({ ...kana.preferences, hermes: { ...kana.preferences.hermes, websocketUrl: event.target.value } })} />
-                </label>
-                <label className="flex flex-col gap-1">
-                  <span className="text-[10px] font-semibold text-muted">Token sesi</span>
-                  <input type="password" value={kana.preferences.hermes.token} placeholder="token" autoComplete="off" className={gateInputClass} onChange={(event) => void kana.savePreferences({ ...kana.preferences, hermes: { ...kana.preferences.hermes, token: event.target.value } })} />
-                </label>
-              </div>
-            </details>
           </div>
         </div>
       ) : null}

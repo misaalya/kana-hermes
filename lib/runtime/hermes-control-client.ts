@@ -7,8 +7,10 @@ export type HermesRuntimeStatus = {
   port: number;
   websocketUrl: string;
   message: string;
-  token?: string;
 };
+
+// The Hermes session token never crosses this boundary: the Kana server mints
+// and holds it, and the browser connects through the server-side relay.
 
 async function runtimeResponse(response: Response): Promise<HermesRuntimeStatus> {
   const value = (await response.json()) as HermesRuntimeStatus & { error?: string };
@@ -25,11 +27,6 @@ export function hermesPortFromWebSocketUrl(url: string): number {
   }
 }
 
-export function generatedSessionToken(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(32));
-  return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
-}
-
 export async function inspectHermesRuntime(preferredPort?: number): Promise<HermesRuntimeStatus> {
   const query = preferredPort ? `?port=${preferredPort}` : "";
   return runtimeResponse(
@@ -40,7 +37,6 @@ export async function inspectHermesRuntime(preferredPort?: number): Promise<Herm
 export async function controlHermesRuntime(options: {
   action: "start" | "restart" | "stop";
   port?: number;
-  token?: string;
   cwd?: string;
 }): Promise<HermesRuntimeStatus> {
   return runtimeResponse(

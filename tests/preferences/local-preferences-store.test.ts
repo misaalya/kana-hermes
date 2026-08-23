@@ -4,7 +4,6 @@ import {
   DEFAULT_PREFERENCES,
   LocalPreferencesStore,
 } from "@/lib/preferences/local-preferences-store";
-import { SessionHermesCredentialsStore } from "@/lib/preferences/session-hermes-credentials-store";
 
 class MemoryStorage implements Storage {
   private readonly values = new Map<string, string>();
@@ -35,32 +34,21 @@ class MemoryStorage implements Storage {
 }
 
 describe("LocalPreferencesStore", () => {
-  it("keeps the Hermes token out of persistent local storage", () => {
+  it("stores no Hermes connection credentials at all", () => {
     const persistent = new MemoryStorage();
-    const session = new MemoryStorage();
-    const store = new LocalPreferencesStore(
-      persistent,
-      new SessionHermesCredentialsStore(session),
-    );
+    const store = new LocalPreferencesStore(persistent);
 
-    store.save({
-      ...DEFAULT_PREFERENCES,
-      agentMode: "hermes",
-      hermes: {
-        ...DEFAULT_PREFERENCES.hermes,
-        token: "super-secret-dashboard-token",
-      },
-    });
+    store.save({ ...DEFAULT_PREFERENCES });
 
-    const raw = persistent.getItem("kana.preferences.v5");
+    const raw = persistent.getItem("kana.preferences.v5") ?? "";
     assert.ok(raw);
-    assert.equal(raw.includes("super-secret-dashboard-token"), false);
-    assert.equal(store.load().hermes.token, "super-secret-dashboard-token");
+    assert.equal(raw.includes("token"), false);
+    assert.equal(raw.includes("websocketUrl"), false);
+    assert.equal(raw.includes("ws://"), false);
   });
 
-  it("moves a legacy v2 token into session storage and removes the old record", () => {
+  it("drops legacy token and websocket fields when migrating old records", () => {
     const persistent = new MemoryStorage();
-    const session = new MemoryStorage();
     persistent.setItem(
       "kana.preferences.v2",
       JSON.stringify({
@@ -72,29 +60,22 @@ describe("LocalPreferencesStore", () => {
         },
       }),
     );
-    const store = new LocalPreferencesStore(
-      persistent,
-      new SessionHermesCredentialsStore(session),
-    );
+    const store = new LocalPreferencesStore(persistent);
 
     const loaded = store.load();
 
-    assert.equal(loaded.hermes.token, "legacy-token");
     assert.equal(loaded.subtitleLanguage, "id");
+    assert.equal(loaded.hermes.cwd, "/tmp/kana");
     assert.equal(persistent.getItem("kana.preferences.v2"), null);
-    assert.equal(
-      persistent.getItem("kana.preferences.v5")?.includes("legacy-token"),
-      false,
-    );
+    const persisted = persistent.getItem("kana.preferences.v5") ?? "";
+    assert.equal(persisted.includes("legacy-token"), false);
+    assert.equal(persisted.includes("ws://127.0.0.1"), false);
     assert.equal(loaded.onboardingCompleted, true);
   });
 
   it("keeps onboarding open only for a genuinely new browser profile", () => {
     const persistent = new MemoryStorage();
-    const store = new LocalPreferencesStore(
-      persistent,
-      new SessionHermesCredentialsStore(new MemoryStorage()),
-    );
+    const store = new LocalPreferencesStore(persistent);
 
     assert.equal(store.load().onboardingCompleted, false);
     store.save({ ...DEFAULT_PREFERENCES, onboardingCompleted: true });
@@ -114,10 +95,7 @@ describe("LocalPreferencesStore", () => {
         },
       }),
     );
-    const store = new LocalPreferencesStore(
-      persistent,
-      new SessionHermesCredentialsStore(new MemoryStorage()),
-    );
+    const store = new LocalPreferencesStore(persistent);
 
     const loaded = store.load();
 
@@ -127,9 +105,8 @@ describe("LocalPreferencesStore", () => {
     assert.ok(persistent.getItem("kana.preferences.v5"));
   });
 
-  it("moves a token embedded in a legacy WebSocket URL into tab storage", () => {
+  it("strips a token embedded in a legacy WebSocket URL during migration", () => {
     const persistent = new MemoryStorage();
-    const session = new MemoryStorage();
     persistent.setItem(
       "kana.preferences.v3",
       JSON.stringify({
@@ -138,24 +115,18 @@ describe("LocalPreferencesStore", () => {
         },
       }),
     );
-    const store = new LocalPreferencesStore(
-      persistent,
-      new SessionHermesCredentialsStore(session),
-    );
+    const store = new LocalPreferencesStore(persistent);
 
-    const loaded = store.load();
+    store.load();
+
     const persisted = persistent.getItem("kana.preferences.v5") ?? "";
-    assert.equal(loaded.hermes.token, "legacy-query-secret");
-    assert.equal(loaded.hermes.websocketUrl.includes("token="), false);
     assert.equal(persisted.includes("legacy-query-secret"), false);
+    assert.equal(persisted.includes("websocketUrl"), false);
   });
 
   it("does not persist executable, credential, or insecure provider URLs", () => {
     const persistent = new MemoryStorage();
-    const store = new LocalPreferencesStore(
-      persistent,
-      new SessionHermesCredentialsStore(new MemoryStorage()),
-    );
+    const store = new LocalPreferencesStore(persistent);
     store.save(DEFAULT_PREFERENCES);
     assert.throws(() =>
       store.save({
@@ -183,10 +154,7 @@ describe("LocalPreferencesStore", () => {
   it("keeps an unreadable legacy record available for manual recovery", () => {
     const persistent = new MemoryStorage();
     persistent.setItem("kana.preferences.v2", "{not valid JSON");
-    const store = new LocalPreferencesStore(
-      persistent,
-      new SessionHermesCredentialsStore(new MemoryStorage()),
-    );
+    const store = new LocalPreferencesStore(persistent);
 
     assert.equal(store.load().agentMode, "hermes");
     assert.equal(persistent.getItem("kana.preferences.v2"), "{not valid JSON");
