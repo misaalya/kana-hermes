@@ -31,6 +31,7 @@ const loadedCoreScripts = new Map<string, Promise<void>>();
 type PixiTickerLike = {
   add(fn: (deltaTime: number) => void): void;
   remove(fn: unknown, context?: unknown): void;
+  deltaMS: number;
   maxFPS: number;
   speed: number;
   start(): void;
@@ -337,8 +338,13 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
       "final",
     );
 
-    // --- Single ticker drives render + Cubism updates ----------------------
-    const updateModel = (deltaMS: number) => { model.update(deltaMS); };
+    // --- Single ticker drives render + Cubism updates ------------------
+    // PixiJS v6 Ticker.add callback receives deltaTime (a multiplier, ~1 at
+    // 60 fps), not milliseconds. Cubism update() needs real ms, so we read
+    // ticker.deltaMS instead of using the callback parameter.
+    const updateModel = () => {
+      model.update(runtime.app.ticker.deltaMS);
+    };
     runtime.app.ticker.add(updateModel);
 
 
@@ -363,11 +369,11 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
     host.addEventListener("pointerleave", handlePointerLeave);
 
     let wanderClock = Math.random() * Math.PI * 2;
-    const wanderTick = (deltaMS: number) => {
+    const wanderTick = () => {
       if (performance.now() - lastPointerFocusAt < POINTER_FOCUS_HOLD_MS) {
         return;
       }
-      wanderClock += deltaMS / 1000;
+      wanderClock += runtime.app.ticker.deltaMS / 1000;
       // A slow, small Lissajous drift keeps the avatar looking around while
       // the cursor is idle or outside the stage.
       focusController.focus(
