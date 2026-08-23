@@ -23,9 +23,10 @@ function formatTime(timestamp: number): string {
 }
 
 /**
- * Thin activity stack shown above the composer — max 3 visible, newest last
- * (FILO = first-in-last-out). Every item gets up to 4 seconds before leaving
- * the stack; "running" items linger longer.
+ * Thin activity stack rendered inside the shared overlay column above the
+ * Kana dialogue box — max 3 visible, newest last (FILO). Items inherit the
+ * column's centering; each gets up to 4 seconds before leaving the stack,
+ * "running" items linger longer.
  */
 export function ActivityStack({ activities }: ActivityStackProps) {
   if (!activities?.length) return null;
@@ -33,11 +34,11 @@ export function ActivityStack({ activities }: ActivityStackProps) {
   const visible = activities.slice(-3);
 
   return (
-    <div className="mb-2 flex flex-col gap-0.5" aria-label="Recent Hermes activity">
+    <div className="flex max-w-full flex-col items-center gap-0.5" aria-label="Recent Hermes activity">
       {visible.map((activity) => (
         <div
           key={activity.id}
-          className={`inline-flex items-center gap-1.5 self-start rounded-full border px-2.5 py-1 text-[10px] leading-none transition-colors ${STATE_BORDER[activity.state]}`}
+          className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] leading-none transition-colors ${STATE_BORDER[activity.state]}`}
         >
           <span className={`size-1.5 rounded-full ${STATE_DOT[activity.state]}`} />
           <span className="min-w-0 max-w-[120px] truncate font-semibold text-ink-dim">{activity.title}</span>

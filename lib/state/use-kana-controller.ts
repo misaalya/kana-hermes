@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { HermesAgentClient } from "@/lib/agent/hermes/hermes-agent-client";
-import { MockAgentClient } from "@/lib/agent/mock-agent-client";
 import type {
   AgentClient,
   AgentCommandSuggestion,
@@ -345,23 +344,21 @@ export function useKanaController(appVersion: string) {
       if (event.type === "session.opened") {
         openingConversationRef.current = null;
         openedConversationRef.current = conversationId;
-        if (preferencesRef.current.agentMode === "hermes") {
-          await saveConversation({
-            ...conversation,
-            agent: {
-              provider: "hermes",
-              persistentSessionId: event.persistentSessionId,
-              status: "linked",
-              relationship: conversation.agent?.relationship ?? "primary",
-              ...(conversation.agent?.parentConversationId
-                ? {
-                    parentConversationId:
-                      conversation.agent.parentConversationId,
-                  }
-                : {}),
-            },
-          });
-        }
+        await saveConversation({
+          ...conversation,
+          agent: {
+            provider: "hermes",
+            persistentSessionId: event.persistentSessionId,
+            status: "linked",
+            relationship: conversation.agent?.relationship ?? "primary",
+            ...(conversation.agent?.parentConversationId
+              ? {
+                  parentConversationId:
+                    conversation.agent.parentConversationId,
+                }
+              : {}),
+          },
+        });
         return;
       }
 
@@ -444,11 +441,7 @@ export function useKanaController(appVersion: string) {
               lastConnectDurationMs: duration,
             }));
           }
-          setStatus(
-            preferencesRef.current.agentMode === "hermes"
-              ? "Connected to Hermes"
-              : "Mock agent connected",
-          );
+          setStatus("Connected to Hermes");
           return;
         }
         if (event.state === "reconnecting" || event.state === "error") {
@@ -686,21 +679,15 @@ export function useKanaController(appVersion: string) {
   const ensureAgent = useCallback(
     async (conversation: Conversation): Promise<AgentClient> => {
       const prefs = preferencesRef.current;
-      const key =
-        prefs.agentMode === "hermes"
-          ? `hermes:${prefs.hermes.websocketUrl}:${prefs.hermes.token}`
-          : "mock";
+      const key = `hermes:${prefs.hermes.websocketUrl}:${prefs.hermes.token}`;
 
       if (!agentRef.current || agentKeyRef.current !== key) {
         unsubscribeAgentRef.current?.();
         await agentRef.current?.disconnect();
-        agentRef.current =
-          prefs.agentMode === "hermes"
-            ? new HermesAgentClient({
-                websocketUrl: prefs.hermes.websocketUrl,
-                token: prefs.hermes.token,
-              })
-            : new MockAgentClient();
+        agentRef.current = new HermesAgentClient({
+          websocketUrl: prefs.hermes.websocketUrl,
+          token: prefs.hermes.token,
+        });
         agentKeyRef.current = key;
         openedConversationRef.current = null;
         unsubscribeAgentRef.current =
@@ -714,10 +701,7 @@ export function useKanaController(appVersion: string) {
         await agent.openSession({
           title: conversation.title,
           subtitleLanguage: prefs.subtitleLanguage,
-          persistentSessionId:
-            prefs.agentMode === "hermes"
-              ? conversation.agent?.persistentSessionId
-              : undefined,
+          persistentSessionId: conversation.agent?.persistentSessionId,
           cwd: prefs.hermes.cwd || undefined,
         });
       }
@@ -967,18 +951,13 @@ export function useKanaController(appVersion: string) {
                 ...nextConversation.messages,
                 createSystemMessage(result.output, cleanText),
               ],
-              ...(preferencesRef.current.agentMode === "hermes"
-                ? {
-                    agent: {
-                      provider: "hermes",
-                      persistentSessionId:
-                        result.session.persistentSessionId,
-                      status: "linked",
-                      relationship: "branch",
-                      parentConversationId: nextConversation.id,
-                    },
-                  }
-                : {}),
+              agent: {
+                provider: "hermes",
+                persistentSessionId: result.session.persistentSessionId,
+                status: "linked",
+                relationship: "branch",
+                parentConversationId: nextConversation.id,
+              },
             });
             activeConversationIdRef.current = savedBranch.id;
             setActiveConversationId(savedBranch.id);
@@ -1075,17 +1054,52 @@ export function useKanaController(appVersion: string) {
         : KANA_COMMAND_SUGGESTIONS.filter((item) =>
             item.text.startsWith(input.toLowerCase()),
           );
-      setCommandSuggestions(localSuggestions);
+
+      // Optimistic pass: narrow what is already on screen instead of
+      // collapsing to the short local list — collapsing made the menu flip
+      // between two states on every refresh.
+      const lowerInput = input.toLowerCase();
+      const applyNarrowing = () => {
+        setCommandSuggestions((current) => {
+          const matching = current.filter((item) =>
+            item.text.toLowerCase().startsWith(lowerInput),
+          );
+          const next = [
+            ...localSuggestions,
+            ...matching.filter(
+              (item) =>
+                !localSuggestions.some(
+                  (local) =>
+                    local.text.toLowerCase() === item.text.toLowerCase(),
+                ),
+            ),
+          ];
+          const changed =
+            next.length !== current.length ||
+            next.some((item, index) => item !== current[index]);
+          return changed ? next : current;
+        });
+      };
+
+      // A conversation whose Hermes session is gone cannot answer completions;
+      // retrying the resume on every keystroke made the menu glitch forever.
+      if (conversation.agent?.status === "missing") {
+        applyNarrowing();
+        return;
+      }
+
+      applyNarrowing();
       setCommandSuggestionsLoading(true);
       try {
         const agent = await ensureAgent(conversation);
         const remoteSuggestions = await agent.completeCommands(input);
         const normalizedInput = input.trim().toLowerCase();
         const completingArguments = /\s$/u.test(input);
+        const seen = new Set<string>();
         const suggestions = [
           ...localSuggestions,
           ...remoteSuggestions,
-        ].filter((item, index, items) => {
+        ].filter((item) => {
           const normalizedSuggestion = item.text.trim().toLowerCase();
           if (
             completingArguments &&
@@ -1093,19 +1107,34 @@ export function useKanaController(appVersion: string) {
           ) {
             return false;
           }
-          return (
-            items.findIndex(
-              (candidate) =>
-                candidate.text.toLowerCase() === item.text.toLowerCase(),
-            ) === index
-          );
+          if (seen.has(normalizedSuggestion)) return false;
+          seen.add(normalizedSuggestion);
+          return true;
         });
-        if (completionRequestRef.current === requestId) {
-          setCommandSuggestions(suggestions);
-        }
-      } catch {
-        if (completionRequestRef.current === requestId) {
-          setCommandSuggestions(localSuggestions);
+        if (completionRequestRef.current !== requestId) return;
+        setCommandSuggestions((current) =>
+          suggestions.length === current.length &&
+          suggestions.every((item, index) => item === current[index])
+            ? current
+            : suggestions,
+        );
+      } catch (completionError) {
+        // Surface a vanished Hermes session instead of silently retrying it
+        // for every keystroke; the sidebar shows the "Session missing" badge.
+        const message =
+          completionError instanceof Error
+            ? completionError.message
+            : String(completionError);
+        if (/no longer exists|session not found/i.test(message)) {
+          const current = conversationsRef.current.find(
+            (item) => item.id === conversationId,
+          );
+          if (current?.agent && current.agent.status !== "missing") {
+            void saveConversation({
+              ...current,
+              agent: { ...current.agent, status: "missing" },
+            });
+          }
         }
       } finally {
         if (completionRequestRef.current === requestId) {
@@ -1113,7 +1142,7 @@ export function useKanaController(appVersion: string) {
         }
       }
     },
-    [ensureAgent],
+    [ensureAgent, saveConversation],
   );
 
   const clearCommandSuggestions = useCallback(() => {
@@ -1194,8 +1223,8 @@ export function useKanaController(appVersion: string) {
   const savePreferences = useCallback(
     async (next: KanaPreferences) => {
       next = normalizeKanaPreferences(next);
-      const oldAgentKey = `${preferencesRef.current.agentMode}:${preferencesRef.current.hermes.websocketUrl}:${preferencesRef.current.hermes.token}`;
-      const nextAgentKey = `${next.agentMode}:${next.hermes.websocketUrl}:${next.hermes.token}`;
+      const oldAgentKey = `hermes:${preferencesRef.current.hermes.websocketUrl}:${preferencesRef.current.hermes.token}`;
+      const nextAgentKey = `hermes:${next.hermes.websocketUrl}:${next.hermes.token}`;
       preferencesRef.current = next;
       setPreferences(next);
       preferencesStore.save(next);
@@ -1279,11 +1308,7 @@ export function useKanaController(appVersion: string) {
       }
 
       await ensureAgent(conversation);
-      setStatus(
-        preferencesRef.current.agentMode === "hermes"
-          ? "Connected to Hermes"
-          : "Mock agent connected",
-      );
+      setStatus("Connected to Hermes");
     } catch (connectError) {
       reportError(
         "agent",
@@ -1341,27 +1366,38 @@ export function useKanaController(appVersion: string) {
         });
         setStatus("Input sent to Hermes");
       } catch (responseError) {
-        reportError(
-          "agent",
+        const message =
           responseError instanceof Error
             ? responseError.message
-            : "Could not send input to Hermes.",
-        );
+            : "Could not send input to Hermes.";
+        reportError("agent", message);
+        // Never trap the user behind an unanswerable modal: close the
+        // prompt and surface the failure in the activity stack instead.
+        setPendingInput((current) => {
+          if (!current || current.kind !== response.kind) return current;
+          if (current.kind === "approval" || response.kind === "approval") {
+            return null;
+          }
+          return current.requestId === response.requestId ? null : current;
+        });
+        addActivity({
+          id: createId("activity"),
+          kind: "input",
+          title: "Hermes input could not be delivered",
+          detail: message,
+          state: "attention",
+          timestamp: Date.now(),
+        });
+        setStatus("Input could not be sent");
       } finally {
         setRespondingToInput(false);
       }
     },
-    [reportError],
+    [addActivity, reportError],
   );
 
   const testAgentConnection = useCallback(
     async (next: KanaPreferences) => {
-      if (next.agentMode === "mock") {
-        const client = new MockAgentClient();
-        await client.connect();
-        await client.disconnect();
-        return "Mock agent is ready. No external service is required.";
-      }
       const client = new HermesAgentClient({
         websocketUrl: next.hermes.websocketUrl,
         token: next.hermes.token,
@@ -1403,14 +1439,11 @@ export function useKanaController(appVersion: string) {
           mode: preferences.avatarMode,
           renderMode: avatar.renderMode,
           loaded: avatar.loaded,
-          source:
-            preferences.avatarMode === "mock"
-              ? "mock"
-              : preferences.live2d.modelId
-                ? "imported-folder"
-                : preferences.live2d.modelUrl === OFFICIAL_HARU_MODEL_URL
-                  ? "official-sample"
-                  : "hosted-url",
+          source: preferences.live2d.modelId
+            ? "imported-folder"
+            : preferences.live2d.modelUrl === OFFICIAL_HARU_MODEL_URL
+              ? "official-sample"
+              : "hosted-url",
         },
         storage: {
           provider: "indexeddb",

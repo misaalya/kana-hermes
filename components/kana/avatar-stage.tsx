@@ -25,6 +25,7 @@ export const AvatarStage = memo(function AvatarStage({ avatar, busy, onCanvasRea
         className={`pointer-events-none absolute inset-0 z-[4] h-full w-full transition-opacity duration-200 ${isLive2D ? "opacity-100" : "opacity-0"}`}
         ref={onCanvasReady}
         aria-hidden="true"
+        data-testid="live2d-canvas"
       />
 
       {!isLive2D ? (

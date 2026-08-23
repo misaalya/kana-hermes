@@ -7,6 +7,7 @@ export type HermesRuntimeStatus = {
   port: number;
   websocketUrl: string;
   message: string;
+  token?: string;
 };
 
 async function runtimeResponse(response: Response): Promise<HermesRuntimeStatus> {

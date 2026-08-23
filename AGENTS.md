@@ -55,8 +55,9 @@ stable internal UI model. Hermes owns reasoning and every agent capability.
   language changes.
 - Do not add a dependency until the existing project and browser APIs have been
   checked for an equivalent capability.
-- Preserve mock mode so frontend development works without Hermes, Live2D, or
-  Qwen3-TTS.
+- Kana has no second mock agent, voice, or conversation-store provider; modes
+  are fixed to Hermes, Qwen3-TTS, and Live2D, and integrations must fail
+  honestly when their external service is unavailable.
 
 ## Hermes environment and safety
 
@@ -337,18 +338,14 @@ ornamental dashboard. This is a product direction, not a temporary theme.
 - The local package is a self-contained web runtime, not a signed native
   desktop application. It does not start or supervise Hermes/Qwen processes.
 
-### Mock or development-only
+### Fixed modes and fallbacks
 
-- `MockAgentClient` simulates sessions, events, tools, responses, commands, and
-  busy-turn queuing. It is the default agent mode until the user selects Hermes.
-- `MockVoiceProvider` produces timed mouth movement without audio. It is the
-  default voice mode.
-- `MockAvatarProvider` remains available as the CSS fallback and for offline
-  development. Live2D is now the default avatar mode; it falls back honestly to
-  the CSS preview if the remote Core or model cannot load.
-- `MockConversationStore` exists for development/testing, but the running app
-  uses `IndexedDbConversationStore`, so normal conversation persistence is
-  real browser-local storage rather than mock state.
+- Agent, voice, and avatar modes are fixed to Hermes, Qwen3-TTS, and Live2D.
+  `normalizeKanaPreferences` forces these values on every load and save, so
+  legacy stored values cannot re-enable anything else.
+- The placeholder avatar state (formerly the CSS mock preview) lives inside
+  `ManagedAvatarProvider` as the honest fallback shown whenever the remote
+  Cubism Core, hosted model, or imported model cannot load.
 
 Do not describe Kana as fully connected merely because the Hermes adapter
 exists. A running installation is using Hermes only when the user selects
@@ -367,7 +364,6 @@ lib/agent/hermes/hermes-agent-client.ts   Hermes JSON-RPC adapter
 lib/agent/hermes/gateway-types.ts         Hermes wire response types
 lib/agent/hermes/gateway-url.ts           Credential-safe WebSocket endpoint handling
 lib/agent/hermes/kana-command-surface.ts  Honest surface availability mapping
-lib/agent/mock-agent-client.ts            Development agent
 lib/presentation/persona.ts               Persona and response instructions
 lib/presentation/response-parser.ts       Structured response validation
 lib/conversation/types.ts                 Stored history model/contracts
@@ -495,7 +491,7 @@ Before coding:
 4. Inspect Hermes source when changing integration behavior.
 5. Preserve unrelated user changes in the working tree.
 
-Run the app in default mock mode:
+Run the app in development:
 
 ```bash
 npm install
@@ -541,6 +537,5 @@ A change is done only when:
 - interfaces still isolate Hermes, voice, avatar, storage, and presentation;
 - Japanese speech and selected-language subtitle rules still hold;
 - stored historical subtitles remain byte-for-byte what the user saw;
-- mock mode still works without local AI services;
 - real integrations fail honestly when their external service is unavailable;
 - lint, TypeScript, and production build pass in proportion to the change.
