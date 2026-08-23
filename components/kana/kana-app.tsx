@@ -596,7 +596,7 @@ export function KanaApp({ appVersion }: KanaAppProps) {
       ) : null}
 
       {!kana.preferences.onboardingCompleted ? (
-        <OnboardingDialog preferences={kana.preferences} onTestAgent={kana.testAgentConnection} onComplete={kana.savePreferences} />
+        <OnboardingDialog preferences={kana.preferences} onComplete={kana.savePreferences} />
       ) : null}
     </main>
   );
