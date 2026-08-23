@@ -55,3 +55,8 @@ reference/
 # Local reference checkouts (read-only study material)
 /auth-reference/
 /data/
+
+# Local audit/debug artifacts
+.playwright-mcp/
+/*.png
+/snapshot.txt

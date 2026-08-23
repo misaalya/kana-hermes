@@ -6,7 +6,6 @@ import type {
   KanaErrorCategory,
   KanaErrorSource,
 } from "@/lib/diagnostics/types";
-import { MockVoiceProvider } from "@/lib/voice/mock-voice-provider";
 import {
   createQwen3VoiceClone,
   deleteQwen3VoiceClone,
@@ -56,17 +55,14 @@ export function useVoiceController(
 
     voiceRef.current?.stop();
     unsubscribeVoiceRef.current?.();
-    const provider =
-      prefs.voiceMode === "qwen3"
-        ? new Qwen3TTSProvider(
-            {
-              baseUrl: prefs.qwen3Tts.baseUrl,
-              voiceId: prefs.qwen3Tts.voiceId,
-              deliveryMode: prefs.qwen3Tts.deliveryMode,
-            },
-            avatarController,
-          )
-        : new MockVoiceProvider(avatarController);
+    const provider = new Qwen3TTSProvider(
+      {
+        baseUrl: prefs.qwen3Tts.baseUrl,
+        voiceId: prefs.qwen3Tts.voiceId,
+        deliveryMode: prefs.qwen3Tts.deliveryMode,
+      },
+      avatarController,
+    );
     voiceRef.current = provider;
     const applySnapshot = (
       snapshot: ReturnType<VoiceProvider["getSnapshot"]>,

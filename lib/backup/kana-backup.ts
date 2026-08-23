@@ -165,9 +165,6 @@ function parsePreferences(value: unknown): KanaPreferences {
   const hermes = isRecord(value.hermes) ? value.hermes : {};
   const qwen3Tts = isRecord(value.qwen3Tts) ? value.qwen3Tts : {};
   const live2d = isRecord(value.live2d) ? value.live2d : {};
-  const agentMode = value.agentMode === "hermes" ? "hermes" : "mock";
-  const voiceMode = value.voiceMode === "qwen3" ? "qwen3" : "mock";
-  const avatarMode = value.avatarMode === "mock" ? "mock" : "live2d";
   return sanitizeBackupPreferences({
     ...DEFAULT_PREFERENCES,
     onboardingCompleted: true,
@@ -175,10 +172,7 @@ function parsePreferences(value: unknown): KanaPreferences {
       typeof value.subtitleLanguage === "string"
         ? value.subtitleLanguage.slice(0, 32)
         : DEFAULT_PREFERENCES.subtitleLanguage,
-    agentMode,
     voiceEnabled: value.voiceEnabled !== false,
-    voiceMode,
-    avatarMode,
     hermes: {
       websocketUrl:
         typeof hermes.websocketUrl === "string"

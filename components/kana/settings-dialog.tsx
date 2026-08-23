@@ -197,10 +197,10 @@ export function SettingsDialog({
             <div className={`${bentoCard} flex items-center justify-between`}>
               <div>
                 <p className="text-xs font-bold text-ink">Avatar</p>
-                <p className="text-[10px] text-faint">{preferences.avatarMode === "live2d" ? "Live2D model" : "Offline placeholder"}</p>
+                <p className="text-[10px] text-faint">Live2D model</p>
               </div>
               <span className="rounded-full border border-line-strong px-2 py-0.5 text-[10px] font-bold tracking-wide text-muted uppercase">
-                {preferences.avatarMode === "live2d" ? "Live2D" : "Offline"}
+                Live2D
               </span>
             </div>
 

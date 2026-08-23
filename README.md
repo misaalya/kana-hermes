@@ -11,8 +11,6 @@ Kana adds:
 - user-selectable subtitle languages for future responses;
 - locally persistent conversation history that preserves the exact subtitle text and language originally displayed;
 - replaceable agent, voice, avatar, and conversation-store providers;
-- realistic mock mode for development without Hermes or Qwen3-TTS, compiled out
-  of production builds through `NEXT_PUBLIC_KANA_DEVELOPMENT_MODE`;
 - a responsive Live2D canvas with two official free sample avatars and
   replaceable, locally persistent URL/folder model sources;
 - local Qwen3-TTS speech with voice cloning: create personal voice profiles
@@ -52,14 +50,14 @@ status. Kana only ever spawns the unmodified Hermes binary and never edits the
 Hermes installation. Running `next dev` directly keeps process control off
 unless `.env.development` enables it.
 
-## Run in mock mode
+## Run in development
 
 ```bash
 npm install
 npm run dev -- --hostname 127.0.0.1
 ```
 
-Open [http://127.0.0.1:3000](http://127.0.0.1:3000). Mock agent and mock lip-sync mode are selected by default. Live2D is the default avatar mode and needs internet access for the official Cubism Core and sample assets; the CSS preview remains available as an offline fallback.
+Open [http://127.0.0.1:3000](http://127.0.0.1:3000). Kana always connects to a real `hermes serve` gateway, the local Qwen3-TTS service, and Live2D; official sample models need internet access for the Cubism Core and sample assets, and an honest placeholder avatar is shown whenever Live2D cannot load.
 
 ## Connect to Hermes
 
@@ -229,18 +227,15 @@ sole discretion. See the [official sample model terms](https://www.live2d.com/en
 ```text
 Kana UI
   ├─ AgentClient
-  │    ├─ MockAgentClient
   │    └─ HermesAgentClient → hermes serve /api/ws
   ├─ ConversationStore
-  │    ├─ IndexedDbConversationStore
-  │    │    └─ LocalConversationStore migration/fallback
-  │    └─ MockConversationStore
+  │    └─ IndexedDbConversationStore
+  │         └─ LocalConversationStore migration/fallback
   ├─ VoiceProvider
-  │    ├─ MockVoiceProvider
   │    └─ Qwen3TTSProvider → local API v2 (speech + voice clones)
   │                         → AudioLipSyncController
   ├─ AvatarProvider
-  │    ├─ MockAvatarProvider
+  │    ├─ ManagedAvatarProvider → placeholder fallback state
   │    └─ Live2DAvatarProvider → PixiLive2DRuntimeAdapter → Cubism Web
   │                             └─ IndexedDbAvatarModelStore
   └─ Hermes control panel
@@ -259,11 +254,8 @@ Hermes events are translated into Kana's stable internal event model. The curren
   official `hermes serve` process. It remains a local launcher, not an OS-native
   signed desktop binary.
 
-In mock mode, send `mock approval`, `mock clarification`, `mock sudo`, or
-`mock secret` to exercise the corresponding Hermes input dialog without a
-running Hermes installation. Mock providers only exist in development builds:
-production bundles force the real agent, voice, and avatar modes regardless of
-stored preferences.
+Stored preferences always resolve to the real agent, voice, and avatar modes;
+legacy values from older installs are normalized away on load.
 
 ## Package for local production
 

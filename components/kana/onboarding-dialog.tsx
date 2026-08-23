@@ -95,42 +95,40 @@ export function OnboardingDialog({
                 Kana connects to a separately running, unmodified <code className="font-mono">hermes serve</code>.
                 Kana can start it for you from the connection screen after setup.
               </p>
-              {draft.agentMode === "hermes" ? (
-                <div className="flex flex-col gap-2.5">
-                  <label className="flex flex-col gap-1">
-                    <span className="text-[11px] font-semibold text-muted">WebSocket URL</span>
-                    <input
-                      className={`${inputClass} font-mono`}
-                      value={draft.hermes.websocketUrl}
-                      onChange={(event) =>
-                        setDraft({
-                          ...draft,
-                          hermes: {
-                            ...draft.hermes,
-                            websocketUrl: event.target.value,
-                          },
-                        })
-                      }
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1">
-                    <span className="text-[11px] font-semibold text-muted">Session token</span>
-                    <input
-                      type="password"
-                      autoComplete="off"
-                      className={inputClass}
-                      value={draft.hermes.token}
-                      onChange={(event) =>
-                        setDraft({
-                          ...draft,
-                          hermes: { ...draft.hermes, token: event.target.value },
-                        })
-                      }
-                    />
-                    <span className="text-[10px] text-faint">Kept only in this browser tab.</span>
-                  </label>
-                </div>
-              ) : null}
+              <div className="flex flex-col gap-2.5">
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] font-semibold text-muted">WebSocket URL</span>
+                  <input
+                    className={`${inputClass} font-mono`}
+                    value={draft.hermes.websocketUrl}
+                    onChange={(event) =>
+                      setDraft({
+                        ...draft,
+                        hermes: {
+                          ...draft.hermes,
+                          websocketUrl: event.target.value,
+                        },
+                      })
+                    }
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] font-semibold text-muted">Session token</span>
+                  <input
+                    type="password"
+                    autoComplete="off"
+                    className={inputClass}
+                    value={draft.hermes.token}
+                    onChange={(event) =>
+                      setDraft({
+                        ...draft,
+                        hermes: { ...draft.hermes, token: event.target.value },
+                      })
+                    }
+                  />
+                  <span className="text-[10px] text-faint">Kept only in this browser tab.</span>
+                </label>
+              </div>
               <button
                 type="button"
                 className={`${btnSecondary} self-start`}

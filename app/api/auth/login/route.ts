@@ -6,8 +6,8 @@ export const runtime = "nodejs";
 
 const NO_STORE = { "Cache-Control": "no-store" };
 
-// Single shared access password with progressive lockout — the 9Router
-// dashboard login model. There are no user accounts to enumerate.
+// Single shared access password with progressive lockout. There are no user
+// accounts to enumerate.
 export async function POST(request: Request): Promise<Response> {
   const lock = checkLock();
   if (lock.locked) {
