@@ -14,6 +14,9 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Generated npm-package payload from scripts/prepare-npm-package.mjs.
     ".npm-package/**",
+    // Read-only AIRI reference checkout used for pattern study; it has its
+    // own toolchain and must never be linted or type-checked from here.
+    "reference/**",
   ]),
 ]);
 

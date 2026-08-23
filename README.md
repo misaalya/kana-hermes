@@ -196,8 +196,8 @@ npm run tts:acceptance -- \
 
 ## Live2D models
 
-Kana uses `pixi.js` and `untitled-pixi-live2d-engine` for the replaceable Cubism
-Web runtime. Haru is the default development avatar and Mao is a second free
+Kana uses `pixi.js` (v6, matching AIRI) and `pixi-live2d-display` for the
+replaceable Cubism Web runtime. Haru is the default development avatar and Mao is a second free
 sample selectable in Settings. Both come from Live2D's official sample
 repository, are pinned to one known upstream commit, and are loaded remotely
 rather than redistributed by Kana. Haru and Mao intentionally use different
