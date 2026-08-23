@@ -9,11 +9,13 @@ import { isLoopbackRequest } from "@/lib/server/auth/loopback";
 // - every other /api/* route requires a valid session cookie once auth is
 //   enabled, and spawn-capable local control routes additionally require a
 //   loopback peer (with or without auth enabled);
+// - the Hermes relay (/api/hermes/*) is authenticated with the session cookie
+//   only — it runs on the server, so the loopback restriction does not apply;
 // - pages redirect to /login when a password is configured.
 
 const PUBLIC_API_PATHS = ["/api/auth/login", "/api/auth/logout", "/api/auth/status"];
 
-// Routes that can spawn child processes or read host state — loopback only.
+// Routes that spawn child processes or read host state — loopback only.
 const LOCAL_ONLY_PREFIXES = ["/api/local-runtime/"];
 
 function unauthorized(): NextResponse {

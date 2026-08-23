@@ -27,37 +27,25 @@ import type {
   HermesSlashExecResponse,
   HermesToolPayload,
 } from "./gateway-types";
-import { sanitizeHermesWebSocketEndpoint } from "./gateway-url";
 import {
   kanaUnavailableMessage,
   kanaUnavailableReason,
 } from "./kana-command-surface";
 
-type PendingRequest = {
-  resolve: (value: unknown) => void;
-  reject: (reason: Error) => void;
-  timeout: ReturnType<typeof setTimeout>;
-};
+// Kana's agent client, relayed through the Kana server.
+//
+// The browser never dials `hermes serve` and never holds its session token.
+// Requests go to POST /api/hermes/rpc (same-origin, Kana session cookie) and
+// gateway events arrive on the /api/hermes/events SSE stream. The Kana server
+// owns the single upstream WebSocket and the credential.
 
-export type HermesAgentClientOptions = {
-  websocketUrl: string;
-  token?: string;
+type HermesRelayOptions = {
   requestTimeoutMs?: number;
   connectTimeoutMs?: number;
   reconnectDelaysMs?: readonly number[];
 };
 
 const DEFAULT_RECONNECT_DELAYS_MS = [500, 1_000, 2_000, 5_000, 10_000] as const;
-
-function buildGatewayUrl(endpoint: string, token?: string): string {
-  const sanitized = sanitizeHermesWebSocketEndpoint(endpoint);
-  const url = new URL(sanitized.endpoint);
-  token ||= sanitized.embeddedToken;
-  if (token && !url.searchParams.has("token") && !url.searchParams.has("ticket")) {
-    url.searchParams.set("token", token);
-  }
-  return url.toString();
-}
 
 function inputRequest(
   type: string,
@@ -108,17 +96,46 @@ function inputRequest(
   return null;
 }
 
+async function relayRpc<T>(
+  method: string,
+  params: Record<string, unknown> = {},
+  timeoutMs = 120_000,
+): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch("/api/hermes/rpc", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ method, params }),
+      cache: "no-store",
+      credentials: "same-origin",
+      signal: controller.signal,
+    });
+    const value = (await response.json()) as { result?: T; error?: string };
+    if (!response.ok || value.error) {
+      throw new Error(value.error || `Hermes relay failed (${response.status}).`);
+    }
+    return value.result as T;
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`Hermes request timed out: ${method}`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export class HermesAgentClient implements AgentClient {
-  readonly id = "hermes-gateway";
+  readonly id = "hermes-relay";
   private readonly listeners = new Set<(event: AgentEvent) => void>();
-  private readonly pending = new Map<string, PendingRequest>();
   private state: AgentConnectionState = "disconnected";
-  private socket: WebSocket | null = null;
+  private eventSource: EventSource | null = null;
   private connectPromise: Promise<void> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempt = 0;
   private connectedOnce = false;
-  private requestId = 0;
   private session: AgentSession | null = null;
   private sessionOptions: AgentSessionOptions | null = null;
   private expectedSubtitleLanguage = "en";
@@ -130,7 +147,7 @@ export class HermesAgentClient implements AgentClient {
     subtitleLanguage: string;
   }> = [];
 
-  constructor(private readonly options: HermesAgentClientOptions) {}
+  constructor(private readonly options: HermesRelayOptions = {}) {}
 
   get connectionState(): AgentConnectionState {
     return this.state;
@@ -139,117 +156,107 @@ export class HermesAgentClient implements AgentClient {
   async connect(): Promise<void> {
     if (this.state === "connected") return;
     if (this.connectPromise) return this.connectPromise;
-    if (typeof WebSocket === "undefined") {
-      throw new Error("Hermes WebSocket connections require a browser runtime.");
-    }
 
     this.cancelReconnect();
     this.intentionallyClosing = false;
     const reconnecting = this.connectedOnce || this.state === "reconnecting";
     this.setConnection(reconnecting ? "reconnecting" : "connecting");
 
-    let socket: WebSocket;
-    try {
-      socket = new WebSocket(
-        buildGatewayUrl(this.options.websocketUrl, this.options.token),
-      );
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "The Hermes endpoint is invalid.";
-      this.setConnection("incompatible", message);
-      throw error;
-    }
-    this.socket = socket;
+    const connectPromise = (async () => {
+      // The SSE "gateway" event already reports upstream reachability: the
+      // relay connects to hermes serve server-side before confirming. No
+      // extra RPC probe is needed to establish the connection.
+      await this.openEventStream();
 
-    const connection = new Promise<void>((resolve, reject) => {
-      let opened = false;
-      let ready = false;
-      let settled = false;
-      const timeout = globalThis.setTimeout(() => {
-        const error = new Error(
-          "Hermes accepted the socket but did not send gateway.ready. Check that the URL points to an up-to-date hermes serve /api/ws endpoint.",
-        );
-        this.setConnection("incompatible", error.message);
-        settleReject(error);
-        socket.close(4400, "gateway.ready timeout");
+      this.connectedOnce = true;
+      this.reconnectAttempt = 0;
+      this.setConnection("connected");
+    })();
+
+    this.connectPromise = connectPromise.finally(() => {
+      this.connectPromise = null;
+    });
+    return this.connectPromise;
+  }
+
+  private openEventStream(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (typeof EventSource === "undefined") {
+        reject(new Error("The Hermes relay requires an EventSource implementation."));
+        return;
+      }
+      const source = new EventSource("/api/hermes/events", { withCredentials: true });
+      this.eventSource = source;
+
+      const timeout = setTimeout(() => {
+        reject(new Error("Timed out waiting for the Hermes event stream."));
+        this.closeEventStream();
       }, this.options.connectTimeoutMs ?? 15_000);
 
-      const cleanup = () => globalThis.clearTimeout(timeout);
-      const settleResolve = () => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        resolve();
+      const onGateway = (event: MessageEvent) => {
+        try {
+          const value = JSON.parse(event.data) as { connected?: boolean; message?: string };
+          if (value.connected) {
+            clearTimeout(timeout);
+            resolve();
+          } else if (!this.connectedOnce) {
+            clearTimeout(timeout);
+            reject(new Error(value.message || "The Hermes gateway is unreachable through the Kana relay."));
+          }
+        } catch {
+          /* ignore malformed gateway status */
+        }
       };
-      const settleReject = (error: Error) => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        reject(error);
-      };
-      const maybeResolve = () => {
-        if (opened && ready) {
-          this.connectedOnce = true;
-          this.reconnectAttempt = 0;
-          this.setConnection("connected");
-          settleResolve();
+      const onHermes = (event: MessageEvent) => {
+        try {
+          const frame = JSON.parse(event.data) as HermesJsonRpcFrame;
+          if (frame?.method === "event" && frame.params?.type === "gateway.ready") {
+            clearTimeout(timeout);
+            if (!this.connectedOnce) resolve();
+          }
+          if (frame) this.handleFrame(frame);
+        } catch {
+          /* ignore malformed frames */
         }
       };
 
-      socket.addEventListener("open", () => {
-        if (this.socket !== socket) return;
-        opened = true;
-        maybeResolve();
+      source.addEventListener("gateway", onGateway as EventListener);
+      source.addEventListener("hermes", onHermes as EventListener);
+      source.addEventListener("open", () => {
+        // The relay accepted the stream; wait for the gateway status before
+        // resolving a first connection.
       });
-      socket.addEventListener("message", (message) => {
-        if (this.socket !== socket) return;
-        const frame = this.parseFrame(message.data);
-        if (frame?.method === "event" && frame.params?.type === "gateway.ready") {
-          ready = true;
-          maybeResolve();
-        }
-        if (frame) this.handleFrame(frame);
-      });
-      socket.addEventListener("error", () => {
-        if (this.socket !== socket) return;
-        const error = new Error("Could not connect to the Hermes gateway.");
-        this.setConnection("error", error.message);
-        settleReject(error);
-      });
-      socket.addEventListener("close", (event) => {
-        if (this.socket !== socket) return;
-        cleanup();
-        this.socket = null;
-        this.rejectPending(new Error("Hermes gateway disconnected."));
+      source.addEventListener("error", () => {
+        clearTimeout(timeout);
         if (this.intentionallyClosing) {
           this.setConnection("disconnected");
-        } else if (event.code === 4401) {
-          const message =
-            "Hermes rejected the session token. Use the same HERMES_DASHBOARD_SESSION_TOKEN value that started hermes serve.";
-          this.setConnection("authentication_failed", message);
-          settleReject(new Error(message));
-        } else if (event.code === 4400 || event.code === 4403) {
-          const message =
-            event.code === 4400
-              ? "Hermes did not complete the expected JSON-RPC gateway handshake. Check the hermes serve version and /api/ws URL."
-              : "Hermes rejected this WebSocket endpoint or browser origin. Kana and hermes serve must use the same hostname form.";
-          this.setConnection("incompatible", message);
-          settleReject(new Error(message));
+          resolve();
+          return;
+        }
+        this.closeEventStream();
+        const detail = "Hermes relay stream closed.";
+        if (!this.connectedOnce) {
+          reject(new Error(detail));
         } else {
           this.recoveringTurn = this.running;
           this.running = false;
-          const detail = event.reason || `WebSocket closed with code ${event.code}`;
-          settleReject(new Error(detail));
+          this.rejectPending(new Error("Hermes gateway disconnected."));
           this.scheduleReconnect(detail);
+          reject(new Error(detail));
         }
       });
     });
+  }
 
-    const wrappedConnection = connection.finally(() => {
-      this.connectPromise = null;
-    });
-    this.connectPromise = wrappedConnection;
-    return wrappedConnection;
+  private closeEventStream(): void {
+    if (!this.eventSource) return;
+    const source = this.eventSource;
+    this.eventSource = null;
+    try {
+      source.close();
+    } catch {
+      // The stream may already be dead.
+    }
   }
 
   async disconnect(): Promise<void> {
@@ -262,8 +269,7 @@ export class HermesAgentClient implements AgentClient {
     this.connectedOnce = false;
     this.reconnectAttempt = 0;
     this.queuedPrompts.length = 0;
-    this.socket?.close(1000, "Kana disconnected");
-    this.socket = null;
+    this.closeEventStream();
     this.rejectPending(new Error("Kana disconnected from Hermes."));
     this.setConnection("disconnected");
   }
@@ -837,39 +843,10 @@ export class HermesAgentClient implements AgentClient {
     params: Record<string, unknown> = {},
     timeoutMs = this.options.requestTimeoutMs ?? 120_000,
   ): Promise<T> {
-    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+    if (this.state !== "connected") {
       return Promise.reject(new Error("Hermes gateway is not connected."));
     }
-
-    const id = `kana-${++this.requestId}`;
-    const timeout = globalThis.setTimeout(() => {
-      const pending = this.pending.get(id);
-      if (pending) {
-        this.pending.delete(id);
-        pending.reject(new Error(`Hermes request timed out: ${method}`));
-      }
-    }, timeoutMs);
-
-    return new Promise<T>((resolve, reject) => {
-      this.pending.set(id, {
-        resolve: (value) => resolve(value as T),
-        reject,
-        timeout,
-      });
-      try {
-        this.socket?.send(
-          JSON.stringify({ jsonrpc: "2.0", id, method, params }),
-        );
-      } catch (error) {
-        globalThis.clearTimeout(timeout);
-        this.pending.delete(id);
-        reject(
-          error instanceof Error
-            ? error
-            : new Error(`Could not send Hermes request: ${method}`),
-        );
-      }
-    });
+    return relayRpc<T>(method, params, timeoutMs);
   }
 
   private parseFrame(raw: unknown): HermesJsonRpcFrame | null {
@@ -881,20 +858,6 @@ export class HermesAgentClient implements AgentClient {
   }
 
   private handleFrame(frame: HermesJsonRpcFrame): void {
-    if (frame.id !== undefined && frame.id !== null) {
-      const key = String(frame.id);
-      const pending = this.pending.get(key);
-      if (!pending) return;
-      globalThis.clearTimeout(pending.timeout);
-      this.pending.delete(key);
-      if (frame.error) {
-        pending.reject(new Error(frame.error.message || "Hermes RPC failed."));
-      } else {
-        pending.resolve(frame.result);
-      }
-      return;
-    }
-
     if (frame.method === "event" && frame.params) {
       this.handleGatewayEvent(frame.params);
     }
@@ -1204,11 +1167,10 @@ export class HermesAgentClient implements AgentClient {
   }
 
   private rejectPending(error: Error): void {
-    for (const [id, pending] of this.pending) {
-      globalThis.clearTimeout(pending.timeout);
-      pending.reject(error);
-      this.pending.delete(id);
-    }
+    // With the relay transport there is no pending-request map on the client;
+    // in-flight relayRpc promises reject through fetch errors. Kept for the
+    // event-emission contract only.
+    void error;
   }
 
   private setConnection(
