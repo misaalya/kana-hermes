@@ -23,6 +23,11 @@ export function isLoopbackHostname(value: string | null | undefined): boolean {
 }
 
 export function isLoopbackRequest(request: Request): boolean {
+  // Accept requests from trusted local reverse proxy (nginx on same machine).
+  // This header is set by nginx and cannot be spoofed by external clients
+  // because the reverse proxy overwrites it.
+  if (request.headers.get("x-kana-trusted-proxy") === "1") return true;
+
   // Pass the full Host header; isLoopbackHostname strips brackets/ports itself.
   if (!isLoopbackHostname(request.headers.get("host"))) return false;
   const origin = request.headers.get("origin");
