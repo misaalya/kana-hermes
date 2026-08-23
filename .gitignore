@@ -44,6 +44,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# Python service (not part of the Next.js app)
+/services/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

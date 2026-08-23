@@ -24,6 +24,17 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: process.cwd(),
   },
+  // Exclude non-application directories from the compilation scope so the
+  // module graph stays smaller and file-watcher memory is lower.
+serverExternalPackages: ["pixi.js"],
+  experimental: {
+    serverSourceMaps: false,
+  },
+  outputFileTracingExcludes: isDevelopment
+    ? {
+        "/": ["./services/**", "./acceptance/**", "./scripts/**/*.mjs"],
+      }
+    : undefined,
   async headers() {
     return [
       {

@@ -40,7 +40,7 @@ function renderResolution(): number {
  */
 function clippingMaskBufferSize(width: number, height: number): number {
   const backing = Math.ceil(Math.max(width, height) * renderResolution());
-  return Math.min(1024, Math.max(256, backing));
+  return Math.min(2048, Math.max(256, backing));
 }
 
 type MotionCurveList = {
@@ -154,11 +154,6 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
       throw error;
     }
     const { app } = canvasApplication;
-    app.ticker.maxFPS = 60;
-    // Reuse the renderer when a user replaces a model. Destroying and
-    // immediately recreating a Pixi application on the same browser canvas
-    // can stall WebGL; one weakly-held application also bounds context usage.
-    app.stop();
 
     const source = modelFiles?.length
       ? modelFiles
@@ -176,15 +171,10 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
         autoFocus: false,
         autoHitTest: false,
         crossOrigin: "anonymous",
-        // Drive Cubism updates from the application's own ticker instead of
-        // the uncapped global Ticker.shared. This keeps motion evaluation
-        // locked to rendered frames (no wasted updates on skipped frames or
-        // high-refresh displays) and stops it automatically whenever the
-        // stage pauses the ticker (hidden tab, offscreen stage, lost context).
+        // Drive Cubism updates from the application's own ticker so motion
+        // evaluation is locked to rendered frames (no wasted updates on
+        // skipped frames) and automatically pauses when hidden.
         ticker: app.ticker,
-        // Keep the engine default full-mipmap texture strategy. Forcing a
-        // downsampled "single-auto" atlas halved texture resolution and made
-        // fine model edges look broken.
       },
     );
 
@@ -200,6 +190,21 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
     }
 
     model.anchor.set(0.5, 0.5);
+
+    // Compute initial layout before adding to stage so the model never
+    // renders at the 0,0 default position even for a single frame.
+    const initWidth = Math.max(1, Math.round(hostBounds.width));
+    const initHeight = Math.max(1, Math.round(hostBounds.height));
+    model.scale.set(1);
+    const baseWidth = Math.max(1, model.width);
+    const baseHeight = Math.max(1, model.height);
+    const fitScale = Math.min(
+      (initWidth * 0.9) / baseWidth,
+      (initHeight * 0.93) / baseHeight,
+    );
+    model.scale.set(fitScale * 2);
+    model.position.set(initWidth / 2, initHeight * 0.75);
+
     app.stage.addChild(model);
 
     let resizeFrame = 0;
@@ -209,10 +214,10 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
       const height = Math.max(1, Math.round(bounds.height));
       app.renderer.resize(width, height);
       model.scale.set(1);
-      const baseWidth = Math.max(1, model.width);
-      const baseHeight = Math.max(1, model.height);
-      const fitScale = Math.min((width * 0.9) / baseWidth, (height * 0.93) / baseHeight);
-      model.scale.set(fitScale * 2);
+      const baseW = Math.max(1, model.width);
+      const baseH = Math.max(1, model.height);
+      const s = Math.min((width * 0.9) / baseW, (height * 0.93) / baseH);
+      model.scale.set(s * 2);
       model.position.set(width / 2, height * 0.75);
     };
     const resize = () => {
@@ -221,10 +226,13 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
     };
     const observer = new ResizeObserver(resize);
     observer.observe(host);
+
+    // Pause the ticker when the page or stage is hidden instead of stopping
+    // it. Setting speed to 0 keeps the ticker's timing alive and avoids the
+    // startup jitter of a full stop/start cycle when the user returns.
     let stageVisible = true;
     const updatePlayback = () => {
-      if (document.hidden || !stageVisible) app.stop();
-      else app.start();
+      app.ticker.speed = document.hidden || !stageVisible ? 0 : 1;
     };
     const visibilityObserver = new IntersectionObserver(
       ([entry]) => {
@@ -237,10 +245,6 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
     document.addEventListener("visibilitychange", updatePlayback);
 
     // --- Cursor focus (eye tracking), modeled on AIRI's Live2D stage -----
-    // The avatar watches the pointer while it moves and gently drifts its
-    // gaze around after a short pause. All of this lives in the runtime
-    // adapter closure: pointer movement must never re-render React
-    // components, and the presentation layer stays unaware of it.
     let focusActive = true;
     const focusController = internals.focusController;
     const stripEyeballCurves = (motion: unknown) => {
@@ -259,10 +263,6 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
         const name =
           typeof id === "string" ? id : (id?.getString?.().s ?? null);
         if (name !== "ParamEyeBallX" && name !== "ParamEyeBallY") continue;
-        // Rename the curve to an unknown parameter id. Cubism routes writes
-        // to unknown ids into dummy storage, so the motion's eyeball values
-        // never reach the real parameters and cannot fight the focus
-        // controller, which adds its gaze on top of motion values.
         curve.id = internals.idManager.getId(`_kanaFocus${name}`);
       }
     };
@@ -273,7 +273,6 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
       )) {
         for (const motion of motions ?? []) stripEyeballCurves(motion);
       }
-      // Motions load lazily; strip each one as it finishes loading.
       motionManager.on?.("motionLoaded", (_group, _index, motion) => {
         if (focusActive) stripEyeballCurves(motion);
       });
@@ -283,20 +282,22 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
     const handlePointerMove = (event: PointerEvent) => {
       if (document.hidden) return;
       const bounds = host.getBoundingClientRect();
-      // The canvas fills the host, so host-relative coordinates are the
-      // Pixi world coordinates that model.focus() expects.
       model.focus(event.clientX - bounds.left, event.clientY - bounds.top);
       lastPointerFocusAt = performance.now();
     };
     const handlePointerLeave = () => {
       lastPointerFocusAt = -Number.POSITIVE_INFINITY;
     };
-    host.addEventListener("pointermove", handlePointerMove, { passive: true });
+    host.addEventListener("pointermove", handlePointerMove, {
+      passive: true,
+    });
     host.addEventListener("pointerleave", handlePointerLeave);
     let wanderClock = Math.random() * Math.PI * 2;
     const wanderTick = (ticker: { deltaMS: number }) => {
       if (!focusActive) return;
-      if (performance.now() - lastPointerFocusAt < POINTER_FOCUS_HOLD_MS) {
+      if (
+        performance.now() - lastPointerFocusAt < POINTER_FOCUS_HOLD_MS
+      ) {
         return;
       }
       wanderClock += ticker.deltaMS / 1000;
@@ -311,7 +312,7 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
 
     const handleContextLost = (event: Event) => {
       event.preventDefault();
-      app.stop();
+      app.ticker.speed = 0;
     };
     const handleContextRestored = () => {
       resize();
@@ -320,30 +321,23 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
     canvas.addEventListener("webglcontextlost", handleContextLost);
     canvas.addEventListener("webglcontextrestored", handleContextRestored);
     resizeNow();
-    // Render once while retired models are still intact. This replaces Pixi's
-    // previous instruction list with the new model before their textures and
-    // Cubism internals are released.
+    // Render one initial frame so the canvas isn't blank while the ticker
+    // settles. The ticker handles all subsequent frames.
     app.render();
     const retiredModels = [...canvasApplication.retiredModels];
     canvasApplication.retiredModels.clear();
     updatePlayback();
-    // Pixi can retain a submitted Live2D instruction for one animation tick.
-    // Two frames give the new stage time to replace it before old textures are
-    // released, avoiding a transient null-texture render error.
+    // Retired models from a previous session need their Cubism resources
+    // released after the new model has had one render cycle to replace
+    // them in Pixi's instruction pipeline.
     requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        for (const retired of retiredModels) {
-          retired.destroy({
-            children: false,
-            // Loader textures can still be referenced by Pixi's Live2D pipe
-            // and asset cache. Keep those cache-owned resources alive; the
-            // model's Cubism internals and generated LOD textures are still
-            // released by destroy().
-            texture: false,
-            baseTexture: false,
-          });
-        }
-      });
+      for (const retired of retiredModels) {
+        retired.destroy({
+          children: false,
+          texture: false,
+          baseTexture: false,
+        });
+      }
     });
 
     return {
@@ -357,15 +351,14 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
         document.removeEventListener("visibilitychange", updatePlayback);
         cancelAnimationFrame(resizeFrame);
         canvas.removeEventListener("webglcontextlost", handleContextLost);
-        canvas.removeEventListener("webglcontextrestored", handleContextRestored);
-        app.stop();
+        canvas.removeEventListener(
+          "webglcontextrestored",
+          handleContextRestored,
+        );
+        app.ticker.speed = 0;
         model.automator.autoUpdate = false;
         app.stage.removeChild(model);
         canvasApplication.retiredModels.add(model);
-        // The weakly-held application is restarted by the next model load and
-        // is reclaimed with the canvas when the avatar stage leaves the page.
-        // Retiring rather than immediately destroying the model avoids Pixi
-        // executing one stale render instruction against released textures.
       },
       setExpression(name) {
         void model.expression(name);
