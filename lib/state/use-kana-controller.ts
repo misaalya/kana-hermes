@@ -679,13 +679,34 @@ export function useKanaController(appVersion: string) {
   const ensureAgent = useCallback(
     async (conversation: Conversation): Promise<AgentClient> => {
       const prefs = preferencesRef.current;
-      const key = `hermes:${prefs.hermes.websocketUrl}:${prefs.hermes.token}`;
+      // Remote access: a browser page served from a non-loopback origin cannot
+      // dial the server's ws://127.0.0.1 endpoint. Route through the same-origin
+      // nginx proxy (/hermes-ws/ -> Hermes serve) so the connection still works.
+      let websocketUrl = prefs.hermes.websocketUrl;
+      if (typeof window !== "undefined") {
+        const pageHost = window.location.hostname.toLowerCase();
+        const pageIsLoopback =
+          pageHost === "127.0.0.1" || pageHost === "localhost" || pageHost === "::1";
+        const urlIsLocal = (() => {
+          try {
+            const host = new URL(websocketUrl).hostname.toLowerCase();
+            return host === "127.0.0.1" || host === "localhost" || host === "::1" || host === "[::1]";
+          } catch {
+            return false;
+          }
+        })();
+        if (!pageIsLoopback && urlIsLocal) {
+          const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+          websocketUrl = `${proto}//${window.location.host}/hermes-ws/api/ws`;
+        }
+      }
+      const key = `hermes:${websocketUrl}:${prefs.hermes.token}`;
 
       if (!agentRef.current || agentKeyRef.current !== key) {
         unsubscribeAgentRef.current?.();
         await agentRef.current?.disconnect();
         agentRef.current = new HermesAgentClient({
-          websocketUrl: prefs.hermes.websocketUrl,
+          websocketUrl,
           token: prefs.hermes.token,
         });
         agentKeyRef.current = key;
