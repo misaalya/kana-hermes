@@ -1,5 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import {
+  generatedSessionToken,
+  hermesPortFromWebSocketUrl,
+} from "@/lib/runtime/hermes-control-client";
 import type { HermesRuntimeStatus } from "@/lib/runtime/hermes-control-client";
+import { btnGhost, btnSecondary, fieldLabel, inputBase } from "./ui";
 
 type HermesControlPanelProps = {
   websocketUrl: string;
@@ -14,22 +19,15 @@ type HermesControlPanelProps = {
     restart?: boolean;
   }): Promise<HermesRuntimeStatus>;
   onStop(): Promise<HermesRuntimeStatus>;
-  onPrepareCommand(command: string): void;
 };
 
-function portFromWebSocket(url: string): number {
-  try {
-    const parsed = new URL(url);
-    return Number(parsed.port || (parsed.protocol === "wss:" ? 443 : 80));
-  } catch {
-    return 9119;
-  }
-}
-
-function generatedToken(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(32));
-  return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
-}
+const STATE_STYLE: Record<string, string> = {
+  running: "border-accent/50 text-accent-strong",
+  starting: "border-accent/40 text-accent-strong animate-kana-pulse",
+  stopping: "border-line-strong text-muted",
+  failed: "border-danger/50 text-danger",
+  stopped: "border-line-strong text-muted",
+};
 
 export function HermesControlPanel({
   websocketUrl,
@@ -39,16 +37,13 @@ export function HermesControlPanel({
   onInspect,
   onStart,
   onStop,
-  onPrepareCommand,
 }: HermesControlPanelProps) {
   const [status, setStatus] = useState<HermesRuntimeStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [port, setPort] = useState(() => portFromWebSocket(websocketUrl));
-  const statusLabel = useMemo(
-    () => status?.state.replaceAll("_", " ") ?? "checking",
-    [status],
-  );
+  const [showToken, setShowToken] = useState(false);
+  const [port, setPort] = useState(() => hermesPortFromWebSocketUrl(websocketUrl));
+  const stateLabel = status?.state.replaceAll("_", " ") ?? "checking";
 
   useEffect(() => {
     let active = true;
@@ -56,7 +51,7 @@ export function HermesControlPanel({
       .then((next) => {
         if (active) {
           setStatus(next);
-          setPort(next.port || portFromWebSocket(websocketUrl));
+          setPort(next.port || hermesPortFromWebSocketUrl(websocketUrl));
         }
       })
       .catch((error) => {
@@ -77,15 +72,21 @@ export function HermesControlPanel({
         setNotice(next.message);
         return;
       }
-      if (!token.trim()) throw new Error("Create or enter a session token first.");
+      // Starting from Kana mints one token and reuses it for the connection —
+      // the user never enters it twice.
+      let startToken = token.trim();
+      if (!startToken) {
+        startToken = generatedSessionToken();
+        onConnectionChange({ websocketUrl, token: startToken });
+      }
       const next = await onStart({
         port,
-        token,
+        token: startToken,
         cwd: cwd || undefined,
         restart: action === "restart",
       });
       setStatus(next);
-      onConnectionChange({ websocketUrl: next.websocketUrl, token });
+      onConnectionChange({ websocketUrl: next.websocketUrl, token: startToken });
       setNotice(`${next.message} Save settings, then connect Kana.`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Hermes control failed.");
@@ -95,53 +96,65 @@ export function HermesControlPanel({
   };
 
   return (
-    <section className="hermes-control-panel full-width" aria-labelledby="hermes-control-title">
-      <div className="settings-subheading">
+    <section className="rounded-2xl border border-line bg-bg p-3.5" aria-label="Hermes process control">
+      <div className="mb-3 flex items-center justify-between gap-2">
         <div>
-          <strong id="hermes-control-title">Hermes control panel</strong>
-          <small>Starts the official, unmodified `hermes serve` process on this machine.</small>
+          <p className="text-xs font-bold text-ink">Local `hermes serve`</p>
+          <p className="text-[10px] text-faint">The official, unmodified process on this machine.</p>
         </div>
-        <span className={`runtime-state ${status?.state ?? "checking"}`}>
-          {statusLabel}
+        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase ${STATE_STYLE[status?.state ?? ""] ?? "border-line-strong text-muted"}`}>
+          {stateLabel}
         </span>
       </div>
 
       {status?.controlAvailable ? (
         <>
-          <div className="runtime-details">
-            <span><small>Executable</small>{status.executable ?? "Not found"}</span>
-            <span><small>Ownership</small>{status.managed ? "Managed by Kana" : "External or stopped"}</span>
-            <span><small>Process</small>{status.pid ? `PID ${status.pid}` : "—"}</span>
-          </div>
-          <div className="settings-grid runtime-controls">
-            <label>
-              Local port
+          <dl className="mb-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-xl bg-surface px-3 py-2.5 text-[11px]">
+            <dt className="text-faint">Executable</dt>
+            <dd className="truncate font-mono text-ink-dim">{status.executable ?? "Not found"}</dd>
+            <dt className="text-faint">Ownership</dt>
+            <dd className="text-ink-dim">{status.managed ? "Managed by Kana" : "External or stopped"}</dd>
+            <dt className="text-faint">Process</dt>
+            <dd className="text-ink-dim">{status.pid ? `PID ${status.pid}` : "—"}</dd>
+            <dt className="text-faint">Endpoint</dt>
+            <dd className="truncate font-mono text-ink-dim">{`ws://127.0.0.1:${port}/api/ws`}</dd>
+          </dl>
+
+          <div className="grid gap-2.5 sm:grid-cols-2">
+            <label className="flex flex-col gap-1">
+              <span className={fieldLabel}>Local port</span>
               <input
                 type="number"
                 min={1024}
                 max={65535}
+                className={inputBase}
                 value={port}
                 disabled={status.managed}
                 onChange={(event) => setPort(Number(event.target.value))}
               />
             </label>
-            <label>
-              Session token
-              <span className="input-with-action">
+            <label className="flex flex-col gap-1">
+              <span className={fieldLabel}>Session token</span>
+              <span className="flex items-center gap-1">
                 <input
-                  type="password"
+                  type={showToken ? "text" : "password"}
+                  className={`${inputBase} font-mono`}
                   value={token}
                   autoComplete="off"
+                  placeholder={showToken ? undefined : "••••••••"}
                   onChange={(event) =>
                     onConnectionChange({ websocketUrl, token: event.target.value })
                   }
                 />
+                <button type="button" className={`${btnGhost} shrink-0`} onClick={() => setShowToken((current) => !current)}>
+                  {showToken ? "Hide" : "Show"}
+                </button>
                 <button
                   type="button"
-                  className="text-button"
+                  className={`${btnGhost} shrink-0`}
                   disabled={status.managed}
                   onClick={() =>
-                    onConnectionChange({ websocketUrl, token: generatedToken() })
+                    onConnectionChange({ websocketUrl, token: generatedSessionToken() })
                   }
                 >
                   Generate
@@ -149,57 +162,38 @@ export function HermesControlPanel({
               </span>
             </label>
           </div>
-          <div className="settings-actions inline-actions">
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
             {status.state === "running" && status.managed ? (
               <>
-                <button type="button" className="secondary-button" disabled={busy} onClick={() => void run("restart")}>
+                <button type="button" className={btnSecondary} disabled={busy} onClick={() => void run("restart")}>
                   Restart Hermes
                 </button>
-                <button type="button" className="secondary-button danger-text" disabled={busy} onClick={() => void run("stop")}>
+                <button type="button" className={`${btnSecondary} hover:border-danger hover:text-danger`} disabled={busy} onClick={() => void run("stop")}>
                   Stop Hermes
                 </button>
               </>
             ) : (
-              <button type="button" className="secondary-button" disabled={busy || !status.executable || status.state === "running"} onClick={() => void run("start")}>
+              <button
+                type="button"
+                className={btnSecondary}
+                disabled={busy || !status.executable || status.state === "running"}
+                onClick={() => void run("start")}
+              >
                 {busy ? "Starting…" : "Start Hermes"}
               </button>
             )}
-            <button
-              type="button"
-              className="text-button"
-              disabled={busy}
-              onClick={() => void onInspect().then(setStatus)}
-            >
+            <button type="button" className={btnGhost} disabled={busy} onClick={() => void onInspect().then(setStatus)}>
               Refresh status
             </button>
           </div>
         </>
       ) : (
-        <p className="field-hint">
+        <p className="text-[11px] leading-relaxed text-faint">
           {status?.message ?? "Start Kana with the npm launcher to enable local process controls."}
         </p>
       )}
-      <p className="field-hint">{notice ?? status?.message}</p>
-      <div className="hermes-command-shortcuts" aria-label="Hermes configuration shortcuts">
-        <span>Live Hermes controls</span>
-        <div>
-          {["/model ", "/profile ", "/reasoning ", "/status", "/usage", "/commands"].map(
-            (command) => (
-              <button
-                type="button"
-                className="text-button"
-                key={command}
-                onClick={() => onPrepareCommand(command)}
-              >
-                {command.trim()}
-              </button>
-            ),
-          )}
-        </div>
-        <small>
-          Model and profile choices come from the connected Hermes registry, so Kana always follows the user&apos;s Hermes configuration.
-        </small>
-      </div>
+      <p className="mt-2 min-h-4 text-[11px] text-muted">{notice ?? ""}</p>
     </section>
   );
 }

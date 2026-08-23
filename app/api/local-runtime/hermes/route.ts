@@ -3,16 +3,15 @@ import {
   startLocalHermesRuntime,
   stopLocalHermesRuntime,
 } from "@/lib/server/local-hermes-runtime";
+import { isAuthEnabled } from "@/lib/server/auth/password-store";
+import { isSessionValid } from "@/lib/server/auth/session";
+import { isLoopbackRequest } from "@/lib/server/auth/loopback";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function requestAllowed(request: Request): boolean {
-  const url = new URL(request.url);
-  if (url.hostname !== "127.0.0.1" && url.hostname !== "localhost") return false;
-  const origin = request.headers.get("origin");
-  return !origin || origin === url.origin;
-}
+// Defense in depth: the auth proxy already enforces loopback + session for
+// this prefix; these checks keep the route honest even without the proxy.
 
 function forbidden(): Response {
   return Response.json(
@@ -21,15 +20,26 @@ function forbidden(): Response {
   );
 }
 
+async function requestAuthorized(request: Request): Promise<boolean> {
+  return !isAuthEnabled() || (await isSessionValid(request));
+}
+
 export async function GET(request: Request): Promise<Response> {
-  if (!requestAllowed(request)) return forbidden();
-  return Response.json(await inspectLocalHermesRuntime(), {
+  if (!isLoopbackRequest(request)) return forbidden();
+  if (!(await requestAuthorized(request))) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const preferredPort = Number(new URL(request.url).searchParams.get("port") ?? "");
+  return Response.json(await inspectLocalHermesRuntime(Number.isInteger(preferredPort) && preferredPort > 0 ? preferredPort : undefined), {
     headers: { "Cache-Control": "no-store" },
   });
 }
 
 export async function POST(request: Request): Promise<Response> {
-  if (!requestAllowed(request)) return forbidden();
+  if (!isLoopbackRequest(request)) return forbidden();
+  if (!(await requestAuthorized(request))) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
     const value = (await request.json()) as {
       action?: unknown;

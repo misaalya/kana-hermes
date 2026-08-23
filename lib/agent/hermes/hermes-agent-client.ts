@@ -1137,6 +1137,10 @@ export class HermesAgentClient implements AgentClient {
       return;
     }
 
+    if (this.state === "error" && !this.connectedOnce) {
+      return;
+    }
+
     const delays = this.options.reconnectDelaysMs ?? DEFAULT_RECONNECT_DELAYS_MS;
     if (!delays.length) {
       this.setConnection("error", message);

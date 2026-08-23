@@ -51,3 +51,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 reference/
+
+# Local reference checkouts (read-only study material)
+/auth-reference/
+/data/
