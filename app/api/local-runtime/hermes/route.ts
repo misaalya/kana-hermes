@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import {
   inspectLocalHermesRuntime,
   startLocalHermesRuntime,
@@ -54,9 +55,15 @@ export async function POST(request: Request): Promise<Response> {
       return Response.json({ error: "Action must be start, restart, or stop." }, { status: 400 });
     }
     if (value.action === "restart") await stopLocalHermesRuntime();
+    // Abstraction-first: when the client supplies no token, the server
+    // generates a strong one so the UI never needs manual token entry.
+    const token =
+      typeof value.token === "string" && value.token.length >= 12
+        ? value.token
+        : randomBytes(24).toString("hex");
     const status = await startLocalHermesRuntime({
       port: typeof value.port === "number" ? value.port : 9119,
-      token: typeof value.token === "string" ? value.token : "",
+      token,
       cwd: typeof value.cwd === "string" ? value.cwd : undefined,
     });
     return Response.json(status);
