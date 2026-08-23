@@ -14,13 +14,8 @@ import type {
 } from "@/lib/agent/types";
 import { AvatarController } from "@/lib/avatar/avatar-controller";
 import { OFFICIAL_HARU_MODEL_URL } from "@/lib/avatar/defaults";
-import { Live2DAvatarProvider } from "@/lib/avatar/live2d-avatar-provider";
 import { ManagedAvatarProvider } from "@/lib/avatar/managed-avatar-provider";
-import { live2DModelBindings } from "@/lib/avatar/model-bindings";
-import { MockAvatarProvider } from "@/lib/avatar/mock-avatar-provider";
-import { PixiLive2DRuntimeAdapter } from "@/lib/avatar/pixi-live2d-runtime-adapter";
 import { IndexedDbAvatarModelStore } from "@/lib/avatar/indexed-db-avatar-model-store";
-import type { AvatarSnapshot } from "@/lib/avatar/types";
 import {
   createKanaBackup,
   parseKanaBackup,
@@ -33,16 +28,6 @@ import {
   type KanaMessage,
 } from "@/lib/conversation/types";
 import {
-  DEFAULT_PREFERENCES,
-  LocalPreferencesStore,
-  normalizeKanaPreferences,
-} from "@/lib/preferences/local-preferences-store";
-import type { KanaPreferences } from "@/lib/preferences/types";
-import {
-  controlHermesRuntime,
-  inspectHermesRuntime,
-} from "@/lib/runtime/hermes-control-client";
-import {
   classifyKanaError,
   serializeKanaDiagnostics,
 } from "@/lib/diagnostics/safe-diagnostics";
@@ -52,15 +37,18 @@ import type {
   KanaErrorSource,
   KanaRuntimeMetrics,
 } from "@/lib/diagnostics/types";
-import { MockVoiceProvider } from "@/lib/voice/mock-voice-provider";
 import {
-  createQwen3VoiceClone,
-  deleteQwen3VoiceClone,
-  inspectQwen3TTSService,
-  type CreateVoiceCloneInput,
-} from "@/lib/voice/qwen3-tts-contract";
-import { Qwen3TTSProvider } from "@/lib/voice/qwen3-tts-provider";
-import type { VoiceProvider, VoiceProviderStatus } from "@/lib/voice/types";
+  DEFAULT_PREFERENCES,
+  LocalPreferencesStore,
+  normalizeKanaPreferences,
+} from "@/lib/preferences/local-preferences-store";
+import type { KanaPreferences } from "@/lib/preferences/types";
+import {
+  controlHermesRuntime,
+  inspectHermesRuntime,
+} from "@/lib/runtime/hermes-control-client";
+import { useAvatarController } from "./use-avatar-controller";
+import { useVoiceController } from "./use-voice-controller";
 
 export type ActivityItem = {
   id: string;
@@ -71,15 +59,6 @@ export type ActivityItem = {
   state: "running" | "complete" | "attention";
   timestamp: number;
   durationMs?: number;
-};
-
-const EMPTY_AVATAR: AvatarSnapshot = {
-  loaded: false,
-  renderMode: "mock",
-  emotion: "neutral",
-  emotionIntensity: 0.2,
-  mouthOpen: 0,
-  talking: false,
 };
 
 const KANA_COMMAND_SUGGESTIONS: AgentCommandSuggestion[] = [
@@ -159,7 +138,7 @@ function withoutLastUserTurn(messages: KanaMessage[]): KanaMessage[] {
 
 function shortTitle(text: string): string {
   const title = text.replace(/\s+/g, " ").trim();
-  return title.length > 42 ? `${title.slice(0, 42)}…` : title;
+  return title.length > 42 ? `${title.slice(0, 42)}\u2026` : title;
 }
 
 function isAbortError(error: unknown): boolean {
@@ -177,8 +156,15 @@ function toolTitle(kind: AgentToolKind, tool: string): string {
 }
 
 export function useKanaController(appVersion: string) {
-  const conversationStore = useMemo(() => new IndexedDbConversationStore(), []);
-  const avatarModelStore = useMemo(() => new IndexedDbAvatarModelStore(), []);
+  // ---- Stable instances ----
+  const conversationStore = useMemo(
+    () => new IndexedDbConversationStore(),
+    [],
+  );
+  const avatarModelStore = useMemo(
+    () => new IndexedDbAvatarModelStore(),
+    [],
+  );
   const preferencesStore = useMemo(() => new LocalPreferencesStore(), []);
   const avatarProvider = useMemo(() => new ManagedAvatarProvider(), []);
   const avatarController = useMemo(
@@ -186,34 +172,26 @@ export function useKanaController(appVersion: string) {
     [avatarProvider],
   );
 
+  // ---- State ----
   const [ready, setReady] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [activeConversationId, setActiveConversationId] = useState<string | null>(
-    null,
-  );
-  const [preferences, setPreferences] =
-    useState<KanaPreferences>(DEFAULT_PREFERENCES);
-  const [connectionState, setConnectionState] =
-    useState<AgentConnectionState>("disconnected");
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [preferences, setPreferences] = useState<KanaPreferences>(DEFAULT_PREFERENCES);
+  const [connectionState, setConnectionState] = useState<AgentConnectionState>("disconnected");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("Ready when you are");
   const [error, setError] = useState<string | null>(null);
   const [lastError, setLastError] = useState<KanaErrorRecord | null>(null);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
-  const [avatar, setAvatar] = useState<AvatarSnapshot>(EMPTY_AVATAR);
-  const [commandSuggestions, setCommandSuggestions] = useState<
-    AgentCommandSuggestion[]
-  >([]);
+  const [commandSuggestions, setCommandSuggestions] = useState<AgentCommandSuggestion[]>([]);
   const [commandSuggestionsLoading, setCommandSuggestionsLoading] = useState(false);
   const [pendingInput, setPendingInput] = useState<AgentInputRequest | null>(null);
   const [respondingToInput, setRespondingToInput] = useState(false);
-  const [voiceStatus, setVoiceStatus] = useState<VoiceProviderStatus | null>(null);
-  const [voiceRuntimeState, setVoiceRuntimeState] = useState("idle");
-  const [voiceCanReplay, setVoiceCanReplay] = useState(false);
   const [metrics, setMetrics] = useState<KanaRuntimeMetrics>({
     reconnectCount: 0,
   });
 
+  // ---- Refs ----
   const conversationsRef = useRef<Conversation[]>([]);
   const activeConversationIdRef = useRef<string | null>(null);
   const preferencesRef = useRef<KanaPreferences>(DEFAULT_PREFERENCES);
@@ -223,54 +201,17 @@ export function useKanaController(appVersion: string) {
   const openingConversationRef = useRef<string | null>(null);
   const turnConversationRef = useRef<string | null>(null);
   const unsubscribeAgentRef = useRef<(() => void) | null>(null);
-  const voiceRef = useRef<VoiceProvider | null>(null);
-  const unsubscribeVoiceRef = useRef<(() => void) | null>(null);
-  const voiceKeyRef = useRef("");
   const initializationRef = useRef<Promise<{
     storedPreferences: KanaPreferences;
     storedConversations: Conversation[];
     storageWarning: string | null;
   }> | null>(null);
   const completionRequestRef = useRef(0);
-  const avatarCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const lastErrorMessageRef = useRef<string | null>(null);
-  const avatarKeyRef = useRef("");
   const connectionStartedAtRef = useRef<number | null>(null);
   const turnStartedAtRef = useRef<number | null>(null);
-  const avatarPreviewTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
 
-  const commitConversations = useCallback((next: Conversation[]) => {
-    const sorted = recentFirst(next);
-    conversationsRef.current = sorted;
-    setConversations(sorted);
-  }, []);
-
-  const saveConversation = useCallback(
-    async (conversation: Conversation) => {
-      const updated = { ...conversation, updatedAt: Date.now() };
-      const next = conversationsRef.current.some((item) => item.id === updated.id)
-        ? conversationsRef.current.map((item) =>
-            item.id === updated.id ? updated : item,
-          )
-        : [...conversationsRef.current, updated];
-      commitConversations(next);
-      await conversationStore.save(updated);
-      return updated;
-    },
-    [commitConversations, conversationStore],
-  );
-
-  const addActivity = useCallback((activity: ActivityItem) => {
-    setActivities((current) => {
-      const existing = current.find((item) => item.id === activity.id);
-      if (!existing) return [activity, ...current].slice(0, 40);
-      if (existing.state === "complete" && activity.state === "running") {
-        return current;
-      }
-      return current.map((item) => (item.id === activity.id ? activity : item));
-    });
-  }, []);
-
+  // ---- Error reporting (shared across hooks) ----
   const reportError = useCallback(
     (
       source: KanaErrorSource,
@@ -283,9 +224,6 @@ export function useKanaController(appVersion: string) {
           : typeof value === "string"
             ? value
             : "Something went wrong.";
-      // Repeated failures (for example every Hermes reconnect attempt while
-      // the gateway is down) must not mint a fresh error record each time;
-      // new object identities re-render the whole shell on every retry.
       if (lastErrorMessageRef.current === message) return null;
       lastErrorMessageRef.current = message;
       const record = classifyKanaError(value, source, category);
@@ -296,287 +234,102 @@ export function useKanaController(appVersion: string) {
     [],
   );
 
-  const configureAvatar = useCallback(
-    async (next: KanaPreferences, selectedModelFiles?: File[]) => {
-      const canvas = avatarCanvasRef.current;
-      if (!canvas) return false;
-      const startedAt = monotonicNow();
-      setError(null);
-      try {
-        let modelFiles = selectedModelFiles;
-        if (
-          !modelFiles?.length &&
-          next.avatarMode === "live2d" &&
-          next.live2d.modelId
-        ) {
-          modelFiles =
-            (await avatarModelStore.load(next.live2d.modelId)) ?? undefined;
-          if (!modelFiles?.length) {
-            throw new Error(
-              `The saved Live2D model “${next.live2d.modelName || next.live2d.modelId}” is no longer available.`,
-            );
-          }
-        }
-
-        const bindings = live2DModelBindings(next.live2d);
-        const key = modelFiles?.length
-          ? `files:${modelFiles
-              .map(
-                (file) =>
-                  `${file.webkitRelativePath}:${file.size}:${file.lastModified}`,
-              )
-              .join("|")}:${JSON.stringify(bindings)}`
-          : next.avatarMode === "live2d"
-            ? `live2d:${next.live2d.coreScriptUrl}:${next.live2d.modelId || next.live2d.modelUrl}:${JSON.stringify(bindings)}`
-            : "mock";
-        if (avatarKeyRef.current === key) return true;
-
-        if (next.avatarMode === "mock" && !modelFiles?.length) {
-          await avatarProvider.use(new MockAvatarProvider(), {
-            id: "kana-mock",
-            name: "Kana preview",
-          });
-        } else {
-          const runtime = new PixiLive2DRuntimeAdapter(
-            next.live2d.coreScriptUrl.trim(),
-          );
-          const provider = new Live2DAvatarProvider(runtime, bindings);
-          await avatarProvider.use(provider, {
-            id: modelFiles?.length ? "imported-live2d" : "configured-live2d",
-            name: modelFiles?.length ? "Imported Live2D model" : "Live2D model",
-            canvas,
-            modelFiles,
-            modelUrl: modelFiles?.length
-              ? undefined
-              : next.live2d.modelUrl.trim(),
-          });
-        }
-        avatarKeyRef.current = key;
-        avatarController.presentEmotion("neutral");
-        setMetrics((current) => ({
-          ...current,
-          lastAvatarLoadDurationMs: Math.round(monotonicNow() - startedAt),
-        }));
-        return true;
-      } catch (avatarError) {
-        avatarKeyRef.current = "mock-fallback";
-        reportError(
-          "avatar",
-          avatarError instanceof Error
-            ? `Live2D could not load: ${avatarError.message}`
-            : "Live2D could not load. Kana is using the CSS preview.",
-          "avatar",
-        );
-        return false;
-      }
+  // ---- Metrics accumulation (shared across hooks) ----
+  const accumulateMetrics = useCallback(
+    (partial: Partial<KanaRuntimeMetrics>) => {
+      setMetrics((current) => ({ ...current, ...partial }));
     },
-    [avatarController, avatarModelStore, avatarProvider, reportError],
+    [],
   );
 
-  const attachAvatarCanvas = useCallback(
-    (canvas: HTMLCanvasElement | null) => {
-      avatarCanvasRef.current = canvas;
-      if (canvas) void configureAvatar(preferencesRef.current);
-    },
-    [configureAvatar],
-  );
-
-  const importAvatarFiles = useCallback(
-    async (files: File[]) => {
-      if (!files.length) throw new Error("Choose a Live2D model folder first.");
-      const previous = preferencesRef.current;
-      const imported = await avatarModelStore.import(files);
-      const next = {
-        ...preferencesRef.current,
-        avatarMode: "live2d" as const,
-        live2d: {
-          ...preferencesRef.current.live2d,
-          modelId: imported.id,
-          modelName: imported.name,
-        },
-      };
-      avatarKeyRef.current = "";
-      const loaded = await configureAvatar(next, files);
-      if (!loaded) {
-        await avatarModelStore.delete(imported.id);
-        avatarKeyRef.current = "";
-        await configureAvatar(previous);
-        throw new Error(
-          "The selected folder could not be loaded. Include the model3.json file and every referenced asset.",
-        );
-      }
+  // ---- Avatar controller (extracted) ----
+  const {
+    avatar,
+    configureAvatar,
+    attachAvatarCanvas,
+    importAvatarFiles,
+    listAvatarModels,
+    selectAvatarModel,
+    renameAvatarModel,
+    deleteAvatarModel,
+    previewAvatarEmotion,
+    previewAvatarMotion,
+    previewAvatarTalking,
+  } = useAvatarController(
+    avatarProvider,
+    avatarModelStore,
+    avatarController,
+    () => preferencesRef.current,
+    (next) => {
       preferencesRef.current = next;
       setPreferences(next);
       preferencesStore.save(next);
-      return imported;
     },
-    [avatarModelStore, configureAvatar, preferencesStore],
+    reportError,
+    accumulateMetrics,
   );
 
-  const listAvatarModels = useCallback(
-    () => avatarModelStore.list(),
-    [avatarModelStore],
+  // ---- Voice controller (extracted) ----
+  const {
+    voiceRuntimeState,
+    voiceCanReplay,
+    voiceStatus,
+    getVoice,
+    inspectVoiceService,
+    cloneVoice,
+    deleteClonedVoice,
+    replayVoice,
+    stopVoice,
+    cleanupVoice,
+  } = useVoiceController(
+    avatarController,
+    () => preferencesRef.current,
+    accumulateMetrics,
+    reportError,
   );
 
-  const selectAvatarModel = useCallback(
-    async (id: string) => {
-      const previous = preferencesRef.current;
-      const model = (await avatarModelStore.list()).find((item) => item.id === id);
-      if (!model) throw new Error("The selected Live2D model no longer exists.");
-      const files = await avatarModelStore.load(id);
-      if (!files?.length) throw new Error("The selected Live2D package is empty.");
-      const next: KanaPreferences = {
-        ...previous,
-        avatarMode: "live2d",
-        live2d: {
-          ...previous.live2d,
-          modelId: model.id,
-          modelName: model.name,
-        },
-      };
-      avatarKeyRef.current = "";
-      if (!(await configureAvatar(next, files))) {
-        avatarKeyRef.current = "";
-        await configureAvatar(previous);
-        throw new Error(
-          "The saved Live2D package could not be loaded. Kana restored the previous avatar.",
-        );
-      }
-      preferencesRef.current = next;
-      setPreferences(next);
-      preferencesStore.save(next);
-      return model;
+  // ---- Conversation management ----
+  const commitConversations = useCallback(
+    (next: Conversation[]) => {
+      const sorted = recentFirst(next);
+      conversationsRef.current = sorted;
+      setConversations(sorted);
     },
-    [avatarModelStore, configureAvatar, preferencesStore],
+    [],
   );
 
-  const renameAvatarModel = useCallback(
-    async (id: string, name: string) => {
-      const renamed = await avatarModelStore.rename(id, name);
-      if (!renamed) throw new Error("The selected Live2D model no longer exists.");
-      if (preferencesRef.current.live2d.modelId === id) {
-        const next = {
-          ...preferencesRef.current,
-          live2d: {
-            ...preferencesRef.current.live2d,
-            modelName: renamed.name,
-          },
-        };
-        preferencesRef.current = next;
-        setPreferences(next);
-        preferencesStore.save(next);
-      }
-      return renamed;
-    },
-    [avatarModelStore, preferencesStore],
-  );
-
-  const deleteAvatarModel = useCallback(
-    async (id: string) => {
-      if (preferencesRef.current.live2d.modelId === id) {
-        throw new Error("Switch to another avatar before deleting the active model.");
-      }
-      await avatarModelStore.delete(id);
-    },
-    [avatarModelStore],
-  );
-
-  const getVoice = useCallback((): VoiceProvider => {
-    const prefs = preferencesRef.current;
-    const key = `${prefs.voiceMode}:${prefs.qwen3Tts.baseUrl}:${prefs.qwen3Tts.voiceId}:${prefs.qwen3Tts.deliveryMode}`;
-    if (voiceRef.current && voiceKeyRef.current === key) {
-      return voiceRef.current;
-    }
-
-    voiceRef.current?.stop();
-    unsubscribeVoiceRef.current?.();
-    const provider =
-      prefs.voiceMode === "qwen3"
-        ? new Qwen3TTSProvider(
-            {
-              baseUrl: prefs.qwen3Tts.baseUrl,
-              voiceId: prefs.qwen3Tts.voiceId,
-              deliveryMode: prefs.qwen3Tts.deliveryMode,
-            },
-            avatarController,
+  const saveConversation = useCallback(
+    async (conversation: Conversation) => {
+      const updated = { ...conversation, updatedAt: Date.now() };
+      const next = conversationsRef.current.some(
+        (item) => item.id === updated.id,
+      )
+        ? conversationsRef.current.map((item) =>
+            item.id === updated.id ? updated : item,
           )
-        : new MockVoiceProvider(avatarController);
-    voiceRef.current = provider;
-    const applySnapshot = (snapshot: ReturnType<VoiceProvider["getSnapshot"]>) => {
-      setVoiceRuntimeState(snapshot.state);
-      setVoiceCanReplay(snapshot.canReplay);
-      const totalDuration =
-        (snapshot.lastSynthesisDurationMs ?? 0) +
-        (snapshot.lastPlaybackDurationMs ?? 0);
-      if (totalDuration > 0) {
-        setMetrics((current) => ({
-          ...current,
-          lastVoiceDurationMs: totalDuration,
-          lastVoiceSynthesisDurationMs: snapshot.lastSynthesisDurationMs,
-          lastVoicePlaybackDurationMs: snapshot.lastPlaybackDurationMs,
-          lastVoiceTimeToFirstAudioMs: snapshot.timeToFirstAudioMs,
-        }));
-      }
-    };
-    applySnapshot(provider.getSnapshot());
-    unsubscribeVoiceRef.current = provider.subscribe(applySnapshot);
-    voiceKeyRef.current = key;
-    return provider;
-  }, [avatarController]);
+        : [...conversationsRef.current, updated];
+      commitConversations(next);
+      await conversationStore.save(updated);
+      return updated;
+    },
+    [commitConversations, conversationStore],
+  );
 
-  const inspectVoiceService = useCallback(async (baseUrl: string) => {
-    setVoiceRuntimeState("checking");
-    const inspection = await inspectQwen3TTSService(baseUrl);
-    setVoiceStatus(inspection);
-    setVoiceRuntimeState(inspection.state);
-    if (inspection.state === "error" || inspection.state === "unavailable") {
-      setLastError(
-        classifyKanaError(
-          inspection.message || "Qwen3-TTS is unavailable.",
-          "voice",
-          "voice",
-        ),
+  // ---- Activities ----
+  const addActivity = useCallback((activity: ActivityItem) => {
+    setActivities((current) => {
+      const existing = current.find((item) => item.id === activity.id);
+      if (!existing) return [activity, ...current].slice(0, 40);
+      if (existing.state === "complete" && activity.state === "running") {
+        return current;
+      }
+      return current.map((item) =>
+        item.id === activity.id ? activity : item,
       );
-    }
-    return inspection;
+    });
   }, []);
 
-  const cloneVoice = useCallback(
-    async (baseUrl: string, input: CreateVoiceCloneInput) => {
-      const voice = await createQwen3VoiceClone(baseUrl, input);
-      const inspection = await inspectQwen3TTSService(baseUrl);
-      setVoiceStatus(inspection);
-      return voice;
-    },
-    [],
-  );
-
-  const deleteClonedVoice = useCallback(
-    async (baseUrl: string, voiceId: string) => {
-      await deleteQwen3VoiceClone(baseUrl, voiceId);
-      const inspection = await inspectQwen3TTSService(baseUrl);
-      setVoiceStatus(inspection);
-      return inspection;
-    },
-    [],
-  );
-
-  const inspectHermesControl = useCallback(() => inspectHermesRuntime(), []);
-  const startHermesControl = useCallback(
-    (options: { port: number; token: string; cwd?: string; restart?: boolean }) =>
-      controlHermesRuntime({
-        action: options.restart ? "restart" : "start",
-        port: options.port,
-        token: options.token,
-        cwd: options.cwd,
-      }),
-    [],
-  );
-  const stopHermesControl = useCallback(
-    () => controlHermesRuntime({ action: "stop" }),
-    [],
-  );
-
+  // ---- Agent event handling ----
   const updateConversationFromEvent = useCallback(
     async (event: AgentEvent) => {
       const conversationId =
@@ -602,7 +355,10 @@ export function useKanaController(appVersion: string) {
               status: "linked",
               relationship: conversation.agent?.relationship ?? "primary",
               ...(conversation.agent?.parentConversationId
-                ? { parentConversationId: conversation.agent.parentConversationId }
+                ? {
+                    parentConversationId:
+                      conversation.agent.parentConversationId,
+                  }
                 : {}),
             },
           });
@@ -621,8 +377,10 @@ export function useKanaController(appVersion: string) {
           .find((message) => message.role === "assistant");
         if (
           previousAssistant?.speech_ja === event.response.speech_ja &&
-          previousAssistant.subtitle?.text === event.response.subtitle.text &&
-          previousAssistant.subtitle.language === event.response.subtitle.language
+          previousAssistant.subtitle?.text ===
+            event.response.subtitle.text &&
+          previousAssistant.subtitle.language ===
+            event.response.subtitle.language
         ) {
           return;
         }
@@ -700,7 +458,7 @@ export function useKanaController(appVersion: string) {
           openedConversationRef.current = null;
           openingConversationRef.current = null;
           setBusy(false);
-          setStatus("Reconnecting to Hermes…");
+          setStatus("Reconnecting to Hermes\u2026");
           if (event.message) {
             setLastError(
               classifyKanaError(event.message, "agent", "connection"),
@@ -742,7 +500,10 @@ export function useKanaController(appVersion: string) {
         return;
       }
 
-      if (event.type === "session.opened" || event.type === "session.updated") {
+      if (
+        event.type === "session.opened" ||
+        event.type === "session.updated"
+      ) {
         void updateConversationFromEvent(event);
         return;
       }
@@ -783,31 +544,30 @@ export function useKanaController(appVersion: string) {
 
       if (event.type === "tool.finished") {
         setActivities((current) => {
-          const existing = current.some((activity) => activity.id === event.id);
-          if (!existing) {
-            return [
-              {
-                id: event.id,
-                tool: event.tool,
-                kind: event.kind,
-                title: event.summary || `${event.tool} finished`,
-                state: "complete" as const,
-                timestamp: Date.now(),
-                durationMs: event.durationMs,
-              },
-              ...current,
-            ].slice(0, 40);
-          }
-          return current.map((activity) =>
-            activity.id === event.id
-              ? {
-                  ...activity,
-                  title: event.summary || `${event.tool} finished`,
-                  state: "complete" as const,
-                  durationMs: event.durationMs,
-                }
-              : activity,
+          const existing = current.some(
+            (activity) => activity.id === event.id,
           );
+          if (!existing) {
+            const newActivity: ActivityItem = {
+              id: event.id,
+              tool: event.tool,
+              kind: event.kind,
+              title: event.summary || `${event.tool} finished`,
+              state: "complete",
+              timestamp: Date.now(),
+              durationMs: event.durationMs,
+            };
+            return [newActivity, ...current].slice(0, 40);
+          }
+          return current.map((activity) => {
+            if (activity.id !== event.id) return activity;
+            return {
+              ...activity,
+              state: "complete" as const,
+              title: event.summary || `${event.tool} finished`,
+              durationMs: event.durationMs,
+            };
+          });
         });
         setStatus(event.summary || `${event.tool} finished`);
         return;
@@ -858,7 +618,9 @@ export function useKanaController(appVersion: string) {
 
       if (event.type === "agent.finished") {
         if (turnStartedAtRef.current !== null) {
-          const duration = Math.round(monotonicNow() - turnStartedAtRef.current);
+          const duration = Math.round(
+            monotonicNow() - turnStartedAtRef.current,
+          );
           turnStartedAtRef.current = null;
           setMetrics((current) => ({
             ...current,
@@ -921,6 +683,7 @@ export function useKanaController(appVersion: string) {
     ],
   );
 
+  // ---- Agent lifecycle ----
   const ensureAgent = useCallback(
     async (conversation: Conversation): Promise<AgentClient> => {
       const prefs = preferencesRef.current;
@@ -941,7 +704,8 @@ export function useKanaController(appVersion: string) {
             : new MockAgentClient();
         agentKeyRef.current = key;
         openedConversationRef.current = null;
-        unsubscribeAgentRef.current = agentRef.current.subscribe(handleAgentEvent);
+        unsubscribeAgentRef.current =
+          agentRef.current.subscribe(handleAgentEvent);
       }
 
       const agent = agentRef.current;
@@ -963,21 +727,9 @@ export function useKanaController(appVersion: string) {
     [handleAgentEvent],
   );
 
+  // ---- Initialization ----
   useEffect(() => {
     let mounted = true;
-    const unsubscribeAvatar = avatarProvider.subscribe((snapshot) => {
-      setAvatar((prev) => {
-        if (
-          prev.emotion === snapshot.emotion &&
-          prev.talking === snapshot.talking &&
-          prev.loaded === snapshot.loaded &&
-          prev.renderMode === snapshot.renderMode
-        ) {
-          return prev;
-        }
-        return snapshot;
-      });
-    });
 
     initializationRef.current ??= (async () => {
       const storedPreferences = preferencesStore.load();
@@ -993,7 +745,9 @@ export function useKanaController(appVersion: string) {
       const storageWarning = [
         preferencesStore.consumeWarning(),
         conversationStore.consumeWarning(),
-      ].filter(Boolean).join(" ") || null;
+      ]
+        .filter(Boolean)
+        .join(" ") || null;
       return { storedPreferences, storedConversations, storageWarning };
     })();
 
@@ -1007,7 +761,11 @@ export function useKanaController(appVersion: string) {
         commitConversations(storedConversations);
         setActiveConversationId(initialConversationId);
         if (storageWarning) {
-          const record = classifyKanaError(storageWarning, "application", "storage");
+          const record = classifyKanaError(
+            storageWarning,
+            "application",
+            "storage",
+          );
           setLastError(record);
           setError(record.message);
         }
@@ -1017,22 +775,22 @@ export function useKanaController(appVersion: string) {
 
     return () => {
       mounted = false;
-      unsubscribeAvatar();
+      cleanupVoice();
       unsubscribeAgentRef.current?.();
-      unsubscribeVoiceRef.current?.();
       void agentRef.current?.disconnect();
-      voiceRef.current?.stop();
-      for (const timer of avatarPreviewTimersRef.current) globalThis.clearTimeout(timer);
-      avatarPreviewTimersRef.current = [];
       avatarProvider.unload();
     };
-  }, [avatarProvider, commitConversations, conversationStore, preferencesStore]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
+  // ---- sendMessage ----
   const sendMessage = useCallback(
     async (text: string) => {
       const cleanText = text.trim();
       const commandMatch = /^\/([^\s/]+)(?:\s+([\s\S]*))?$/.exec(cleanText);
-      const commandName = commandMatch?.[1]?.toLowerCase().replaceAll("_", "-");
+      const commandName = commandMatch?.[1]
+        ?.toLowerCase()
+        .replaceAll("_", "-");
       const commandArg = commandMatch?.[2]?.trim() || "";
       const canRunWhileBusy = Boolean(
         commandName &&
@@ -1048,7 +806,12 @@ export function useKanaController(appVersion: string) {
             "background",
           ].includes(commandName),
       );
-      if (!cleanText || (busy && !canRunWhileBusy) || !activeConversationId) return;
+      if (
+        !cleanText ||
+        (busy && !canRunWhileBusy) ||
+        !activeConversationId
+      )
+        return;
       const wasBusy = busy;
 
       const conversation = conversationsRef.current.find(
@@ -1101,7 +864,10 @@ export function useKanaController(appVersion: string) {
         }
 
         const listing = conversationsRef.current
-          .map((item, index) => `${index + 1}. ${item.title} — ${item.id.slice(0, 18)}`)
+          .map(
+            (item, index) =>
+              `${index + 1}. ${item.title} \u2014 ${item.id.slice(0, 18)}`,
+          )
           .join("\n");
         await saveConversation({
           ...conversation,
@@ -1124,10 +890,14 @@ export function useKanaController(appVersion: string) {
       const nextConversation = await saveConversation({
         ...conversation,
         title:
-          conversation.messages.length === 0 && conversation.title === "New conversation"
+          conversation.messages.length === 0 &&
+          conversation.title === "New conversation"
             ? shortTitle(cleanText)
             : conversation.title,
-        messages: [...conversation.messages, createUserMessage(cleanText)],
+        messages: [
+          ...conversation.messages,
+          createUserMessage(cleanText),
+        ],
       });
 
       turnConversationRef.current = nextConversation.id;
@@ -1181,10 +951,11 @@ export function useKanaController(appVersion: string) {
               ...(preferencesRef.current.agentMode === "hermes"
                 ? {
                     agent: {
-                      provider: "hermes" as const,
-                      persistentSessionId: result.session.persistentSessionId,
-                      status: "linked" as const,
-                      relationship: "branch" as const,
+                      provider: "hermes",
+                      persistentSessionId:
+                        result.session.persistentSessionId,
+                      status: "linked",
+                      relationship: "branch",
                       parentConversationId: nextConversation.id,
                     },
                   }
@@ -1236,10 +1007,16 @@ export function useKanaController(appVersion: string) {
         setCommandSuggestions([]);
       } catch (sendError) {
         if (!wasBusy) setBusy(false);
-        setStatus(wasBusy ? "Hermes is still working" : "Could not send the message");
+        setStatus(
+          wasBusy
+            ? "Hermes is still working"
+            : "Could not send the message",
+        );
         reportError(
           "agent",
-          sendError instanceof Error ? sendError.message : "Could not send message.",
+          sendError instanceof Error
+            ? sendError.message
+            : "Could not send message.",
         );
         if (!wasBusy) turnConversationRef.current = null;
       }
@@ -1255,12 +1032,17 @@ export function useKanaController(appVersion: string) {
     ],
   );
 
+  // ---- Command completion ----
   const completeCommands = useCallback(
     async (input: string) => {
       const requestId = ++completionRequestRef.current;
       if (!input.startsWith("/")) {
-        setCommandSuggestions((current) => (current.length ? [] : current));
-        setCommandSuggestionsLoading((current) => (current ? false : current));
+        setCommandSuggestions((current) =>
+          current.length ? [] : current,
+        );
+        setCommandSuggestionsLoading((current) =>
+          current ? false : current,
+        );
         return;
       }
       const conversationId = activeConversationIdRef.current;
@@ -1281,20 +1063,24 @@ export function useKanaController(appVersion: string) {
         const remoteSuggestions = await agent.completeCommands(input);
         const normalizedInput = input.trim().toLowerCase();
         const completingArguments = /\s$/u.test(input);
-        const suggestions = [...localSuggestions, ...remoteSuggestions].filter(
-          (item, index, items) => {
-            const normalizedSuggestion = item.text.trim().toLowerCase();
-            // Some completion surfaces echo the exact command when asked for
-            // arguments. Showing that echo after Tab makes a quick Enter
-            // select the same command twice instead of executing it.
-            if (completingArguments && normalizedSuggestion === normalizedInput) {
-              return false;
-            }
-            return items.findIndex(
-              (candidate) => candidate.text.toLowerCase() === item.text.toLowerCase(),
-            ) === index;
-          },
-        );
+        const suggestions = [
+          ...localSuggestions,
+          ...remoteSuggestions,
+        ].filter((item, index, items) => {
+          const normalizedSuggestion = item.text.trim().toLowerCase();
+          if (
+            completingArguments &&
+            normalizedSuggestion === normalizedInput
+          ) {
+            return false;
+          }
+          return (
+            items.findIndex(
+              (candidate) =>
+                candidate.text.toLowerCase() === item.text.toLowerCase(),
+            ) === index
+          );
+        });
         if (completionRequestRef.current === requestId) {
           setCommandSuggestions(suggestions);
         }
@@ -1313,13 +1099,13 @@ export function useKanaController(appVersion: string) {
 
   const clearCommandSuggestions = useCallback(() => {
     completionRequestRef.current += 1;
-    // Functional updates that return the current reference make React bail
-    // out, so clearing an already-empty menu (every keystroke while typing a
-    // normal message) costs no re-render at all.
     setCommandSuggestions((current) => (current.length ? [] : current));
-    setCommandSuggestionsLoading((current) => (current ? false : current));
+    setCommandSuggestionsLoading((current) =>
+      current ? false : current,
+    );
   }, []);
 
+  // ---- Conversation CRUD ----
   const createConversation = useCallback(async () => {
     if (busy) return;
     const conversation = await conversationStore.create({
@@ -1341,16 +1127,10 @@ export function useKanaController(appVersion: string) {
       openedConversationRef.current = null;
       setActivities([]);
       setError(null);
-      voiceRef.current?.stop();
-      unsubscribeVoiceRef.current?.();
-      unsubscribeVoiceRef.current = null;
-      voiceRef.current = null;
-      voiceKeyRef.current = "";
-      setVoiceRuntimeState("idle");
-      setVoiceCanReplay(false);
+      cleanupVoice();
       avatarController.presentEmotion("neutral");
     },
-    [activeConversationId, avatarController, busy],
+    [activeConversationId, avatarController, busy, cleanupVoice],
   );
 
   const renameConversation = useCallback(
@@ -1358,7 +1138,9 @@ export function useKanaController(appVersion: string) {
       const renamed = await conversationStore.rename(id, title);
       if (!renamed) return;
       commitConversations(
-        conversationsRef.current.map((item) => (item.id === id ? renamed : item)),
+        conversationsRef.current.map((item) =>
+          item.id === id ? renamed : item,
+        ),
       );
     },
     [commitConversations, conversationStore],
@@ -1368,7 +1150,9 @@ export function useKanaController(appVersion: string) {
     async (id: string) => {
       if (busy) return;
       await conversationStore.delete(id);
-      let remaining = conversationsRef.current.filter((item) => item.id !== id);
+      let remaining = conversationsRef.current.filter(
+        (item) => item.id !== id,
+      );
       if (!remaining.length) {
         remaining = [
           await conversationStore.create({
@@ -1387,6 +1171,7 @@ export function useKanaController(appVersion: string) {
     [activeConversationId, busy, commitConversations, conversationStore],
   );
 
+  // ---- Preferences management ----
   const savePreferences = useCallback(
     async (next: KanaPreferences) => {
       next = normalizeKanaPreferences(next);
@@ -1410,19 +1195,13 @@ export function useKanaController(appVersion: string) {
         setStatus("Ready when you are");
         setConnectionState("disconnected");
       }
-      voiceRef.current?.stop();
-      setVoiceRuntimeState("idle");
-      setVoiceCanReplay(false);
-      unsubscribeVoiceRef.current?.();
-      unsubscribeVoiceRef.current = null;
-      voiceRef.current = null;
-      voiceKeyRef.current = "";
-      avatarKeyRef.current = "";
-      await configureAvatar(next);
+      cleanupVoice();
+      await configureAvatar(next, undefined, true);
     },
-    [configureAvatar, preferencesStore],
+    [cleanupVoice, configureAvatar, preferencesStore],
   );
 
+  // ---- Backup ----
   const exportLocalBackup = useCallback(() => {
     return serializeKanaBackup(
       createKanaBackup(preferencesRef.current, conversationsRef.current),
@@ -1433,7 +1212,7 @@ export function useKanaController(appVersion: string) {
     async (text: string) => {
       const backup = parseKanaBackup(text);
       const currentById = new Map(
-        conversationsRef.current.map((conversation) => [conversation.id, conversation]),
+        conversationsRef.current.map((c) => [c.id, c]),
       );
       for (const conversation of backup.conversations) {
         await conversationStore.save(conversation);
@@ -1441,22 +1220,26 @@ export function useKanaController(appVersion: string) {
       }
       const merged = [...currentById.values()];
       commitConversations(merged);
-      await savePreferences({
+      const next = {
         ...backup.preferences,
         onboardingCompleted: true,
         hermes: {
           ...backup.preferences.hermes,
           token: preferencesRef.current.hermes.token,
         },
-      });
+      };
+      preferencesRef.current = next;
+      setPreferences(next);
+      preferencesStore.save(next);
       return {
         importedConversations: backup.conversations.length,
         totalConversations: merged.length,
       };
     },
-    [commitConversations, conversationStore, savePreferences],
+    [commitConversations, conversationStore, preferencesStore],
   );
 
+  // ---- Agent connection ----
   const connectAgent = useCallback(async () => {
     if (!activeConversationId) return;
     const conversation = conversationsRef.current.find(
@@ -1481,27 +1264,6 @@ export function useKanaController(appVersion: string) {
     }
   }, [activeConversationId, ensureAgent, reportError]);
 
-  const testAgentConnection = useCallback(async (next: KanaPreferences) => {
-    if (next.agentMode === "mock") {
-      const client = new MockAgentClient();
-      await client.connect();
-      await client.disconnect();
-      return "Mock agent is ready. No external service is required.";
-    }
-    const client = new HermesAgentClient({
-      websocketUrl: next.hermes.websocketUrl,
-      token: next.hermes.token,
-      reconnectDelaysMs: [],
-      connectTimeoutMs: 10_000,
-    });
-    try {
-      await client.connect();
-      return "Hermes gateway.ready received. The connection is compatible.";
-    } finally {
-      await client.disconnect();
-    }
-  }, []);
-
   const disconnectAgent = useCallback(async () => {
     unsubscribeAgentRef.current?.();
     unsubscribeAgentRef.current = null;
@@ -1518,91 +1280,75 @@ export function useKanaController(appVersion: string) {
     setStatus("Agent disconnected");
   }, []);
 
+  // ---- Abort ----
   const abort = useCallback(async () => {
-    voiceRef.current?.stop();
-    setVoiceRuntimeState("idle");
+    stopVoice();
     await agentRef.current?.abort();
-  }, []);
+  }, [stopVoice]);
 
-  const replayVoice = useCallback(async () => {
-    const voice = voiceRef.current;
-    if (!voice || !voice.getSnapshot().canReplay) {
-      reportError("voice", "There is no generated speech to replay yet.", "voice");
-      return;
-    }
-    setError(null);
-    try {
-      await voice.replay();
-    } catch (replayError) {
-      if (isAbortError(replayError)) return;
-      reportError("voice", replayError, "voice");
-    }
-  }, [reportError]);
-
-  const stopVoice = useCallback(() => {
-    voiceRef.current?.stop();
-  }, []);
-
-  const previewAvatarEmotion = useCallback(
-    async (next: KanaPreferences, emotion: KanaMessage["emotion"]) => {
-      if (!emotion || !(await configureAvatar(next))) return;
-      avatarController.presentEmotion(emotion);
+  // ---- Input responses ----
+  const respondToInput = useCallback(
+    async (response: AgentInputResponse) => {
+      const agent = agentRef.current;
+      if (!agent) {
+        reportError("agent", "Hermes is not connected.", "connection");
+        return;
+      }
+      setRespondingToInput(true);
+      setError(null);
+      try {
+        await agent.respondToInput(response);
+        setPendingInput((current) => {
+          if (!current || current.kind !== response.kind) return current;
+          if (
+            current.kind === "approval" ||
+            response.kind === "approval"
+          )
+            return null;
+          return current.requestId === response.requestId
+            ? null
+            : current;
+        });
+        setStatus("Input sent to Hermes");
+      } catch (responseError) {
+        reportError(
+          "agent",
+          responseError instanceof Error
+            ? responseError.message
+            : "Could not send input to Hermes.",
+        );
+      } finally {
+        setRespondingToInput(false);
+      }
     },
-    [avatarController, configureAvatar],
+    [reportError],
   );
 
-  const previewAvatarMotion = useCallback(
-    async (next: KanaPreferences, motion: string) => {
-      if (!(await configureAvatar(next))) return;
-      avatarController.provider.playMotion(motion);
-    },
-    [avatarController, configureAvatar],
-  );
-
-  const previewAvatarTalking = useCallback(
+  const testAgentConnection = useCallback(
     async (next: KanaPreferences) => {
-      if (!(await configureAvatar(next))) return;
-      for (const timer of avatarPreviewTimersRef.current) globalThis.clearTimeout(timer);
-      avatarPreviewTimersRef.current = [];
-      avatarController.setTalking(true);
-      avatarController.setMouthOpen(0.8);
-      avatarPreviewTimersRef.current.push(
-        globalThis.setTimeout(() => avatarController.setMouthOpen(0.25), 300),
-        globalThis.setTimeout(() => avatarController.setMouthOpen(0.7), 520),
-        globalThis.setTimeout(() => avatarController.setTalking(false), 850),
-      );
+      if (next.agentMode === "mock") {
+        const client = new MockAgentClient();
+        await client.connect();
+        await client.disconnect();
+        return "Mock agent is ready. No external service is required.";
+      }
+      const client = new HermesAgentClient({
+        websocketUrl: next.hermes.websocketUrl,
+        token: next.hermes.token,
+        reconnectDelaysMs: [],
+        connectTimeoutMs: 10_000,
+      });
+      try {
+        await client.connect();
+        return "Hermes gateway.ready received. The connection is compatible.";
+      } finally {
+        await client.disconnect();
+      }
     },
-    [avatarController, configureAvatar],
+    [],
   );
 
-  const respondToInput = useCallback(async (response: AgentInputResponse) => {
-    const agent = agentRef.current;
-    if (!agent) {
-      reportError("agent", "Hermes is not connected.", "connection");
-      return;
-    }
-    setRespondingToInput(true);
-    setError(null);
-    try {
-      await agent.respondToInput(response);
-      setPendingInput((current) => {
-        if (!current || current.kind !== response.kind) return current;
-        if (current.kind === "approval" || response.kind === "approval") return null;
-        return current.requestId === response.requestId ? null : current;
-      });
-      setStatus("Input sent to Hermes");
-    } catch (responseError) {
-      reportError(
-        "agent",
-        responseError instanceof Error
-          ? responseError.message
-          : "Could not send input to Hermes.",
-      );
-    } finally {
-      setRespondingToInput(false);
-    }
-  }, [reportError]);
-
+  // ---- Diagnostics ----
   const activeConversation =
     conversations.find((item) => item.id === activeConversationId) ?? null;
   const diagnostics = useMemo(
@@ -1640,7 +1386,7 @@ export function useKanaController(appVersion: string) {
           provider: "indexeddb",
           conversationCount: conversations.length,
           messageCount: conversations.reduce(
-            (count, conversation) => count + conversation.messages.length,
+            (count, c) => count + c.messages.length,
             0,
           ),
           linkedHermesSession: Boolean(activeConversation?.agent),
@@ -1704,9 +1450,20 @@ export function useKanaController(appVersion: string) {
     inspectVoiceService,
     cloneVoice,
     deleteClonedVoice,
-    inspectHermesControl,
-    startHermesControl,
-    stopHermesControl,
+    inspectHermesControl: () => inspectHermesRuntime(),
+    startHermesControl: (options: {
+      port: number;
+      token: string;
+      cwd?: string;
+      restart?: boolean;
+    }) =>
+      controlHermesRuntime({
+        action: options.restart ? "restart" : "start",
+        port: options.port,
+        token: options.token,
+        cwd: options.cwd,
+      }),
+    stopHermesControl: () => controlHermesRuntime({ action: "stop" }),
     abort,
     replayVoice,
     stopVoice,
