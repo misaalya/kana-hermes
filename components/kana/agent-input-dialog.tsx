@@ -1,9 +1,12 @@
+"use client";
+
 import { useMemo, useRef, useState } from "react";
 import type {
   AgentInputRequest,
   AgentInputResponse,
 } from "@/lib/agent/types";
 import { useDialogFocus } from "@/lib/accessibility/use-dialog-focus";
+import { btnPrimary, btnSecondary, bentoCard, inputBase } from "./ui";
 
 type AgentInputDialogProps = {
   request: AgentInputRequest;
@@ -84,16 +87,19 @@ export function AgentInputDialog({
     void cancel();
   });
 
+  const headingIcon =
+    "grid size-9 shrink-0 place-items-center rounded-xl border border-accent/50 bg-accent/15 text-sm font-bold text-accent-strong";
+
   return (
     <div
-      className="agent-input-backdrop"
+      className="fixed inset-0 z-50 grid place-items-center bg-bg/85 p-3"
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) void cancel();
       }}
     >
       <section
-        className="agent-input-dialog"
+        className="w-[min(480px,100%)] rounded-3xl border border-line bg-bg p-3"
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
@@ -104,29 +110,25 @@ export function AgentInputDialog({
       >
         {request.kind === "approval" ? (
           <>
-            <div className="agent-input-heading">
-              <span className="agent-input-icon" aria-hidden="true">
-                !
-              </span>
-              <div>
-                <h2 id="agent-input-title">Hermes needs approval</h2>
-                <p>{request.description}</p>
+            <div className={`mb-2 flex items-start gap-3 ${bentoCard}`}>
+              <span aria-hidden="true" className={headingIcon}>!</span>
+              <div className="min-w-0">
+                <h2 id="agent-input-title" className="text-sm font-bold text-ink">Hermes needs approval</h2>
+                <p className="mt-0.5 text-xs leading-relaxed break-words text-ink-dim">{request.description}</p>
               </div>
             </div>
             {request.command ? (
-              <pre className="approval-command">{request.command}</pre>
+              <pre className="mb-2 overflow-x-auto rounded-2xl border border-line bg-surface p-3 font-mono text-xs text-accent-strong">{request.command}</pre>
             ) : null}
             {request.smartDenied ? (
-              <p className="agent-input-warning">
+              <p className="mb-2 rounded-2xl border border-danger/40 px-3.5 py-2.5 text-xs font-semibold text-danger">
                 Hermes safety checks recommended denying this action.
               </p>
             ) : null}
-            <div className="agent-input-actions approval-actions">
+            <div className={`flex flex-wrap gap-2 ${bentoCard}`}>
               {approvalChoices.map((choice) => (
                 <button
-                  className={
-                    choice === "deny" ? "secondary-button" : "primary-button"
-                  }
+                  className={choice === "deny" ? btnSecondary : `${btnPrimary} grow`}
                   disabled={submitting}
                   key={choice}
                   onClick={() => void onRespond({ kind: "approval", choice })}
@@ -150,19 +152,18 @@ export function AgentInputDialog({
               });
             }}
           >
-            <div className="agent-input-heading">
-              <span className="agent-input-icon" aria-hidden="true">
-                ?
-              </span>
-              <div>
-                <h2 id="agent-input-title">Hermes has a question</h2>
-                <p>{request.question}</p>
+            <div className={`mb-2 flex items-start gap-3 ${bentoCard}`}>
+              <span aria-hidden="true" className={headingIcon}>?</span>
+              <div className="min-w-0">
+                <h2 id="agent-input-title" className="text-sm font-bold text-ink">Hermes has a question</h2>
+                <p className="mt-0.5 text-xs leading-relaxed break-words text-ink-dim">{request.question}</p>
               </div>
             </div>
             {request.choices?.length ? (
-              <div className="clarification-choices">
+              <div className="mb-2 flex flex-wrap gap-1.5 rounded-2xl border border-line bg-surface p-3">
                 {request.choices.map((choice) => (
                   <button
+                    className="rounded-full border border-line-strong px-3 py-1.5 text-xs font-semibold text-ink-dim transition-colors hover:border-accent hover:text-accent-strong"
                     disabled={submitting}
                     key={choice}
                     onClick={() =>
@@ -179,8 +180,8 @@ export function AgentInputDialog({
                 ))}
               </div>
             ) : null}
-            <label className="agent-input-field">
-              Your answer
+            <label className={`mb-2 flex flex-col gap-1.5 ${bentoCard}`}>
+              <span className="text-[11px] font-semibold text-muted">Your answer</span>
               <textarea
                 autoFocus
                 disabled={submitting}
@@ -188,22 +189,14 @@ export function AgentInputDialog({
                 placeholder="Type a response for Hermes…"
                 rows={3}
                 value={answer}
+                className={`${inputBase} resize-y`}
               />
             </label>
-            <div className="agent-input-actions">
-              <button
-                className="secondary-button"
-                disabled={submitting}
-                onClick={() => void cancel()}
-                type="button"
-              >
+            <div className={`flex justify-end gap-2 ${bentoCard}`}>
+              <button type="button" className={btnSecondary} disabled={submitting} onClick={() => void cancel()}>
                 Skip
               </button>
-              <button
-                className="primary-button"
-                disabled={submitting || !answer.trim()}
-                type="submit"
-              >
+              <button type="submit" className={btnPrimary} disabled={submitting || !answer.trim()}>
                 Send answer
               </button>
             </div>
@@ -217,25 +210,25 @@ export function AgentInputDialog({
               void submitSecureValue();
             }}
           >
-            <div className="agent-input-heading">
-              <span className="agent-input-icon" aria-hidden="true">
-                ⌁
-              </span>
-              <div>
-                <h2 id="agent-input-title">
+            <div className={`mb-2 flex items-start gap-3 ${bentoCard}`}>
+              <span aria-hidden="true" className={headingIcon}>⌁</span>
+              <div className="min-w-0">
+                <h2 id="agent-input-title" className="text-sm font-bold break-words text-ink">
                   {request.kind === "sudo"
                     ? "Sudo password required"
                     : request.envVar || "Secret required"}
                 </h2>
-                <p>
+                <p className="mt-0.5 text-xs leading-relaxed text-ink-dim">
                   {request.kind === "sudo"
                     ? "Hermes needs a password for the current protected command."
                     : request.prompt || "Hermes needs a secret for the current tool."}
                 </p>
               </div>
             </div>
-            <label className="agent-input-field">
-              {request.kind === "sudo" ? "Password" : "Secret value"}
+            <label className={`mb-2 flex flex-col gap-1.5 ${bentoCard}`}>
+              <span className="text-[11px] font-semibold text-muted">
+                {request.kind === "sudo" ? "Password" : "Secret value"}
+              </span>
               <input
                 autoComplete="off"
                 autoFocus
@@ -245,22 +238,17 @@ export function AgentInputDialog({
                 ref={secureInputRef}
                 spellCheck={false}
                 type="password"
+                className={inputBase}
               />
+              <span className="text-[10px] leading-relaxed text-faint">
+                Sent directly to Hermes; never added to Kana history or local preferences.
+              </span>
             </label>
-            <p className="secure-input-note">
-              This value is sent directly to Hermes and is not added to Kana
-              history or local preferences.
-            </p>
-            <div className="agent-input-actions">
-              <button
-                className="secondary-button"
-                disabled={submitting}
-                onClick={() => void cancel()}
-                type="button"
-              >
+            <div className={`flex justify-end gap-2 ${bentoCard}`}>
+              <button type="button" className={btnSecondary} disabled={submitting} onClick={() => void cancel()}>
                 Cancel
               </button>
-              <button className="primary-button" disabled={submitting} type="submit">
+              <button type="submit" className={btnPrimary} disabled={submitting}>
                 {submitting ? "Sending…" : "Send securely"}
               </button>
             </div>

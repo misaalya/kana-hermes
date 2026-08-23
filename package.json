@@ -48,6 +48,8 @@
     "tts:test": "uv run --project services/qwen3-tts python -m unittest discover -s services/qwen3-tts/tests"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "jose": "^6.2.10",
     "next": "16.3.1",
     "pixi-live2d-display": "0.4.0",
     "pixi.js": "6.5.10",

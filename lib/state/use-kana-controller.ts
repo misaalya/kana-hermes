@@ -202,7 +202,6 @@ export function useKanaController(appVersion: string) {
   const turnConversationRef = useRef<string | null>(null);
   const unsubscribeAgentRef = useRef<(() => void) | null>(null);
   const initializationRef = useRef<Promise<{
-    storedPreferences: KanaPreferences;
     storedConversations: Conversation[];
     storageWarning: string | null;
   }> | null>(null);
@@ -458,7 +457,7 @@ export function useKanaController(appVersion: string) {
           openedConversationRef.current = null;
           openingConversationRef.current = null;
           setBusy(false);
-          setStatus("Reconnecting to Hermes\u2026");
+          setStatus("Reconnecting\u2026");
           if (event.message) {
             setLastError(
               classifyKanaError(event.message, "agent", "connection"),
@@ -730,9 +729,9 @@ export function useKanaController(appVersion: string) {
   // ---- Initialization ----
   useEffect(() => {
     let mounted = true;
+    const storedPreferences = preferencesStore.load();
 
     initializationRef.current ??= (async () => {
-      const storedPreferences = preferencesStore.load();
       let storedConversations = await conversationStore.list();
       if (!storedConversations.length) {
         storedConversations = [
@@ -748,12 +747,22 @@ export function useKanaController(appVersion: string) {
       ]
         .filter(Boolean)
         .join(" ") || null;
-      return { storedPreferences, storedConversations, storageWarning };
+      return { storedConversations, storageWarning };
     })();
 
-    void initializationRef.current.then(
-      ({ storedPreferences, storedConversations, storageWarning }) => {
+    const timeout = globalThis.setTimeout(() => {
+      if (!mounted) return;
+      preferencesRef.current = storedPreferences;
+      setPreferences(storedPreferences);
+      commitConversations([]);
+      setActiveConversationId(null);
+      setReady(true);
+    }, 30_000);
+
+    void initializationRef.current!.then(
+      ({ storedConversations, storageWarning }) => {
         if (!mounted) return;
+        globalThis.clearTimeout(timeout);
         const initialConversationId = storedConversations[0]?.id ?? null;
         preferencesRef.current = storedPreferences;
         activeConversationIdRef.current = initialConversationId;
@@ -771,10 +780,20 @@ export function useKanaController(appVersion: string) {
         }
         setReady(true);
       },
+      () => {
+        if (!mounted) return;
+        globalThis.clearTimeout(timeout);
+        preferencesRef.current = storedPreferences;
+        setPreferences(storedPreferences);
+        commitConversations([]);
+        setActiveConversationId(null);
+        setReady(true);
+      },
     );
 
     return () => {
       mounted = false;
+      globalThis.clearTimeout(timeout);
       cleanupVoice();
       unsubscribeAgentRef.current?.();
       void agentRef.current?.disconnect();
@@ -1241,13 +1260,24 @@ export function useKanaController(appVersion: string) {
 
   // ---- Agent connection ----
   const connectAgent = useCallback(async () => {
-    if (!activeConversationId) return;
-    const conversation = conversationsRef.current.find(
-      (item) => item.id === activeConversationId,
-    );
-    if (!conversation) return;
     setError(null);
     try {
+      let conversation = activeConversationId
+        ? conversationsRef.current.find(
+            (item) => item.id === activeConversationId,
+          ) ?? null
+        : null;
+
+      if (!conversation) {
+        conversation = await conversationStore.create({
+          subtitleLanguage: preferencesRef.current.subtitleLanguage,
+        });
+        commitConversations([...conversationsRef.current, conversation]);
+        activeConversationIdRef.current = conversation.id;
+        setActiveConversationId(conversation.id);
+        openedConversationRef.current = null;
+      }
+
       await ensureAgent(conversation);
       setStatus(
         preferencesRef.current.agentMode === "hermes"
@@ -1262,7 +1292,7 @@ export function useKanaController(appVersion: string) {
           : "Could not connect to the agent.",
       );
     }
-  }, [activeConversationId, ensureAgent, reportError]);
+  }, [activeConversationId, commitConversations, conversationStore, ensureAgent, reportError]);
 
   const disconnectAgent = useCallback(async () => {
     unsubscribeAgentRef.current?.();
@@ -1450,7 +1480,7 @@ export function useKanaController(appVersion: string) {
     inspectVoiceService,
     cloneVoice,
     deleteClonedVoice,
-    inspectHermesControl: () => inspectHermesRuntime(),
+    inspectHermesControl: (preferredPort?: number) => inspectHermesRuntime(preferredPort),
     startHermesControl: (options: {
       port: number;
       token: string;

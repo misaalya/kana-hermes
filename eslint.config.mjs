@@ -17,6 +17,8 @@ const eslintConfig = defineConfig([
     // Read-only AIRI reference checkout used for pattern study; it has its
     // own toolchain and must never be linted or type-checked from here.
     "reference/**",
+    // Read-only 9Router reference checkout used for the auth pattern study.
+    "auth-reference/**",
   ]),
 ]);
 

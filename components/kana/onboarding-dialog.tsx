@@ -1,7 +1,10 @@
+"use client";
+
 import { useState } from "react";
-import { SUPPORTED_SUBTITLE_LANGUAGES } from "@/lib/presentation/languages";
 import type { KanaPreferences } from "@/lib/preferences/types";
 import { useDialogFocus } from "@/lib/accessibility/use-dialog-focus";
+import { SubtitleLanguagePicker } from "./subtitle-language-picker";
+import { btnPrimary, btnSecondary, bentoCard, chipBase } from "./ui";
 
 type OnboardingDialogProps = {
   preferences: KanaPreferences;
@@ -34,58 +37,70 @@ export function OnboardingDialog({
     }
   };
 
+  const inputClass =
+    "min-h-9 w-full rounded-xl border border-line-strong bg-transparent px-3 text-[13px] text-ink placeholder:text-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15";
+
   return (
-    <div className="onboarding-backdrop">
+    <div className="fixed inset-0 z-40 grid place-items-center bg-bg p-3">
       <section
-        className="onboarding-dialog"
+        className="max-h-[92dvh] w-[min(640px,100%)] overflow-y-auto rounded-3xl border border-line bg-bg p-3"
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="onboarding-title"
         onKeyDown={onDialogKeyDown}
       >
-        <div className="onboarding-progress" aria-label="Setup progress">
+        {/* Progress tile */}
+        <div className={`mb-2 flex flex-wrap items-center gap-1.5 ${bentoCard}`} aria-label="Setup progress">
           {STEPS.map((label, index) => (
             <span
-              className={index === step ? "active" : index < step ? "done" : ""}
               key={label}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold tracking-wide uppercase ${
+                index === step
+                  ? "border-accent bg-accent text-on-accent"
+                  : index < step
+                    ? "border-line-strong text-muted"
+                    : "border-line text-faint"
+              }`}
             >
-              {index + 1}<small>{label}</small>
+              {index + 1} {label}
             </span>
           ))}
         </div>
 
-        <div className="onboarding-content">
+        <div className="grid gap-2">
           {step === 0 ? (
-            <div className="onboarding-copy">
-              <div className="kana-mark">か</div>
-              <p className="eyebrow">Local presentation layer</p>
-              <h1 id="onboarding-title">Welcome to Kana</h1>
-              <p>
+            <div className={bentoCard}>
+              <p className="text-[10px] font-bold tracking-wider text-muted uppercase">Local presentation layer</p>
+              <h1 id="onboarding-title" className="mt-0.5 mb-2 text-lg font-bold text-ink">Welcome to Kana</h1>
+              <p className="text-xs leading-relaxed text-ink-dim">
                 Kana gives your existing Hermes Agent a visual conversation,
                 Japanese voice, subtitles, and a replaceable avatar. Hermes
                 remains the only agent and keeps ownership of tools, memory,
                 sessions, and reasoning.
               </p>
-              <div className="onboarding-boundary">
-                <span>Kana Web UI</span><b>→</b><span>Your Hermes</span>
+              <div className="mt-3 flex items-center justify-center gap-3 rounded-xl border border-dashed border-line-strong py-2.5 text-xs font-semibold">
+                <span className="text-ink-dim">Kana Web UI</span>
+                <b aria-hidden="true" className="text-accent-strong">→</b>
+                <span className="text-ink-dim">Your Hermes</span>
               </div>
             </div>
           ) : null}
 
           {step === 1 ? (
-            <div className="onboarding-copy">
-              <p className="eyebrow">Step 2</p>
-              <h1 id="onboarding-title">Choose the agent connection</h1>
-              <p>
-                Kana connects to a separately running, unmodified <code>hermes serve</code>.
-                The npm launcher can start it for you from Settings after setup.
+            <div className={`${bentoCard} flex flex-col gap-3`}>
+              <p className="text-[10px] font-bold tracking-wider text-muted uppercase">Step 2</p>
+              <h1 id="onboarding-title" className="text-lg font-bold text-ink">Choose the agent connection</h1>
+              <p className="text-xs leading-relaxed text-ink-dim">
+                Kana connects to a separately running, unmodified <code className="font-mono">hermes serve</code>.
+                Kana can start it for you from the connection screen after setup.
               </p>
               {draft.agentMode === "hermes" ? (
-                <div className="onboarding-fields">
-                  <label>
-                    WebSocket URL
+                <div className="flex flex-col gap-2.5">
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[11px] font-semibold text-muted">WebSocket URL</span>
                     <input
+                      className={`${inputClass} font-mono`}
                       value={draft.hermes.websocketUrl}
                       onChange={(event) =>
                         setDraft({
@@ -98,11 +113,12 @@ export function OnboardingDialog({
                       }
                     />
                   </label>
-                  <label>
-                    Session token
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[11px] font-semibold text-muted">Session token</span>
                     <input
                       type="password"
                       autoComplete="off"
+                      className={inputClass}
                       value={draft.hermes.token}
                       onChange={(event) =>
                         setDraft({
@@ -111,13 +127,13 @@ export function OnboardingDialog({
                         })
                       }
                     />
-                    <small>Kept only in this browser tab.</small>
+                    <span className="text-[10px] text-faint">Kept only in this browser tab.</span>
                   </label>
                 </div>
               ) : null}
               <button
                 type="button"
-                className="secondary-button onboarding-test"
+                className={`${btnSecondary} self-start`}
                 disabled={testing}
                 onClick={() => {
                   setTesting(true);
@@ -140,84 +156,65 @@ export function OnboardingDialog({
           ) : null}
 
           {step === 2 ? (
-            <div className="onboarding-copy">
-              <p className="eyebrow">Step 3</p>
-              <h1 id="onboarding-title">Choose how Kana is presented</h1>
-              <div className="onboarding-fields two-column">
-                <label>
-                  Subtitle language
-                  <select
-                    value={draft.subtitleLanguage}
-                    onChange={(event) =>
-                      setDraft({ ...draft, subtitleLanguage: event.target.value })
-                    }
-                  >
-                    {SUPPORTED_SUBTITLE_LANGUAGES.map((language) => (
-                      <option key={language.code} value={language.code}>
-                        {language.nativeLabel}
-                      </option>
-                    ))}
-                  </select>
-                  <small>Future replies only. Old subtitles never change.</small>
-                </label>
-                <label>
-                  Japanese voice
-                  <select
-                    value={draft.voiceMode}
-                    onChange={(event) =>
-                      setDraft({
-                        ...draft,
-                        voiceMode: event.target.value as KanaPreferences["voiceMode"],
-                      })
-                    }
-                  >
-                    <option value="qwen3">Local Qwen3-TTS</option>
-                  </select>
-                  <small>Qwen runs as a separate local service.</small>
-                </label>
-                <label>
-                  Avatar
-                  <select
-                    value={draft.avatarMode}
-                    onChange={(event) =>
-                      setDraft({
-                        ...draft,
-                        avatarMode: event.target.value as KanaPreferences["avatarMode"],
-                      })
-                    }
-                  >
-                    <option value="live2d">Official Live2D sample</option>
-                  </select>
-                  <small>You can import another Cubism model later.</small>
-                </label>
+            <div className={`${bentoCard} flex flex-col gap-4`}>
+              <div>
+                <p className="text-[10px] font-bold tracking-wider text-muted uppercase">Step 3</p>
+                <h1 id="onboarding-title" className="mt-0.5 text-lg font-bold text-ink">Choose how Kana is presented</h1>
+              </div>
+              <SubtitleLanguagePicker
+                value={draft.subtitleLanguage}
+                onChange={(subtitleLanguage) => setDraft({ ...draft, subtitleLanguage })}
+              />
+              <div className="flex flex-wrap gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-semibold text-muted">Japanese voice</span>
+                  <span className={`${chipBase} border-accent bg-accent text-on-accent`}>Local Qwen3-TTS</span>
+                  <span className="text-[10px] text-faint">Runs as a separate local service.</span>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-semibold text-muted">Avatar</span>
+                  <span className={`${chipBase} border-accent bg-accent text-on-accent`}>Official Live2D sample</span>
+                  <span className="text-[10px] text-faint">Import another Cubism model later.</span>
+                </div>
               </div>
             </div>
           ) : null}
 
           {step === 3 ? (
-            <div className="onboarding-copy">
-              <p className="eyebrow">Setup summary</p>
-              <h1 id="onboarding-title">Kana is ready</h1>
-              <dl className="onboarding-summary">
-                <div><dt>Agent</dt><dd>{draft.agentMode}</dd></div>
-                <div><dt>Subtitles</dt><dd>{draft.subtitleLanguage}</dd></div>
-                <div><dt>Voice</dt><dd>{draft.voiceMode}</dd></div>
-                <div><dt>Avatar</dt><dd>{draft.avatarMode}</dd></div>
+            <div className={`${bentoCard}`}>
+              <p className="text-[10px] font-bold tracking-wider text-muted uppercase">Setup summary</p>
+              <h1 id="onboarding-title" className="mt-0.5 mb-3 text-lg font-bold text-ink">Kana is ready</h1>
+              <dl className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {[
+                  ["Agent", draft.agentMode],
+                  ["Subtitles", draft.subtitleLanguage],
+                  ["Voice", draft.voiceMode],
+                  ["Avatar", draft.avatarMode],
+                ].map(([term, value]) => (
+                  <div key={term} className="rounded-xl border border-line bg-surface px-3 py-2">
+                    <dt className="text-[9px] font-bold tracking-wider text-faint uppercase">{term}</dt>
+                    <dd className="truncate text-xs font-semibold text-ink">{value}</dd>
+                  </div>
+                ))}
               </dl>
-              <p>
+              <p className="text-xs leading-relaxed text-ink-dim">
                 You can change every presentation setting later. Kana never
                 patches Hermes and does not add another model for translation.
               </p>
             </div>
           ) : null}
 
-          {notice ? <p className="onboarding-notice" role="status">{notice}</p> : null}
+          {notice ? (
+            <div className={`${bentoCard} border-accent/40`} role="status">
+              <p className="text-xs text-ink-dim">{notice}</p>
+            </div>
+          ) : null}
         </div>
 
-        <div className="onboarding-actions">
+        <div className={`mt-2 flex items-center justify-between ${bentoCard}`}>
           {step > 0 ? (
             <button
-              className="secondary-button"
+              className={btnSecondary}
               type="button"
               disabled={saving}
               onClick={() => {
@@ -229,7 +226,7 @@ export function OnboardingDialog({
             </button>
           ) : <span />}
           <button
-            className="primary-button"
+            className={btnPrimary}
             type="button"
             disabled={saving}
             onClick={() =>
