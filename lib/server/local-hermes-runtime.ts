@@ -1,5 +1,5 @@
-import { spawn, type ChildProcess } from "node:child_process";
-import { access, stat } from "node:fs/promises";
+import { spawn, execSync, type ChildProcess } from "node:child_process";
+import { access, readFile, stat } from "node:fs/promises";
 import { constants } from "node:fs";
 import path from "node:path";
 
@@ -12,6 +12,7 @@ export type LocalHermesRuntimeStatus = {
   port: number;
   websocketUrl: string;
   message: string;
+  token?: string;
 };
 
 type ManagedRuntime = {
@@ -67,6 +68,43 @@ async function resolveHermesExecutable(): Promise<string | null> {
       // Continue through known user-local and system locations.
     }
   }
+  return null;
+}
+
+async function scanRunningHermesProcesses(): Promise<Array<{ pid: number; port: number }>> {
+  try {
+    const output = execSync("pgrep -af 'hermes serve'", {
+      encoding: "utf8",
+      timeout: 2_000,
+    });
+    const results: Array<{ pid: number; port: number }> = [];
+    for (const line of output.trim().split("\n")) {
+      if (!line.trim()) continue;
+      const match = line.match(/^(\d+)\s+.+--port\s+(\d+)/);
+      if (match) {
+        const pid = Number(match[1]);
+        const port = Number(match[2]);
+        if (pid > 0 && port >= 1024 && port <= 65535 && !results.some((r) => r.port === port)) {
+          results.push({ pid, port });
+        }
+      }
+    }
+    return results;
+  } catch {
+    return [];
+  }
+}
+
+async function readProcessToken(pid: number): Promise<string | null> {
+  try {
+    const env = await readFile(`/proc/${pid}/environ`, "utf8");
+    for (const entry of env.split("\0")) {
+      if (entry.startsWith("HERMES_DASHBOARD_SESSION_TOKEN=")) {
+        const value = entry.slice("HERMES_DASHBOARD_SESSION_TOKEN=".length);
+        return value.length > 0 ? value : null;
+      }
+    }
+  } catch {}
   return null;
 }
 
@@ -126,9 +164,34 @@ export async function inspectLocalHermesRuntime(
     return publicStatus(current, true);
   }
 
-  // No managed child: detect an existing `hermes serve` on the user's machine.
-  // Probe the preferred port first (the configured WebSocket URL), then the
-  // Hermes default, then whatever port a previous inspection used.
+  // Auto-discovery: scan running processes and read their tokens.
+  // This catches non-default ports and eliminates manual token entry.
+  const processes = await scanRunningHermesProcesses();
+  for (const proc of processes) {
+    if (proc.port === current.port && (await probe(proc.port))) {
+      current.state = "running";
+      current.child = null;
+      current.lastMessage = `Hermes already running on port ${proc.port}.`;
+      return {
+        ...publicStatus(current, true),
+        token: (await readProcessToken(proc.pid)) ?? undefined,
+      };
+    }
+  }
+  for (const proc of processes) {
+    if (await probe(proc.port)) {
+      current.port = proc.port;
+      current.state = "running";
+      current.child = null;
+      current.lastMessage = `A Hermes gateway was found on port ${proc.port}.`;
+      return {
+        ...publicStatus(current, true),
+        token: (await readProcessToken(proc.pid)) ?? undefined,
+      };
+    }
+  }
+
+  // Fallback: probe candidate ports.
   const candidates: number[] = [];
   for (const port of [preferredPort, DEFAULT_HERMES_PORT, current.port]) {
     if (

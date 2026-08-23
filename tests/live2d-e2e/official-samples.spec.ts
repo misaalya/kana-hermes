@@ -12,9 +12,9 @@ test.setTimeout(240_000);
 const HARU_PREFS = {
   onboardingCompleted: true,
   subtitleLanguage: "en",
-  agentMode: "mock",
+  agentMode: "hermes",
   voiceEnabled: false,
-  voiceMode: "mock",
+  voiceMode: "qwen3",
   avatarMode: "live2d",
   hermes: {
     websocketUrl: "ws://127.0.0.1:9119/api/ws",

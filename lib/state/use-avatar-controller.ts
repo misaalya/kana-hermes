@@ -6,7 +6,6 @@ import type { AvatarModelSummary } from "@/lib/avatar/indexed-db-avatar-model-st
 import { Live2DAvatarProvider } from "@/lib/avatar/live2d-avatar-provider";
 import { ManagedAvatarProvider } from "@/lib/avatar/managed-avatar-provider";
 import { live2DModelBindings } from "@/lib/avatar/model-bindings";
-import { MockAvatarProvider } from "@/lib/avatar/mock-avatar-provider";
 import { PixiLive2DRuntimeAdapter } from "@/lib/avatar/pixi-live2d-runtime-adapter";
 import type { AvatarSnapshot } from "@/lib/avatar/types";
 import type {
@@ -67,11 +66,7 @@ export function useAvatarController(
       const startedAt = performance.now();
       try {
         let modelFiles = selectedModelFiles;
-        if (
-          !modelFiles?.length &&
-          next.avatarMode === "live2d" &&
-          next.live2d.modelId
-        ) {
+        if (!modelFiles?.length && next.live2d.modelId) {
           modelFiles =
             (await avatarModelStore.load(next.live2d.modelId)) ?? undefined;
           if (!modelFiles?.length) {
@@ -89,31 +84,22 @@ export function useAvatarController(
                   `${file.webkitRelativePath}:${file.size}:${file.lastModified}`,
               )
               .join("|")}:${JSON.stringify(bindings)}`
-          : next.avatarMode === "live2d"
-            ? `live2d:${next.live2d.coreScriptUrl}:${next.live2d.modelId || next.live2d.modelUrl}:${JSON.stringify(bindings)}`
-            : "mock";
+          : `live2d:${next.live2d.coreScriptUrl}:${next.live2d.modelId || next.live2d.modelUrl}:${JSON.stringify(bindings)}`;
         if (!force && avatarKeyRef.current === key) return true;
 
-        if (next.avatarMode === "mock" && !modelFiles?.length) {
-          await avatarProvider.use(new MockAvatarProvider(), {
-            id: "kana-mock",
-            name: "Kana preview",
-          });
-        } else {
-          const runtime = new PixiLive2DRuntimeAdapter(
-            next.live2d.coreScriptUrl.trim(),
-          );
-          const provider = new Live2DAvatarProvider(runtime, bindings);
-          await avatarProvider.use(provider, {
-            id: modelFiles?.length ? "imported-live2d" : "configured-live2d",
-            name: modelFiles?.length ? "Imported Live2D model" : "Live2D model",
-            canvas,
-            modelFiles,
-            modelUrl: modelFiles?.length
-              ? undefined
-              : next.live2d.modelUrl.trim(),
-          });
-        }
+        const runtime = new PixiLive2DRuntimeAdapter(
+          next.live2d.coreScriptUrl.trim(),
+        );
+        const provider = new Live2DAvatarProvider(runtime, bindings);
+        await avatarProvider.use(provider, {
+          id: modelFiles?.length ? "imported-live2d" : "configured-live2d",
+          name: modelFiles?.length ? "Imported Live2D model" : "Live2D model",
+          canvas,
+          modelFiles,
+          modelUrl: modelFiles?.length
+            ? undefined
+            : next.live2d.modelUrl.trim(),
+        });
         avatarKeyRef.current = key;
         avatarController.presentEmotion("neutral");
         onMetrics({
@@ -150,7 +136,6 @@ export function useAvatarController(
       const imported = await avatarModelStore.import(files);
       const next = {
         ...previous,
-        avatarMode: "live2d" as const,
         live2d: {
           ...previous.live2d,
           modelId: imported.id,
@@ -190,7 +175,6 @@ export function useAvatarController(
         throw new Error("The selected Live2D package is empty.");
       const next: KanaPreferences = {
         ...previous,
-        avatarMode: "live2d",
         live2d: {
           ...previous.live2d,
           modelId: model.id,

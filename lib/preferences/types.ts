@@ -2,9 +2,9 @@ import type { SubtitleLanguage } from "@/lib/presentation/types";
 import type { Live2DModelBindings } from "@/lib/avatar/live2d-avatar-provider";
 import type { VoiceDeliveryMode } from "@/lib/voice/speech-chunks";
 
-export type AgentMode = "mock" | "hermes";
-export type VoiceMode = "mock" | "qwen3";
-export type AvatarMode = "mock" | "live2d";
+export type AgentMode = "hermes";
+export type VoiceMode = "qwen3";
+export type AvatarMode = "live2d";
 export type HostedAvatarModel = {
   id: string;
   name: string;

@@ -188,7 +188,7 @@ describe("LocalPreferencesStore", () => {
       new SessionHermesCredentialsStore(new MemoryStorage()),
     );
 
-    assert.equal(store.load().agentMode, "mock");
+    assert.equal(store.load().agentMode, "hermes");
     assert.equal(persistent.getItem("kana.preferences.v2"), "{not valid JSON");
     assert.match(store.consumeWarning() ?? "", /kept for recovery/i);
     assert.equal(store.consumeWarning(), null);

@@ -31,9 +31,8 @@ test("is installable on mobile and restores the local shell while offline", asyn
   try {
     const page = context.pages()[0] ?? (await context.newPage());
     await page.goto("/");
-    // Production builds gate mock mode behind development mode, so the
-    // onboarding wizard has no "Use offline defaults" shortcut there. Walk
-    // the wizard like a real first-run user instead.
+    // The onboarding wizard has no offline shortcut; walk it like a real
+    // first-run user instead.
     for (let step = 0; step < 8; step += 1) {
       const enter = page.getByRole("button", { name: "Enter Kana" });
       if (await enter.isVisible().catch(() => false)) {

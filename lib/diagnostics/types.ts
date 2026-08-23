@@ -65,7 +65,7 @@ export type KanaDiagnosticsInput = {
     mode: AvatarMode;
     renderMode: "mock" | "live2d";
     loaded: boolean;
-    source: "official-sample" | "hosted-url" | "imported-folder" | "mock";
+    source: "official-sample" | "hosted-url" | "imported-folder";
   };
   storage: {
     provider: "indexeddb";

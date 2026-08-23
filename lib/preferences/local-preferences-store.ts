@@ -75,9 +75,11 @@ export function normalizeKanaPreferences(
   );
   return {
     ...preferences,
-agentMode: "hermes",
-      voiceMode: "qwen3",
-      avatarMode: "live2d",
+    // Runtime guard: stored or restored values can never re-enable another
+    // mode — Kana always talks to Hermes, Qwen3-TTS, and Live2D.
+    agentMode: "hermes",
+    voiceMode: "qwen3",
+    avatarMode: "live2d",
     hermes: {
       ...preferences.hermes,
       websocketUrl: endpoint.endpoint,
