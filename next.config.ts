@@ -18,7 +18,7 @@ const contentSecurityPolicy = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  allowedDevOrigins: ["127.0.0.1", "localhost"],
+  allowedDevOrigins: ["127.0.0.1", "localhost", "95.111.198.170"],
   // Hide the Next.js dev route indicator so it never covers UI text or
   // screenshots during development. Errors are still surfaced normally.
   devIndicators: false,
