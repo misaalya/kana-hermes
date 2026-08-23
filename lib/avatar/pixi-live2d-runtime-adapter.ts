@@ -29,7 +29,7 @@ const loadedCoreScripts = new Map<string, Promise<void>>();
    touch. Keeping them local stops either library's types from leaking into
    the rest of Kana and keeps the runtime adapter swappable. */
 type PixiTickerLike = {
-  add(fn: (ticker: { deltaMS: number }) => void): void;
+  add(fn: (deltaTime: number) => void): void;
   remove(fn: unknown, context?: unknown): void;
   maxFPS: number;
   speed: number;
@@ -338,14 +338,9 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
     );
 
     // --- Single ticker drives render + Cubism updates ----------------------
-    const updateModel = (ticker: { deltaMS: number }) => {
-      try {
-        model.update(ticker.deltaMS);
-      } catch (error) {
-        console.error("[kana-live2d] Model update failed.", error);
-      }
-    };
+    const updateModel = (deltaMS: number) => { model.update(deltaMS); };
     runtime.app.ticker.add(updateModel);
+
 
 
     // --- Pointer focus + idle gaze wander (AIRI-style cursor focus) --------
@@ -368,11 +363,11 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
     host.addEventListener("pointerleave", handlePointerLeave);
 
     let wanderClock = Math.random() * Math.PI * 2;
-    const wanderTick = (ticker: { deltaMS: number }) => {
+    const wanderTick = (deltaMS: number) => {
       if (performance.now() - lastPointerFocusAt < POINTER_FOCUS_HOLD_MS) {
         return;
       }
-      wanderClock += ticker.deltaMS / 1000;
+      wanderClock += deltaMS / 1000;
       // A slow, small Lissajous drift keeps the avatar looking around while
       // the cursor is idle or outside the stage.
       focusController.focus(
