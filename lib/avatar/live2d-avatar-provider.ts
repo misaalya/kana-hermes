@@ -12,6 +12,8 @@ export interface Live2DModelInstance {
   setExpression(name: string): void;
   startMotion(group: string, index?: number): void;
   setParameter(id: string, value: number): void;
+  /** Optional speech boundary so runtimes can own the mouth via a plugin. */
+  setTalking?(value: boolean): void;
 }
 
 export interface Live2DRuntimeAdapter {
@@ -19,6 +21,7 @@ export interface Live2DRuntimeAdapter {
     canvas: HTMLCanvasElement;
     modelUrl?: string;
     modelFiles?: File[];
+    mouthOpenParameterId: string;
   }): Promise<Live2DModelInstance>;
 }
 
@@ -51,6 +54,7 @@ export class Live2DAvatarProvider implements AvatarProvider {
       canvas: source.canvas,
       modelUrl: source.modelUrl,
       modelFiles: source.modelFiles,
+      mouthOpenParameterId: this.bindings.mouthOpenParameter,
     });
     if (generation !== this.loadGeneration) {
       loaded.destroy();
@@ -82,7 +86,9 @@ export class Live2DAvatarProvider implements AvatarProvider {
     );
   }
 
-  setTalking(): void {
-    // Talking state is expressed through mouth samples from the voice layer.
+  setTalking(value: boolean): void {
+    // The runtime owns the mouth during speech; the voice layer supplies the
+    // boundary and amplitude samples.
+    this.model?.setTalking?.(value);
   }
 }
