@@ -1,7 +1,14 @@
+import { randomBytes } from "node:crypto";
 import { spawn, execSync, type ChildProcess } from "node:child_process";
 import { access, readFile, stat } from "node:fs/promises";
 import { constants } from "node:fs";
 import path from "node:path";
+
+// Server-side custody of the Hermes dashboard session token.
+//
+// The browser never receives the token: Kana's server relay is the only party
+// that dials `hermes serve`, so the credential lives in process memory here
+// and is never serialized into an API response or client storage.
 
 export type LocalHermesRuntimeStatus = {
   controlAvailable: boolean;
@@ -12,7 +19,6 @@ export type LocalHermesRuntimeStatus = {
   port: number;
   websocketUrl: string;
   message: string;
-  token?: string;
 };
 
 type ManagedRuntime = {
@@ -20,6 +26,7 @@ type ManagedRuntime = {
   state: LocalHermesRuntimeStatus["state"];
   executable?: string;
   port: number;
+  token: string | null;
   lastMessage: string;
 };
 
@@ -34,9 +41,29 @@ function runtime(): ManagedRuntime {
     child: null,
     state: "stopped",
     port: DEFAULT_HERMES_PORT,
+    token: null,
     lastMessage: "Hermes is not running under Kana.",
   };
   return shared[runtimeKey];
+}
+
+/** The server-held session token for the gateway Kana connects to, if known. */
+export function managedRuntimeToken(): string | null {
+  return runtime().token;
+}
+
+// Test/acceptance-script hook: install a token+port pair without spawning a
+// process. Never used by application code paths.
+export const __setTestToken = (token: string, port: number): void => {
+  const current = runtime();
+  current.token = token;
+  current.port = port;
+  current.state = "running";
+};
+
+/** The port of the gateway Kana currently targets. */
+export function managedRuntimePort(): number {
+  return runtime().port;
 }
 
 export function localRuntimeControlEnabled(): boolean {
@@ -108,6 +135,18 @@ async function readProcessToken(pid: number): Promise<string | null> {
   return null;
 }
 
+/** Best-effort: find the session token of a `hermes serve` on a given port. */
+async function discoverProcessTokenByPort(port: number): Promise<string | null> {
+  for (const proc of await scanRunningHermesProcesses()) {
+    if (proc.port === port) return readProcessToken(proc.pid);
+  }
+  return null;
+}
+
+function mintSessionToken(): string {
+  return randomBytes(24).toString("hex");
+}
+
 function endpoint(port: number): string {
   return `ws://127.0.0.1:${port}/api/ws`;
 }
@@ -164,18 +203,17 @@ export async function inspectLocalHermesRuntime(
     return publicStatus(current, true);
   }
 
-  // Auto-discovery: scan running processes and read their tokens.
-  // This catches non-default ports and eliminates manual token entry.
+  // Auto-discovery: scan running processes and capture their tokens
+  // server-side. This catches non-default ports and removes manual token
+  // entry entirely — the browser connects through the Kana relay instead.
   const processes = await scanRunningHermesProcesses();
   for (const proc of processes) {
     if (proc.port === current.port && (await probe(proc.port))) {
       current.state = "running";
       current.child = null;
+      current.token = (await readProcessToken(proc.pid)) ?? current.token;
       current.lastMessage = `Hermes already running on port ${proc.port}.`;
-      return {
-        ...publicStatus(current, true),
-        token: (await readProcessToken(proc.pid)) ?? undefined,
-      };
+      return publicStatus(current, true);
     }
   }
   for (const proc of processes) {
@@ -183,11 +221,9 @@ export async function inspectLocalHermesRuntime(
       current.port = proc.port;
       current.state = "running";
       current.child = null;
+      current.token = (await readProcessToken(proc.pid)) ?? current.token;
       current.lastMessage = `A Hermes gateway was found on port ${proc.port}.`;
-      return {
-        ...publicStatus(current, true),
-        token: (await readProcessToken(proc.pid)) ?? undefined,
-      };
+      return publicStatus(current, true);
     }
   }
 
@@ -211,12 +247,16 @@ export async function inspectLocalHermesRuntime(
     current.port = detectedPort;
     current.state = "running";
     current.child = null;
-    current.lastMessage = `A Hermes gateway is already running on port ${detectedPort}. Enter its session token to connect.`;
+    current.token = await discoverProcessTokenByPort(detectedPort);
+    current.lastMessage = current.token
+      ? `A Hermes gateway is already running on port ${detectedPort}.`
+      : `A Hermes gateway is running on port ${detectedPort}, but its session token could not be read. Restart it from Kana to connect.`;
     return publicStatus(current, true);
   }
 
   if (current.state !== "starting" && current.state !== "stopping") {
     current.state = current.child && current.child.exitCode !== null ? "failed" : "stopped";
+    current.token = null;
   }
   if (!current.executable) {
     current.lastMessage = "Hermes was not found. Install Hermes or set KANA_HERMES_BIN.";
@@ -240,14 +280,10 @@ async function waitUntilReady(current: ManagedRuntime): Promise<void> {
 
 export async function startLocalHermesRuntime(options: {
   port: number;
-  token: string;
   cwd?: string;
 }): Promise<LocalHermesRuntimeStatus> {
   if (!Number.isInteger(options.port) || options.port < 1024 || options.port > 65_535) {
     throw new Error("Hermes port must be an integer between 1024 and 65535.");
-  }
-  if (options.token.length < 12 || options.token.length > 512) {
-    throw new Error("Hermes session token must contain between 12 and 512 characters.");
   }
   const current = runtime();
   if (current.child && current.child.exitCode === null) {
@@ -256,8 +292,10 @@ export async function startLocalHermesRuntime(options: {
   if (await probe(options.port)) {
     current.port = options.port;
     current.state = "running";
-    current.lastMessage =
-      "This port already has a Hermes server. Kana will connect without taking ownership.";
+    current.token = await discoverProcessTokenByPort(options.port);
+    current.lastMessage = current.token
+      ? "This port already has a Hermes server. Kana will connect without taking ownership."
+      : "This port already has a Hermes server, but its session token could not be read. Restart it from Kana to connect.";
     return publicStatus(current, true);
   }
   const executable = await resolveHermesExecutable();
@@ -269,9 +307,14 @@ export async function startLocalHermesRuntime(options: {
     if (!details.isDirectory()) throw new Error("Hermes working folder is not a directory.");
   }
 
+  // Kana mints the session token itself. Callers cannot inject one, and the
+  // value never leaves this process: the browser reaches Hermes only through
+  // the server-side relay (/api/hermes/*).
+  const token = mintSessionToken();
   current.state = "starting";
   current.port = options.port;
   current.executable = executable;
+  current.token = token;
   current.lastMessage = "Starting the official Hermes UI gateway…";
   const child = spawn(
     executable,
@@ -280,7 +323,7 @@ export async function startLocalHermesRuntime(options: {
       cwd: workingDirectory,
       env: {
         ...process.env,
-        HERMES_DASHBOARD_SESSION_TOKEN: options.token,
+        HERMES_DASHBOARD_SESSION_TOKEN: token,
       },
       stdio: ["ignore", "pipe", "pipe"],
     },
@@ -294,6 +337,7 @@ export async function startLocalHermesRuntime(options: {
   child.stderr?.on("data", updateMessage);
   child.once("exit", (code, signal) => {
     current.child = null;
+    current.token = null;
     current.state = code === 0 || signal === "SIGTERM" ? "stopped" : "failed";
     current.lastMessage =
       code === 0 || signal === "SIGTERM"
@@ -302,6 +346,7 @@ export async function startLocalHermesRuntime(options: {
   });
   child.once("error", (error) => {
     current.state = "failed";
+    current.token = null;
     current.lastMessage = error.message;
   });
 
@@ -312,6 +357,7 @@ export async function startLocalHermesRuntime(options: {
   } catch (error) {
     if (child.exitCode === null) child.kill("SIGTERM");
     current.state = "failed";
+    current.token = null;
     current.lastMessage = error instanceof Error ? error.message : "Hermes failed to start.";
     throw error;
   }
@@ -339,6 +385,7 @@ export async function stopLocalHermesRuntime(): Promise<LocalHermesRuntimeStatus
   ]);
   if (child.exitCode === null) child.kill("SIGKILL");
   current.child = null;
+  current.token = null;
   current.state = "stopped";
   current.lastMessage = "Hermes stopped.";
   return publicStatus(current, true);

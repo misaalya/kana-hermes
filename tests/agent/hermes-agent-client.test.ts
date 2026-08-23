@@ -12,64 +12,60 @@ type RpcRequest = {
 
 type RpcHandler = (request: RpcRequest) => unknown | Promise<unknown>;
 
-class FakeWebSocket extends EventTarget {
-  static readonly CONNECTING = 0;
-  static readonly OPEN = 1;
-  static readonly CLOSING = 2;
-  static readonly CLOSED = 3;
-  static instances: FakeWebSocket[] = [];
+// Fake relay transport: the client now speaks HTTP RPC + SSE instead of a
+// direct WebSocket, so the test double intercepts fetch() and EventSource().
+
+class FakeRelay {
   static handler: RpcHandler = () => ({});
+  static requests: RpcRequest[] = [];
+  static streams: FakeEventSource[] = [];
+
+  static reset(): void {
+    FakeRelay.handler = () => ({});
+    FakeRelay.requests = [];
+    FakeRelay.streams = [];
+  }
+
+  static rpcResponse(result: unknown): Response {
+    return new Response(JSON.stringify({ result }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  static rpcError(message: string, status = 502): Response {
+    return new Response(JSON.stringify({ error: message }), {
+      status,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+}
+
+class FakeEventSource extends EventTarget {
+  static instances: FakeEventSource[] = [];
 
   readonly url: string;
-  readonly requests: RpcRequest[] = [];
-  readyState = FakeWebSocket.CONNECTING;
+  closed = false;
 
   constructor(url: string | URL) {
     super();
     this.url = String(url);
-    FakeWebSocket.instances.push(this);
+    FakeEventSource.instances.push(this);
+    FakeRelay.streams.push(this);
     queueMicrotask(() => {
-      this.readyState = FakeWebSocket.OPEN;
       this.dispatchEvent(new Event("open"));
-      this.emitFrame({
-        jsonrpc: "2.0",
-        method: "event",
-        params: { type: "gateway.ready", payload: {} },
-      });
+      this.send("gateway", { connected: true });
     });
   }
 
-  send(raw: string): void {
-    const request = JSON.parse(raw) as RpcRequest;
-    this.requests.push(request);
-    void Promise.resolve(FakeWebSocket.handler(request)).then(
-      (result) =>
-        this.emitFrame({ jsonrpc: "2.0", id: request.id, result }),
-      (error) =>
-        this.emitFrame({
-          jsonrpc: "2.0",
-          id: request.id,
-          error: {
-            code: -32000,
-            message: error instanceof Error ? error.message : String(error),
-          },
-        }),
+  close(): void {
+    this.closed = true;
+  }
+
+  send(event: string, data: unknown): void {
+    this.dispatchEvent(
+      new MessageEvent(event, { data: JSON.stringify(data) }),
     );
-  }
-
-  close(code = 1000, reason = ""): void {
-    if (this.readyState === FakeWebSocket.CLOSED) return;
-    this.readyState = FakeWebSocket.CLOSED;
-    const event = new Event("close");
-    Object.defineProperties(event, {
-      code: { value: code },
-      reason: { value: reason },
-    });
-    this.dispatchEvent(event);
-  }
-
-  unexpectedClose(code = 1006, reason = "connection lost"): void {
-    this.close(code, reason);
   }
 
   emitEvent(
@@ -77,49 +73,73 @@ class FakeWebSocket extends EventTarget {
     payload: Record<string, unknown> = {},
     sessionId = "runtime-1",
   ): void {
-    this.emitFrame({
+    this.send("hermes", {
       jsonrpc: "2.0",
       method: "event",
       params: { type, session_id: sessionId, payload },
     });
   }
 
-  private emitFrame(frame: unknown): void {
-    this.dispatchEvent(
-      new MessageEvent("message", { data: JSON.stringify(frame) }),
-    );
+  unexpectedClose(): void {
+    this.dispatchEvent(new Event("error"));
   }
 }
 
-const originalWebSocket = globalThis.WebSocket;
-const originalWindow = globalThis.window;
+const originalFetch = globalThis.fetch;
+const originalEventSource = globalThis.EventSource;
 
 function installBrowserGlobals(): void {
-  Object.defineProperty(globalThis, "WebSocket", {
+  Object.defineProperty(globalThis, "EventSource", {
     configurable: true,
-    value: FakeWebSocket,
+    value: FakeEventSource,
   });
-  Object.defineProperty(globalThis, "window", {
+  Object.defineProperty(globalThis, "fetch", {
     configurable: true,
-    value: globalThis,
+    writable: true,
+    value: async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url !== "/api/hermes/rpc") {
+        return new Response("not found", { status: 404 });
+      }
+      const body = JSON.parse(String(init?.body ?? "{}")) as {
+        method?: string;
+        params?: Record<string, unknown>;
+      };
+      const request: RpcRequest = {
+        jsonrpc: "2.0",
+        id: `fake-${FakeRelay.requests.length + 1}`,
+        method: String(body.method ?? ""),
+        params: body.params ?? {},
+      };
+      FakeRelay.requests.push(request);
+      try {
+        const result = await FakeRelay.handler(request);
+        return FakeRelay.rpcResponse(result);
+      } catch (error) {
+        return FakeRelay.rpcError(
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    },
   });
 }
 
 function restoreBrowserGlobals(): void {
-  Object.defineProperty(globalThis, "WebSocket", {
+  Object.defineProperty(globalThis, "EventSource", {
     configurable: true,
-    value: originalWebSocket,
+    value: originalEventSource,
   });
-  Object.defineProperty(globalThis, "window", {
+  Object.defineProperty(globalThis, "fetch", {
     configurable: true,
-    value: originalWindow,
+    writable: true,
+    value: originalFetch,
   });
 }
 
-function latestSocket(): FakeWebSocket {
-  const socket = FakeWebSocket.instances.at(-1);
-  assert.ok(socket);
-  return socket;
+function latestStream(): FakeEventSource {
+  const stream = FakeEventSource.instances.at(-1);
+  assert.ok(stream);
+  return stream;
 }
 
 function responseText(language = "en"): string {
@@ -137,10 +157,8 @@ async function tick(): Promise<void> {
 let activeClients: HermesAgentClient[] = [];
 
 async function connectedClient(handler: RpcHandler): Promise<HermesAgentClient> {
-  FakeWebSocket.handler = handler;
+  FakeRelay.handler = handler;
   const client = new HermesAgentClient({
-    websocketUrl: "ws://127.0.0.1:9121/api/ws",
-    token: "test-token",
     requestTimeoutMs: 500,
   });
   activeClients.push(client);
@@ -152,21 +170,21 @@ async function openSession(client: HermesAgentClient): Promise<void> {
   await client.openSession({ title: "Test", subtitleLanguage: "en" });
 }
 
-describe("HermesAgentClient", () => {
+describe("HermesAgentClient (relay transport)", () => {
   beforeEach(() => {
     installBrowserGlobals();
-    FakeWebSocket.instances = [];
-    FakeWebSocket.handler = () => ({});
+    FakeRelay.reset();
+    FakeEventSource.instances = [];
     activeClients = [];
   });
 
   afterEach(async () => {
     await Promise.all(activeClients.map((client) => client.disconnect()));
-    for (const socket of FakeWebSocket.instances) socket.close();
+    for (const stream of FakeEventSource.instances) stream.close();
     restoreBrowserGlobals();
   });
 
-  it("connects with the token and creates a Kana-scoped session", async () => {
+  it("never puts a token in a URL and creates a Kana-scoped session", async () => {
     const client = await connectedClient((request) => {
       if (request.method === "session.create") {
         return { session_id: "runtime-1", stored_session_id: "stored-1" };
@@ -194,8 +212,9 @@ describe("HermesAgentClient", () => {
       persistentSessionId: "stored-1",
       resumed: false,
     });
-    assert.match(latestSocket().url, /token=test-token/);
-    const create = latestSocket().requests.find(
+    // The relay transport must carry no credential anywhere.
+    assert.equal(FakeEventSource.instances.some((stream) => stream.url.includes("token=")), false);
+    const create = FakeRelay.requests.find(
       (request) => request.method === "session.create",
     );
     assert.ok(create);
@@ -305,7 +324,7 @@ describe("HermesAgentClient", () => {
       await client.executeCommand({ command: "/goal build it", subtitleLanguage: "en" }),
       { type: "output", output: "Goal set" },
     );
-    latestSocket().emitEvent("message.complete", {
+    latestStream().emitEvent("message.complete", {
       status: "complete",
       text: responseText(),
     });
@@ -313,7 +332,7 @@ describe("HermesAgentClient", () => {
     assert.equal(promptCount, 2);
 
     await client.executeCommand({ command: "/goal continue", subtitleLanguage: "en" });
-    latestSocket().emitEvent("message.complete", { status: "interrupted" });
+    latestStream().emitEvent("message.complete", { status: "interrupted" });
     await tick();
     assert.equal(promptCount, 3);
   });
@@ -391,7 +410,7 @@ describe("HermesAgentClient", () => {
     );
   });
 
-  it("translates input and tool events and reconnects after an unexpected close", async () => {
+  it("translates input and tool events and reconnects after a stream drop", async () => {
     const events: AgentEvent[] = [];
     const client = await connectedClient((request) => {
       if (request.method === "session.create") {
@@ -411,17 +430,17 @@ describe("HermesAgentClient", () => {
     await openSession(client);
     client.subscribe((event) => events.push(event));
 
-    latestSocket().emitEvent("clarify.request", {
+    latestStream().emitEvent("clarify.request", {
       request_id: "clarify-1",
       question: "Which option?",
       choices: ["A", "B"],
     });
-    latestSocket().emitEvent("tool.start", {
+    latestStream().emitEvent("tool.start", {
       tool_id: "tool-1",
       name: "terminal",
       args: { command: "pwd" },
     });
-    latestSocket().emitEvent("tool.complete", {
+    latestStream().emitEvent("tool.complete", {
       tool_id: "tool-1",
       name: "terminal",
       result: "done",
@@ -431,17 +450,17 @@ describe("HermesAgentClient", () => {
     assert.ok(events.some((event) => event.type === "tool.started"));
     assert.ok(events.some((event) => event.type === "tool.finished"));
 
-    latestSocket().unexpectedClose();
+    latestStream().unexpectedClose();
     assert.equal(client.connectionState, "reconnecting");
     await client.connect();
     assert.equal(client.connectionState, "connected");
-    assert.equal(FakeWebSocket.instances.length, 2);
+    assert.equal(FakeEventSource.instances.length, 2);
     const resumed = await client.openSession({
       persistentSessionId: "stored-1",
       subtitleLanguage: "en",
     });
     assert.equal(resumed.sessionId, "runtime-2");
-    assert.ok(latestSocket().requests.some((request) => request.method === "session.resume"));
+    assert.ok(FakeRelay.requests.some((request) => request.method === "session.resume"));
   });
 
   it("handles delayed, duplicate, out-of-order, foreign-session, and error events deterministically", async () => {
@@ -457,27 +476,27 @@ describe("HermesAgentClient", () => {
     client.subscribe((event) => events.push(event));
     await client.sendMessage({ text: "test", subtitleLanguage: "en" });
 
-    latestSocket().emitEvent("tool.complete", {
+    latestStream().emitEvent("tool.complete", {
       tool_id: "late-tool",
       name: "terminal",
       result: "already done",
     });
     await tick();
-    latestSocket().emitEvent("tool.start", {
+    latestStream().emitEvent("tool.start", {
       tool_id: "late-tool",
       name: "terminal",
       args: { command: "pwd" },
     });
-    latestSocket().emitEvent(
+    latestStream().emitEvent(
       "message.complete",
       { status: "complete", text: responseText() },
       "foreign-runtime",
     );
-    latestSocket().emitEvent("message.complete", {
+    latestStream().emitEvent("message.complete", {
       status: "complete",
       text: responseText(),
     });
-    latestSocket().emitEvent("message.complete", {
+    latestStream().emitEvent("message.complete", {
       status: "complete",
       text: responseText(),
     });
@@ -496,7 +515,7 @@ describe("HermesAgentClient", () => {
       ["tool.finished", "tool.started"],
     );
 
-    latestSocket().emitEvent("error", { message: "delayed provider failure" });
+    latestStream().emitEvent("error", { message: "delayed provider failure" });
     assert.equal(
       events.some(
         (event) =>
@@ -532,7 +551,7 @@ describe("HermesAgentClient", () => {
     client.subscribe((event) => events.push(event));
 
     await client.sendMessage({ text: "Continue", subtitleLanguage: "en" });
-    latestSocket().unexpectedClose();
+    latestStream().unexpectedClose();
     await client.connect();
     await client.openSession({
       persistentSessionId: "stored-1",
@@ -552,7 +571,7 @@ describe("HermesAgentClient", () => {
 
   it("shares one in-flight connection and automatically resumes after a drop", async () => {
     let resumeCount = 0;
-    FakeWebSocket.handler = (request) => {
+    FakeRelay.handler = (request) => {
       if (request.method === "session.create") {
         return { session_id: "runtime-1", stored_session_id: "stored-1" };
       }
@@ -570,34 +589,24 @@ describe("HermesAgentClient", () => {
       return {};
     };
     const client = new HermesAgentClient({
-      websocketUrl: "ws://127.0.0.1:9121/api/ws",
-      token: "test-token",
       requestTimeoutMs: 500,
       reconnectDelaysMs: [0],
     });
     activeClients.push(client);
 
     await Promise.all([client.connect(), client.connect(), client.connect()]);
-    assert.equal(FakeWebSocket.instances.length, 1);
+    assert.equal(FakeEventSource.instances.length, 1);
     await openSession(client);
 
-    latestSocket().unexpectedClose();
+    latestStream().unexpectedClose();
     assert.equal(client.connectionState, "reconnecting");
     for (let index = 0; index < 8 && resumeCount === 0; index += 1) {
       await tick();
     }
 
-    assert.equal(FakeWebSocket.instances.length, 2);
+    assert.equal(FakeEventSource.instances.length, 2);
     assert.equal(resumeCount, 1);
     assert.equal(client.connectionState, "connected");
-  });
-
-  it("does not retry authentication and origin rejections", async () => {
-    const client = await connectedClient(() => ({}));
-    latestSocket().unexpectedClose(4401, "unauthorized");
-    assert.equal(client.connectionState, "authentication_failed");
-    await tick();
-    assert.equal(FakeWebSocket.instances.length, 1);
   });
 
   it("does not silently replace a deleted durable Hermes session", async () => {
@@ -638,6 +647,6 @@ describe("HermesAgentClient", () => {
     assert.match(voice.output, /Kana Settings/);
     assert.equal(topic.type, "output");
     assert.match(topic.output, /messaging identity/);
-    assert.equal(latestSocket().requests.filter((request) => request.method === "slash.exec").length, 0);
+    assert.equal(FakeRelay.requests.filter((request) => request.method === "slash.exec").length, 0);
   });
 });

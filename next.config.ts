@@ -7,7 +7,9 @@ const contentSecurityPolicy = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' blob: data: https: http://127.0.0.1:* http://localhost:*",
   "font-src 'self' data:",
-  "connect-src 'self' blob: https: http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*",
+  // The browser talks to Hermes only through the same-origin Kana relay
+  // (/api/hermes/*); direct loopback WebSocket holes are no longer needed.
+  "connect-src 'self' blob: https: http://127.0.0.1:* http://localhost:*",
   "media-src 'self' blob: data:",
   "worker-src 'self' blob:",
   "object-src 'none'",

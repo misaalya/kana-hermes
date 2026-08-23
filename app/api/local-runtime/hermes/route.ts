@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import {
   inspectLocalHermesRuntime,
   startLocalHermesRuntime,
@@ -11,8 +10,12 @@ import { isLoopbackRequest } from "@/lib/server/auth/loopback";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Defense in depth: the auth proxy already enforces loopback + session for
-// this prefix; these checks keep the route honest even without the proxy.
+// Local process control for the managed `hermes serve`. Defense in depth: the
+// auth proxy already enforces loopback + session for this prefix; these checks
+// keep the route honest even without the proxy.
+//
+// The Hermes session token is NOT part of this API. Kana's server mints and
+// holds it; the browser connects through the server-side relay instead.
 
 function forbidden(): Response {
   return Response.json(
@@ -45,7 +48,6 @@ export async function POST(request: Request): Promise<Response> {
     const value = (await request.json()) as {
       action?: unknown;
       port?: unknown;
-      token?: unknown;
       cwd?: unknown;
     };
     if (value.action === "stop") {
@@ -55,15 +57,8 @@ export async function POST(request: Request): Promise<Response> {
       return Response.json({ error: "Action must be start, restart, or stop." }, { status: 400 });
     }
     if (value.action === "restart") await stopLocalHermesRuntime();
-    // Abstraction-first: when the client supplies no token, the server
-    // generates a strong one so the UI never needs manual token entry.
-    const token =
-      typeof value.token === "string" && value.token.length >= 12
-        ? value.token
-        : randomBytes(24).toString("hex");
     const status = await startLocalHermesRuntime({
       port: typeof value.port === "number" ? value.port : 9119,
-      token,
       cwd: typeof value.cwd === "string" ? value.cwd : undefined,
     });
     return Response.json(status);

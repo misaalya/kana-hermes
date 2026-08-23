@@ -34,7 +34,7 @@ type SettingsDialogProps = {
   onCloneVoice(baseUrl: string, input: CreateVoiceCloneInput): Promise<VoiceDescriptor>;
   onDeleteClonedVoice(baseUrl: string, voiceId: string): Promise<VoiceProviderStatus>;
   onInspectHermesControl(preferredPort?: number): Promise<HermesRuntimeStatus>;
-  onStartHermesControl(options: { port: number; token: string; cwd?: string; restart?: boolean }): Promise<HermesRuntimeStatus>;
+  onStartHermesControl(options: { port: number; cwd?: string; restart?: boolean }): Promise<HermesRuntimeStatus>;
   onStopHermesControl(): Promise<HermesRuntimeStatus>;
   onClose(): void;
 };
@@ -221,22 +221,13 @@ export function SettingsDialog({
               Hermes gateway
             </summary>
             <div className="flex flex-col gap-3 pt-3">
-              <label className="flex flex-col gap-1">
-                <span className={fieldLabel}>WebSocket URL</span>
-                <input
-                  type="text"
-                  className={`${inputBase} font-mono`}
-                  value={draft.hermes.websocketUrl}
-                  onChange={(e) => setDraft((prev) => ({ ...prev, hermes: { ...prev.hermes, websocketUrl: e.target.value } }))}
-                />
-              </label>
+              <p className="text-[11px] leading-relaxed text-faint">
+                Kana memroses koneksi Hermes di server. Browser tidak menyimpan
+                token sesi — semuanya ditangani otomatis oleh relay Kana.
+              </p>
               <HermesControlPanel
-                websocketUrl={draft.hermes.websocketUrl}
-                token={draft.hermes.token}
                 cwd={draft.hermes.cwd ?? ""}
-                onConnectionChange={({ websocketUrl, token }) =>
-                  setDraft((prev) => ({ ...prev, hermes: { ...prev.hermes, websocketUrl, token } }))
-                }
+                onCwdChange={(cwd) => setDraft((prev) => ({ ...prev, hermes: { ...prev.hermes, cwd } }))}
                 onInspect={() => onInspectHermesControl()}
                 onStart={onStartHermesControl}
                 onStop={onStopHermesControl}

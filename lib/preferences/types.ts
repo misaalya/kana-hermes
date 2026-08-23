@@ -20,8 +20,7 @@ export type KanaPreferences = {
   voiceMode: VoiceMode;
   avatarMode: AvatarMode;
   hermes: {
-    websocketUrl: string;
-    token: string;
+    /** Working folder for the managed Hermes process (server-side concern). */
     cwd: string;
   };
   qwen3Tts: {
@@ -43,10 +42,4 @@ export type KanaPreferences = {
 export interface PreferencesStore {
   load(): KanaPreferences;
   save(preferences: KanaPreferences): void;
-}
-
-export interface HermesCredentialsStore {
-  loadToken(): string;
-  saveToken(token: string): void;
-  clear(): void;
 }

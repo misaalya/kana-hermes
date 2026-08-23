@@ -21,12 +21,6 @@ describe("Kana local backup", () => {
     const backup = createKanaBackup(
       {
         ...DEFAULT_PREFERENCES,
-        hermes: {
-          ...DEFAULT_PREFERENCES.hermes,
-          websocketUrl:
-            "ws://127.0.0.1:9119/api/ws?token=never-export-query-token",
-          token: "never-export-me",
-        },
         qwen3Tts: {
           ...DEFAULT_PREFERENCES.qwen3Tts,
           deliveryMode: "sentence_chunks",
@@ -42,8 +36,10 @@ describe("Kana local backup", () => {
     const serialized = serializeKanaBackup(backup);
     const restored = parseKanaBackup(serialized);
 
-    assert.equal(serialized.includes("never-export-me"), false);
-    assert.equal(serialized.includes("never-export-query-token"), false);
+    // Credentials cannot leak: they are not part of preferences at all now.
+    assert.equal(serialized.includes("token"), false);
+    assert.equal(serialized.includes("websocketUrl"), false);
+    assert.equal(serialized.includes("ws://"), false);
     assert.equal(serialized.includes("licensed-local-model"), false);
     assert.deepEqual(restored.conversations[0].messages[0].subtitle, {
       text: "Halo",

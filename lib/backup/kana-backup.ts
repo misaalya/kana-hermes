@@ -137,7 +137,7 @@ export function sanitizeBackupPreferences(
   return {
     ...preferences,
     onboardingCompleted: true,
-    hermes: { ...preferences.hermes, token: "" },
+    hermes: { cwd: preferences.hermes.cwd },
     live2d: {
       ...preferences.live2d,
       modelId: undefined,
@@ -174,15 +174,10 @@ function parsePreferences(value: unknown): KanaPreferences {
         : DEFAULT_PREFERENCES.subtitleLanguage,
     voiceEnabled: value.voiceEnabled !== false,
     hermes: {
-      websocketUrl:
-        typeof hermes.websocketUrl === "string"
-          ? hermes.websocketUrl.slice(0, 2_000)
-          : DEFAULT_PREFERENCES.hermes.websocketUrl,
       cwd:
         typeof hermes.cwd === "string"
           ? hermes.cwd.slice(0, 10_000)
           : DEFAULT_PREFERENCES.hermes.cwd,
-      token: "",
     },
     qwen3Tts: {
       baseUrl: normalizeQwen3TTSBaseUrl(

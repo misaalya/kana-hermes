@@ -1,20 +1,13 @@
 import { useEffect, useState } from "react";
-import {
-  generatedSessionToken,
-  hermesPortFromWebSocketUrl,
-} from "@/lib/runtime/hermes-control-client";
 import type { HermesRuntimeStatus } from "@/lib/runtime/hermes-control-client";
 import { btnGhost, btnSecondary, fieldLabel, inputBase } from "./ui";
 
 type HermesControlPanelProps = {
-  websocketUrl: string;
-  token: string;
   cwd: string;
-  onConnectionChange(value: { websocketUrl: string; token: string }): void;
-  onInspect(): Promise<HermesRuntimeStatus>;
+  onCwdChange(cwd: string): void;
+  onInspect(preferredPort?: number): Promise<HermesRuntimeStatus>;
   onStart(options: {
     port: number;
-    token: string;
     cwd?: string;
     restart?: boolean;
   }): Promise<HermesRuntimeStatus>;
@@ -29,11 +22,13 @@ const STATE_STYLE: Record<string, string> = {
   stopped: "border-line-strong text-muted",
 };
 
+// Control panel for the managed `hermes serve` process. There is no token
+// field on purpose: the server mints and holds the session token, and the
+// browser connects through the Kana relay with its session cookie only.
+
 export function HermesControlPanel({
-  websocketUrl,
-  token,
   cwd,
-  onConnectionChange,
+  onCwdChange,
   onInspect,
   onStart,
   onStop,
@@ -41,8 +36,7 @@ export function HermesControlPanel({
   const [status, setStatus] = useState<HermesRuntimeStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [showToken, setShowToken] = useState(false);
-  const [port, setPort] = useState(() => hermesPortFromWebSocketUrl(websocketUrl));
+  const [port, setPort] = useState(9119);
   const stateLabel = status?.state.replaceAll("_", " ") ?? "checking";
 
   useEffect(() => {
@@ -51,7 +45,7 @@ export function HermesControlPanel({
       .then((next) => {
         if (active) {
           setStatus(next);
-          setPort(next.port || hermesPortFromWebSocketUrl(websocketUrl));
+          setPort(next.port || 9119);
         }
       })
       .catch((error) => {
@@ -60,7 +54,8 @@ export function HermesControlPanel({
     return () => {
       active = false;
     };
-  }, [onInspect, websocketUrl]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const run = async (action: "start" | "restart" | "stop") => {
     setBusy(true);
@@ -72,22 +67,13 @@ export function HermesControlPanel({
         setNotice(next.message);
         return;
       }
-      // Starting from Kana mints one token and reuses it for the connection —
-      // the user never enters it twice.
-      let startToken = token.trim();
-      if (!startToken) {
-        startToken = generatedSessionToken();
-        onConnectionChange({ websocketUrl, token: startToken });
-      }
       const next = await onStart({
         port,
-        token: startToken,
         cwd: cwd || undefined,
         restart: action === "restart",
       });
       setStatus(next);
-      onConnectionChange({ websocketUrl: next.websocketUrl, token: startToken });
-      setNotice(`${next.message} Save settings, then connect Kana.`);
+      setNotice(next.message);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Hermes control failed.");
     } finally {
@@ -117,7 +103,9 @@ export function HermesControlPanel({
             <dt className="text-faint">Process</dt>
             <dd className="text-ink-dim">{status.pid ? `PID ${status.pid}` : "—"}</dd>
             <dt className="text-faint">Endpoint</dt>
-            <dd className="truncate font-mono text-ink-dim">{`ws://127.0.0.1:${port}/api/ws`}</dd>
+            <dd className="truncate font-mono text-ink-dim">{`ws://127.0.0.1:${port}/api/ws (server-side)`}</dd>
+            <dt className="text-faint">Auth</dt>
+            <dd className="text-ink-dim">Token held by the Kana server</dd>
           </dl>
 
           <div className="grid gap-2.5 sm:grid-cols-2">
@@ -134,32 +122,14 @@ export function HermesControlPanel({
               />
             </label>
             <label className="flex flex-col gap-1">
-              <span className={fieldLabel}>Session token</span>
-              <span className="flex items-center gap-1">
-                <input
-                  type={showToken ? "text" : "password"}
-                  className={`${inputBase} font-mono`}
-                  value={token}
-                  autoComplete="off"
-                  placeholder={showToken ? undefined : "••••••••"}
-                  onChange={(event) =>
-                    onConnectionChange({ websocketUrl, token: event.target.value })
-                  }
-                />
-                <button type="button" className={`${btnGhost} shrink-0`} onClick={() => setShowToken((current) => !current)}>
-                  {showToken ? "Hide" : "Show"}
-                </button>
-                <button
-                  type="button"
-                  className={`${btnGhost} shrink-0`}
-                  disabled={status.managed}
-                  onClick={() =>
-                    onConnectionChange({ websocketUrl, token: generatedSessionToken() })
-                  }
-                >
-                  Generate
-                </button>
-              </span>
+              <span className={fieldLabel}>Working folder (optional)</span>
+              <input
+                type="text"
+                className={inputBase}
+                value={cwd}
+                placeholder="/home/user/project"
+                onChange={(event) => onCwdChange(event.target.value)}
+              />
             </label>
           </div>
 

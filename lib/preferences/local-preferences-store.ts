@@ -1,5 +1,4 @@
 import { DEFAULT_SUBTITLE_LANGUAGE } from "@/lib/presentation/languages";
-import { sanitizeHermesWebSocketEndpoint } from "@/lib/agent/hermes/gateway-url";
 import {
   DEFAULT_HARU_BINDINGS,
   OFFICIAL_CUBISM_CORE_URL,
@@ -12,15 +11,19 @@ import {
   DEFAULT_QWEN3_TTS_VOICE_ID,
   normalizeQwen3TTSBaseUrl,
 } from "@/lib/voice/qwen3-tts-contract";
-import {
-  SessionHermesCredentialsStore,
-  type BrowserStorage,
-} from "./session-hermes-credentials-store";
 import type {
-  HermesCredentialsStore,
   KanaPreferences,
   PreferencesStore,
 } from "./types";
+
+type BrowserStorage = Pick<
+  Storage,
+  "getItem" | "setItem" | "removeItem"
+>;
+
+// Preferences hold presentation choices only. The Hermes endpoint and session
+// token are deliberately absent: the browser reaches Hermes through the Kana
+// server relay and never stores connection credentials.
 
 const STORAGE_KEY = "kana.preferences.v5";
 const LEGACY_STORAGE_KEYS = [
@@ -33,12 +36,12 @@ const LEGACY_STORAGE_KEYS = [
 type StoredPreferences = Partial<
   Omit<KanaPreferences, "hermes" | "qwen3Tts">
 > & {
-  hermes?: Partial<KanaPreferences["hermes"]>;
+  hermes?: Partial<KanaPreferences["hermes"]> & {
+    // Legacy fields are tolerated on read and dropped on persist.
+    websocketUrl?: string;
+    token?: string;
+  };
   qwen3Tts?: Partial<KanaPreferences["qwen3Tts"]> & { endpoint?: string };
-};
-
-type PersistentPreferences = Omit<KanaPreferences, "hermes"> & {
-  hermes: Omit<KanaPreferences["hermes"], "token">;
 };
 
 export const DEFAULT_PREFERENCES: KanaPreferences = {
@@ -49,8 +52,6 @@ export const DEFAULT_PREFERENCES: KanaPreferences = {
   voiceMode: "qwen3",
   avatarMode: "live2d",
   hermes: {
-    websocketUrl: "ws://127.0.0.1:9119/api/ws",
-    token: "",
     cwd: "",
   },
   qwen3Tts: {
@@ -70,9 +71,6 @@ export const DEFAULT_PREFERENCES: KanaPreferences = {
 export function normalizeKanaPreferences(
   preferences: KanaPreferences,
 ): KanaPreferences {
-  const endpoint = sanitizeHermesWebSocketEndpoint(
-    preferences.hermes.websocketUrl,
-  );
   return {
     ...preferences,
     // Runtime guard: stored or restored values can never re-enable another
@@ -81,9 +79,7 @@ export function normalizeKanaPreferences(
     voiceMode: "qwen3",
     avatarMode: "live2d",
     hermes: {
-      ...preferences.hermes,
-      websocketUrl: endpoint.endpoint,
-      token: preferences.hermes.token || endpoint.embeddedToken,
+      cwd: preferences.hermes.cwd,
     },
     qwen3Tts: {
       ...preferences.qwen3Tts,
@@ -103,17 +99,12 @@ export function normalizeKanaPreferences(
 
 export class LocalPreferencesStore implements PreferencesStore {
   private warning: string | null = null;
-  constructor(
-    private readonly storage?: BrowserStorage,
-    private readonly credentials: HermesCredentialsStore =
-      new SessionHermesCredentialsStore(),
-  ) {}
+  constructor(private readonly storage?: BrowserStorage) {}
 
   load(): KanaPreferences {
     this.warning = null;
     const storage = this.getStorage();
-    const sessionToken = this.credentials.loadToken();
-    if (!storage) return this.withToken(DEFAULT_PREFERENCES, sessionToken);
+    if (!storage) return DEFAULT_PREFERENCES;
 
     try {
       const current = storage.getItem(STORAGE_KEY);
@@ -122,7 +113,7 @@ export class LocalPreferencesStore implements PreferencesStore {
       );
       const raw = current ?? legacy;
       if (!raw) {
-        return this.withToken(DEFAULT_PREFERENCES, sessionToken);
+        return DEFAULT_PREFERENCES;
       }
       const value = JSON.parse(raw) as StoredPreferences;
       const migratedFromLegacy = !current && Boolean(legacy);
@@ -133,18 +124,6 @@ export class LocalPreferencesStore implements PreferencesStore {
       } catch {
         baseUrl = DEFAULT_PREFERENCES.qwen3Tts.baseUrl;
       }
-      let websocketUrl = value.hermes?.websocketUrl;
-      let endpointToken = "";
-      try {
-        const sanitizedEndpoint = sanitizeHermesWebSocketEndpoint(
-          websocketUrl ?? DEFAULT_PREFERENCES.hermes.websocketUrl,
-        );
-        websocketUrl = sanitizedEndpoint.endpoint;
-        endpointToken = sanitizedEndpoint.embeddedToken;
-      } catch {
-        websocketUrl = DEFAULT_PREFERENCES.hermes.websocketUrl;
-      }
-      const legacyToken = value.hermes?.token ?? endpointToken;
       let coreScriptUrl = value.live2d?.coreScriptUrl;
       let modelUrl = value.live2d?.modelUrl;
       try {
@@ -194,10 +173,10 @@ export class LocalPreferencesStore implements PreferencesStore {
         onboardingCompleted:
           value.onboardingCompleted ?? migratedFromLegacy,
         hermes: {
-          ...DEFAULT_PREFERENCES.hermes,
-          ...value.hermes,
-          websocketUrl,
-          token: sessionToken || legacyToken,
+          cwd:
+            typeof value.hermes?.cwd === "string"
+              ? value.hermes.cwd
+              : DEFAULT_PREFERENCES.hermes.cwd,
         },
         qwen3Tts: {
           ...DEFAULT_PREFERENCES.qwen3Tts,
@@ -217,7 +196,6 @@ export class LocalPreferencesStore implements PreferencesStore {
         },
       };
       const normalizedPreferences = normalizeKanaPreferences(preferences);
-      if (legacyToken && !sessionToken) this.credentials.saveToken(legacyToken);
       try {
         this.persistSanitized(storage, normalizedPreferences);
       } catch {
@@ -228,7 +206,7 @@ export class LocalPreferencesStore implements PreferencesStore {
     } catch {
       this.warning =
         "Kana could not read stored preferences. Safe defaults are active, and the unreadable record was kept for recovery.";
-      return this.withToken(DEFAULT_PREFERENCES, sessionToken);
+      return DEFAULT_PREFERENCES;
     }
   }
 
@@ -240,34 +218,15 @@ export class LocalPreferencesStore implements PreferencesStore {
 
   save(preferences: KanaPreferences): void {
     const normalized = normalizeKanaPreferences(preferences);
-    this.credentials.saveToken(normalized.hermes.token);
     const storage = this.getStorage();
     if (!storage) return;
     this.persistSanitized(storage, normalized);
-  }
-
-  private withToken(
-    preferences: KanaPreferences,
-    token: string,
-  ): KanaPreferences {
-    return {
-      ...preferences,
-      hermes: { ...preferences.hermes, token },
-    };
   }
 
   private persistSanitized(
     storage: BrowserStorage,
     preferences: KanaPreferences,
   ): void {
-    let websocketUrl = DEFAULT_PREFERENCES.hermes.websocketUrl;
-    try {
-      websocketUrl = sanitizeHermesWebSocketEndpoint(
-        preferences.hermes.websocketUrl,
-      ).endpoint;
-    } catch {
-      // Persist a known-safe endpoint while the UI reports the invalid draft.
-    }
     let qwenBaseUrl = DEFAULT_PREFERENCES.qwen3Tts.baseUrl;
     let modelUrl = DEFAULT_PREFERENCES.live2d.modelUrl;
     let coreScriptUrl = DEFAULT_PREFERENCES.live2d.coreScriptUrl;
@@ -295,10 +254,9 @@ export class LocalPreferencesStore implements PreferencesStore {
         }
       },
     );
-    const persistent: PersistentPreferences = {
+    const persistent: KanaPreferences = {
       ...preferences,
       hermes: {
-        websocketUrl,
         cwd: preferences.hermes.cwd,
       },
       qwen3Tts: { ...preferences.qwen3Tts, baseUrl: qwenBaseUrl },
