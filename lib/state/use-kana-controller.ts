@@ -185,6 +185,10 @@ export function useKanaController(appVersion: string) {
   const [serverActivityTurns, setServerActivityTurns] = useState<
     Array<{ turnAnchorMs: number; activities: ActivityItem[] }>
   >([]);
+  // Kana sessions known to Hermes but not yet present in this browser.
+  const [hermesSessions, setHermesSessions] = useState<
+    Array<{ hermesSessionKey: string; title: string; messageCount: number; startedAt: number }>
+  >([]);
   const [commandSuggestions, setCommandSuggestions] = useState<AgentCommandSuggestion[]>([]);
   const [commandSuggestionsLoading, setCommandSuggestionsLoading] = useState(false);
   const [pendingInput, setPendingInput] = useState<AgentInputRequest | null>(null);
@@ -569,6 +573,19 @@ export function useKanaController(appVersion: string) {
       }
 
       if (event.type === "tool.finished") {
+        // Mirror the completion into the per-turn log first: the snapshot that
+        // lands on the assistant message must carry final states, not the
+        // stale "running" rows from tool.start.
+        turnActivitiesRef.current = turnActivitiesRef.current.map((activity) =>
+          activity.id === event.id
+            ? {
+                ...activity,
+                state: "complete" as const,
+                title: event.summary || `${event.tool} finished`,
+                durationMs: event.durationMs,
+              }
+            : activity,
+        );
         setActivities((current) => {
           const existing = current.some(
             (activity) => activity.id === event.id,
@@ -827,23 +844,8 @@ export function useKanaController(appVersion: string) {
         ?.toLowerCase()
         .replaceAll("_", "-");
       const commandArg = commandMatch?.[2]?.trim() || "";
-      const canRunWhileBusy = Boolean(
-        commandName &&
-          [
-            "approve",
-            "deny",
-            "queue",
-            "steer",
-            "status",
-            "agents",
-            "goal",
-            "heartbeat",
-            "background",
-          ].includes(commandName),
-      );
       if (
         !cleanText ||
-        (busy && !canRunWhileBusy) ||
         !activeConversationId
       )
         return;
@@ -853,6 +855,28 @@ export function useKanaController(appVersion: string) {
         (item) => item.id === activeConversationId,
       );
       if (!conversation) return;
+
+      // Telegram-parity: a plain message typed while Kana is mid-turn is
+      // queued and submitted automatically when the current turn completes,
+      // instead of being silently dropped.
+      if (busy && !commandName) {
+        agentRef.current?.enqueuePrompt(
+          cleanText,
+          preferencesRef.current.subtitleLanguage,
+        );
+        await saveConversation({
+          ...conversation,
+          messages: [
+            ...conversation.messages,
+            {
+              ...createUserMessage(cleanText),
+              text: cleanText,
+            },
+          ],
+        });
+        setStatus("Message queued — Kana will answer after the current task");
+        return;
+      }
 
       if (commandName === "new") {
         const created = await conversationStore.create({
@@ -1199,6 +1223,44 @@ export function useKanaController(appVersion: string) {
     setError(null);
   }, [busy, commitConversations, conversationStore]);
 
+  // ---- Cross-browser Hermes sessions ----
+  // Sessions created on other surfaces/browsers have no local IndexedDB
+  // record. They are listed from Hermes (source=kana) and "adopted" into a
+  // lightweight local record on first open, linked via persistentSessionId.
+  const adoptHermesSession = useCallback(
+    async (hermesSessionKey: string, title: string) => {
+      if (busy) return;
+      const existing = conversationsRef.current.find(
+        (item) => item.agent?.persistentSessionId === hermesSessionKey,
+      );
+      if (existing) {
+        activeConversationIdRef.current = existing.id;
+        setActiveConversationId(existing.id);
+        openedConversationRef.current = null;
+        setActivities([]);
+        return;
+      }
+      const created = await conversationStore.create({
+        title: title || "Imported session",
+        subtitleLanguage: preferencesRef.current.subtitleLanguage,
+      });
+      const saved = await saveConversation({
+        ...created,
+        agent: {
+          provider: "hermes",
+          persistentSessionId: hermesSessionKey,
+          status: "linked",
+          relationship: "primary",
+        },
+      });
+      activeConversationIdRef.current = saved.id;
+      setActiveConversationId(saved.id);
+      openedConversationRef.current = null;
+      setActivities([]);
+    },
+    [busy, conversationStore, saveConversation],
+  );
+
   const selectConversation = useCallback(
     (id: string) => {
       if (busy || id === activeConversationId) return;
@@ -1431,10 +1493,7 @@ export function useKanaController(appVersion: string) {
   // session changes. Best-effort: an empty result just means no stored turns.
   const serverSessionKey = activeConversation?.agent?.persistentSessionId ?? null;
   useEffect(() => {
-    if (!serverSessionKey) {
-      setServerActivityTurns([]);
-      return;
-    }
+    if (!serverSessionKey) return;
     let cancelled = false;
     void fetch(`/api/kana/activities?session=${encodeURIComponent(serverSessionKey)}`, {
       credentials: "same-origin",
@@ -1443,6 +1502,26 @@ export function useKanaController(appVersion: string) {
       .then((data: { turns?: Array<{ turnAnchorMs: number; activities: ActivityItem[] }> } | null) => {
         if (!cancelled && data?.turns) setServerActivityTurns(data.turns);
       })
+      .catch(() => {});
+    // Refresh the cross-browser Hermes session directory too.
+    void fetch("/api/kana/sessions", { credentials: "same-origin" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then(
+        (
+          data:
+            | {
+                sessions?: Array<{
+                  hermesSessionKey: string;
+                  title: string;
+                  messageCount: number;
+                  startedAt: number;
+                }>;
+              }
+            | null,
+        ) => {
+          if (!cancelled && data?.sessions) setHermesSessions(data.sessions);
+        },
+      )
       .catch(() => {});
     return () => {
       cancelled = true;
@@ -1518,6 +1597,8 @@ export function useKanaController(appVersion: string) {
     voiceCanReplay,
     activities,
     serverActivityTurns,
+    hermesSessions,
+    adoptHermesSession,
     avatar,
     commandSuggestions,
     commandSuggestionsLoading,
