@@ -189,6 +189,10 @@ export function useKanaController(appVersion: string) {
   // Kana sessions known to Hermes but not yet present in this browser.
   // Debug visibility: true while any history/session/activity fetch runs.
   const [fetchingFromServer, setFetchingFromServer] = useState(false);
+  const [fetchDebugRecords, setFetchDebugRecords] = useState<
+    Array<{ id: number; label: string; url: string; status: number | string; body: unknown }>
+  >([]);
+  const fetchDebugIdRef = useRef(0);
   const [hermesSessions, setHermesSessions] = useState<
     Array<{ hermesSessionKey: string; title: string; messageCount: number; startedAt: number }>
   >([]);
@@ -306,6 +310,16 @@ export function useKanaController(appVersion: string) {
     [],
   );
 
+  const recordFetchDebug = useCallback(
+    (label: string, url: string, status: number | string, body: unknown) => {
+      setFetchDebugRecords((current) => [
+        ...current,
+        { id: ++fetchDebugIdRef.current, label, url, status, body },
+      ]);
+    },
+    [],
+  );
+
   const saveConversation = useCallback(
     async (conversation: Conversation) => {
       const updated = { ...conversation, updatedAt: Date.now() };
@@ -367,6 +381,12 @@ export function useKanaController(appVersion: string) {
         throw new Error("Hermes client is not connected.");
       }
       const result = await agentRef.current.fetchHistory(hermesSessionKey);
+      recordFetchDebug(
+        "chat transcript (session.history)",
+        `session.history session_id=${hermesSessionKey}`,
+        "ok",
+        result,
+      );
       const rows = result.messages ?? [];
       if (!rows.length) return;
 
@@ -1654,31 +1674,62 @@ export function useKanaController(appVersion: string) {
     void fetch(`/api/kana/activities?session=${encodeURIComponent(serverSessionKey)}`, {
       credentials: "same-origin",
     })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data: { turns?: Array<{ turnAnchorMs: number; activities: ActivityItem[] }> } | null) => {
-        if (!cancelled && data?.turns) setServerActivityTurns(data.turns);
+      .then(async (response) => ({
+        status: response.status,
+        data: response.ok ? await response.json() : await response.text(),
+      }))
+      .then(({ status, data }) => {
+        if (!cancelled) {
+          recordFetchDebug(
+            "activity turns",
+            `/api/kana/activities?session=${serverSessionKey}`,
+            status,
+            data,
+          );
+          const typed = data as {
+            turns?: Array<{ turnAnchorMs: number; activities: ActivityItem[] }>;
+          } | null;
+          if (typed?.turns) setServerActivityTurns(typed.turns);
+        }
       })
-      .catch(() => {});
+      .catch((error) => {
+        if (!cancelled)
+          recordFetchDebug(
+            "activity turns (network error)",
+            `/api/kana/activities?session=${serverSessionKey}`,
+            "ERR",
+            String(error),
+          );
+      });
     // Refresh the cross-browser Hermes session directory too.
     void fetch("/api/kana/sessions", { credentials: "same-origin" })
-      .then((response) => (response.ok ? response.json() : null))
-      .then(
-        (
-          data:
-            | {
-                sessions?: Array<{
-                  hermesSessionKey: string;
-                  title: string;
-                  messageCount: number;
-                  startedAt: number;
-                }>;
-              }
-            | null,
-        ) => {
-          if (!cancelled && data?.sessions) setHermesSessions(data.sessions);
-        },
-      )
-      .catch(() => {})
+      .then(async (response) => ({
+        status: response.status,
+        data: response.ok ? await response.json() : await response.text(),
+      }))
+      .then(({ status, data }) => {
+        if (!cancelled) {
+          recordFetchDebug("hermes session directory", "/api/kana/sessions", status, data);
+          const typed = data as {
+            sessions?: Array<{
+              hermesSessionKey: string;
+              title: string;
+              messageCount: number;
+              startedAt: number;
+            }>;
+          } | null;
+          if (typed?.sessions) setHermesSessions(typed.sessions);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled)
+          recordFetchDebug(
+            "hermes sessions (network error)",
+            "/api/kana/sessions",
+            "ERR",
+            String(error),
+          );
+      })
       .finally(() => {
         if (!cancelled) setFetchingFromServer(false);
       });
@@ -1758,6 +1809,8 @@ export function useKanaController(appVersion: string) {
     activities,
     serverActivityTurns,
     fetchingFromServer,
+    fetchDebugRecords,
+    clearFetchDebugRecords: () => setFetchDebugRecords([]),
     hermesSessions,
     adoptHermesSession,
     avatar,
