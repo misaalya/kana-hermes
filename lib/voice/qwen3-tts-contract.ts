@@ -86,8 +86,10 @@ export function qwen3TTSUrl(baseUrl: string, path: string): string {
   // through Kana's server-side relay so the service's loopback address and
   // port stay private to the server process (mirrors the Hermes token rule).
   // The baseUrl argument is retained for call-site compatibility but ignored.
+  // Strip /v1/ prefix since relay routes live under /api/voice/tts/ directly.
   void normalizeQwen3TTSBaseUrl(baseUrl);
-  return `/api/voice/tts${path}`;
+  const stripped = path.replace(/^\/v1\//, "/");
+  return `/api/voice/tts${stripped}`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
