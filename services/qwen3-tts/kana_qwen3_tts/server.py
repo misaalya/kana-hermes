@@ -247,6 +247,14 @@ def create_app(
             else None
         )
         if snapshot.supports_voice_clone and voice_profile is None:
+            # Fall back to the configured/default cloned voice so a request
+            # without an explicit voice_id still speaks (Kana sends one from
+            # preferences, but the default keeps the service usable directly).
+            fallback_id = snapshot.default_voice_id or (
+                voice_profiles.list()[0].id if voice_profiles.list() else None
+            )
+            voice_profile = voice_profiles.get(fallback_id) if fallback_id else None
+        if snapshot.supports_voice_clone and voice_profile is None:
             raise HTTPException(
                 status_code=422,
                 detail="Select or create a cloned voice before speaking.",
