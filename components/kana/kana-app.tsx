@@ -283,8 +283,10 @@ export function KanaApp({ appVersion }: KanaAppProps) {
       {/* Live-chat feed (vtuber style): a height-capped, scrollable column
           anchored to the LEFT edge. Holds the chronological stream — user
           messages, tool activity lines, Kana's reply — so long responses
-          scroll inside the column and never cover the avatar stage. */}
-      <div className="pointer-events-none absolute inset-y-0 left-0 z-10 flex w-[min(88%,480px)] flex-col justify-end p-3 max-md:inset-x-0 max-md:w-full">
+          scroll inside the column and never cover the avatar stage. The
+          bottom padding keeps the feed above the composer instead of
+          sliding underneath it. */}
+      <div className="pointer-events-none absolute inset-y-0 left-0 z-10 flex w-[min(88%,480px)] flex-col justify-end p-3 pb-24 max-md:inset-x-0 max-md:w-full max-md:pb-20">
         <div className="pointer-events-auto min-h-0">
           <LiveChatFeed
             messages={kana.activeConversation?.messages ?? NO_MESSAGES}
