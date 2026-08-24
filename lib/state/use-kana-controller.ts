@@ -187,6 +187,8 @@ export function useKanaController(appVersion: string) {
     Array<{ turnAnchorMs: number; activities: ActivityItem[] }>
   >([]);
   // Kana sessions known to Hermes but not yet present in this browser.
+  // Debug visibility: true while any history/session/activity fetch runs.
+  const [fetchingFromServer, setFetchingFromServer] = useState(false);
   const [hermesSessions, setHermesSessions] = useState<
     Array<{ hermesSessionKey: string; title: string; messageCount: number; startedAt: number }>
   >([]);
@@ -512,17 +514,20 @@ export function useKanaController(appVersion: string) {
         // Hermes owns the transcript. Always pull it on open so every
         // browser sees the same history (IndexedDB is no longer the source).
         {
+          setFetchingFromServer(true);
           void loadHermesTranscript(
             conversation.id,
             event.persistentSessionId,
-          ).catch((historyError) => {
-            reportError(
-              "agent",
-              historyError instanceof Error
-                ? historyError.message
-                : "Could not load chat history from Hermes.",
-            );
-          });
+          )
+            .catch((historyError) => {
+              reportError(
+                "agent",
+                historyError instanceof Error
+                  ? historyError.message
+                  : "Could not load chat history from Hermes.",
+              );
+            })
+            .finally(() => setFetchingFromServer(false));
         }
         return;
       }
@@ -1645,6 +1650,7 @@ export function useKanaController(appVersion: string) {
   useEffect(() => {
     if (!serverSessionKey) return;
     let cancelled = false;
+    setFetchingFromServer(true);
     void fetch(`/api/kana/activities?session=${encodeURIComponent(serverSessionKey)}`, {
       credentials: "same-origin",
     })
@@ -1672,9 +1678,13 @@ export function useKanaController(appVersion: string) {
           if (!cancelled && data?.sessions) setHermesSessions(data.sessions);
         },
       )
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setFetchingFromServer(false);
+      });
     return () => {
       cancelled = true;
+      setFetchingFromServer(false);
     };
   }, [serverSessionKey]);
 
@@ -1747,6 +1757,7 @@ export function useKanaController(appVersion: string) {
     voiceCanReplay,
     activities,
     serverActivityTurns,
+    fetchingFromServer,
     hermesSessions,
     adoptHermesSession,
     avatar,
