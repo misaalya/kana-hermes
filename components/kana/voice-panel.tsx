@@ -11,6 +11,15 @@ type VoicePanelProps = {
   onDeleteCloned(voiceId: string): Promise<VoiceProviderStatus>;
 };
 
+// Per-voice accent dot colors. The first clone ("Kana") is white; new clones
+// cycle through the remaining palette so every radio is visually distinct.
+const VOICE_DOTS = ["bg-white", "bg-rose-400", "bg-amber-400", "bg-emerald-400", "bg-sky-400", "bg-violet-400"];
+
+function voiceDotColor(voiceId: string, index: number): string {
+  if (voiceId.endsWith("b2176303f2264f8ba3fdbd3a375d66ef")) return VOICE_DOTS[0];
+  return VOICE_DOTS[1 + (index % (VOICE_DOTS.length - 1))];
+}
+
 // Voice management for the Qwen3-TTS Base model: it only speaks through a
 // cloned voice profile, so one must exist and be selected or Kana stays
 // silent. Restores the UI removed in the VN-style redesign (c95faa7).
@@ -95,51 +104,70 @@ export function VoicePanel({
 
   const voices = status?.voices ?? [];
   const cloned = voices.filter((voice) => voice.kind === "cloned");
+  // Radio-group semantics: exactly one voice is always active. When nothing
+  // has been chosen yet (or the chosen voice was deleted), the first clone
+  // takes over automatically — the group can never be fully "off".
+  const effectiveSelected =
+    selectedVoiceId && cloned.some((voice) => voice.id === selectedVoiceId)
+      ? selectedVoiceId
+      : (cloned[0]?.id ?? "");
 
   return (
     <div className="flex flex-col gap-3">
-      <div>
-        <p className="mb-1.5 text-[11px] font-bold text-ink-dim uppercase">Selected voice</p>
-        {!selectedVoiceId ? (
+      <fieldset className="flex flex-col gap-1" role="radiogroup" aria-label="Kana voice">
+        <legend className="mb-1.5 text-[11px] font-bold text-ink-dim uppercase">Voice</legend>
+        {cloned.length === 0 ? (
           <p className="rounded-xl border border-danger/40 bg-danger/5 px-3 py-2 text-[11px] text-danger">
-            Belum ada suara dipilih — Kana akan tetap diam sampai satu suara dipilih.
+            Belum ada suara kloningan — clone satu suara dulu agar Kana bisa bicara.
           </p>
         ) : (
-          <span className="inline-block rounded-full border border-accent/50 px-2.5 py-0.5 text-[11px] font-bold text-accent-strong">
-            {voices.find((voice) => voice.id === selectedVoiceId)?.name ?? selectedVoiceId}
-          </span>
-        )}
-      </div>
-
-      {cloned.length > 0 && (
-        <ul className="flex flex-col gap-1">
-          {cloned.map((voice) => (
-            <li
-              key={voice.id}
-              className="flex items-center justify-between gap-2 rounded-xl bg-surface px-3 py-2"
-            >
-              <button
-                type="button"
-                className={`min-w-0 flex-1 truncate text-left text-xs ${selectedVoiceId === voice.id ? "font-bold text-accent-strong" : "text-ink-dim"}`}
+          cloned.map((voice, index) => {
+            const active = voice.id === effectiveSelected;
+            return (
+              <label
+                key={voice.id}
+                role="radio"
+                aria-checked={active}
+                tabIndex={0}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onVoiceSelect(voice.id);
+                  }
+                }}
+                className={`flex cursor-pointer items-center justify-between gap-2 rounded-xl border px-3 py-2 transition-colors ${
+                  active ? "border-accent/60 bg-accent/10" : "border-line bg-surface hover:border-line-strong"
+                }`}
                 onClick={() => onVoiceSelect(voice.id)}
               >
-                {voice.name ?? voice.id}
-                <span className="ml-1.5 text-[10px] text-faint">
-                  {voice.durationSeconds ? `${Math.round(voice.durationSeconds)}s ref` : ""}
+                <span className="flex min-w-0 items-center gap-2.5">
+                  <span
+                    className={`grid size-4 shrink-0 place-items-center rounded-full border ${
+                      active ? "border-white/70" : "border-line-strong"
+                    }`}
+                  >
+                    <span className={`size-2 rounded-full ${voiceDotColor(voice.id, index)} ${active ? "" : "opacity-40"}`} />
+                  </span>
+                  <span className={`truncate text-xs ${active ? "font-bold text-ink" : "text-ink-dim"}`}>
+                    {voice.name ?? voice.id}
+                  </span>
                 </span>
-              </button>
-              <button
-                type="button"
-                className="text-[11px] text-faint transition-colors hover:text-danger"
-                disabled={busy}
-                onClick={() => void remove(voice.id)}
-              >
-                Hapus
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+                <button
+                  type="button"
+                  className="text-[11px] text-faint transition-colors hover:text-danger"
+                  disabled={busy}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void remove(voice.id);
+                  }}
+                >
+                  Hapus
+                </button>
+              </label>
+            );
+          })
+        )}
+      </fieldset>
 
       <details className="rounded-xl border border-line px-3 py-2.5">
         <summary className="cursor-pointer text-[11px] font-bold text-ink-dim marker:content-none [&::-webkit-details-marker]:hidden">
