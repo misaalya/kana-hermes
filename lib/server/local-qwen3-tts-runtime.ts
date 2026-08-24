@@ -310,7 +310,7 @@ export async function ensureQwen3TTSService(): Promise<EnsureQwen3TtsResult> {
       return { ok: true, port: inspected.port, state: inspected.state };
     }
     try {
-      const started = await startLocalQwen3TtsRuntime();
+      const started = await startLocalQwen3TtsRuntime({});
       if (started.state === "external") {
         return { ok: true, port: started.port, state: "external" };
       }
