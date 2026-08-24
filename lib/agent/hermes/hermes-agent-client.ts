@@ -303,6 +303,9 @@ export class HermesAgentClient implements AgentClient {
         source: "kana",
         close_on_disconnect: false,
         ...(options.cwd ? { cwd: options.cwd } : {}),
+        // Best-effort: the gateway currently ignores client-seeded system
+        // messages, so the binding contract rides on each user prompt
+        // (see buildKanaUserPrompt).
         messages: [
           {
             role: "system",

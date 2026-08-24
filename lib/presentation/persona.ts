@@ -63,6 +63,16 @@ export function buildKanaUserPrompt(
       null,
       2,
     ),
+    // The gateway ignores client-seeded system messages, so the response
+    // contract must ride on every user turn rather than a session-level
+    // system prompt.
+    [
+      "Response format (mandatory): reply with exactly one JSON object and nothing else:",
+      '{"speech_ja": "...", "subtitle": {"text": "...", "language": "' + subtitleLanguage + '"}, "emotion": "neutral|happy|sad|angry|surprised|thinking|confused|excited"}',
+      "- speech_ja: natural conversational Japanese.",
+      `- subtitle.text: your answer in ${subtitleLanguage}; subtitle.language: "${subtitleLanguage}".`,
+      "- No Markdown fence, no prose before or after the JSON object.",
+    ].join("\n"),
   ].join("\n\n");
 }
 
