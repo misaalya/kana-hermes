@@ -290,3 +290,41 @@ export async function stopLocalQwen3TtsRuntime(): Promise<LocalQwen3TtsRuntimeSt
   current.lastMessage = "No managed Qwen3-TTS process was running.";
   return publicStatus(current);
 }
+
+export type EnsureQwen3TtsResult =
+  | { ok: true; port: number; state: "running" | "external" }
+  | { ok: false; status: LocalQwen3TtsRuntimeStatus };
+
+const ensureKey = Symbol.for("kana.localQwen3TtsEnsure");
+type EnsureGlobal = typeof globalThis & {
+  [ensureKey]?: Promise<EnsureQwen3TtsResult>;
+};
+
+// Ensure-on-use with a single-flight guard: concurrent relay requests share
+// one discovery/spawn attempt instead of racing to spawn two children.
+export async function ensureQwen3TTSService(): Promise<EnsureQwen3TtsResult> {
+  const shared = globalThis as EnsureGlobal;
+  shared[ensureKey] ??= (async (): Promise<EnsureQwen3TtsResult> => {
+    const inspected = await inspectLocalQwen3TtsRuntime();
+    if (inspected.state === "running" || inspected.state === "external") {
+      return { ok: true, port: inspected.port, state: inspected.state };
+    }
+    try {
+      const started = await startLocalQwen3TtsRuntime();
+      if (started.state === "external") {
+        return { ok: true, port: started.port, state: "external" };
+      }
+      return { ok: true, port: started.port, state: "running" };
+    } catch (error) {
+      const status = await inspectLocalQwen3TtsRuntime();
+      status.message =
+        error instanceof Error ? error.message : status.message;
+      return { ok: false, status };
+    }
+  })();
+  try {
+    return await shared[ensureKey];
+  } finally {
+    shared[ensureKey] = undefined;
+  }
+}

@@ -60,3 +60,13 @@ describe("local qwen3-tts runtime", () => {
     assert.equal(status.state, "stopped");
   });
 });
+
+describe("ensureQwen3TTSService", () => {
+  it("adopts the fake external service and reports ok", async () => {
+    __setTestTtsPort(healthPort);
+    const { ensureQwen3TTSService } = await import("@/lib/server/local-qwen3-tts-runtime");
+    const result = await ensureQwen3TTSService();
+    assert.equal(result.ok, true);
+    if (result.ok) assert.equal(result.port, healthPort);
+  });
+});
