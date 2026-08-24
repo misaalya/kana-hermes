@@ -36,10 +36,6 @@ const ALLOWED_METHODS = new Set([
   "sudo.respond",
   "secret.respond",
   "handoff.request",
-  // Applies the Kana persona overlay to the open session (see
-  // HermesAgentClient.openSession). Params are hardcoded by the client
-  // (key: "personality", value: "kana"); no browser-controlled config path.
-  "config.set",
 ]);
 
 const LONG_RUNNING_METHODS = new Set(["session.compress"]);
