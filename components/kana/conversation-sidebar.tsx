@@ -1,6 +1,13 @@
 import { memo, useMemo, useState } from "react";
 import type { Conversation } from "@/lib/conversation/types";
 
+export type HermesSessionEntry = {
+  hermesSessionKey: string;
+  title: string;
+  messageCount: number;
+  startedAt: number;
+};
+
 type ConversationSidebarProps = {
   conversations: Conversation[];
   activeId?: string;
@@ -10,6 +17,10 @@ type ConversationSidebarProps = {
   onRename(id: string, title: string): void;
   onDelete(id: string): void;
   onClose?: () => void;
+  /** Kana sessions known to Hermes but not present in this browser. */
+  hermesSessions?: HermesSessionEntry[];
+  /** Opens (imports) a Hermes-only session into this browser. */
+  onAdopt?(hermesSessionKey: string, title: string): void;
 };
 
 function formatDate(timestamp: number): string {
@@ -32,7 +43,22 @@ export const ConversationSidebar = memo(function ConversationSidebar({
   onRename,
   onDelete,
   onClose,
+  hermesSessions = [],
+  onAdopt,
 }: ConversationSidebarProps) {
+  // Hermes sessions this browser has not adopted yet (no local record).
+  const localKeys = useMemo(
+    () =>
+      new Set(
+        conversations
+          .map((c) => c.agent?.persistentSessionId)
+          .filter(Boolean) as string[],
+      ),
+    [conversations],
+  );
+  const remoteOnly = hermesSessions.filter(
+    (session) => !localKeys.has(session.hermesSessionKey),
+  );
   const [query, setQuery] = useState("");
   const visibleConversations = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
@@ -167,6 +193,30 @@ export const ConversationSidebar = memo(function ConversationSidebar({
             </p>
           ) : null}
         </div>
+
+        {remoteOnly.length > 0 && onAdopt ? (
+          <div className="mt-3 flex flex-col gap-1.5 border-t border-line pt-3">
+            <p className="px-1 pb-1 text-[10px] font-bold tracking-wider text-faint uppercase">
+              Di Hermes — belum dibuka di browser ini
+            </p>
+            {remoteOnly.map((session) => (
+              <button
+                key={session.hermesSessionKey}
+                type="button"
+                disabled={disabled}
+                onClick={() => onAdopt(session.hermesSessionKey, session.title)}
+                className="w-full rounded-xl border border-dashed border-line-strong px-3 py-2 text-left transition-colors hover:border-accent disabled:opacity-50"
+              >
+                <span className="block truncate pr-14 text-xs font-semibold text-ink">
+                  {session.title}
+                </span>
+                <span className="mt-0.5 block truncate text-[11px] text-muted">
+                  {session.messageCount} pesan · {formatDate(session.startedAt * 1000)}
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       <div className="flex items-center gap-2 border-t border-line pt-3 text-[10px] text-faint">

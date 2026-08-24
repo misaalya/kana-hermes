@@ -380,6 +380,18 @@ export class HermesAgentClient implements AgentClient {
     await this.submitPrompt(input.text, input.subtitleLanguage);
   }
 
+  /**
+   * Queue a plain message while a turn is running. It is submitted
+   * automatically when the current turn completes — matching the Telegram /
+   * TUI behavior where a follow-up message lands after the active loop.
+   */
+  enqueuePrompt(message: string, subtitleLanguage: string): void {
+    if (!this.session) {
+      throw new Error("Open a Hermes session before queueing a message.");
+    }
+    this.queuedPrompts.push({ message, subtitleLanguage });
+  }
+
   async executeCommand(input: AgentCommandInput): Promise<AgentCommandResult> {
     if (!this.session) {
       throw new Error("Open a Hermes session before running a command.");

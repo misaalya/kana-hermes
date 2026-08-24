@@ -411,6 +411,8 @@ export function KanaApp({ appVersion }: KanaAppProps) {
               conversations={kana.conversations}
               activeId={kana.activeConversation?.id}
               disabled={kana.busy}
+              hermesSessions={kana.hermesSessions}
+              onAdopt={(key, title) => void kana.adoptHermesSession(key, title)}
               onCreate={createConversationFromModal}
               onSelect={selectConversationFromModal}
               onRename={renameConversationFromModal}
