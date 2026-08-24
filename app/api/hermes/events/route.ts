@@ -47,7 +47,13 @@ export async function GET(request: Request): Promise<Response> {
         });
       }
 
-      unsubscribe = subscribeHermesEvents((frame) => send("hermes", frame));
+      unsubscribe = subscribeHermesEvents((params) =>
+        // The bridge fan-out delivers the raw gateway event params
+        // ({type, session_id, payload}). Wrap it back into the JSON-RPC
+        // "event" frame shape the browser client expects (frame.method ===
+        // "event", frame.params) so handleFrame routes it correctly.
+        send("hermes", { jsonrpc: "2.0", method: "event", params }),
+      );
 
       heartbeat = setInterval(() => {
         if (closed) return;
