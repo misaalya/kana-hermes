@@ -531,24 +531,6 @@ export function useKanaController(appVersion: string) {
               : {}),
           },
         });
-        // Hermes owns the transcript. Always pull it on open so every
-        // browser sees the same history (IndexedDB is no longer the source).
-        {
-          setFetchingFromServer(true);
-          void loadHermesTranscript(
-            conversation.id,
-            event.persistentSessionId,
-          )
-            .catch((historyError) => {
-              reportError(
-                "agent",
-                historyError instanceof Error
-                  ? historyError.message
-                  : "Could not load chat history from Hermes.",
-              );
-            })
-            .finally(() => setFetchingFromServer(false));
-        }
         return;
       }
 
@@ -1738,6 +1720,42 @@ export function useKanaController(appVersion: string) {
       setFetchingFromServer(false);
     };
   }, [serverSessionKey]);
+
+  // Transcript restore: whenever we are connected and the open conversation
+  // is Hermes-linked with an empty local transcript (fresh browser, adopted
+  // session, or post-refresh), pull the real one from session.history.
+  const connected = connectionState === "connected";
+  const restoreKey = `${activeConversation?.id ?? "none"}:${connected ? 1 : 0}:${
+    activeConversation?.agent?.persistentSessionId ?? "none"
+  }:${activeConversation?.messages.length ?? 0}`;
+  useEffect(() => {
+    if (!connected) return;
+    const target = activeConversation;
+    if (!target) return;
+    if (target.messages.length > 0) return; // local already has it
+    if (!target.agent?.persistentSessionId) return; // never linked
+    let cancelled = false;
+    setFetchingFromServer(true);
+    loadHermesTranscript(target.id, target.agent.persistentSessionId)
+      .catch((historyError) => {
+        if (!cancelled)
+          recordFetchDebug(
+            "transcript restore failed",
+            `session.history session_id=${target.agent?.persistentSessionId}`,
+            "ERR",
+            historyError instanceof Error
+              ? historyError.message
+              : String(historyError),
+          );
+      })
+      .finally(() => {
+        if (!cancelled) setFetchingFromServer(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restoreKey]);
 
   const diagnostics = useMemo(
     () =>
