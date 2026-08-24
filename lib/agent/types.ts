@@ -208,6 +208,11 @@ export interface AgentClient {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   openSession(options: AgentSessionOptions): Promise<AgentSession>;
+  /**
+   * Queue a plain message while a turn is running; it is submitted
+   * automatically when the current turn completes (Telegram-parity).
+   */
+  enqueuePrompt(message: string, subtitleLanguage: string): void;
   sendMessage(input: AgentMessageInput): Promise<void>;
   executeCommand(input: AgentCommandInput): Promise<AgentCommandResult>;
   completeCommands(input: string): Promise<AgentCommandSuggestion[]>;
