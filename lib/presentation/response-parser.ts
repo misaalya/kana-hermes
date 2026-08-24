@@ -32,15 +32,31 @@ export function parseKanaResponse(
   rawResponse: string,
   expectedSubtitleLanguage?: string,
 ): KanaResponse {
+  const trimmed = rawResponse.trim();
+
+  // Graceful degradation: when Hermes answers in plain text instead of the
+  // Kana JSON envelope (the persona contract is advisory to the model), wrap
+  // it so the user still sees the answer instead of a silent failure.
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("```")) {
+    return {
+      speech_ja: trimmed,
+      subtitle: { text: trimmed, language: expectedSubtitleLanguage ?? "en" },
+      emotion: "neutral",
+    };
+  }
+
   let candidate: unknown;
 
   try {
     candidate = JSON.parse(unwrapJson(rawResponse));
   } catch {
-    throw new KanaProtocolError(
-      "Hermes returned text that is not valid Kana response JSON.",
-      rawResponse,
-    );
+    // Unparseable even though it looked envelope-ish — degrade rather than
+    // drop the turn.
+    return {
+      speech_ja: trimmed,
+      subtitle: { text: trimmed, language: expectedSubtitleLanguage ?? "en" },
+      emotion: "neutral",
+    };
   }
 
   if (!candidate || typeof candidate !== "object") {
