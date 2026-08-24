@@ -14,7 +14,7 @@
 // - Hermes gates most RPCs to one active session per connection; Kana is a
 //   single-user surface, so one shared connection matches the product model.
 
-import { managedRuntimePort, managedRuntimeToken } from "./local-hermes-runtime";
+import { managedRuntimePort, managedRuntimeToken, inspectLocalHermesRuntime } from "./local-hermes-runtime";
 
 type BridgeState = {
   socket: WebSocket | null;
@@ -98,7 +98,14 @@ export async function ensureHermesConnection(): Promise<WebSocket> {
   if (state.connectPromise) return state.connectPromise;
 
   const port = managedRuntimePort();
-  const token = managedRuntimeToken();
+  let token = managedRuntimeToken();
+  if (!token) {
+    // Hermes may have been started outside Kana (e.g. manually via
+    // `hermes serve`). Discovery reads the running process table and adopts
+    // its port + session token so the bridge can attach without a restart.
+    await inspectLocalHermesRuntime();
+    token = managedRuntimeToken();
+  }
   if (!token) {
     throw new Error(
       "Kana is not managing a Hermes gateway with a known session token. Start Hermes from Kana first.",
