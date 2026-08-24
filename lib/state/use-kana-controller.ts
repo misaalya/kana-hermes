@@ -180,6 +180,11 @@ export function useKanaController(appVersion: string) {
   const [error, setError] = useState<string | null>(null);
   const [lastError, setLastError] = useState<KanaErrorRecord | null>(null);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
+  // Server-side activity logs (SQLite via /api/kana/activities) for the open
+  // Hermes session — the cross-browser source of truth for past turns.
+  const [serverActivityTurns, setServerActivityTurns] = useState<
+    Array<{ turnAnchorMs: number; activities: ActivityItem[] }>
+  >([]);
   const [commandSuggestions, setCommandSuggestions] = useState<AgentCommandSuggestion[]>([]);
   const [commandSuggestionsLoading, setCommandSuggestionsLoading] = useState(false);
   const [pendingInput, setPendingInput] = useState<AgentInputRequest | null>(null);
@@ -403,6 +408,22 @@ export function useKanaController(appVersion: string) {
           ...conversation,
           messages: [...conversation.messages, assistantMessage],
         });
+        // Mirror the turn's activity log to the server-side store, anchored
+        // to this reply's timestamp. Best-effort: losing it only means the
+        // feed loses tool rows on a fresh browser, never chat content.
+        const hermesSessionKey = conversation.agent?.persistentSessionId;
+        if (hermesSessionKey && assistantMessage.activities?.length) {
+          void fetch("/api/kana/activities", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({
+              session: hermesSessionKey,
+              turnAnchorMs: assistantMessage.timestamp,
+              activities: assistantMessage.activities,
+            }),
+          }).catch(() => {});
+        }
         avatarController.presentEmotion(assistantMessage.emotion);
         if (preferencesRef.current.voiceEnabled) {
           void getVoice()
@@ -1405,6 +1426,29 @@ export function useKanaController(appVersion: string) {
   // ---- Diagnostics ----
   const activeConversation =
     conversations.find((item) => item.id === activeConversationId) ?? null;
+
+  // Load the server-side activity log whenever the open conversation's Hermes
+  // session changes. Best-effort: an empty result just means no stored turns.
+  const serverSessionKey = activeConversation?.agent?.persistentSessionId ?? null;
+  useEffect(() => {
+    if (!serverSessionKey) {
+      setServerActivityTurns([]);
+      return;
+    }
+    let cancelled = false;
+    void fetch(`/api/kana/activities?session=${encodeURIComponent(serverSessionKey)}`, {
+      credentials: "same-origin",
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { turns?: Array<{ turnAnchorMs: number; activities: ActivityItem[] }> } | null) => {
+        if (!cancelled && data?.turns) setServerActivityTurns(data.turns);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [serverSessionKey]);
+
   const diagnostics = useMemo(
     () =>
       serializeKanaDiagnostics({
@@ -1473,6 +1517,7 @@ export function useKanaController(appVersion: string) {
     voiceRuntimeState,
     voiceCanReplay,
     activities,
+    serverActivityTurns,
     avatar,
     commandSuggestions,
     commandSuggestionsLoading,

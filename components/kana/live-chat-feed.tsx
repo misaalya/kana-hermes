@@ -5,9 +5,16 @@ import type { ActivityItem } from "@/lib/state/use-kana-controller";
 import type { KanaMessage } from "@/lib/conversation/types";
 import { ActivityStack } from "./activity-stack";
 
+type ServerActivityTurn = {
+  turnAnchorMs: number;
+  activities: ActivityItem[];
+};
+
 type LiveChatFeedProps = {
   messages: KanaMessage[];
   activities: ActivityItem[];
+  /** Stored per-turn logs from the server-side store (cross-browser). */
+  serverActivityTurns?: ServerActivityTurn[];
   busy: boolean;
   status: string;
 };
@@ -35,26 +42,40 @@ function formatTime(timestamp: number): string {
 export const LiveChatFeed = memo(function LiveChatFeed({
   messages,
   activities,
+  serverActivityTurns = [],
   busy,
   status,
 }: LiveChatFeedProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [pinnedToBottom, setPinnedToBottom] = useState(true);
 
-  // Merge persisted messages and this turn's live activities into one
-  // chronological timeline. Persisted per-turn activity logs ride on their
-  // assistant message (restored after refresh); the running turn's live
-  // activities attach after the last user message. Messages keep stored order.
+  // Merge persisted messages and activity logs into one chronological
+  // timeline. Sources, deduped by turn anchor:
+  // - assistant messages carry their turn's activities (IndexedDB snapshot);
+  // - server turns carry the same logs cross-browser. A server turn whose
+  //   anchor matches a message's timestamp is skipped — the message already
+  //   has the log;
+  // - live activities attach after the last user message (running turn).
   const entries = useMemo<FeedEntry[]>(() => {
     const timeline: FeedEntry[] = [];
+    const anchored = new Set<number>();
     for (const message of messages) {
       if (message.role !== "system") {
         timeline.push({ kind: "message", at: message.timestamp, message });
       }
       if (message.activities?.length) {
+        anchored.add(message.timestamp);
         const at = [...timeline].at(-1)?.at ?? message.timestamp;
         timeline.push({ kind: "activity", at, activities: message.activities });
       }
+    }
+    for (const turn of serverActivityTurns) {
+      if (!turn.activities.length || anchored.has(turn.turnAnchorMs)) continue;
+      timeline.push({
+        kind: "activity",
+        at: turn.turnAnchorMs,
+        activities: turn.activities,
+      });
     }
     if (activities.length) {
       const lastUser = [...timeline]
@@ -64,7 +85,7 @@ export const LiveChatFeed = memo(function LiveChatFeed({
       timeline.push({ kind: "activity", at: attachAt, activities });
     }
     return timeline.sort((a, b) => a.at - b.at);
-  }, [messages, activities]);
+  }, [messages, activities, serverActivityTurns]);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     const node = scrollRef.current;

@@ -60,3 +60,6 @@ reference/
 .playwright-mcp/
 /*.png
 /snapshot.txt
+
+# Server-side activity store (SQLite)
+.kana/

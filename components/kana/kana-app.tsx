@@ -291,6 +291,7 @@ export function KanaApp({ appVersion }: KanaAppProps) {
           <LiveChatFeed
             messages={kana.activeConversation?.messages ?? NO_MESSAGES}
             activities={kana.activities}
+            serverActivityTurns={kana.serverActivityTurns}
             busy={kana.busy}
             status={kana.status}
           />
