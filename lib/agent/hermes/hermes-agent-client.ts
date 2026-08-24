@@ -392,6 +392,31 @@ export class HermesAgentClient implements AgentClient {
     this.queuedPrompts.push({ message, subtitleLanguage });
   }
 
+  async fetchHistory(hermesSessionKey: string): Promise<{
+    messages?: Array<{
+      role: string;
+      text?: string;
+      name?: string;
+      context?: string;
+      timestamp?: number;
+    }>;
+  }> {
+    return this.request<{
+      messages?: Array<{
+        role: string;
+        text?: string;
+        name?: string;
+        context?: string;
+        timestamp?: number;
+      }>;
+    }>(
+      "session.history",
+      // The gateway resolves stored sessions by their durable key on resume.
+      { session_id: hermesSessionKey },
+      60_000,
+    );
+  }
+
   async executeCommand(input: AgentCommandInput): Promise<AgentCommandResult> {
     if (!this.session) {
       throw new Error("Open a Hermes session before running a command.");
