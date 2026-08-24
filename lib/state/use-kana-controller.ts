@@ -21,7 +21,7 @@ import {
   parseKanaBackup,
   serializeKanaBackup,
 } from "@/lib/backup/kana-backup";
-import { IndexedDbConversationStore } from "@/lib/conversation/indexed-db-conversation-store";
+import { MemoryConversationStore } from "@/lib/conversation/memory-conversation-store";
 import {
   createId,
   type Conversation,
@@ -156,7 +156,7 @@ function toolTitle(kind: AgentToolKind, tool: string): string {
 export function useKanaController(appVersion: string) {
   // ---- Stable instances ----
   const conversationStore = useMemo(
-    () => new IndexedDbConversationStore(),
+    () => new MemoryConversationStore(),
     [],
   );
   const avatarModelStore = useMemo(
@@ -919,15 +919,10 @@ export function useKanaController(appVersion: string) {
     const storedPreferences = preferencesStore.load();
 
     initializationRef.current ??= (async () => {
-      let storedConversations = await conversationStore.list();
-      if (!storedConversations.length) {
-        storedConversations = [
-          await conversationStore.create({
-            title: "First meeting",
-            subtitleLanguage: storedPreferences.subtitleLanguage,
-          }),
-        ];
-      }
+      // Conversations live in Hermes; the in-memory store starts empty and is
+      // hydrated from /api/kana/sessions once the agent connects
+      // (see connectAgent). No "First meeting" stub — that was IndexedDB-era.
+      const storedConversations: Conversation[] = [];
       const storageWarning = [
         preferencesStore.consumeWarning(),
         conversationStore.consumeWarning(),
@@ -1537,6 +1532,45 @@ export function useKanaController(appVersion: string) {
       }
 
       await ensureAgent(conversation);
+      // Hydrate the session directory from Hermes: every kana-originated
+      // session becomes a local handle so the sidebar is identical across
+      // browsers. Transcripts load lazily via loadHermesTranscript on open.
+      try {
+        const directory = (await fetch("/api/kana/sessions", {
+          credentials: "same-origin",
+        }).then((response) => (response.ok ? response.json() : null))) as {
+          sessions?: Array<{
+            hermesSessionKey: string;
+            title: string;
+            messageCount: number;
+            startedAt: number;
+          }>;
+        } | null;
+        const remote = directory?.sessions ?? [];
+        const known = new Set(
+          conversationsRef.current
+            .map((item) => item.agent?.persistentSessionId)
+            .filter(Boolean) as string[],
+        );
+        for (const entry of remote) {
+          if (known.has(entry.hermesSessionKey)) continue;
+          const created = await conversationStore.create({
+            title: entry.title || "Untitled",
+            subtitleLanguage: preferencesRef.current.subtitleLanguage,
+          });
+          await saveConversation({
+            ...created,
+            agent: {
+              provider: "hermes",
+              persistentSessionId: entry.hermesSessionKey,
+              status: "linked",
+              relationship: "primary",
+            },
+          });
+        }
+      } catch {
+        /* directory hydration is best-effort */
+      }
       setStatus("Connected to Hermes");
     } catch (connectError) {
       reportError(
