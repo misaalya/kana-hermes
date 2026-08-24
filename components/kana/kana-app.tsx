@@ -37,7 +37,11 @@ export function KanaApp({ appVersion }: KanaAppProps) {
   const { theme, toggleTheme } = useTheme();
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
+  // Independent modals: chat transcript vs. Hermes session list. Opening one
+  // must never drag the other along (the old shared `historyOpen` flag stacked
+  // a bottom sheet and a right drawer on top of each other).
+  const [messagesOpen, setMessagesOpen] = useState(false);
+  const [sessionsOpen, setSessionsOpen] = useState(false);
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
   const [hermesRuntime, setHermesRuntime] = useState<HermesRuntimeStatus | null>(null);
   const [hermesRuntimeNotice, setHermesRuntimeNotice] = useState<string | null>(null);
@@ -191,25 +195,25 @@ export function KanaApp({ appVersion }: KanaAppProps) {
     clearCommandSuggestions();
   }, [clearCommandSuggestions, setMessage]);
 
-  const closeHistory = useCallback(() => setHistoryOpen(false), []);
+  const closeMessages = useCallback(() => setMessagesOpen(false), []);
+  const closeSessions = useCallback(() => setSessionsOpen(false), []);
   const createConversation = kana.createConversation;
   const selectConversation = kana.selectConversation;
   const renameConversation = kana.renameConversation;
   const deleteConversation = kana.deleteConversation;
-  const createConversationFromSidebar = useCallback(() => {
+  const createConversationFromModal = useCallback(() => {
     void createConversation();
-    setHistoryOpen(false);
+    setSessionsOpen(false);
   }, [createConversation]);
-  const selectConversationFromSidebar = useCallback((id: string) => {
+  const selectConversationFromModal = useCallback((id: string) => {
     selectConversation(id);
-    setHistoryOpen(false);
+    setSessionsOpen(false);
   }, [selectConversation]);
-  const renameConversationFromSidebar = useCallback((id: string, title: string) => {
+  const renameConversationFromModal = useCallback((id: string, title: string) => {
     void renameConversation(id, title);
   }, [renameConversation]);
-  const deleteConversationFromSidebar = useCallback((id: string) => {
+  const deleteConversationFromModal = useCallback((id: string) => {
     void deleteConversation(id);
-    setHistoryOpen(false);
   }, [deleteConversation]);
 
   const submitMessage = useCallback(async () => {
@@ -270,7 +274,10 @@ export function KanaApp({ appVersion }: KanaAppProps) {
       {/* Top-right icon row — the only chrome over the avatar */}
       <div className="absolute right-3 top-3 z-20 flex gap-1.5">
         {themeToggle}
-        <button type="button" className={topActionIcon} onClick={() => { setHistoryOpen(true); }} aria-label="Open conversation history">
+        <button type="button" className={topActionIcon} onClick={() => { setMessagesOpen(true); }} aria-label="Open message history">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3"><path d="M14.5 8A6.5 6.5 0 1 1 8 1.5c3.2 0 6.5 2.4 6.5 6.5Z"/><path d="M5 7h6M5 9.5h4" strokeLinecap="round"/></svg>
+        </button>
+        <button type="button" className={topActionIcon} onClick={() => { setSessionsOpen(true); }} aria-label="Open session history">
           <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3"><rect x="1.5" y="3" width="13" height="11" rx="2"/><line x1="1.5" y1="6.5" x2="14.5" y2="6.5"/><line x1="5" y1="3" x2="5" y2="1.5"/><line x1="11" y1="3" x2="11" y2="1.5"/></svg>
         </button>
         <button type="button" className={topActionIcon} onClick={() => setSettingsOpen(true)} aria-label="Open settings">
@@ -367,38 +374,54 @@ export function KanaApp({ appVersion }: KanaAppProps) {
         </div>
       </section>
 
-      {/* Message history (bottom sheet) */}
-      {historyOpen ? (
-        <section
-          className="fixed inset-x-0 bottom-0 z-30 flex h-[70dvh] flex-col rounded-t-3xl border-t border-line bg-raised p-4"
+      {/* Message history modal */}
+      {messagesOpen ? (
+        <div
+          className="fixed inset-0 z-30 grid place-items-center bg-black/40 p-4 backdrop-blur-sm"
           role="dialog"
+          aria-modal="true"
           aria-label="Message history"
+          onClick={closeMessages}
         >
-          <header className="mb-2 flex items-center justify-between">
-            <span className="text-[11px] font-bold tracking-wider text-ink-dim uppercase">Messages</span>
-            <button type="button" className={topActionIcon} aria-label="Close history" onClick={closeHistory}>×</button>
-          </header>
-          <DialogueHistory messages={kana.activeConversation?.messages ?? NO_MESSAGES} />
-        </section>
+          <section
+            className="flex h-[min(70dvh,560px)] w-full max-w-lg flex-col rounded-3xl border border-line bg-raised p-4 shadow-xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="mb-2 flex items-center justify-between">
+              <span className="text-[11px] font-bold tracking-wider text-ink-dim uppercase">Messages</span>
+              <button type="button" className={topActionIcon} aria-label="Close message history" onClick={closeMessages}>×</button>
+            </header>
+            <DialogueHistory messages={kana.activeConversation?.messages ?? NO_MESSAGES} />
+          </section>
+        </div>
       ) : null}
 
-      {/* Conversations panel (right drawer, layered above messages) */}
-      <aside
-        className={`fixed inset-y-0 right-0 z-40 w-[min(340px,100vw)] border-l border-line bg-raised p-4 transition-transform duration-200 ${historyOpen ? "translate-x-0" : "translate-x-[102%]"}`}
-        aria-hidden={!historyOpen}
-        inert={historyOpen ? undefined : true}
-      >
-        <ConversationSidebar
-          conversations={kana.conversations}
-          activeId={kana.activeConversation?.id}
-          disabled={kana.busy}
-          onCreate={createConversationFromSidebar}
-          onSelect={selectConversationFromSidebar}
-          onRename={renameConversationFromSidebar}
-          onDelete={deleteConversationFromSidebar}
-          onClose={closeHistory}
-        />
-      </aside>
+      {/* Session history modal */}
+      {sessionsOpen ? (
+        <div
+          className="fixed inset-0 z-30 grid place-items-center bg-black/40 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Session history"
+          onClick={closeSessions}
+        >
+          <section
+            className="flex h-[min(70dvh,560px)] w-full max-w-md flex-col overflow-hidden rounded-3xl border border-line bg-raised p-4 shadow-xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <ConversationSidebar
+              conversations={kana.conversations}
+              activeId={kana.activeConversation?.id}
+              disabled={kana.busy}
+              onCreate={createConversationFromModal}
+              onSelect={selectConversationFromModal}
+              onRename={renameConversationFromModal}
+              onDelete={deleteConversationFromModal}
+              onClose={closeSessions}
+            />
+          </section>
+        </div>
+      ) : null}
 
       {/* Gate modal — overlay when Hermes is not connected */}
       {showGate ? (
