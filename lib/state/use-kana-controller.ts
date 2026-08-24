@@ -51,16 +51,12 @@ import {
 import { useAvatarController } from "./use-avatar-controller";
 import { useVoiceController } from "./use-voice-controller";
 
-export type ActivityItem = {
-  id: string;
-  tool?: string;
-  kind: AgentToolKind | "status" | "input";
-  title: string;
-  detail?: string;
-  state: "running" | "complete" | "attention";
-  timestamp: number;
-  durationMs?: number;
-};
+export type { ActivityItem } from "@/lib/agent/types";
+import type { ActivityItem } from "@/lib/agent/types";
+
+// Activities captured during the current turn; snapshotted onto the assistant
+// message when the turn completes so tool history survives a page refresh.
+const turnActivitiesRef: { current: ActivityItem[] } = { current: [] };
 
 const KANA_COMMAND_SUGGESTIONS: AgentCommandSuggestion[] = [
   {
@@ -317,6 +313,16 @@ export function useKanaController(appVersion: string) {
 
   // ---- Activities ----
   const addActivity = useCallback((activity: ActivityItem) => {
+    // Mirror into the per-turn log: the snapshot lands on the assistant
+    // message at turn end, so tool history survives page refreshes.
+    const existingIndex = turnActivitiesRef.current.findIndex(
+      (item) => item.id === activity.id,
+    );
+    if (existingIndex === -1) {
+      turnActivitiesRef.current.push(activity);
+    } else {
+      turnActivitiesRef.current[existingIndex] = activity;
+    }
     setActivities((current) => {
       const existing = current.find((item) => item.id === activity.id);
       if (!existing) return [activity, ...current].slice(0, 40);
@@ -389,6 +395,9 @@ export function useKanaController(appVersion: string) {
           subtitle: { ...event.response.subtitle },
           emotion: event.response.emotion ?? "neutral",
           timestamp: Date.now(),
+          // Persist the tool activity log for this turn so the live-chat feed
+          // can restore it after a page refresh.
+          activities: [...turnActivitiesRef.current],
         };
         await saveConversation({
           ...conversation,
@@ -504,6 +513,8 @@ export function useKanaController(appVersion: string) {
 
       if (event.type === "agent.started") {
         turnStartedAtRef.current = monotonicNow();
+        // Fresh activity log for this turn.
+        turnActivitiesRef.current = [];
         setBusy(true);
         setError(null);
         setStatus("Kana is thinking");

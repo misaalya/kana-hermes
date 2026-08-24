@@ -13,6 +13,8 @@ export type KanaMessage = {
   subtitle?: Subtitle;
   emotion?: Emotion;
   timestamp: number;
+  /** Tool activity log for the turn that produced this assistant reply. */
+  activities?: import("@/lib/agent/types").ActivityItem[];
 };
 
 export type ConversationAgentLink = {

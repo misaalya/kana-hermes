@@ -42,17 +42,25 @@ export const LiveChatFeed = memo(function LiveChatFeed({
   const [pinnedToBottom, setPinnedToBottom] = useState(true);
 
   // Merge persisted messages and this turn's live activities into one
-  // chronological timeline. Activities attach after the last user message
-  // (they belong to the running turn); messages keep their stored order.
+  // chronological timeline. Persisted per-turn activity logs ride on their
+  // assistant message (restored after refresh); the running turn's live
+  // activities attach after the last user message. Messages keep stored order.
   const entries = useMemo<FeedEntry[]>(() => {
-    const timeline: FeedEntry[] = messages
-      .filter((message) => message.role !== "system")
-      .map((message) => ({ kind: "message" as const, at: message.timestamp, message }));
-    const lastUser = [...timeline]
-      .reverse()
-      .find((entry) => entry.kind === "message" && entry.message.role === "user");
-    const attachAt = (lastUser?.at ?? 0) + 0.5;
+    const timeline: FeedEntry[] = [];
+    for (const message of messages) {
+      if (message.role !== "system") {
+        timeline.push({ kind: "message", at: message.timestamp, message });
+      }
+      if (message.activities?.length) {
+        const at = [...timeline].at(-1)?.at ?? message.timestamp;
+        timeline.push({ kind: "activity", at, activities: message.activities });
+      }
+    }
     if (activities.length) {
+      const lastUser = [...timeline]
+        .reverse()
+        .find((entry) => entry.kind === "message" && entry.message.role === "user");
+      const attachAt = (lastUser?.at ?? 0) + 0.5;
       timeline.push({ kind: "activity", at: attachAt, activities });
     }
     return timeline.sort((a, b) => a.at - b.at);
