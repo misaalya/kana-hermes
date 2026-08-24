@@ -12,7 +12,12 @@ import type {
   AgentSession,
   AgentSessionOptions,
 } from "@/lib/agent/types";
-import { buildKanaSystemPrompt, buildKanaUserPrompt } from "@/lib/presentation/persona";
+import {
+  buildKanaResumeSeedPrefix,
+  buildKanaSystemPrompt,
+  buildKanaUserPrompt,
+} from "@/lib/presentation/persona";
+import type { SubtitleLanguage } from "@/lib/presentation/types";
 import {
   KanaProtocolError,
   parseKanaResponse,
@@ -139,6 +144,12 @@ export class HermesAgentClient implements AgentClient {
   private session: AgentSession | null = null;
   private sessionOptions: AgentSessionOptions | null = null;
   private expectedSubtitleLanguage = "en";
+  // Language captured at openSession time; the one-shot resume seed needs it
+  // because submitPrompt's own language argument applies to that turn only.
+  private sessionSubtitleLanguage: SubtitleLanguage = "en";
+  // One-shot flag: restate the response contract on the first prompt after
+  // resuming a session (resumed history carries no system seed).
+  private needsResumeSeed = false;
   private intentionallyClosing = false;
   private running = false;
   private recoveringTurn = false;
@@ -288,6 +299,10 @@ export class HermesAgentClient implements AgentClient {
           source: "kana",
           close_on_disconnect: false,
         });
+        // Resumed history is restored by Hermes from its DB without any
+        // client-supplied system message, so the response contract must be
+        // re-stated once on the next prompt (see submitPrompt).
+        this.needsResumeSeed = true;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         if (/session not found/i.test(message)) {
@@ -303,9 +318,10 @@ export class HermesAgentClient implements AgentClient {
         source: "kana",
         close_on_disconnect: false,
         ...(options.cwd ? { cwd: options.cwd } : {}),
-        // Best-effort: the gateway currently ignores client-seeded system
-        // messages, so the binding contract rides on each user prompt
-        // (see buildKanaUserPrompt).
+        // Verified against hermes serve: a client-seeded system message rides
+        // into the model's conversation history and is honored for the
+        // lifetime of the session, even though the gateway does not persist it
+        // as a formal system prompt.
         messages: [
           {
             role: "system",
@@ -313,7 +329,9 @@ export class HermesAgentClient implements AgentClient {
           },
         ],
       });
+      this.needsResumeSeed = false;
     }
+    this.sessionSubtitleLanguage = options.subtitleLanguage;
 
     const persistentSessionId =
       response.stored_session_id ??
@@ -351,19 +369,6 @@ export class HermesAgentClient implements AgentClient {
       }
     }
     this.recoverResumedTurn(response);
-    // Plan B contract enforcement: the gateway ignores client-seeded system
-    // messages, so the Kana persona rides on Hermes's personality-overlay
-    // mechanism instead. The "kana" personality is defined once in the user's
-    // config.yaml (agent.personalities.kana); applying it here sets the
-    // agent's ephemeral_system_prompt for this session, which Hermes appends
-    // to the system prompt at every API call. Best-effort: if it fails (older
-    // gateway, missing personality), the per-turn user prompt metadata and
-    // the graceful parser degradation still carry the UX.
-    void this.request("config.set", {
-      key: "personality",
-      value: "kana",
-      session_id: this.session.sessionId,
-    }).catch(() => {});
     return this.session;
   }
 
@@ -841,12 +846,22 @@ export class HermesAgentClient implements AgentClient {
       throw new Error("Open a Hermes session before sending a message.");
     }
     this.expectedSubtitleLanguage = subtitleLanguage;
+    // One-shot: the first prompt after resuming carries the response contract,
+    // because resumed history is restored by Hermes without any system seed.
+    const text = this.needsResumeSeed
+      ? [
+          buildKanaResumeSeedPrefix(this.sessionSubtitleLanguage),
+          "",
+          buildKanaUserPrompt(message, subtitleLanguage),
+        ].join("\n\n")
+      : buildKanaUserPrompt(message, subtitleLanguage);
+    this.needsResumeSeed = false;
     this.running = true;
     this.emit({ type: "agent.started" });
     try {
       await this.request("prompt.submit", {
         session_id: this.session.sessionId,
-        text: buildKanaUserPrompt(message, subtitleLanguage),
+        text,
       });
     } catch (error) {
       this.running = false;
