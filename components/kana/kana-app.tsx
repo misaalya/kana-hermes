@@ -295,7 +295,15 @@ export function KanaApp({ appVersion }: KanaAppProps) {
 
       {/* Composer */}
       <section className="absolute inset-x-0 bottom-0 z-20 px-4 pb-4">
-        <div className="mx-auto flex w-full max-w-3xl items-end gap-2 rounded-3xl border border-line bg-raised/85 p-2 backdrop-blur-md">
+        <div className="relative mx-auto w-full max-w-3xl">
+          <SlashCommandMenu
+            suggestions={kana.commandSuggestions}
+            loading={kana.commandSuggestionsLoading}
+            selectedIndex={activeCommandIndex}
+            onHighlight={highlightCommand}
+            onSelect={selectCommand}
+          />
+          <div className="flex items-end gap-2 rounded-3xl border border-line bg-raised/85 p-2 backdrop-blur-md">
           <textarea
             ref={inputRef}
             value={message}
@@ -305,6 +313,30 @@ export function KanaApp({ appVersion }: KanaAppProps) {
             className="max-h-36 min-h-11 flex-1 resize-none bg-transparent px-2 py-2.5 text-[15px] leading-snug text-ink placeholder:text-faint focus:outline-none"
             onChange={(event) => setMessage(event.target.value)}
             onKeyDown={(event) => {
+              if (kana.commandSuggestions.length > 0) {
+                if (event.key === "ArrowDown") {
+                  event.preventDefault();
+                  highlightCommand((activeCommandIndex + 1) % kana.commandSuggestions.length);
+                  return;
+                }
+                if (event.key === "ArrowUp") {
+                  event.preventDefault();
+                  highlightCommand(
+                    (activeCommandIndex - 1 + kana.commandSuggestions.length) % kana.commandSuggestions.length,
+                  );
+                  return;
+                }
+                if (event.key === "Tab") {
+                  event.preventDefault();
+                  setMessage(kana.commandSuggestions[activeCommandIndex]?.text ?? message);
+                  return;
+                }
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  clearCommandSuggestions();
+                  return;
+                }
+              }
               if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                 event.preventDefault();
                 void submitMessage();
@@ -331,6 +363,7 @@ export function KanaApp({ appVersion }: KanaAppProps) {
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M2.5 8L13.5 2.5 10.5 8l3 5.5L2.5 8z"/></svg>
             </button>
           )}
+          </div>
         </div>
       </section>
 
