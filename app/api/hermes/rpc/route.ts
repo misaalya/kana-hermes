@@ -23,6 +23,7 @@ const ALLOWED_METHODS = new Set([
   "session.title",
   "session.branch",
   "session.save",
+  "session.history",
   "session.status",
   "session.compress",
   "session.steer",

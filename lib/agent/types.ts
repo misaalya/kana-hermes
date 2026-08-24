@@ -213,6 +213,19 @@ export interface AgentClient {
    * automatically when the current turn completes (Telegram-parity).
    */
   enqueuePrompt(message: string, subtitleLanguage: string): void;
+  /**
+   * Fetch the persisted transcript of a stored Hermes session
+   * (session.history relayed server-side).
+   */
+  fetchHistory(hermesSessionKey: string): Promise<{
+    messages?: Array<{
+      role: string;
+      text?: string;
+      name?: string;
+      context?: string;
+      timestamp?: number;
+    }>;
+  }>;
   sendMessage(input: AgentMessageInput): Promise<void>;
   executeCommand(input: AgentCommandInput): Promise<AgentCommandResult>;
   completeCommands(input: string): Promise<AgentCommandSuggestion[]>;
