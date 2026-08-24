@@ -32,8 +32,10 @@ after(() => {
 
 describe("local qwen3-tts runtime", () => {
   it("reports stopped when no service answers on any candidate port", async () => {
-    __setTestTtsPort(healthPort + 50); // an almost-certainly closed loopback port
-    const status = await inspectLocalQwen3TtsRuntime(healthPort + 51);
+    // Null the default-port candidate so the test never sees a real service
+    // that may be running on the host's 7860.
+    __setTestTtsPort(null);
+    const status = await inspectLocalQwen3TtsRuntime(healthPort + 50);
     // Either stopped or failed is acceptable depending on prior state in this
     // shared global; the key assertion is that it is NOT running/external.
     assert.ok(!["running", "external"].includes(status.state), status.message);

@@ -49,9 +49,11 @@ function runtime(): ManagedRuntime {
   return shared[runtimeKey];
 }
 
-/** Test hook: install a known port without spawning a process. */
-export const __setTestTtsPort = (port: number): void => {
-  runtime().port = port;
+/** Test hook: install a known port without spawning a process. Passing null
+ * also removes the DEFAULT_TTS_PORT fallback candidate so tests stay
+ * independent of whatever happens to listen on the host's real 7860. */
+export const __setTestTtsPort = (port: number | null): void => {
+  runtime().port = port ?? 0;
 };
 
 function publicStatus(current: ManagedRuntime): LocalQwen3TtsRuntimeStatus {
@@ -120,8 +122,16 @@ export async function inspectLocalQwen3TtsRuntime(
     return publicStatus(current);
   }
 
-  // External instance already running on the default (or preferred) port?
-  const candidates = [preferredPort, DEFAULT_TTS_PORT, current.port].filter(
+  // External instance already running on the preferred or configured port?
+  // When a test nulls the configured port (0), the DEFAULT_TTS_PORT fallback
+  // is skipped so tests stay independent of the host's real 7860.
+  const candidates = [
+    preferredPort,
+    current.port >= 1024 ? current.port : undefined,
+    // DEFAULT_TTS_PORT only applies while the configured port is untouched;
+    // a test that nulls it (port 0) must never probe the host's real 7860.
+    runtime().port === DEFAULT_TTS_PORT ? DEFAULT_TTS_PORT : undefined,
+  ].filter(
     (value): value is number =>
       typeof value === "number" &&
       Number.isInteger(value) &&
