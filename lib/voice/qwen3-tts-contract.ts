@@ -82,7 +82,12 @@ export function normalizeQwen3TTSBaseUrl(value: string): string {
 }
 
 export function qwen3TTSUrl(baseUrl: string, path: string): string {
-  return `${normalizeQwen3TTSBaseUrl(baseUrl)}${path}`;
+  // The browser never talks to the Python service directly. All requests go
+  // through Kana's server-side relay so the service's loopback address and
+  // port stay private to the server process (mirrors the Hermes token rule).
+  // The baseUrl argument is retained for call-site compatibility but ignored.
+  void normalizeQwen3TTSBaseUrl(baseUrl);
+  return `/api/voice/tts${path}`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
