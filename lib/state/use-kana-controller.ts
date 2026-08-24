@@ -1233,11 +1233,12 @@ export function useKanaController(appVersion: string) {
       const existing = conversationsRef.current.find(
         (item) => item.agent?.persistentSessionId === hermesSessionKey,
       );
+      turnActivitiesRef.current = [];
+      setActivities([]);
       if (existing) {
         activeConversationIdRef.current = existing.id;
         setActiveConversationId(existing.id);
         openedConversationRef.current = null;
-        setActivities([]);
         return;
       }
       const created = await conversationStore.create({
@@ -1268,6 +1269,7 @@ export function useKanaController(appVersion: string) {
       setActiveConversationId(id);
       openedConversationRef.current = null;
       setActivities([]);
+      turnActivitiesRef.current = [];
       setError(null);
       cleanupVoice();
       avatarController.presentEmotion("neutral");
