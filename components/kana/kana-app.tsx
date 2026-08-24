@@ -228,7 +228,7 @@ export function KanaApp({ appVersion }: KanaAppProps) {
   }, [kana, message, setMessage]);
 
   const topActionIcon =
-    "grid size-8 place-items-center rounded-full border border-line bg-raised text-ink-dim transition-colors hover:border-accent hover:text-accent-strong";
+    "grid size-8 place-items-center rounded-lg border border-line bg-raised text-ink-dim transition-colors hover:border-accent hover:text-accent-strong";
 
   const themeToggle = (
     <button type="button" className={topActionIcon} onClick={toggleTheme} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}>
@@ -356,7 +356,7 @@ export function KanaApp({ appVersion }: KanaAppProps) {
             <button
               type="button"
               aria-label="Stop"
-              className="grid size-10 shrink-0 place-items-center rounded-2xl border border-line-strong text-muted transition-colors hover:border-danger hover:text-danger"
+              className="grid size-10 shrink-0 place-items-center rounded-lg border border-line-strong text-muted transition-colors hover:border-danger hover:text-danger"
               onClick={() => void kana.abort()}
             >
               <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="3" width="10" height="10" rx="2" /></svg>
@@ -366,7 +366,7 @@ export function KanaApp({ appVersion }: KanaAppProps) {
               type="button"
               aria-label="Send"
               disabled={!message.trim() || (kana.busy && !canSubmitWhileBusy)}
-              className="grid size-10 shrink-0 place-items-center rounded-2xl bg-accent text-on-accent transition-opacity disabled:opacity-40"
+              className="grid size-10 shrink-0 place-items-center rounded-lg bg-accent text-on-accent transition-opacity disabled:opacity-40"
               onClick={() => void submitMessage()}
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M2.5 8L13.5 2.5 10.5 8l3 5.5L2.5 8z"/></svg>
