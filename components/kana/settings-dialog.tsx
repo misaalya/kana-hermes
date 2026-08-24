@@ -17,6 +17,7 @@ import {
 import { useDialogFocus } from "@/lib/accessibility/use-dialog-focus";
 import { HermesControlPanel } from "./hermes-control-panel";
 import { TtsControlPanel } from "./tts-control-panel";
+import { VoicePanel } from "./voice-panel";
 import { inspectTtsRuntime, controlTtsRuntime } from "@/lib/runtime/tts-control-client";
 import { SubtitleLanguagePicker } from "./subtitle-language-picker";
 import { btnGhost, btnPrimary, btnSecondary, bentoCard, btnDangerGhost, inputBase, fieldLabel } from "./ui";
@@ -138,6 +139,9 @@ export function SettingsDialog({
   preferences,
   onSave,
   onClose,
+  onInspectVoice,
+  onCloneVoice,
+  onDeleteClonedVoice,
   onInspectHermesControl,
   onStartHermesControl,
   onStopHermesControl,
@@ -195,6 +199,23 @@ export function SettingsDialog({
                 <span className={`absolute top-1/2 size-3.5 -translate-y-1/2 rounded-full transition-all ${draft.voiceEnabled ? "left-[22px] bg-on-accent" : "left-1 bg-muted"}`} />
               </button>
             </div>
+
+            {draft.voiceEnabled && (
+              <div className={`${bentoCard} flex flex-col gap-3`}>
+                <VoicePanel
+                  selectedVoiceId={draft.qwen3Tts.voiceId}
+                  onVoiceSelect={(voiceId) =>
+                    setDraft((prev) => ({ ...prev, qwen3Tts: { ...prev.qwen3Tts, voiceId } }))
+                  }
+                  onInspect={() => onInspectVoice(draft.qwen3Tts.baseUrl)}
+                  onClone={(input) => onCloneVoice(draft.qwen3Tts.baseUrl, input)}
+                  onDeleteCloned={(voiceId) => onDeleteClonedVoice(draft.qwen3Tts.baseUrl, voiceId)}
+                />
+                <p className="text-[10px] text-faint">
+                  Perubahan suara tersimpan saat kamu menekan Done.
+                </p>
+              </div>
+            )}
 
             <div className={`${bentoCard} flex items-center justify-between`}>
               <div>
