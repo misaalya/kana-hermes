@@ -59,22 +59,30 @@ export const LiveChatFeed = memo(function LiveChatFeed({
   const entries = useMemo<FeedEntry[]>(() => {
     const timeline: FeedEntry[] = [];
     const anchored = new Set<number>();
+    // A "running" state is only meaningful while the turn is live. Persisted
+    // copies (IndexedDB snapshot + server store) may still contain one when a
+    // turn never finished cleanly — they would render as phantom spinners
+    // forever, so strip them everywhere history is restored.
+    const settled = (items: ActivityItem[]) =>
+      items.filter((item) => item.state !== "running");
     for (const message of messages) {
       if (message.role !== "system") {
         timeline.push({ kind: "message", at: message.timestamp, message });
       }
-      if (message.activities?.length) {
+      const logged = message.activities ? settled(message.activities) : [];
+      if (logged.length) {
         anchored.add(message.timestamp);
         const at = [...timeline].at(-1)?.at ?? message.timestamp;
-        timeline.push({ kind: "activity", at, activities: message.activities });
+        timeline.push({ kind: "activity", at, activities: logged });
       }
     }
     for (const turn of serverActivityTurns) {
-      if (!turn.activities.length || anchored.has(turn.turnAnchorMs)) continue;
+      const logged = settled(turn.activities);
+      if (!logged.length || anchored.has(turn.turnAnchorMs)) continue;
       timeline.push({
         kind: "activity",
         at: turn.turnAnchorMs,
-        activities: turn.activities,
+        activities: logged,
       });
     }
     if (activities.length) {
