@@ -16,6 +16,8 @@ import {
 } from "@/lib/runtime/auth-client";
 import { useDialogFocus } from "@/lib/accessibility/use-dialog-focus";
 import { HermesControlPanel } from "./hermes-control-panel";
+import { TtsControlPanel } from "./tts-control-panel";
+import { inspectTtsRuntime, controlTtsRuntime } from "@/lib/runtime/tts-control-client";
 import { SubtitleLanguagePicker } from "./subtitle-language-picker";
 import { btnGhost, btnPrimary, btnSecondary, bentoCard, btnDangerGhost, inputBase, fieldLabel } from "./ui";
 
@@ -231,6 +233,24 @@ export function SettingsDialog({
                 onInspect={() => onInspectHermesControl()}
                 onStart={onStartHermesControl}
                 onStop={onStopHermesControl}
+              />
+            </div>
+          </details>
+
+          {/* Qwen3-TTS service tile */}
+          <details className={`${bentoCard} lg:col-span-2`}>
+            <summary className="cursor-pointer text-xs font-bold text-ink-dim marker:content-none [&::-webkit-details-marker]:hidden">
+              Qwen3-TTS voice service
+            </summary>
+            <div className="flex flex-col gap-3 pt-3">
+              <p className="text-[11px] leading-relaxed text-faint">
+                Layanan suara Jepang dijalankan di server dan otomatis dinyalakan
+                saat dibutuhkan. Browser mengaksesnya hanya lewat relay Kana.
+              </p>
+              <TtsControlPanel
+                onInspect={inspectTtsRuntime}
+                onStart={({ restart }) => controlTtsRuntime({ action: restart ? "restart" : "start" })}
+                onStop={() => controlTtsRuntime({ action: "stop" })}
               />
             </div>
           </details>
