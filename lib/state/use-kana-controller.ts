@@ -396,8 +396,13 @@ export function useKanaController(appVersion: string) {
 
       const flushToolsBefore = (assistantTs: number) => {
         if (!pendingActivities.length) return;
+        // Anchor just after the LAST tool so the block sorts between the
+        // tools and Kana's reply (assistantTs can be later than the tools).
+        const lastToolTs = Math.max(
+          ...pendingActivities.map((activity) => activity.timestamp),
+        );
         turns.push({
-          anchorMs: assistantTs,
+          anchorMs: Math.min(lastToolTs + 1, assistantTs),
           activities: pendingActivities,
         });
         pendingActivities = [];
@@ -566,19 +571,25 @@ export function useKanaController(appVersion: string) {
           ...conversation,
           messages: [...conversation.messages, assistantMessage],
         });
-        // Mirror the turn's activity log to the server-side store, anchored
-        // to this reply's timestamp. Best-effort: losing it only means the
-        // feed loses tool rows on a fresh browser, never chat content.
+        // Mirror the turn's activity log to the server-side store. Anchor =
+        // last tool's timestamp + 1ms: the block must sit between the tools
+        // and Kana's reply in the chronological feed. Anchoring on the reply
+        // time (Date.now() at save) lands AFTER the reply row from Hermes
+        // and pushes the tools below the summary.
         const hermesSessionKey = conversation.agent?.persistentSessionId;
-        if (hermesSessionKey && assistantMessage.activities?.length) {
+        const turnActivities = assistantMessage.activities ?? [];
+        if (hermesSessionKey && turnActivities.length) {
+          const lastToolTs = Math.max(
+            ...turnActivities.map((activity) => activity.timestamp),
+          );
           void fetch("/api/kana/activities", {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             credentials: "same-origin",
             body: JSON.stringify({
               session: hermesSessionKey,
-              turnAnchorMs: assistantMessage.timestamp,
-              activities: assistantMessage.activities,
+              turnAnchorMs: Math.min(lastToolTs + 1, assistantMessage.timestamp),
+              activities: turnActivities,
             }),
           }).catch(() => {});
         }
