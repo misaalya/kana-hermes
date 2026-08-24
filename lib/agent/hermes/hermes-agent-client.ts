@@ -351,6 +351,19 @@ export class HermesAgentClient implements AgentClient {
       }
     }
     this.recoverResumedTurn(response);
+    // Plan B contract enforcement: the gateway ignores client-seeded system
+    // messages, so the Kana persona rides on Hermes's personality-overlay
+    // mechanism instead. The "kana" personality is defined once in the user's
+    // config.yaml (agent.personalities.kana); applying it here sets the
+    // agent's ephemeral_system_prompt for this session, which Hermes appends
+    // to the system prompt at every API call. Best-effort: if it fails (older
+    // gateway, missing personality), the per-turn user prompt metadata and
+    // the graceful parser degradation still carry the UX.
+    void this.request("config.set", {
+      key: "personality",
+      value: "kana",
+      session_id: this.session.sessionId,
+    }).catch(() => {});
     return this.session;
   }
 
