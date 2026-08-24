@@ -1724,14 +1724,16 @@ export function useKanaController(appVersion: string) {
   // is Hermes-linked with an empty local transcript (fresh browser, adopted
   // session, or post-refresh), pull the real one from session.history.
   const connected = connectionState === "connected";
+  // Stable key: conversation identity + connection state only. Deliberately
+  // NOT keyed on local message count — Hermes is authoritative and the
+  // effect must not re-fire when the restored transcript lands locally.
   const restoreKey = `${activeConversation?.id ?? "none"}:${connected ? 1 : 0}:${
     activeConversation?.agent?.persistentSessionId ?? "none"
-  }:${activeConversation?.messages.length ?? 0}`;
+  }`;
   useEffect(() => {
     if (!connected) return;
     const target = activeConversation;
     if (!target) return;
-    if (target.messages.length > 0) return; // local already has it
     if (!target.agent?.persistentSessionId) return; // never linked
     let cancelled = false;
     queueMicrotask(() => setFetchingFromServer(true));
