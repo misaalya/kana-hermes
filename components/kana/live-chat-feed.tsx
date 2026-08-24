@@ -58,31 +58,22 @@ export const LiveChatFeed = memo(function LiveChatFeed({
   // - live activities attach after the last user message (running turn).
   const entries = useMemo<FeedEntry[]>(() => {
     const timeline: FeedEntry[] = [];
-    const anchored = new Set<number>();
-    // A "running" state is only meaningful while the turn is live. Persisted
-    // copies (IndexedDB snapshot + server store) may still contain one when a
-    // turn never finished cleanly — they would render as phantom spinners
-    // forever, so strip them everywhere history is restored.
-    const settled = (items: ActivityItem[]) =>
-      items.filter((item) => item.state !== "running");
+    // Restored tool history comes from ONE source only: the server store
+    // (cross-browser, anchored to each assistant reply's Hermes timestamp).
+    // message.activities is the PUT payload that feeds that store — never a
+    // second render source, or every restored turn renders twice (once above,
+    // once below Kana's reply).
     for (const message of messages) {
       if (message.role !== "system") {
         timeline.push({ kind: "message", at: message.timestamp, message });
       }
-      const logged = message.activities ? settled(message.activities) : [];
-      if (logged.length) {
-        anchored.add(message.timestamp);
-        const at = [...timeline].at(-1)?.at ?? message.timestamp;
-        timeline.push({ kind: "activity", at, activities: logged });
-      }
     }
     for (const turn of serverActivityTurns) {
-      const logged = settled(turn.activities);
-      if (!logged.length || anchored.has(turn.turnAnchorMs)) continue;
+      if (!turn.activities.length) continue;
       timeline.push({
         kind: "activity",
         at: turn.turnAnchorMs,
-        activities: logged,
+        activities: turn.activities,
       });
     }
     if (activities.length) {
