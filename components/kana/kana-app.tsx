@@ -5,6 +5,7 @@ import { AgentInputDialog } from "./agent-input-dialog";
 import { AvatarStage } from "./avatar-stage";
 import { ConversationSidebar } from "./conversation-sidebar";
 import { DialogueHistory } from "./dialogue-history";
+import { DialogueBox } from "./dialogue-box";
 import { SettingsDialog } from "./settings-dialog";
 import { SlashCommandMenu } from "./slash-command-menu";
 import { OnboardingDialog } from "./onboarding-dialog";
@@ -285,11 +286,12 @@ export function KanaApp({ appVersion }: KanaAppProps) {
         </button>
       </div>
 
-      {/* Overlay column above the composer: Hermes activity pills stack on
-          top of the Kana dialogue box ("listening" pulse / latest subtitle).
-          One shared column keeps them mutually centered, never overlapping. */}
+      {/* Overlay column above the composer: the Kana dialogue box (live reply
+          subtitle), Hermes activity pills, and the busy pulse. One shared
+          column keeps them mutually centered, never overlapping. */}
       {kana.activities.length > 0 || latestAssistant?.subtitle?.text || kana.busy ? (
-        <div className="pointer-events-none absolute bottom-24 left-1/2 z-10 flex w-[min(92%,720px)] -translate-x-1/2 flex-col items-center gap-2 max-md:bottom-20">
+        <div className="absolute bottom-24 left-1/2 z-10 flex w-[min(92%,720px)] -translate-x-1/2 flex-col items-center gap-2 max-md:bottom-20">
+          <DialogueBox message={latestAssistant} />
           <ActivityStack activities={kana.activities} />
           {kana.busy ? (
             <p className="flex items-center gap-1.5 rounded-full border border-line bg-surface/80 px-3 py-1 text-[11px] font-semibold text-ink-dim backdrop-blur">
