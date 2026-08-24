@@ -6,6 +6,7 @@ import { AvatarStage } from "./avatar-stage";
 import { ConversationSidebar } from "./conversation-sidebar";
 import { DialogueHistory } from "./dialogue-history";
 import { LiveChatFeed } from "./live-chat-feed";
+import { FetchIndicator } from "./fetch-indicator";
 import { SettingsDialog } from "./settings-dialog";
 import { SlashCommandMenu } from "./slash-command-menu";
 import { OnboardingDialog } from "./onboarding-dialog";
@@ -286,6 +287,7 @@ export function KanaApp({ appVersion }: KanaAppProps) {
           scroll inside the column and never cover the avatar stage. The
           bottom padding keeps the feed above the composer instead of
           sliding underneath it. */}
+      <FetchIndicator active={kana.fetchingFromServer} />
       <div className="pointer-events-none absolute inset-y-0 left-0 z-10 flex w-[min(88%,480px)] flex-col justify-end p-3 pb-24 max-md:inset-x-0 max-md:w-full max-md:pb-20">
         <div className="pointer-events-auto min-h-0">
           <LiveChatFeed
