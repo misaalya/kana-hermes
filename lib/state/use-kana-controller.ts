@@ -515,7 +515,6 @@ export function useKanaController(appVersion: string) {
       if (event.type === "session.opened") {
         openingConversationRef.current = null;
         openedConversationRef.current = conversationId;
-        const hermesSessionKey = event.persistentSessionId;
         await saveConversation({
           ...conversation,
           agent: {
@@ -1652,7 +1651,7 @@ export function useKanaController(appVersion: string) {
   useEffect(() => {
     if (!serverSessionKey) return;
     let cancelled = false;
-    setFetchingFromServer(true);
+    queueMicrotask(() => setFetchingFromServer(true));
     void fetch(`/api/kana/activities?session=${encodeURIComponent(serverSessionKey)}`, {
       credentials: "same-origin",
     })
@@ -1735,7 +1734,7 @@ export function useKanaController(appVersion: string) {
     if (target.messages.length > 0) return; // local already has it
     if (!target.agent?.persistentSessionId) return; // never linked
     let cancelled = false;
-    setFetchingFromServer(true);
+    queueMicrotask(() => setFetchingFromServer(true));
     loadHermesTranscript(target.id, target.agent.persistentSessionId)
       .catch((historyError) => {
         if (!cancelled)
