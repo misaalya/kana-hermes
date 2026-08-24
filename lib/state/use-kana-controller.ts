@@ -315,7 +315,13 @@ export function useKanaController(appVersion: string) {
           )
         : [...conversationsRef.current, updated];
       commitConversations(next);
-      await conversationStore.save(updated);
+      // IndexedDB is a metadata handle only now (title, agent link,
+      // timestamps). The transcript itself lives in Hermes; persisting
+      // messages here made fresh browsers show empty/partial history.
+      await conversationStore.save({
+        ...updated,
+        messages: [],
+      });
       return updated;
     },
     [commitConversations, conversationStore],
@@ -394,14 +400,12 @@ export function useKanaController(appVersion: string) {
         }
         if (row.role === "user") {
           let text = row.text ?? "";
-          const marker = '"user_message":';
-          const at = text.indexOf(marker);
-          if (at !== -1) {
-            const rest = text.slice(at + marker.length).trim();
+          // Unwrap the kana_request wrapper: extract the raw user message
+          // from the metadata envelope (string value, JSON-escaped).
+          const match = /"user_message"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(text);
+          if (match) {
             try {
-              text =
-                (JSON.parse(`{${rest}}`) as { user_message?: string })
-                  .user_message ?? text;
+              text = JSON.parse(`"${match[1]}"`) as string;
             } catch {
               /* keep raw text */
             }
@@ -452,7 +456,9 @@ export function useKanaController(appVersion: string) {
       if (!target || !messages.length) return;
       await saveConversation({
         ...target,
-        messages: [...messages, ...target.messages],
+        // Hermes is authoritative: replace, not merge, so stale local rows
+        // (e.g. from before this fix) can never shadow the real transcript.
+        messages: messages,
       });
       for (const turn of turns) {
         void fetch("/api/kana/activities", {
@@ -487,7 +493,7 @@ export function useKanaController(appVersion: string) {
       if (event.type === "session.opened") {
         openingConversationRef.current = null;
         openedConversationRef.current = conversationId;
-        const localEmpty = conversation.messages.length === 0;
+        const hermesSessionKey = event.persistentSessionId;
         await saveConversation({
           ...conversation,
           agent: {
@@ -503,9 +509,9 @@ export function useKanaController(appVersion: string) {
               : {}),
           },
         });
-        // Cross-browser restore: a session adopted on a fresh browser has no
-        // local transcript. Hermes owns it — pull the real one.
-        if (localEmpty) {
+        // Hermes owns the transcript. Always pull it on open so every
+        // browser sees the same history (IndexedDB is no longer the source).
+        {
           void loadHermesTranscript(
             conversation.id,
             event.persistentSessionId,
