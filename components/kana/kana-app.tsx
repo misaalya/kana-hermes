@@ -5,11 +5,10 @@ import { AgentInputDialog } from "./agent-input-dialog";
 import { AvatarStage } from "./avatar-stage";
 import { ConversationSidebar } from "./conversation-sidebar";
 import { DialogueHistory } from "./dialogue-history";
-import { DialogueBox } from "./dialogue-box";
+import { LiveChatFeed } from "./live-chat-feed";
 import { SettingsDialog } from "./settings-dialog";
 import { SlashCommandMenu } from "./slash-command-menu";
 import { OnboardingDialog } from "./onboarding-dialog";
-import { ActivityStack } from "./activity-stack";
 import { useKanaController } from "@/lib/state/use-kana-controller";
 import { useTheme } from "@/lib/state/use-theme";
 import type { KanaMessage } from "@/lib/conversation/types";
@@ -66,11 +65,6 @@ export function KanaApp({ appVersion }: KanaAppProps) {
       return { ...current, [activeConversationId]: value };
     });
   }, [activeConversationId]);
-
-  const latestAssistant = useMemo(
-    () => kana.activeConversation?.messages.filter((item) => item.role === "assistant").at(-1),
-    [kana.activeConversation?.messages],
-  );
 
   const commandName = /^\/([^\s/]+)/.exec(message.trim())?.[1]?.toLowerCase();
   const canSubmitWhileBusy = Boolean(
@@ -286,21 +280,20 @@ export function KanaApp({ appVersion }: KanaAppProps) {
         </button>
       </div>
 
-      {/* Overlay column above the composer: the Kana dialogue box (live reply
-          subtitle), Hermes activity pills, and the busy pulse. One shared
-          column keeps them mutually centered, never overlapping. */}
-      {kana.activities.length > 0 || latestAssistant?.subtitle?.text || kana.busy ? (
-        <div className="absolute bottom-24 left-1/2 z-10 flex w-[min(92%,720px)] -translate-x-1/2 flex-col items-center gap-2 max-md:bottom-20">
-          <DialogueBox message={latestAssistant} />
-          <ActivityStack activities={kana.activities} />
-          {kana.busy ? (
-            <p className="flex items-center gap-1.5 rounded-full border border-line bg-surface/80 px-3 py-1 text-[11px] font-semibold text-ink-dim backdrop-blur">
-              <span className="size-1.5 animate-kana-pulse rounded-full bg-accent-strong" />
-              {kana.status}
-            </p>
-          ) : null}
+      {/* Live-chat feed (vtuber style): a height-capped, scrollable column
+          anchored to the LEFT edge. Holds the chronological stream — user
+          messages, tool activity lines, Kana's reply — so long responses
+          scroll inside the column and never cover the avatar stage. */}
+      <div className="pointer-events-none absolute inset-y-0 left-0 z-10 flex w-[min(88%,480px)] flex-col justify-end p-3 max-md:inset-x-0 max-md:w-full">
+        <div className="pointer-events-auto min-h-0">
+          <LiveChatFeed
+            messages={kana.activeConversation?.messages ?? NO_MESSAGES}
+            activities={kana.activities}
+            busy={kana.busy}
+            status={kana.status}
+          />
         </div>
-      ) : null}
+      </div>
 
       {/* Composer */}
       <section className="absolute inset-x-0 bottom-0 z-20 px-4 pb-4">
