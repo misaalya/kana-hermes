@@ -14,7 +14,7 @@ function json(value: unknown, status = 200): Response {
 }
 
 function responseFor(url: string): Response {
-  if (url.endsWith("/v1/health")) {
+  if (url.endsWith("/health")) {
     return json({
       service: "kana-qwen3-tts",
       api_version: "2",
@@ -31,7 +31,7 @@ function responseFor(url: string): Response {
       model_type: "custom_voice",
     });
   }
-  if (url.endsWith("/v1/setup")) {
+  if (url.endsWith("/setup")) {
     return json({
       service: "kana-qwen3-tts",
       api_version: "2",
@@ -44,7 +44,7 @@ function responseFor(url: string): Response {
       disk_sufficient: true,
     });
   }
-  if (url.endsWith("/v1/voices")) {
+  if (url.endsWith("/voices")) {
     return json({
       service: "kana-qwen3-tts",
       api_version: "2",
@@ -85,7 +85,7 @@ describe("Qwen3-TTS browser contract", () => {
       configurable: true,
       value: async (input: string | URL | Request, init?: RequestInit) => {
         const url = String(input);
-        if (url.endsWith("/v1/speech")) {
+        if (url.endsWith("/speech")) {
           speechRequests += 1;
           speechBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
           return new Response(new Uint8Array([82, 73, 70, 70]), {
@@ -130,7 +130,7 @@ describe("Qwen3-TTS browser contract", () => {
       configurable: true,
       value: async (input: string | URL | Request, init?: RequestInit) => {
         const url = String(input);
-        if (url.endsWith("/v1/speech")) {
+        if (url.endsWith("/speech")) {
           const body = JSON.parse(String(init?.body)) as { text: string };
           speechTexts.push(body.text);
           return new Response(new TextEncoder().encode(`RIFF${speechTexts.length}`), {
@@ -184,7 +184,7 @@ describe("Qwen3-TTS browser contract", () => {
       configurable: true,
       value: (input: string | URL | Request) => {
         const url = String(input);
-        if (url.endsWith("/v1/speech")) {
+        if (url.endsWith("/speech")) {
           speechRequestCount += 1;
           if (speechRequestCount === 1) {
             return Promise.resolve(
@@ -260,7 +260,7 @@ describe("Qwen3-TTS browser contract", () => {
       configurable: true,
       value: (input: string | URL | Request) => {
         const url = String(input);
-        if (url.endsWith("/v1/speech")) {
+        if (url.endsWith("/speech")) {
           return new Promise<Response>((resolve) => {
             resolveSpeech = resolve;
           });

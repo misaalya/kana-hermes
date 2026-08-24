@@ -20,6 +20,79 @@ function voiceDotColor(voiceId: string, index: number): string {
   return VOICE_DOTS[1 + (index % (VOICE_DOTS.length - 1))];
 }
 
+// Pure-Tailwind radio button — no native <input>, just React state + CSS.
+function VoiceRadio({
+  active,
+  dotColor,
+  label,
+  onSelect,
+  onDelete,
+  disabled,
+}: {
+  active: boolean;
+  dotColor: string;
+  label: string;
+  onSelect(): void;
+  onDelete(): void;
+  disabled: boolean;
+}) {
+  return (
+    <div
+      role="radio"
+      aria-checked={active}
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelect();
+        }
+      }}
+      onClick={onSelect}
+      className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border px-3.5 py-3 transition-all duration-150 ${
+        active
+          ? "border-accent/70 bg-white/8 shadow-[0_0_0_1px_rgba(255,255,255,0.15)]"
+          : "border-line bg-surface hover:border-line-strong hover:bg-white/5"
+      }`}
+    >
+      <span className="flex min-w-0 items-center gap-3">
+        {/* Outer ring */}
+        <span
+          className={`grid size-[22px] shrink-0 place-items-center rounded-full border-2 transition-all duration-150 ${
+            active ? "scale-110 border-white/80" : "border-line-strong"
+          }`}
+        >
+          {/* Inner fill dot — visible only when active */}
+          <span
+            className={`size-3 rounded-full transition-all duration-150 ${
+              active ? "scale-100" : "scale-0"
+            } ${dotColor}`}
+          />
+        </span>
+        {/* Voice name */}
+        <span
+          className={`truncate text-sm font-medium transition-colors ${
+            active ? "text-ink" : "text-ink-dim"
+          }`}
+        >
+          {label}
+        </span>
+      </span>
+      {/* Delete button */}
+      <button
+        type="button"
+        className="shrink-0 text-[11px] font-medium text-faint transition-colors hover:text-danger"
+        disabled={disabled}
+        onClick={(event) => {
+          event.stopPropagation();
+          onDelete();
+        }}
+      >
+        Hapus
+      </button>
+    </div>
+  );
+}
+
 // Voice management for the Qwen3-TTS Base model: it only speaks through a
 // cloned voice profile, so one must exist and be selected or Kana stays
 // silent. Restores the UI removed in the VN-style redesign (c95faa7).
@@ -92,7 +165,8 @@ export function VoicePanel({
     setBusy(true);
     try {
       await onDeleteCloned(voiceId);
-      if (selectedVoiceId === voiceId) onVoiceSelect("");
+      // Don't call onVoiceSelect("") — the effectiveSelected fallback in the
+      // radio group automatically selects the first remaining clone.
       setNotice("Suara kloningan dihapus.");
       await refresh();
     } catch (error) {
@@ -114,58 +188,24 @@ export function VoicePanel({
 
   return (
     <div className="flex flex-col gap-3">
-      <fieldset className="flex flex-col gap-1" role="radiogroup" aria-label="Kana voice">
-        <legend className="mb-1.5 text-[11px] font-bold text-ink-dim uppercase">Voice</legend>
+      <fieldset className="flex flex-col gap-1.5" role="radiogroup" aria-label="Pilih suara Kana">
+        <legend className="mb-1 text-[11px] font-bold tracking-wider text-ink-dim uppercase">Voice</legend>
         {cloned.length === 0 ? (
-          <p className="rounded-xl border border-danger/40 bg-danger/5 px-3 py-2 text-[11px] text-danger">
-            Belum ada suara kloningan — clone satu suara dulu agar Kana bisa bicara.
+          <p className="rounded-xl border border-danger/40 bg-danger/5 px-3.5 py-2.5 text-[11px] leading-relaxed text-danger">
+            Belum ada suara kloningan. Clone suara kamu dulu agar Kana bisa bicara dengan suaramu.
           </p>
         ) : (
-          cloned.map((voice, index) => {
-            const active = voice.id === effectiveSelected;
-            return (
-              <label
-                key={voice.id}
-                role="radio"
-                aria-checked={active}
-                tabIndex={0}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    onVoiceSelect(voice.id);
-                  }
-                }}
-                className={`flex cursor-pointer items-center justify-between gap-2 rounded-xl border px-3 py-2 transition-colors ${
-                  active ? "border-accent/60 bg-accent/10" : "border-line bg-surface hover:border-line-strong"
-                }`}
-                onClick={() => onVoiceSelect(voice.id)}
-              >
-                <span className="flex min-w-0 items-center gap-2.5">
-                  <span
-                    className={`grid size-4 shrink-0 place-items-center rounded-full border ${
-                      active ? "border-white/70" : "border-line-strong"
-                    }`}
-                  >
-                    <span className={`size-2 rounded-full ${voiceDotColor(voice.id, index)} ${active ? "" : "opacity-40"}`} />
-                  </span>
-                  <span className={`truncate text-xs ${active ? "font-bold text-ink" : "text-ink-dim"}`}>
-                    {voice.name ?? voice.id}
-                  </span>
-                </span>
-                <button
-                  type="button"
-                  className="text-[11px] text-faint transition-colors hover:text-danger"
-                  disabled={busy}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    void remove(voice.id);
-                  }}
-                >
-                  Hapus
-                </button>
-              </label>
-            );
-          })
+          cloned.map((voice, index) => (
+            <VoiceRadio
+              key={voice.id}
+              active={voice.id === effectiveSelected}
+              dotColor={voiceDotColor(voice.id, index)}
+              label={voice.name ?? voice.id}
+              onSelect={() => onVoiceSelect(voice.id)}
+              onDelete={() => void remove(voice.id)}
+              disabled={busy}
+            />
+          ))
         )}
       </fieldset>
 
