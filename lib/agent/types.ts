@@ -12,6 +12,20 @@ export type AgentConnectionState =
 
 export type AgentToolKind = "tool" | "command" | "file";
 
+export type AgentActivityState = "running" | "complete" | "attention";
+
+/** One Hermes tool/input event inside a turn, rendered in the live-chat feed. */
+export type ActivityItem = {
+  id: string;
+  tool?: string;
+  kind: AgentToolKind | "status" | "input";
+  title: string;
+  detail?: string;
+  state: AgentActivityState;
+  timestamp: number;
+  durationMs?: number;
+};
+
 export type AgentInputRequestKind =
   | "approval"
   | "clarification"
