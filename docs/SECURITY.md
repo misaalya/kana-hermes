@@ -26,9 +26,55 @@ treated as automatically trusted.
 | Remote models | HTTPS or localhost HTTP `.model3.json`, no embedded credentials; CSP permits data fetch but not remote scripts |
 | Folder import | Relative paths, duplicate paths, JSON, required assets, and folder escapes are validated before IndexedDB write |
 | Diagnostics | Endpoint queries and common token/password/secret forms are redacted; content and protected input are omitted |
+| Local-only routes | Trusted via shared secret (`KANA_TRUSTED_PROXY_SECRET` + `X-Kana-Trusted-Proxy` header, timing-safe compare) or direct loopback Host/Origin evidence; the bare `x-kana-trusted-proxy: 1` marker is no longer honored |
 | Backup | Versioned and size-limited; parser validates records; tokens and imported avatar assets are excluded |
 | Offline cache | Service worker handles same-origin navigation/static assets only and explicitly ignores `/api` plus all cross-origin Hermes/Qwen/model traffic |
 | Framing/injection | CSP blocks objects and framing; `nosniff`, no-referrer, and restrictive permissions headers are set |
+
+## Reverse proxy (VPS)
+
+When Kana runs behind nginx on a VPS, configure the proxy headers explicitly:
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # Shared-secret trust for local-only routes (/api/local-runtime/*).
+    # Set the SAME value as the server's KANA_TRUSTED_PROXY_SECRET.
+    proxy_set_header X-Kana-Trusted-Proxy "<same value as KANA_TRUSTED_PROXY_SECRET>";
+}
+```
+
+Trust model for spawn-capable local-only routes:
+
+- **`KANA_TRUSTED_PROXY_SECRET` set (recommended on a VPS):** a request is
+  trusted only when its `X-Kana-Trusted-Proxy` header equals the configured
+  secret (compared with `timingSafeEqual`). Hostname evidence is ignored,
+  because nginx forwards whatever `Host` the client sent — a remote caller
+  sending `Host: 127.0.0.1` must not unlock these routes.
+- **Secret unset:** the header is ignored entirely and only direct-loopback
+  `Host`/`Origin` pairs are trusted.
+
+Never leave an old plain marker such as `proxy_set_header X-Kana-Trusted-Proxy
+"1";` in place, and never forward a client-supplied value of this header:
+either set it to the shared secret or blank it with `proxy_set_header
+X-Kana-Trusted-Proxy "";`. A spoofable trusted-proxy header would let remote
+callers reach Hermes process control.
+
+Forwarding `X-Forwarded-Proto $scheme` keeps session cookies `Secure`
+automatically; if your proxy cannot forward it, set `AUTH_COOKIE_SECURE=true`.
+
+## Production without authentication
+
+Production boots with authentication disabled (no `auth.json`, no
+`KANA_ACCESS_PASSWORD`) only when `KANA_ALLOW_NO_AUTH=1` acknowledges it; the
+server logs a loud warning either way and surfaces the state as
+`insecureNoAuth: true` in `/api/auth/status` plus an
+`x-kana-insecure-no-auth: 1` response header from the auth guard. UI layers may
+use that flag to warn the operator; the flag stays `true` even while the opt-out
+is acknowledged because the exposure itself does not disappear.
 
 ## CSP rationale
 

@@ -48,3 +48,76 @@ available when WebGL, audio, internet, Hermes, or Qwen is unavailable.
 - Real restart recovery while every kind of pending Hermes protected input,
   two custom Live2D packages, and real Qwen p50/p95 still need target-host
   acceptance before beta.
+
+## VPS deploy checklist
+
+Kana's server-side files (auth hash, JWT secret, activity database) live in one
+authoritative data directory resolved as `KANA_DATA_DIR` → `$XDG_DATA_HOME/kana`
+→ `~/.local/share/kana`. Files from the legacy roots (`./data`, `~/.kana`) are
+migrated automatically on first use. Never run Kana in production without an
+explicit data directory.
+
+1. Create a non-root user and its data directory:
+
+   ```bash
+   sudo useradd --system --create-home --home-dir /var/lib/kana kana || true
+   sudo chown kana:kana /var/lib/kana
+   ```
+
+2. Provide secrets outside git (systemd `Environment=` lines or an untracked
+   `.env.production` next to the deployment):
+
+   ```bash
+   KANA_ACCESS_PASSWORD=<bootstrap password, or pre-seed auth.json>
+   KANA_JWT_SECRET=<64-hex, survives redeploys>
+   KANA_DATA_DIR=/var/lib/kana
+   AUTH_COOKIE_SECURE=true            # if nginx does not forward X-Forwarded-Proto
+   KANA_TRUSTED_PROXY_SECRET=<long random string, shared with nginx>
+   ```
+
+3. systemd unit example:
+
+   ```ini
+   [Unit]
+   Description=Kana web UI
+   After=network-online.target
+
+   [Service]
+   User=kana
+   Group=kana
+   WorkingDirectory=/var/lib/kana
+   Environment=KANA_DATA_DIR=/var/lib/kana
+   Environment=KANA_ACCESS_PASSWORD=<bootstrap password>
+   Environment=KANA_JWT_SECRET=<64-hex>
+   Environment=KANA_TRUSTED_PROXY_SECRET=<same value as nginx>
+   Environment=AUTH_COOKIE_SECURE=true
+   Environment=HOSTNAME=127.0.0.1
+   Environment=PORT=3000
+   ExecStart=/usr/bin/node /opt/kana/.next/standalone/server.js
+   Restart=on-failure
+
+   [Install]
+   WantedBy=multi-user.target
+   ```
+
+   The npm launcher (`kana`) resolves and forwards `KANA_DATA_DIR` and an
+   explicit `HOME` into the spawned Next server automatically; under systemd,
+   set both explicitly as shown.
+
+4. nginx must forward:
+
+   ```nginx
+   proxy_set_header Host $host;
+   proxy_set_header X-Forwarded-Proto $scheme;
+   # Shared secret for /api/local-runtime/* — same value as the server env:
+   proxy_set_header X-Kana-Trusted-Proxy "<KANA_TRUSTED_PROXY_SECRET value>";
+   ```
+
+   If a route must not trust the proxy, blank the header instead of leaving a
+   spoofable value: `proxy_set_header X-Kana-Trusted-Proxy "";`. See
+   docs/SECURITY.md for the full trust model.
+
+5. First-request sanity check: with auth configured, `/api/auth/status`
+   reports `"authEnabled": true` and never `insecureNoAuth: true`. If the
+   server logs the no-auth security warning at boot, fix the environment
+   before exposing the port.
