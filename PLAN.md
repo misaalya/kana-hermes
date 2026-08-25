@@ -364,8 +364,8 @@ sudah ada di `package.json` — dipakai, bukan dependency baru.
                                             placeholder credentials, fail-loud
                                             flag insecureNoAuth, trusted-proxy
                                             secret; C4 skip dengan alasan)
-   [ ] B3-lite menyusul: rewire activity-store.ts dbPath ke
-       lib/server/data-dir.ts + adopsi legacy activities.db
+   [x] B3-lite: activity-store.ts dbPath diarahkan ke
+       lib/server/data-dir.ts + adopsi legacy activities.db (2026-08-25)
 3. [ ] Setelah Track 1 merge: Track 4 (E1..E5 — keputusan pemilik: berhenti di E5)
 4. [ ] Final: verifikasi menyeluruh §11 + live-test resume/TTS pada mesin &
       VPS + update AGENTS.md (arsitektur relay, KANA_DATA_DIR, store slices)
