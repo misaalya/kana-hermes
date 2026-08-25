@@ -37,6 +37,10 @@ await cp(
     },
   },
 );
+// Shipped default voice reference (registered into the library at runtime).
+await cp(path.join(root, "assets", "voices"), path.join(standalone, "assets", "voices"), {
+  force: true,
+});
 await cp(
   path.join(root, "README.md"),
   path.join(standalone, "README.md"),

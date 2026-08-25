@@ -605,8 +605,6 @@ export function KanaApp({ appVersion }: KanaAppProps) {
           onPreviewAvatarMotion={kana.previewAvatarMotion}
           onPreviewAvatarTalking={kana.previewAvatarTalking}
           onInspectVoice={kana.inspectVoiceService}
-          onCloneVoice={kana.cloneVoice}
-          onDeleteClonedVoice={kana.deleteClonedVoice}
           onInspectHermesControl={kana.inspectHermesControl}
           onStartHermesControl={kana.startHermesControl}
           onStopHermesControl={kana.stopHermesControl}
