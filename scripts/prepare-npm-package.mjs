@@ -30,4 +30,8 @@ await cp(
     },
   },
 );
+// Shipped default voice reference (registered into the library at runtime).
+await cp(path.join(root, "assets", "voices"), path.join(runtime, "assets", "voices"), {
+  force: true,
+});
 process.stdout.write(`Prepared npm runtime at ${runtime}\n`);

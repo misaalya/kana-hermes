@@ -1,30 +1,37 @@
+"use client";
+
 import { useCallback, useEffect, useState } from "react";
-import type { VoiceDescriptor, VoiceProviderStatus } from "@/lib/voice/types";
-import type { CreateVoiceCloneInput } from "@/lib/voice/qwen3-tts-contract";
+import type { VoiceProviderStatus } from "@/lib/voice/types";
+import {
+  deleteKanaVoice,
+  listKanaVoices,
+  uploadKanaVoice,
+  type LibraryVoice,
+} from "@/lib/runtime/voice-library-client";
 import { btnGhost, btnPrimary, inputBase } from "./ui";
 
 type VoicePanelProps = {
   selectedVoiceId: string;
-  onVoiceSelect(voiceId: string): void;
-  onInspect(): Promise<VoiceProviderStatus>;
-  onClone(input: CreateVoiceCloneInput): Promise<VoiceDescriptor>;
-  onDeleteCloned(voiceId: string): Promise<VoiceProviderStatus>;
+  onVoiceSelect(serviceVoiceId: string): void;
+  /** Service health line under the list (probe-only, never spawns). */
+  onInspectService(): Promise<VoiceProviderStatus>;
 };
 
-// Per-voice accent dot colors. The first clone ("Kana") is white; new clones
+// Per-voice accent dot colors. The default "Kana" voice is white; new clones
 // cycle through the remaining palette so every radio is visually distinct.
 const VOICE_DOTS = ["bg-white", "bg-rose-400", "bg-amber-400", "bg-emerald-400", "bg-sky-400", "bg-violet-400"];
 
-function voiceDotColor(voiceId: string, index: number): string {
-  if (voiceId.endsWith("b2176303f2264f8ba3fdbd3a375d66ef")) return VOICE_DOTS[0];
+function voiceDotColor(voice: LibraryVoice, index: number): string {
+  if (voice.isDefault) return VOICE_DOTS[0];
   return VOICE_DOTS[1 + (index % (VOICE_DOTS.length - 1))];
 }
 
-// Pure-Tailwind radio button — no native <input>, just React state + CSS.
 function VoiceRadio({
   active,
   dotColor,
   label,
+  hint,
+  deletable,
   onSelect,
   onDelete,
   disabled,
@@ -32,6 +39,8 @@ function VoiceRadio({
   active: boolean;
   dotColor: string;
   label: string;
+  hint: string | null;
+  deletable: boolean;
   onSelect(): void;
   onDelete(): void;
   disabled: boolean;
@@ -40,101 +49,123 @@ function VoiceRadio({
     <div
       role="radio"
       aria-checked={active}
+      aria-disabled={disabled || !deletable ? undefined : undefined}
       tabIndex={0}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          onSelect();
+          if (!disabled) onSelect();
         }
       }}
-      onClick={onSelect}
+      onClick={() => {
+        if (!disabled) onSelect();
+      }}
       className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border px-3.5 py-3 transition-all duration-150 ${
         active
           ? "border-accent/70 bg-white/8 shadow-[0_0_0_1px_rgba(255,255,255,0.15)]"
           : "border-line bg-surface hover:border-line-strong hover:bg-white/5"
-      }`}
+      } ${disabled ? "opacity-60" : ""}`}
     >
       <span className="flex min-w-0 items-center gap-3">
-        {/* Outer ring */}
         <span
           className={`grid size-[22px] shrink-0 place-items-center rounded-full border-2 transition-all duration-150 ${
             active ? "scale-110 border-white/80" : "border-line-strong"
           }`}
         >
-          {/* Inner fill dot — visible only when active */}
-          <span
-            className={`size-3 rounded-full transition-all duration-150 ${
-              active ? "scale-100" : "scale-0"
-            } ${dotColor}`}
-          />
+          <span className={`size-3 rounded-full transition-all duration-150 ${active ? "scale-100" : "scale-0"} ${dotColor}`} />
         </span>
-        {/* Voice name */}
-        <span
-          className={`truncate text-sm font-medium transition-colors ${
-            active ? "text-ink" : "text-ink-dim"
-          }`}
-        >
-          {label}
+        <span className="min-w-0">
+          <span className={`block truncate text-sm font-medium transition-colors ${active ? "text-ink" : "text-ink-dim"}`}>
+            {label}
+          </span>
+          {hint ? <span className="block truncate text-[10px] text-faint">{hint}</span> : null}
         </span>
       </span>
-      {/* Delete button */}
-      <button
-        type="button"
-        className="shrink-0 text-[11px] font-medium text-faint transition-colors hover:text-danger"
-        disabled={disabled}
-        onClick={(event) => {
-          event.stopPropagation();
-          onDelete();
-        }}
-      >
-        Hapus
-      </button>
+      {deletable ? (
+        <button
+          type="button"
+          className="shrink-0 text-[11px] font-medium text-faint transition-colors hover:text-danger"
+          disabled={disabled}
+          onClick={(event) => {
+            event.stopPropagation();
+            onDelete();
+          }}
+        >
+          Hapus
+        </button>
+      ) : null}
     </div>
   );
 }
 
-// Voice management for the Qwen3-TTS Base model: it only speaks through a
-// cloned voice profile, so one must exist and be selected or Kana stays
-// silent. Restores the UI removed in the VN-style redesign (c95faa7).
+// Voice management backed by Kana's persistent library (data/voices +
+// SQLite). The shipped default voice is always present, so the radio group
+// is never empty; user clones survive service cache wipes because the
+// reference audio lives on the Kana side.
 
 export function VoicePanel({
   selectedVoiceId,
   onVoiceSelect,
-  onInspect,
-  onClone,
-  onDeleteCloned,
+  onInspectService,
 }: VoicePanelProps) {
-  const [status, setStatus] = useState<VoiceProviderStatus | null>(null);
+  const [voices, setVoices] = useState<LibraryVoice[]>([]);
+  const [loadingVoices, setLoadingVoices] = useState(true);
+  const [serviceStatus, setServiceStatus] = useState<VoiceProviderStatus | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [cloneName, setCloneName] = useState("");
   const [cloneAudio, setCloneAudio] = useState<File | null>(null);
   const [cloneConsent, setCloneConsent] = useState(false);
 
-  const refresh = useCallback(() => {
-    return onInspect()
-      .then((next) => {
-        setStatus(next);
-        return next;
-      })
-      .catch((error) => {
-        setNotice(error instanceof Error ? error.message : "Voice check failed.");
-        return null;
-      });
-  }, [onInspect]);
+  const refresh = useCallback(async () => {
+    setLoadingVoices(true);
+    try {
+      setVoices(await listKanaVoices());
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Voice check failed.");
+    } finally {
+      setLoadingVoices(false);
+    }
+    try {
+      setServiceStatus(await onInspectService());
+    } catch {
+      // Service line is informational only.
+    }
+  }, [onInspectService]);
 
   useEffect(() => {
     let active = true;
-    void refresh().then((next) => {
-      if (!active && next) return;
-    });
+    void listKanaVoices()
+      .then((next) => {
+        if (!active) return;
+        setVoices(next);
+        setLoadingVoices(false);
+      })
+      .catch((error) => {
+        if (!active) return;
+        setNotice(error instanceof Error ? error.message : "Voice check failed.");
+        setLoadingVoices(false);
+      });
+    void onInspectService()
+      .then((next) => {
+        if (active) setServiceStatus(next);
+      })
+      .catch(() => undefined);
     return () => {
       active = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const clone = async () => {
+  // Register pending voices in the background while the panel is open.
+  useEffect(() => {
+    if (!voices.some((voice) => !voice.registered)) return;
+    const timer = setInterval(() => {
+      void listKanaVoices().then(setVoices).catch(() => undefined);
+    }, 10_000);
+    return () => clearInterval(timer);
+  }, [voices]);
+
+  const upload = async () => {
     if (!cloneAudio || !cloneName.trim() || !cloneConsent) {
       setNotice("Isi nama, pilih audio referensi, dan centang persetujuan dulu.");
       return;
@@ -142,14 +173,11 @@ export function VoicePanel({
     setBusy(true);
     setNotice(null);
     try {
-      const voice = await onClone({
-        name: cloneName.trim(),
-        audio: cloneAudio,
-        xVectorOnly: true,
-        consent: true,
-      });
-      onVoiceSelect(voice.id);
-      setNotice(`Suara "${voice.name}" tersimpan dan langsung dipilih.`);
+      const result = await uploadKanaVoice(cloneName.trim(), cloneAudio, cloneConsent);
+      if (result.voice.registered && result.voice.serviceVoiceId) {
+        onVoiceSelect(result.voice.serviceVoiceId);
+      }
+      setNotice(result.warning ?? `Suara "${result.voice.name}" tersimpan.`);
       setCloneName("");
       setCloneAudio(null);
       setCloneConsent(false);
@@ -161,13 +189,10 @@ export function VoicePanel({
     }
   };
 
-  const remove = async (voiceId: string) => {
+  const remove = async (id: string) => {
     setBusy(true);
     try {
-      await onDeleteCloned(voiceId);
-      // Don't call onVoiceSelect("") — the effectiveSelected fallback in the
-      // radio group automatically selects the first remaining clone.
-      setNotice("Suara kloningan dihapus.");
+      await deleteKanaVoice(id);
       await refresh();
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Hapus suara gagal.");
@@ -176,34 +201,36 @@ export function VoicePanel({
     }
   };
 
-  const voices = status?.voices ?? [];
-  const cloned = voices.filter((voice) => voice.kind === "cloned");
-  // Radio-group semantics: exactly one voice is always active. When nothing
-  // has been chosen yet (or the chosen voice was deleted), the first clone
-  // takes over automatically — the group can never be fully "off".
+  const registered = voices.filter((voice) => voice.registered && voice.serviceVoiceId);
   const effectiveSelected =
-    selectedVoiceId && cloned.some((voice) => voice.id === selectedVoiceId)
+    selectedVoiceId && registered.some((voice) => voice.serviceVoiceId === selectedVoiceId)
       ? selectedVoiceId
-      : (cloned[0]?.id ?? "");
+      : (registered[0]?.serviceVoiceId ?? "");
 
   return (
     <div className="flex flex-col gap-3">
       <fieldset className="flex flex-col gap-1.5" role="radiogroup" aria-label="Pilih suara Kana">
         <legend className="mb-1 text-[11px] font-bold tracking-wider text-ink-dim uppercase">Voice</legend>
-        {cloned.length === 0 ? (
+        {loadingVoices && voices.length === 0 ? (
+          <p className="rounded-xl border border-line bg-surface px-3.5 py-2.5 text-[11px] text-muted">Memuat suara…</p>
+        ) : registered.length === 0 ? (
           <p className="rounded-xl border border-danger/40 bg-danger/5 px-3.5 py-2.5 text-[11px] leading-relaxed text-danger">
-            Belum ada suara kloningan. Clone suara kamu dulu agar Kana bisa bicara dengan suaramu.
+            Suara bawaan masih didaftarkan ke mesin suara. Tunggu sebentar lalu tekan Refresh.
           </p>
         ) : (
-          cloned.map((voice, index) => (
+          voices.map((voice, index) => (
             <VoiceRadio
               key={voice.id}
-              active={voice.id === effectiveSelected}
-              dotColor={voiceDotColor(voice.id, index)}
-              label={voice.name ?? voice.id}
-              onSelect={() => onVoiceSelect(voice.id)}
+              active={Boolean(voice.registered && voice.serviceVoiceId === effectiveSelected)}
+              dotColor={voiceDotColor(voice, index)}
+              label={voice.name}
+              hint={voice.registered ? null : "menunggu pendaftaran ke mesin suara…"}
+              deletable={!voice.isDefault}
+              onSelect={() => {
+                if (voice.registered && voice.serviceVoiceId) onVoiceSelect(voice.serviceVoiceId);
+              }}
               onDelete={() => void remove(voice.id)}
-              disabled={busy}
+              disabled={busy || !voice.registered}
             />
           ))
         )}
@@ -236,7 +263,7 @@ export function VoicePanel({
             Audio ini adalah suaraku / aku punya izin untuk menggunakannya.
           </label>
           <div className="flex items-center gap-2">
-            <button type="button" className={btnPrimary} disabled={busy} onClick={() => void clone()}>
+            <button type="button" className={btnPrimary} disabled={busy} onClick={() => void upload()}>
               {busy ? "Memproses…" : "Clone"}
             </button>
             <button type="button" className={btnGhost} disabled={busy} onClick={() => void refresh()}>
@@ -246,11 +273,9 @@ export function VoicePanel({
         </div>
       </details>
 
-      {status?.state !== "ready" && (
-        <p className="text-[10px] text-faint">
-          Layanan TTS: {status?.message ?? "memeriksa…"}
-        </p>
-      )}
+      {serviceStatus?.state !== "ready" && serviceStatus ? (
+        <p className="text-[10px] text-faint">Layanan TTS: {serviceStatus.message}</p>
+      ) : null}
       <p className="min-h-4 text-[11px] text-muted">{notice ?? ""}</p>
     </div>
   );

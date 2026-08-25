@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
+import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, it } from "node:test";
 import path from "node:path";
 import {
@@ -46,7 +47,6 @@ describe("app state store (sqlite)", () => {
     resetAppStateStoreForTests();
     delete process.env.KANA_DATA_DIR;
     process.env.KANA_DATA_DIR = dir;
-    const { DatabaseSync } = require("node:sqlite") as typeof import("node:sqlite");
     const raw = new DatabaseSync(path.join(dir, "appstate.db"));
     raw.prepare("UPDATE app_state SET value = '{not json' WHERE key = 'broken'").run();
     raw.close();
