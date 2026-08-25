@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { SignJWT, jwtVerify } from "jose";
-import { kanaDataDir } from "./password-store";
+import { adoptLegacyKanaFile, resolveKanaDataDir } from "@/lib/server/data-dir";
 
 // Stateless JWT session cookie following the 9Router dashboard pattern:
 // HS256 token signed with a per-installation secret (env override or an
@@ -18,17 +18,22 @@ function loadSecret(): Uint8Array {
   return cachedSecret;
 }
 
+function secretFile(): string {
+  adoptLegacyKanaFile("jwt-secret");
+  return path.join(resolveKanaDataDir(), "jwt-secret");
+}
+
 function newSecret(): Uint8Array {
   const fromEnv = process.env.KANA_JWT_SECRET?.trim();
   if (fromEnv) return new TextEncoder().encode(fromEnv);
-  const file = path.join(kanaDataDir(), "jwt-secret");
+  const file = secretFile();
   try {
     const raw = fs.readFileSync(file, "utf8").trim();
     if (raw.length >= 32) return new TextEncoder().encode(raw);
   } catch {
     // Fall through to first-run generation.
   }
-  fs.mkdirSync(kanaDataDir(), { recursive: true });
+  fs.mkdirSync(resolveKanaDataDir(), { recursive: true });
   const generated = randomBytes(32).toString("hex");
   fs.writeFileSync(file, generated, { encoding: "utf8", mode: 0o600 });
   return new TextEncoder().encode(generated);

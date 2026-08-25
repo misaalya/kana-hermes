@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { isAuthEnabled } from "@/lib/server/auth/password-store";
+import {
+  isAuthEnabled,
+  isInsecureNoAuthMode,
+  isNoAuthExplicitlyAllowed,
+} from "@/lib/server/auth/password-store";
 import { verifySessionToken } from "@/lib/server/auth/session";
 import { isLoopbackRequest } from "@/lib/server/auth/loopback";
 
@@ -18,14 +22,39 @@ const PUBLIC_API_PATHS = ["/api/auth/login", "/api/auth/logout", "/api/auth/stat
 // Routes that spawn child processes or read host state — loopback only.
 const LOCAL_ONLY_PREFIXES = ["/api/local-runtime/"];
 
+const INSECURE_NO_AUTH_HEADER = "x-kana-insecure-no-auth";
+
+let insecureNoAuthWarned = false;
+
+function warnInsecureNoAuthOnce(): void {
+  if (insecureNoAuthWarned || !isInsecureNoAuthMode()) return;
+  insecureNoAuthWarned = true;
+  const acknowledged = isNoAuthExplicitlyAllowed();
+  console.warn(
+    acknowledged
+      ? "[kana] SECURITY WARNING: authentication is disabled by explicit configuration (KANA_ALLOW_NO_AUTH=1). Every visitor can read conversations and drive local process control."
+      : "[kana] SECURITY WARNING: production is running WITHOUT authentication (no auth.json, no KANA_ACCESS_PASSWORD). Set KANA_ACCESS_PASSWORD, or set KANA_ALLOW_NO_AUTH=1 to acknowledge an intentionally open instance.",
+  );
+}
+
+function surfaceInsecureNoAuth(response: NextResponse): NextResponse {
+  warnInsecureNoAuthOnce();
+  if (isInsecureNoAuthMode()) response.headers.set(INSECURE_NO_AUTH_HEADER, "1");
+  return response;
+}
+
 function unauthorized(): NextResponse {
-  return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  return surfaceInsecureNoAuth(
+    NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+  );
 }
 
 function forbidden(): NextResponse {
-  return NextResponse.json(
-    { error: "Local process control accepts loopback requests only." },
-    { status: 403 },
+  return surfaceInsecureNoAuth(
+    NextResponse.json(
+      { error: "Local process control accepts loopback requests only." },
+      { status: 403 },
+    ),
   );
 }
 
@@ -38,18 +67,22 @@ export async function proxy(request: NextRequest) {
   const authEnabled = isAuthEnabled();
 
   if (pathname.startsWith("/api/")) {
-    if (PUBLIC_API_PATHS.some((path) => pathname === path)) return NextResponse.next();
+    if (PUBLIC_API_PATHS.some((path) => pathname === path)) {
+      return surfaceInsecureNoAuth(NextResponse.next());
+    }
 
     if (LOCAL_ONLY_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
       if (!isLoopbackRequest(request)) return forbidden();
       if (authEnabled && !(await hasValidSession(request))) return unauthorized();
-      return NextResponse.next();
+      return surfaceInsecureNoAuth(NextResponse.next());
     }
 
-    if (!authEnabled) return NextResponse.next();
+    if (!authEnabled) return surfaceInsecureNoAuth(NextResponse.next());
     if (!(await hasValidSession(request))) return unauthorized();
-    return NextResponse.next();
+    return surfaceInsecureNoAuth(NextResponse.next());
   }
+
+  warnInsecureNoAuthOnce();
 
   if (pathname === "/login") {
     // With no password configured the login page has nothing to do.
