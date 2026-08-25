@@ -69,6 +69,24 @@ export type Copy = {
     degraded: string;
     action: string;
   };
+  panels: {
+    hermesTitle: string;
+    hermesSubtitle: string;
+    ttsTitle: string;
+    ttsSubtitle: string;
+    states: Record<string, string>;
+    start: string;
+    starting: string;
+    restart: string;
+    stop: string;
+    refresh: string;
+    ttsAutoNote: string;
+    ttsFirstStart: string;
+    advanced: string;
+    portLabel: string;
+    cwdLabel: string;
+    cwdPlaceholder: string;
+  };
   gate: {
     connecting: string;
     reconnecting: string;
@@ -151,6 +169,31 @@ const id: Copy = {
   banner: {
     degraded: "Ada komponen Kana yang bermasalah.",
     action: "Periksa",
+  },
+  panels: {
+    hermesTitle: "Hermes — otak asisten",
+    hermesSubtitle: "Proses resmi di mesin ini, tanpa dimodifikasi.",
+    ttsTitle: "Mesin suara Jepang (Qwen3-TTS)",
+    ttsSubtitle: "Menyala otomatis saat suara dibutuhkan.",
+    states: {
+      running: "menyala",
+      external: "menyala",
+      starting: "menyiapkan…",
+      stopping: "mematikan…",
+      failed: "gagal",
+      stopped: "mati",
+    },
+    start: "Nyalakan",
+    starting: "Menyalakan…",
+    restart: "Mulai ulang",
+    stop: "Matikan",
+    refresh: "Perbarui status",
+    ttsAutoNote: "Tidak dipakai = tidak memakan daya. Model hanya bekerja saat ada permintaan suara.",
+    ttsFirstStart: "Menyiapkan model suara — pemakaian pertama bisa mengunduh ±2,3 GB dan butuh beberapa menit.",
+    advanced: "Pengaturan lanjutan",
+    portLabel: "Port lokal",
+    cwdLabel: "Folder kerja (opsional)",
+    cwdPlaceholder: "/home/user/project",
   },
   gate: {
     connecting: "Menghubungkan…",
@@ -238,6 +281,31 @@ const en: Copy = {
   banner: {
     degraded: "A Kana component is having trouble.",
     action: "Check",
+  },
+  panels: {
+    hermesTitle: "Hermes — the assistant's brain",
+    hermesSubtitle: "The official, unmodified process on this machine.",
+    ttsTitle: "Japanese voice engine (Qwen3-TTS)",
+    ttsSubtitle: "Starts automatically whenever voice is needed.",
+    states: {
+      running: "running",
+      external: "running",
+      starting: "starting…",
+      stopping: "stopping…",
+      failed: "failed",
+      stopped: "stopped",
+    },
+    start: "Start",
+    starting: "Starting…",
+    restart: "Restart",
+    stop: "Stop",
+    refresh: "Refresh status",
+    ttsAutoNote: "Idle = zero cost. The model only works when a voice request comes in.",
+    ttsFirstStart: "Preparing the voice model — first use may download ~2.3 GB and take several minutes.",
+    advanced: "Advanced",
+    portLabel: "Local port",
+    cwdLabel: "Working folder (optional)",
+    cwdPlaceholder: "/home/user/project",
   },
   gate: {
     connecting: "Connecting…",
