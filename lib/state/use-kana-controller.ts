@@ -743,7 +743,17 @@ export function useKanaController(appVersion: string) {
           activities: [...turnActivitiesRef.current],
         };
 
+        // TEMP DEBUG: trace the voice path (remove after diagnosis).
+        console.warn(
+          "[kana-debug] assistant.message received",
+          JSON.stringify({
+            voiceEnabled: preferencesRef.current.voiceEnabled,
+            voiceId: preferencesRef.current.qwen3Tts.voiceId,
+            speechLen: event.response.speech_ja?.length ?? 0,
+          }),
+        );
         if (!preferencesRef.current.voiceEnabled) {
+          console.warn("[kana-debug] branch: voice disabled — no speak call");
           avatarController.presentEmotion(assistantMessage.emotion);
           await commitAssistantMessage(conversation.id, assistantMessage);
           return;
@@ -767,6 +777,7 @@ export function useKanaController(appVersion: string) {
             heldMessageRef.current = null;
             await commitAssistantMessage(conversation.id, assistantMessage);
           };
+          console.warn("[kana-debug] calling speak()", new Date().toISOString());
           return getVoice()
             .speak({
               text: event.response.speech_ja,
@@ -774,12 +785,14 @@ export function useKanaController(appVersion: string) {
               emotion: assistantMessage.emotion,
               voiceId: preferencesRef.current.qwen3Tts.voiceId || undefined,
               onAudioStart: () => {
+                console.warn("[kana-debug] onAudioStart fired");
                 avatarController.presentEmotion(assistantMessage.emotion);
                 setStatus("Kana berbicara…");
                 void commitOnce();
               },
             })
             .then(async () => {
+              console.warn("[kana-debug] speak() resolved OK");
               await commitOnce();
               setStatus("Ready when you are");
             })

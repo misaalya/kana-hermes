@@ -38,6 +38,9 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // The login page must stay reachable without a session — otherwise an
+  // unauthenticated visitor to /login is redirected back to /login forever.
+  if (pathname === "/login") return NextResponse.next();
   if (await hasValidSession(request)) return NextResponse.next();
   return NextResponse.redirect(new URL("/login", request.url));
 }
