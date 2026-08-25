@@ -4,7 +4,7 @@ import {
   createVoiceClone,
   saveVoiceReferenceFile,
 } from "@/lib/server/voice-store";
-import { ensureQwen3TTSService } from "@/lib/server/local-qwen3-tts-runtime";
+import { getQwen3TtsServiceReadiness } from "@/lib/server/local-qwen3-tts-runtime";
 import { isAuthEnabled } from "@/lib/server/auth/password-store";
 import { isSessionValid } from "@/lib/server/auth/session";
 import {
@@ -24,22 +24,36 @@ async function requestAuthorized(request: Request): Promise<boolean> {
   return !isAuthEnabled() || (await isSessionValid(request));
 }
 
+const PENDING_REASON_MESSAGE: Record<string, string> = {
+  loading: "Mesin suara sedang menyiapkan model — suara akan terdaftar otomatis begitu siap.",
+  stopped: "Mesin suara belum menyala — suara akan terdaftar otomatis saat pertama dibutuhkan.",
+  error: "Mesin suara gagal dimuat. Perbaiki lewat Pengaturan → mesin suara, lalu tekan Refresh.",
+};
+
 /**
- * GET /api/kana/voices — persistent voice library (SQLite + data/voices).
- * Kicks off default-voice registration in the background; never blocks.
+ * GET /api/kana/voices — persistent voice library (SQLite + data/voices)
+ * plus current engine readiness. Default-voice registration is kicked off
+ * fire-and-forget and throttled server-side; this never blocks on spawn.
  */
 export async function GET(request: Request): Promise<Response> {
   if (!(await requestAuthorized(request))) {
     return Response.json({ error: "Unauthorized" }, { status: 401, headers: NO_STORE });
   }
   void ensureDefaultVoice().catch(() => undefined);
-  return Response.json({ voices: listLibraryVoices() }, { headers: NO_STORE });
+  const readiness = await getQwen3TtsServiceReadiness();
+  return Response.json(
+    {
+      voices: listLibraryVoices(),
+      engine: readiness.ready ? { state: "ready" } : { state: readiness.reason },
+    },
+    { headers: NO_STORE },
+  );
 }
 
 /**
- * POST /api/kana/voices — upload a reference audio file, persist it under
- * the data root, and register it with the Qwen service. The registration
- * blocks here because the user explicitly asked for this clone.
+ * POST /api/kana/voices — persist the reference audio first (it always
+ * survives), then register with the service only when it is already READY.
+ * This endpoint never waits for a spawn/model-load.
  */
 export async function POST(request: Request): Promise<Response> {
   if (!(await requestAuthorized(request))) {
@@ -76,38 +90,24 @@ export async function POST(request: Request): Promise<Response> {
   const filePath = saveVoiceReferenceFile(id, extension, bytes);
   const row = createVoiceClone({ id, name, filePath });
 
-  const ensured = await ensureQwen3TTSService();
-  if (!ensured.ok) {
-    return Response.json(
-      {
-        voice: { id: row.id, name: row.name, registered: false, serviceVoiceId: null, isDefault: false },
-        warning:
-          "Referensi tersimpan. Mesin suara belum siap — suara akan terdaftar otomatis saat layanan menyala.",
-      },
-      { status: 202, headers: NO_STORE },
-    );
-  }
   const serviceVoiceId = await registerVoiceClone(row);
   const updated = getVoiceClone(id);
   if (!serviceVoiceId || !updated?.service_voice_id) {
-    // Keep the stored reference; surface an honest retryable state.
+    const readiness = await getQwen3TtsServiceReadiness();
+    const warning = readiness.ready
+      ? "Pendaftaran ke mesin suara gagal. Coba Refresh nanti."
+      : PENDING_REASON_MESSAGE[readiness.reason];
     return Response.json(
       {
         voice: { id: row.id, name: row.name, registered: false, serviceVoiceId: null, isDefault: false },
-        warning: "Referensi tersimpan, tetapi pendaftaran ke mesin suara gagal. Coba Perbarui status nanti.",
+        warning,
       },
       { status: 202, headers: NO_STORE },
     );
   }
   return Response.json(
     {
-      voice: {
-        id,
-        name,
-        registered: true,
-        serviceVoiceId: updated.service_voice_id,
-        isDefault: false,
-      },
+      voice: { id, name, registered: true, serviceVoiceId: updated.service_voice_id, isDefault: false },
     },
     { headers: NO_STORE },
   );
@@ -128,9 +128,9 @@ export async function DELETE(request: Request): Promise<Response> {
   deleteVoiceClone(id);
   if (row.service_voice_id) {
     try {
-      const ensured = await ensureQwen3TTSService();
-      if (ensured.ok) {
-        await fetch(`http://127.0.0.1:${ensured.status.port}/v1/voices/${encodeURIComponent(row.service_voice_id)}`, {
+      const readiness = await getQwen3TtsServiceReadiness();
+      if (readiness.ready) {
+        await fetch(`http://127.0.0.1:${readiness.port}/v1/voices/${encodeURIComponent(row.service_voice_id)}`, {
           method: "DELETE",
           signal: AbortSignal.timeout(15_000),
         });

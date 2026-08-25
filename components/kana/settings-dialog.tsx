@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import type { KanaPreferences } from "@/lib/preferences/types";
 import type { Emotion } from "@/lib/presentation/types";
 import type { AvatarModelSummary } from "@/lib/avatar/indexed-db-avatar-model-store";
-import type { VoiceProviderStatus } from "@/lib/voice/types";
 import type { HermesRuntimeStatus } from "@/lib/runtime/hermes-control-client";
 import {
   changeAccessPassword,
@@ -32,7 +31,6 @@ type SettingsDialogProps = {
   onPreviewAvatarEmotion(preferences: KanaPreferences, emotion: Emotion): Promise<void>;
   onPreviewAvatarMotion(preferences: KanaPreferences, motion: string): Promise<void>;
   onPreviewAvatarTalking(preferences: KanaPreferences): Promise<void>;
-  onInspectVoice(baseUrl: string): Promise<VoiceProviderStatus>;
   onInspectHermesControl(preferredPort?: number): Promise<HermesRuntimeStatus>;
   onStartHermesControl(options: { port: number; cwd?: string; restart?: boolean }): Promise<HermesRuntimeStatus>;
   onStopHermesControl(): Promise<HermesRuntimeStatus>;
@@ -136,7 +134,6 @@ export function SettingsDialog({
   preferences,
   onSave,
   onClose,
-  onInspectVoice,
   onInspectHermesControl,
   onStartHermesControl,
   onStopHermesControl,
@@ -217,7 +214,6 @@ export function SettingsDialog({
                   onVoiceSelect={(voiceId) =>
                     setDraft((prev) => ({ ...prev, qwen3Tts: { ...prev.qwen3Tts, voiceId } }))
                   }
-                  onInspectService={() => onInspectVoice(draft.qwen3Tts.baseUrl)}
                 />
                 <p className="text-[10px] text-faint">
                   Perubahan suara tersimpan saat kamu menekan Done.

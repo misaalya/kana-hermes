@@ -604,7 +604,6 @@ export function KanaApp({ appVersion }: KanaAppProps) {
           onPreviewAvatarEmotion={kana.previewAvatarEmotion}
           onPreviewAvatarMotion={kana.previewAvatarMotion}
           onPreviewAvatarTalking={kana.previewAvatarTalking}
-          onInspectVoice={kana.inspectVoiceService}
           onInspectHermesControl={kana.inspectHermesControl}
           onStartHermesControl={kana.startHermesControl}
           onStopHermesControl={kana.stopHermesControl}

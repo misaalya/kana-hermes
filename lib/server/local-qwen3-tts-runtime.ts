@@ -147,8 +147,7 @@ type Qwen3TtsHealthProbe =
 async function probeHealth(
   port: number,
   timeoutMs = 750,
-): Promise<Qwen3TtsHealthProbe> {
-  const controller = new AbortController();
+): Promise<Qwen3TtsHealthProbe> {  const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(`http://127.0.0.1:${port}/v1/health`, {
@@ -422,6 +421,36 @@ export async function stopLocalQwen3TtsRuntime(): Promise<LocalQwen3TtsRuntimeSt
   current.state = "stopped";
   current.lastMessage = "No managed Qwen3-TTS process was running.";
   return publicStatus(current);
+}
+
+export type Qwen3TtsServiceReadiness =
+  | { ready: true; port: number }
+  | { ready: false; reason: "loading" | "error" | "stopped" };
+
+/** Cheap readiness probe: adopts an already-running service but never spawns. */
+export async function getQwen3TtsServiceReadiness(): Promise<Qwen3TtsServiceReadiness> {
+  const inspected = await inspectLocalQwen3TtsRuntime();
+  if (inspected.state !== "running" && inspected.state !== "external") {
+    return { ready: false, reason: "stopped" };
+  }
+  const health = await probeHealth(inspected.port);
+  switch (health.kind) {
+    case "ready":
+      return { ready: true, port: inspected.port };
+    case "loading":
+      return { ready: false, reason: "loading" };
+    case "error":
+      return { ready: false, reason: "error" };
+    default:
+      return { ready: false, reason: "stopped" };
+  }
+}
+
+export type Qwen3TtsHealthKind = Qwen3TtsHealthProbe["kind"];
+
+/** Raw health classification for one candidate port (no adoption, no spawn). */
+export async function probeQwen3TtsHealthKind(port: number): Promise<Qwen3TtsHealthKind> {
+  return (await probeHealth(port)).kind;
 }
 
 export type EnsureQwen3TtsResult =
