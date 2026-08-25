@@ -5,8 +5,6 @@ import type { KanaPreferences } from "@/lib/preferences/types";
 import type { Emotion } from "@/lib/presentation/types";
 import type { AvatarModelSummary } from "@/lib/avatar/indexed-db-avatar-model-store";
 import type { VoiceProviderStatus } from "@/lib/voice/types";
-import type { VoiceDescriptor } from "@/lib/voice/types";
-import type { CreateVoiceCloneInput } from "@/lib/voice/qwen3-tts-contract";
 import type { HermesRuntimeStatus } from "@/lib/runtime/hermes-control-client";
 import {
   changeAccessPassword,
@@ -35,8 +33,6 @@ type SettingsDialogProps = {
   onPreviewAvatarMotion(preferences: KanaPreferences, motion: string): Promise<void>;
   onPreviewAvatarTalking(preferences: KanaPreferences): Promise<void>;
   onInspectVoice(baseUrl: string): Promise<VoiceProviderStatus>;
-  onCloneVoice(baseUrl: string, input: CreateVoiceCloneInput): Promise<VoiceDescriptor>;
-  onDeleteClonedVoice(baseUrl: string, voiceId: string): Promise<VoiceProviderStatus>;
   onInspectHermesControl(preferredPort?: number): Promise<HermesRuntimeStatus>;
   onStartHermesControl(options: { port: number; cwd?: string; restart?: boolean }): Promise<HermesRuntimeStatus>;
   onStopHermesControl(): Promise<HermesRuntimeStatus>;
@@ -141,8 +137,6 @@ export function SettingsDialog({
   onSave,
   onClose,
   onInspectVoice,
-  onCloneVoice,
-  onDeleteClonedVoice,
   onInspectHermesControl,
   onStartHermesControl,
   onStopHermesControl,
@@ -223,9 +217,7 @@ export function SettingsDialog({
                   onVoiceSelect={(voiceId) =>
                     setDraft((prev) => ({ ...prev, qwen3Tts: { ...prev.qwen3Tts, voiceId } }))
                   }
-                  onInspect={() => onInspectVoice(draft.qwen3Tts.baseUrl)}
-                  onClone={(input) => onCloneVoice(draft.qwen3Tts.baseUrl, input)}
-                  onDeleteCloned={(voiceId) => onDeleteClonedVoice(draft.qwen3Tts.baseUrl, voiceId)}
+                  onInspectService={() => onInspectVoice(draft.qwen3Tts.baseUrl)}
                 />
                 <p className="text-[10px] text-faint">
                   Perubahan suara tersimpan saat kamu menekan Done.
