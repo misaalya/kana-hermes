@@ -6,6 +6,7 @@ import type {
   AgentCommandSuggestion,
   AgentConnectionState,
   AgentEvent,
+  AgentHistoryRow,
   AgentInputRequest,
   AgentInputResponse,
   AgentMessageInput,
@@ -184,9 +185,23 @@ export class HermesAgentClient implements AgentClient {
       this.setConnection("connected");
     })();
 
-    this.connectPromise = connectPromise.finally(() => {
-      this.connectPromise = null;
-    });
+    this.connectPromise = connectPromise
+      .catch((error: unknown) => {
+        // First-connect failures must land in a terminal state: rejecting
+        // alone parked the connection in "connecting" forever (endless gate
+        // spinner, and the manual button disabled itself as a transition).
+        if (!this.connectedOnce && !this.intentionallyClosing) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : "Could not reach the Hermes relay.";
+          this.setConnection("error", message);
+        }
+        throw error;
+      })
+      .finally(() => {
+        this.connectPromise = null;
+      });
     return this.connectPromise;
   }
 
@@ -352,6 +367,17 @@ export class HermesAgentClient implements AgentClient {
     };
     this.emit({ type: "session.opened", ...this.session });
     if (options.persistentSessionId) {
+      // session.resume already carries the full display transcript — no
+      // second RPC is needed to restore it (verified in methods_session.py).
+      this.emit({
+        type: "history.restored",
+        sessionId: this.session.sessionId,
+        persistentSessionId,
+        messages: (response.messages ?? []).map((message) => ({
+          ...message,
+          role: message.role ?? "",
+        })),
+      });
       try {
         const title = await this.request<{ title?: string }>("session.title", {
           session_id: this.session.sessionId,
@@ -392,27 +418,19 @@ export class HermesAgentClient implements AgentClient {
     this.queuedPrompts.push({ message, subtitleLanguage });
   }
 
-  async fetchHistory(hermesSessionKey: string): Promise<{
-    messages?: Array<{
-      role: string;
-      text?: string;
-      name?: string;
-      context?: string;
-      timestamp?: number;
-    }>;
+  async fetchHistory(): Promise<{
+    messages?: AgentHistoryRow[];
   }> {
-    return this.request<{
-      messages?: Array<{
-        role: string;
-        text?: string;
-        name?: string;
-        context?: string;
-        timestamp?: number;
-      }>;
-    }>(
+    // Hermes resolves session.history ONLY by runtime session id; a durable
+    // key fails with JSON-RPC 4001 ("session not found"). The runtime id
+    // exists after openSession, so refuse instead of sending a doomed call.
+    const sessionId = this.session?.sessionId;
+    if (!sessionId) {
+      throw new Error("Open a Hermes session before fetching its history.");
+    }
+    return this.request<{ messages?: AgentHistoryRow[] }>(
       "session.history",
-      // The gateway resolves stored sessions by their durable key on resume.
-      { session_id: hermesSessionKey },
+      { session_id: sessionId },
       60_000,
     );
   }
