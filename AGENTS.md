@@ -12,7 +12,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 This file is the implementation handoff and operating guide for agents working
 on Kana. Read it completely before changing the project. The status below was
-last reviewed on 2026-08-22.
+last reviewed on 2026-08-25. Active remediation work is tracked in `PLAN.md`.
 
 ## Product definition
 
@@ -24,16 +24,18 @@ The ownership boundary is:
 
 ```text
 User
-  -> Kana Web UI
-  -> AgentClient
-  -> HermesAgentClient
-  -> unmodified `hermes serve`
+  -> Kana Web UI (browser)
+  -> Kana server relay (/api/hermes/*, same-origin session cookie)
+  -> HermesAgentClient over the relay (SSE events + allow-listed JSON-RPC)
+  -> hermes-bridge: ONE server-held WebSocket to unmodified `hermes serve`
   -> Hermes agent loop, tools, filesystem, MCP, subagents, memory, and context
 ```
 
-Kana owns presentation, local UI preferences, locally displayed conversation
-history, avatar control, audio playback, and translating Hermes events into a
-stable internal UI model. Hermes owns reasoning and every agent capability.
+Kana owns presentation, local UI preferences, the per-turn tool-activity log
+(server-side SQLite), avatar control, audio playback, and translating Hermes
+events into a stable internal UI model. The conversation transcript itself is
+owned by Hermes and restored from it. Hermes owns reasoning and every agent
+capability.
 
 ## Non-negotiable rules
 
@@ -49,6 +51,13 @@ stable internal UI model. Hermes owns reasoning and every agent capability.
 - Keep voice, avatar, conversation storage, presentation protocol, and agent
   concerns behind their existing interfaces. Do not merge them into one React
   component or controller class.
+- The browser never holds a Hermes session token. The Kana server mints or
+  discovers it, keeps it in process memory, and the browser reaches Hermes
+  only through `/api/hermes/*`.
+- All server-side persistent state (auth hash, JWT secret, activities DB)
+  lives under ONE data root resolved by `lib/server/data-dir.ts`
+  (`KANA_DATA_DIR` → XDG → HOME). Never introduce a new `$CWD`-relative
+  storage location.
 - Do not hardcode a single Live2D model or third-party copyrighted character.
 - Do not hardcode Indonesian as the subtitle language.
 - Do not retranslate old conversation history when the current subtitle
@@ -95,20 +104,47 @@ Hermes exposes multiple surfaces with different purposes:
   control plane Kana needs.
 
 A local bridge is required because a browser cannot spawn the Hermes binary.
-For now the user starts `hermes serve` separately. A future desktop wrapper may
-manage that process, but the underlying Hermes installation must remain
-independently updatable.
+Kana's Node server owns the gateway lifecycle: on first connect it discovers a
+running `hermes serve` (process-table scan plus `/proc/<pid>/environ` token
+read, Linux) or spawns the unmodified binary itself with a server-minted
+session token. The token never leaves the Kana server process. Manual starts
+are still honored: `hermes serve --host 127.0.0.1 --port 9119` is discovered
+and adopted when its environment exposes `HERMES_DASHBOARD_SESSION_TOKEN`.
 
-Start a local Hermes UI gateway with:
+## Server-side custody, relay, and the data root
 
-```bash
-HERMES_DASHBOARD_SESSION_TOKEN="replace-with-a-long-local-token" \
-  /home/kenobu/.local/bin/hermes serve --host 127.0.0.1 --port 9119
+```text
+Browser                         Kana Next.js server                Hermes
+SSE  GET /api/hermes/events  ->  hermes-bridge (1 shared WS)   ->  /api/ws
+RPC  POST /api/hermes/rpc    ->  allow-listed JSON-RPC forward
+     GET  /api/kana/sessions ->  session.list filtered to source "kana"
+     GET/PUT /api/kana/activities -> SQLite activity store
 ```
 
-Kana then connects to `ws://127.0.0.1:9119/api/ws`. The Kana page and Hermes
-must use the same hostname form because Hermes validates the browser WebSocket
-origin.
+- The browser authenticates with its Kana session cookie; the Hermes session
+  token stays inside the server process (`lib/server/hermes-bridge.ts`).
+- Transcript authority is Hermes: restoring a conversation parses the
+  `messages` returned by `session.resume` (emitted to the UI as the
+  `history.restored` agent event). `session.history` accepts only the RUNTIME
+  session id, never the durable key, and is a fallback only.
+- Per-turn tool activity logs live in SQLite (`activities.db`) keyed by the
+  durable Hermes session plus a zero-based assistant-reply ordinal
+  (`turn_index`, schema v2). They are reconstructed from restored history and
+  mirrored by live turns through `/api/kana/activities`.
+- All persistent server state — auth hash, JWT secret, activities DB — lives
+  under one data root resolved by `lib/server/data-dir.ts`
+  (`KANA_DATA_DIR` → XDG → HOME; production fails loudly without it). Legacy
+  files from `$HOME/.kana` / `$CWD/data` are adopted on first use.
+- Login is password-based with a deny-by-default proxy. Production without
+  auth config surfaces `insecureNoAuth` (header + auth status) and logs
+  loudly unless `KANA_ALLOW_NO_AUTH=1`. Local process-control routes trust a
+  shared-secret header (`KANA_TRUSTED_PROXY_SECRET`), not a spoofable flag.
+- The Qwen3-TTS Python service is spawned/probed by the Node runtime and
+  reached by the browser only through `/api/voice/tts/*` relay routes,
+  including request cancellation.
+
+For VPS deployment requirements see the checklist in `PLAN.md` §10 and
+`docs/SUPPORTED_ENVIRONMENT.md`.
 
 ## Hermes interfaces confirmed in the installed source
 
@@ -116,6 +152,9 @@ The current adapter uses or is designed around these official methods:
 
 - session lifecycle: `session.create`, `session.resume`, `session.close`,
   `session.interrupt`, `session.title`, and `session.branch`;
+- transcript access: `session.history` (RUNTIME session id only — the durable
+  key returns "session not found") and `session.list` (durable directory,
+  filtered to `source: "kana"` server-side);
 - prompts and events: `prompt.submit` plus gateway session/message/tool/status
   events;
 - slash commands: `commands.catalog`, `complete.slash`, `slash.exec`, and
@@ -229,8 +268,19 @@ ornamental dashboard. This is a product direction, not a temporary theme.
 - Next.js App Router UI with a minimal white workspace, centered avatar stage,
   Codex-inspired conversation sidebar/composer hierarchy, and responsive
   mobile drawer layout.
-- `HermesAgentClient` WebSocket connection, session create/resume, prompt
-  submission, interruption, and event translation.
+- `HermesAgentClient` over the server relay: SSE event stream plus
+  allow-listed JSON-RPC (`/api/hermes/events`, `/api/hermes/rpc`), session
+  create/resume, prompt submission, interruption, and event translation.
+- Event-driven transcript restore: `session.resume` responses carry the full
+  display transcript; the adapter emits `history.restored` and the controller
+  parses it (kana_request unwrap, response envelope, tool rows). Selecting a
+  linked conversation or auto-connecting opens the session first, so
+  refreshes and fresh browsers always repopulate the transcript. Auto-connect
+  lands on the most recent non-empty Hermes session instead of minting a
+  blank one per visit.
+- Per-turn tool activity logs in SQLite (schema v2, `turn_index` ordinal with
+  idempotent v1 migration), reconstructed from restored history and mirrored
+  by live turns; `LiveChatFeed` splices them by ordinal across browsers.
 - Live categorized Hermes slash catalog, command search, argument completion,
   command execution, aliases, skill/send directives, dedicated approval/title/
   branch handling, and busy-turn prompt queuing.
@@ -240,23 +290,22 @@ ornamental dashboard. This is a product direction, not a temporary theme.
   preferences, or local storage.
 - Kana persona and strict response parsing for Japanese speech, stored
   subtitles, language, and emotion.
-- Local user preferences in browser storage.
-- Persistent preferences exclude the Hermes token. The migration path through
-  v5 moves legacy tokens into tab-scoped session storage, adds first-run
-  completion and voice delivery mode, and strips credentials embedded in
-  legacy WebSocket URLs. Existing installs retain complete-response voice.
-- `IndexedDbConversationStore` with create, reopen, continue, rename, and
-  delete, plus idempotent migration from the v1 localStorage envelope.
-- Historical subtitle preservation across preference changes.
+- Local user preferences in browser storage; the Hermes session token is
+  server-side only and never enters browser storage in any form.
+- Password-based login behind a deny-by-default proxy, single data root for
+  auth/JWT/activity state, production no-auth surfacing (`insecureNoAuth`),
+  and a shared-secret trusted-proxy model — see the custody section above.
 - Browser audio decoding/playback and amplitude-based lip sync through the Web
-  Audio API.
+  Audio API, with autoplay-policy timeouts and per-playback graph cleanup.
 - A versioned local Qwen3-TTS API service backed by the official
   `qwen-tts==0.1.1` package and pinned official 0.6B CustomVoice model. It
   exposes health, voice discovery, Japanese WAV synthesis, request
   cancellation, local-only CORS, and a CPU-safe default.
-- `Qwen3TTSProvider` checks API compatibility, discovers live voices, sends
-  `speech_ja` as Japanese, aborts server work when stopped, decodes WAV audio,
-  and drives Live2D lip sync. Complete WAV is the default. An opt-in
+- `Qwen3TTSProvider` reaches the service only through the Kana relay
+  (`/api/voice/tts/*`), checks API compatibility, discovers live voices,
+  sends `speech_ja` as Japanese, cancels server work when stopped (dedicated
+  cancel route + upstream abort propagation), decodes WAV audio, and drives
+  Live2D lip sync. Complete WAV is the default. An opt-in
   experimental sentence mode preserves the exact text/order, prefetches the
   next part, cancels safely, and replays all cached parts without another
   Hermes request.
@@ -296,8 +345,8 @@ ornamental dashboard. This is a product direction, not a temporary theme.
   temporary home. Active turn and protected input restart cases remain an
   explicit beta acceptance matrix.
 - Arrow-key/Enter/Tab/Escape slash-menu navigation, mobile drawer/settings
-  behavior, IndexedDB history reload, and WebGL teardown were manually checked
-  in the local browser at desktop and 390 × 844 mobile viewport sizes.
+  behavior, transcript restore after reload, and WebGL teardown were manually
+  checked in the local browser at desktop and 390 × 844 mobile viewport sizes.
 - First-run setup, conversation search, per-conversation drafts, linked/missing
   Hermes session markers, modal focus restoration/trapping, safe diagnostics,
   route-level error recovery, and versioned local backup/restore are present.
@@ -355,64 +404,66 @@ Hermes mode and successfully connects to `hermes serve`.
 
 ```text
 app/page.tsx                              App entry
-components/kana/kana-app.tsx             Main composition and composer
+components/kana/kana-app.tsx             Main composition, gate/auto-connect
+components/kana/live-chat-feed.tsx        Chronological message+activity feed
 components/kana/agent-input-dialog.tsx   Approval and secure Hermes input UI
 components/kana/slash-command-menu.tsx   Slash catalog/completion UI
-lib/state/use-kana-controller.ts          Application orchestration/state
+lib/state/use-kana-controller.ts          Application orchestration (god hook;
+                                          zustand slice refactor tracked in PLAN.md)
 lib/agent/types.ts                        Stable agent contracts/events
-lib/agent/hermes/hermes-agent-client.ts   Hermes JSON-RPC adapter
+lib/agent/hermes/hermes-agent-client.ts   Hermes relay adapter (SSE + JSON-RPC)
 lib/agent/hermes/gateway-types.ts         Hermes wire response types
-lib/agent/hermes/gateway-url.ts           Credential-safe WebSocket endpoint handling
+lib/agent/hermes/gateway-url.ts           Relay URL normalization
 lib/agent/hermes/kana-command-surface.ts  Honest surface availability mapping
+lib/server/hermes-bridge.ts               Server-held gateway WS + token custody
+lib/server/local-hermes-runtime.ts        hermes serve spawn/discovery control
+lib/server/data-dir.ts                    KANA_DATA_DIR resolver + legacy adoption
+lib/server/activity-store.ts              SQLite per-turn activity log (schema v2)
+app/api/hermes/events                     SSE downstream relay
+app/api/hermes/rpc                        Allow-listed JSON-RPC relay
+app/api/kana/sessions                     session.list filtered to source "kana"
+app/api/kana/activities                   Activity turn store GET/PUT
+lib/server/auth/*                         Password store, JWT session, loopback,
+                                          login limiter
+proxy.ts                                  Deny-by-default auth proxy (Next 16)
 lib/presentation/persona.ts               Persona and response instructions
 lib/presentation/response-parser.ts       Structured response validation
-lib/conversation/types.ts                 Stored history model/contracts
-lib/conversation/indexed-db-conversation-store.ts Primary history persistence
-lib/conversation/local-conversation-store.ts Legacy migration/fallback
+lib/conversation/memory-conversation-store.ts In-memory conversation state
+                                          (transcripts live in Hermes)
 lib/backup/kana-backup.ts                  Versioned credential-free backup format
 lib/avatar/avatar-controller.ts           Provider-independent avatar control
 lib/avatar/defaults.ts                     Official Haru/Mao URLs and bindings
-lib/avatar/binding-backup.ts               Asset-free binding import/export
 lib/avatar/live2d-avatar-provider.ts       Live2D integration boundary
 lib/avatar/managed-avatar-provider.ts      Stable runtime/fallback delegation
 lib/avatar/pixi-live2d-runtime-adapter.ts  Pixi/Cubism canvas implementation
 lib/avatar/indexed-db-avatar-model-store.ts Imported model persistence
 lib/avatar/model-bindings.ts               Per-source binding resolution
-lib/avatar/mock-avatar-provider.ts         CSS fallback runtime state
+lib/avatar/binding-backup.ts               Asset-free binding import/export
 lib/voice/qwen3-tts-contract.ts            Versioned browser/service protocol
-lib/voice/qwen3-tts-provider.ts            Local TTS HTTP client
-lib/voice/speech-chunks.ts                  Ordered Japanese sentence delivery
+lib/voice/qwen3-tts-provider.ts            TTS client via /api/voice/tts relay
+lib/server/tts-relay.ts                    Relay helpers (session + port guard)
+lib/server/local-qwen3-tts-runtime.ts      Python service spawn/probe control
 lib/voice/audio-lip-sync.ts                Web Audio lip-sync mechanism
 lib/preferences/local-preferences-store.ts Local settings persistence
-lib/preferences/session-hermes-credentials-store.ts Tab-only Hermes token
 lib/diagnostics/safe-diagnostics.ts        Redacted local diagnostics
-lib/accessibility/use-dialog-focus.ts      Modal focus trap/restoration
-lib/storage/kana-indexed-db.ts              Shared browser database
 services/qwen3-tts/                         Official-model local Python service
 scripts/package-standalone.mjs              Local production package assembly
 scripts/hermes-restart-acceptance.ts         Isolated real-server restart audit
 scripts/qwen3-tts-acceptance.mjs             Target-host latency/cancel evidence
-scripts/dogfood-check.mjs                    Executable beta evidence gate
-scripts/dogfood-journal.mjs                  Validated dogfood evidence writer
-scripts/hermes-active-restart-check.mjs      Active restart evidence validator
-acceptance/hermes-active-restart.json        Pending real restart observations
 tests/agent/hermes-agent-client.test.ts     Adapter/control/recovery tests
-tests/preferences/local-preferences-store.test.ts Credential migration tests
+tests/server/                               data-dir, trusted-proxy, auth,
+                                            activity-store unit tests
 tests/e2e/kana-critical-journeys.spec.ts    Desktop/mobile acceptance journeys
-tests/e2e/pwa-installability.spec.ts        Production install/offline journey
-tests/live2d-e2e/official-samples.spec.ts   Real official-model switching
-public/sw.js                                Same-origin offline app shell
-docs/QUALITY.md                             Repeatable quality matrix
-docs/HERMES_RESTART_ACCEPTANCE.md           Active/idle restart criteria
-docs/QWEN3_TTS_VPS_ACCEPTANCE.md            Real synthesis baseline procedure
-docs/DOGFOOD.md                             Seven-day beta journal contract
-docs/BETA_ACCEPTANCE_HANDOFF.md              Unified remaining beta procedure
 docs/SECURITY.md                            Local threat model and controls
-docs/SUPPORTED_ENVIRONMENT.md               Tested versions and limitations
-docs/COMPATIBILITY_POLICY.md                Alpha/beta/stable and Hermes policy
+docs/SUPPORTED_ENVIRONMENT.md               Tested versions + VPS deploy guide
+PLAN.md                                     Active remediation plan/status
 ```
 
 ## Implementation plan
+
+The phased plan below is complete; ACTIVE remediation work (bug fixes,
+hardening, the deferred zustand slice refactor) is tracked in `PLAN.md` —
+read it before picking up work here.
 
 Work incrementally and keep the application usable after every phase.
 
@@ -537,5 +588,7 @@ A change is done only when:
 - interfaces still isolate Hermes, voice, avatar, storage, and presentation;
 - Japanese speech and selected-language subtitle rules still hold;
 - stored historical subtitles remain byte-for-byte what the user saw;
+- the browser holds no Hermes token and no new `$CWD`-relative server state
+  path was introduced;
 - real integrations fail honestly when their external service is unavailable;
 - lint, TypeScript, and production build pass in proportion to the change.
