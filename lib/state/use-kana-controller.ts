@@ -200,14 +200,27 @@ function parseHermesTranscript(rows: AgentHistoryRow[]): {
     }
     if (row.role === "user") {
       let text = row.text ?? "";
-      // Unwrap the kana_request wrapper: extract the raw user message
-      // from the metadata envelope (string value, JSON-escaped).
-      const match = /"user_message"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(text);
-      if (match) {
+      // Unwrap the kana_request wrapper: the stored row is the full prompt
+      // Kana sent (prose + a JSON metadata envelope). Parse the envelope as
+      // real JSON instead of regex-scraping it — a regex breaks on escaped
+      // quotes and would leave the restored text as raw JSON, which then
+      // never matches the local copy during merge and drops messages.
+      const braceIndex = text.indexOf("{");
+      if (braceIndex !== -1) {
         try {
-          text = JSON.parse(`"${match[1]}"`) as string;
+          const envelope = JSON.parse(text.slice(braceIndex)) as {
+            user_message?: unknown;
+          };
+          if (typeof envelope.user_message === "string" && envelope.user_message) {
+            // Keep any prose before the envelope (the resume seed prefix).
+            text = (
+              text.slice(0, braceIndex).trim() +
+              " " +
+              envelope.user_message
+            ).trim();
+          }
         } catch {
-          /* keep raw text */
+          /* not an envelope — keep raw text */
         }
       }
       messages.push({ ...createUserMessage(text), timestamp });
