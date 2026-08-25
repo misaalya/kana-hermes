@@ -237,6 +237,9 @@ describe("Qwen3-TTS browser contract", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
     assert.ok(resolveSecondSpeech);
+    // The first part finished playing, so the CURRENT utterance already has
+    // replayable audio even though part two never played.
+    assert.equal(provider.getSnapshot().canReplay, true);
     provider.stop();
     const finishSecondSpeech = resolveSecondSpeech as (response: Response) => void;
     finishSecondSpeech(
@@ -250,8 +253,57 @@ describe("Qwen3-TTS browser contract", () => {
     });
     assert.equal(playCount, 1);
     assert.equal(cancelRequestCount, 1);
-    assert.equal(provider.getSnapshot().state, "idle");
-    assert.equal(provider.getSnapshot().canReplay, false);
+    assert.equal(provider.getSnapshot().state, "ready");
+    assert.equal(provider.getSnapshot().canReplay, true);
+  });
+
+  it("surfaces a failed upstream cancel as status instead of swallowing it", async () => {
+    Object.defineProperty(globalThis, "fetch", {
+      configurable: true,
+      value: (input: string | URL | Request) => {
+        const url = String(input);
+        if (url.endsWith("/speech")) {
+          return new Promise<Response>((resolve) => {
+            setTimeout(
+              () =>
+                resolve(
+                  new Response(new TextEncoder().encode("RIFF1"), {
+                    headers: { "content-type": "audio/wav" },
+                  }),
+                ),
+              20,
+            );
+          });
+        }
+        if (url.includes("/cancel")) {
+          return Promise.resolve(new Response("no relay", { status: 404 }));
+        }
+        return Promise.resolve(responseFor(url));
+      },
+    });
+
+    let resolvePlay: (() => void) | null = null;
+    const provider = new Qwen3TTSProvider(
+      { baseUrl: "http://127.0.0.1:7860" },
+      null as unknown as AvatarController,
+      {
+        play: () =>
+          new Promise<void>((resolve) => {
+            resolvePlay = resolve;
+          }),
+        stop: () => {
+          resolvePlay?.();
+          resolvePlay = null;
+        },
+      },
+    );
+    const speaking = provider.speak({ text: "止まらない。", language: "ja" });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    provider.stop();
+    await speaking.catch(() => undefined);
+    // Let the cancel POST settle.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.match(provider.getSnapshot().message ?? "", /could not be told to cancel/);
   });
 
   it("prevents a cancelled response from starting stale playback", async () => {

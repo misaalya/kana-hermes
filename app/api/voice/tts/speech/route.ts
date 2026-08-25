@@ -21,7 +21,13 @@ export async function POST(request: Request): Promise<Response> {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body,
-      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+      // A browser abort must break the upstream fetch so Python's
+      // request.is_disconnected() fires and sets its cancel event; the
+      // timeout still bounds a wedged upstream on its own.
+      signal: AbortSignal.any([
+        request.signal,
+        AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+      ]),
     });
     return new Response(upstream.body, {
       status: upstream.status,

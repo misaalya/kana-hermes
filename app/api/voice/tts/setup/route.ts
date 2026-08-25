@@ -1,15 +1,21 @@
-import { ensureOr503, requireSession, ttsServiceUrl } from "@/lib/server/tts-relay";
+import {
+  probeOnlyPortOr503,
+  requireSession,
+  ttsServiceUrl,
+} from "@/lib/server/tts-relay";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Relay GET /v1/setup: disk/cache info from the upstream.
+// Relay GET /v1/setup: disk/cache info from the upstream. Probe-only — a
+// setup check must not cold-start the model; spawning happens through the
+// explicit control routes or ensure-on-use speech.
 const UPSTREAM_TIMEOUT_MS = 5_000;
 
 export async function GET(request: Request): Promise<Response> {
   const unauthorized = await requireSession(request);
   if (unauthorized) return unauthorized;
-  const ensured = await ensureOr503();
+  const ensured = await probeOnlyPortOr503();
   if (!ensured.ok) return ensured.response;
   try {
     const upstream = await fetch(ttsServiceUrl(ensured.port, "/v1/setup"), {

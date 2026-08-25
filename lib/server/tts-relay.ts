@@ -1,4 +1,7 @@
-import { ensureQwen3TTSService } from "@/lib/server/local-qwen3-tts-runtime";
+import {
+  ensureQwen3TTSService,
+  inspectLocalQwen3TtsRuntime,
+} from "@/lib/server/local-qwen3-tts-runtime";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,7 +27,7 @@ export async function ensureOr503(): Promise<
   { ok: true; port: number } | { ok: false; response: Response }
 > {
   const result = await ensureQwen3TTSService();
-  if (result.ok) return { ok: true, port: result.port };
+  if (result.ok) return { ok: true, port: result.status.port };
   return {
     ok: false,
     response: Response.json(
@@ -32,6 +35,29 @@ export async function ensureOr503(): Promise<
         error: "The Qwen3-TTS service is unavailable.",
         detail: result.status.message,
         state: result.status.state,
+      },
+      { status: 503 },
+    ),
+  };
+}
+
+// Probe-only resolution for routes that must never spawn the Python service
+// (health, setup, cancel): adopt an already-running instance or report the
+// honest runtime state instead of triggering a cold start.
+export async function probeOnlyPortOr503(): Promise<
+  { ok: true; port: number } | { ok: false; response: Response }
+> {
+  const status = await inspectLocalQwen3TtsRuntime();
+  if (status.state === "running" || status.state === "external") {
+    return { ok: true, port: status.port };
+  }
+  return {
+    ok: false,
+    response: Response.json(
+      {
+        error: "The Qwen3-TTS service is not running.",
+        detail: status.message,
+        state: status.state,
       },
       { status: 503 },
     ),
