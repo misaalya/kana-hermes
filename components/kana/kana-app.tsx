@@ -10,11 +10,17 @@ import { FetchIndicator } from "./fetch-indicator";
 import { FetchDebugOverlay } from "./fetch-debug-overlay";
 import { SettingsDialog } from "./settings-dialog";
 import { SlashCommandMenu } from "./slash-command-menu";
-import { OnboardingDialog } from "./onboarding-dialog";
+import { OnboardingWizard, type DependencyFindings } from "./onboarding-dialog";
 import { useKanaController } from "@/lib/state/use-kana-controller";
 import { useTheme } from "@/lib/state/use-theme";
 import type { KanaMessage } from "@/lib/conversation/types";
 import type { HermesRuntimeStatus } from "@/lib/runtime/hermes-control-client";
+import {
+  fetchSetupState,
+  markOnboardingComplete,
+} from "@/lib/runtime/setup-client";
+import { getCopy } from "@/lib/ui/copy";
+import type { KanaPreferences } from "@/lib/preferences/types";
 import { btnPrimary, btnSecondary } from "./ui";
 
 function destructiveCommandPrompt(input: string): string | null {
@@ -48,6 +54,11 @@ export function KanaApp({ appVersion }: KanaAppProps) {
   const [hermesRuntime, setHermesRuntime] = useState<HermesRuntimeStatus | null>(null);
   const [hermesRuntimeNotice, setHermesRuntimeNotice] = useState<string | null>(null);
   const [hermesRuntimeBusy, setHermesRuntimeBusy] = useState(false);
+  // Install-level setup state (server SQLite) + dependency findings drive the
+  // wizard: full mode runs once per installation, repair mode once per
+  // browser session while a dependency is unhealthy.
+  const [deps, setDeps] = useState<DependencyFindings>({ hermes: "installed", voice: null });
+  const [wizardMode, setWizardMode] = useState<null | "full" | "repair">(null);
   const selectedCommandIndexRef = useRef(0);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const { clearCommandSuggestions } = kana;
@@ -197,6 +208,76 @@ export function KanaApp({ appVersion }: KanaAppProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showGate]);
 
+  // Setup wizard driver. The full run is keyed on the SERVER-side flag (once
+  // per installation); dependency degradation opens a repair run at most once
+  // per browser session so a broken cache never nags repeatedly.
+  const repairSeenKey = "kana.repairPrompt.seen";
+  useEffect(() => {
+    if (!kana.ready) return;
+    let active = true;
+    void (async () => {
+      const state = await fetchSetupState();
+      if (!active) return;
+
+      let hermes: DependencyFindings["hermes"] = "installed";
+      try {
+        const status = await kana.inspectHermesControl();
+        if (active) setHermesRuntime(status);
+        hermes =
+          status.state === "running" || Boolean(status.executable)
+            ? "installed"
+            : "missing";
+        if (status.state === "running") hermes = "running";
+      } catch {
+        hermes = "missing";
+      }
+
+      let voice: DependencyFindings["voice"] = null;
+      if (kana.preferences.voiceEnabled) {
+        try {
+          const status = await kana.inspectVoiceService(kana.preferences.qwen3Tts.baseUrl);
+          voice =
+            status.state === "error"
+              ? "error"
+              : status.state === "loading"
+                ? "loading"
+                : status.state === "ready"
+                  ? "ok"
+                  : "stopped";
+        } catch {
+          voice = "error";
+        }
+      }
+      if (!active) return;
+      const findings = { hermes, voice };
+      setDeps(findings);
+
+      const degraded = findings.hermes === "missing" || findings.voice === "error";
+      if (state && !state.onboardingCompleted) {
+        setWizardMode("full");
+      } else if (
+        degraded &&
+        state?.onboardingCompleted !== false &&
+        !window.sessionStorage.getItem(repairSeenKey)
+      ) {
+        window.sessionStorage.setItem(repairSeenKey, "1");
+        setWizardMode("repair");
+      }
+    })();
+    return () => { active = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kana.ready]);
+
+  const completeWizard = useCallback(
+    async (next: KanaPreferences) => {
+      // Server flag first: it is the source other browsers read.
+      await markOnboardingComplete();
+      await kana.savePreferences({ ...next, onboardingCompleted: true });
+      setWizardMode(null);
+    },
+    [kana],
+  );
+
   useEffect(() => {
     if (!message.startsWith("/")) { clearCommandSuggestions(); return; }
     const timer = window.setTimeout(() => { void completeCommandsRef.current(message); }, 120);
@@ -270,11 +351,12 @@ export function KanaApp({ appVersion }: KanaAppProps) {
     );
   }
 
+  const gateCopy = getCopy(kana.preferences.uiLocale).gate;
   const connectButtonLabel = connectionInTransition
-    ? "Menghubungkan…"
+    ? gateCopy.connecting
     : connectPhase === "auto_starting"
-      ? "Memulai Hermes…"
-      : "Koneksikan Hermes";
+      ? gateCopy.startButton
+      : gateCopy.connectButton;
 
   const gateFailed =
     kana.connectionState === "error" ||
@@ -467,16 +549,16 @@ export function KanaApp({ appVersion }: KanaAppProps) {
             >
               <span className={`size-1.5 rounded-full ${connectionInTransition ? "bg-accent animate-kana-pulse" : gateFailed ? "bg-danger" : "bg-faint"}`} />
               {kana.connectionState === "connecting"
-                ? "Menghubungkan…"
+                ? gateCopy.connecting
                 : kana.connectionState === "reconnecting"
-                  ? "Menghubungkan ulang…"
+                  ? gateCopy.reconnecting
                   : kana.connectionState === "authentication_failed"
-                    ? "Sesi Kana tidak valid"
+                    ? gateCopy.authInvalid
                     : kana.connectionState === "incompatible"
-                      ? "Versi Hermes tidak kompatibel"
+                      ? gateCopy.incompatible
                       : kana.connectionState === "error"
-                        ? "Koneksi gagal"
-                        : "Hermes tidak terhubung"}
+                        ? gateCopy.failed
+                        : gateCopy.idle}
             </div>
 
             {/* Primary action */}
@@ -492,18 +574,18 @@ export function KanaApp({ appVersion }: KanaAppProps) {
             {hermesRuntime?.controlAvailable ? (
               <div className="flex w-full flex-col items-center gap-1.5 text-[10px] leading-relaxed">
                 {detectedExternalGateway ? (
-                  <p className="text-faint">{`Hermes gateway terdeteksi di port ${hermesRuntime.port}.`}</p>
+                  <p className="text-faint">{gateCopy.detectedExternal(hermesRuntime.port)}</p>
                 ) : hermesRuntime.state === "running" && hermesRuntime.managed ? (
-                  <p className="text-faint">{`Hermes sedang berjalan (PID ${hermesRuntime.pid ?? "—"}).`}</p>
+                  <p className="text-faint">{gateCopy.managedRunning(hermesRuntime.pid ?? null)}</p>
                 ) : hermesRuntime.executable ? (
-                  <p className="text-faint">{hermesRuntimeBusy ? "Memulai Hermes…" : "Hermes terpasang, siap dijalankan."}</p>
+                  <p className="text-faint">{hermesRuntimeBusy ? gateCopy.startButton : gateCopy.installedReady}</p>
                 ) : (
-                  <p className="text-faint">Pasang Hermes atau atur KANA_HERMES_BIN.</p>
+                  <p className="text-faint">{gateCopy.missingBinary}</p>
                 )}
                 {hermesRuntimeNotice ? (
                   <p role="status" className="max-w-full break-words text-faint">{hermesRuntimeNotice}</p>
                 ) : null}
-                <p className="text-faint">Koneksi diproses di server Kana — token tidak diperlukan di browser.</p>
+                <p className="text-faint">{gateCopy.relayNote}</p>
               </div>
             ) : null}
           </div>
@@ -541,9 +623,50 @@ export function KanaApp({ appVersion }: KanaAppProps) {
         />
       ) : null}
 
-      {!kana.preferences.onboardingCompleted ? (
-        <OnboardingDialog preferences={kana.preferences} onComplete={kana.savePreferences} />
+      {wizardMode ? (
+        <OnboardingWizard
+          locale={kana.preferences.uiLocale}
+          preferences={kana.preferences}
+          deps={deps}
+          mode={wizardMode}
+          onComplete={completeWizard}
+          onDismiss={() => setWizardMode(null)}
+          onOpenSettings={() => {
+            setWizardMode(null);
+            setSettingsOpen(true);
+          }}
+        />
+      ) : null}
+
+      {!wizardMode && (deps.hermes === "missing" || deps.voice === "error") ? (
+        <DegradedBanner
+          locale={kana.preferences.uiLocale}
+          onCheck={() => setWizardMode("repair")}
+        />
       ) : null}
     </main>
+  );
+}
+
+function DegradedBanner({
+  locale,
+  onCheck,
+}: {
+  locale: KanaPreferences["uiLocale"];
+  onCheck(): void;
+}) {
+  const copy = getCopy(locale);
+  return (
+    <div className="absolute right-3 top-14 z-30 flex items-center gap-2 rounded-full border border-danger/40 bg-bg/90 px-3 py-1.5 backdrop-blur-sm">
+      <span aria-hidden="true" className="size-1.5 rounded-full bg-danger" />
+      <p className="text-[11px] font-semibold text-ink-dim">{copy.banner.degraded}</p>
+      <button
+        type="button"
+        className="text-[11px] font-bold text-accent-strong underline-offset-2 hover:underline"
+        onClick={onCheck}
+      >
+        {copy.banner.action}
+      </button>
+    </div>
   );
 }
