@@ -1,29 +1,62 @@
 import assert from "node:assert/strict";
-import { createServer } from "node:http";
+import { createServer, type Server } from "node:http";
 import { after, before, describe, it } from "node:test";
 import {
   __setTestTtsPort,
+  ensureQwen3TTSService,
   inspectLocalQwen3TtsRuntime,
   startLocalQwen3TtsRuntime,
   stopLocalQwen3TtsRuntime,
 } from "@/lib/server/local-qwen3-tts-runtime";
 
-// A fake TTS health endpoint so probe() exercises the real HTTP path without
-// spawning the Python service.
-let healthServer: ReturnType<typeof createServer> | null = null;
-let healthPort = 0;
+// Fake /v1/health endpoints so probe classification exercises the real HTTP
+// path without spawning the Python service.
+type HealthMode = "ready" | "loading" | "foreign";
 
-before(async () => {
-  await new Promise<void>((resolve) => {
-    healthServer = createServer((request, response) => {
+let healthServer: Server | null = null;
+let healthPort = 0;
+let healthMode: HealthMode = "ready";
+
+function kanaHealthPayload(status: string): Record<string, unknown> {
+  return {
+    service: "kana-qwen3-tts",
+    api_version: "2",
+    status,
+    model: "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
+    device: "cpu",
+    dtype: "bfloat16",
+    speakers: [],
+    languages: ["japanese"],
+    default_voice_id: "",
+    supports_instruction: false,
+    supports_voice_clone: true,
+    model_type: "base",
+    ...(status === "error" ? { error: "checkpoint missing" } : {}),
+  };
+}
+
+function startFake(mode: () => HealthMode): Promise<number> {
+  return new Promise((resolve) => {
+    const server = createServer((request, response) => {
+      const current = mode();
+      if (current === "foreign") {
+        // A Gradio-style responder that is NOT the Kana service.
+        response.writeHead(200, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ status: "ok" }));
+        return;
+      }
       response.writeHead(200, { "Content-Type": "application/json" });
-      response.end(JSON.stringify({ status: "ok" }));
+      response.end(JSON.stringify(kanaHealthPayload(current)));
     });
-    healthServer.listen(0, "127.0.0.1", () => {
-      healthPort = (healthServer!.address() as { port: number }).port;
-      resolve();
+    server.listen(0, "127.0.0.1", () => {
+      healthServer = server;
+      resolve((server.address() as { port: number }).port);
     });
   });
+}
+
+before(async () => {
+  healthPort = await startFake(() => healthMode);
 });
 
 after(() => {
@@ -41,7 +74,8 @@ describe("local qwen3-tts runtime", () => {
     assert.ok(!["running", "external"].includes(status.state), status.message);
   });
 
-  it("adopts an external service answering /v1/health", async () => {
+  it("adopts an external Kana service answering /v1/health as ready", async () => {
+    healthMode = "ready";
     __setTestTtsPort(healthPort);
     const status = await inspectLocalQwen3TtsRuntime();
     assert.equal(status.state, "external");
@@ -49,10 +83,27 @@ describe("local qwen3-tts runtime", () => {
     assert.match(status.message, /found on port/);
   });
 
-  it("refuses to double-start while a managed child would exist, and reports external when the port is already served", async () => {
+  it("adopts an external Kana service whose model is still loading, with an honest message", async () => {
+    healthMode = "loading";
     __setTestTtsPort(healthPort);
-    // The port is occupied by our fake server; start must adopt it as external
-    // instead of spawning.
+    const status = await inspectLocalQwen3TtsRuntime();
+    assert.equal(status.state, "external");
+    assert.match(status.message, /still loading/);
+  });
+
+  it("refuses to adopt a foreign HTTP 200 responder on the port (D6 guard)", async () => {
+    healthMode = "foreign";
+    __setTestTtsPort(healthPort);
+    const status = await inspectLocalQwen3TtsRuntime(healthPort);
+    assert.ok(
+      !["running", "external"].includes(status.state),
+      `foreign responder was adopted: ${status.message}`,
+    );
+  });
+
+  it("start adopts an occupied port served by the Kana service instead of spawning", async () => {
+    healthMode = "ready";
+    __setTestTtsPort(healthPort);
     const status = await startLocalQwen3TtsRuntime({ port: healthPort, readyTimeoutMs: 2_000 });
     assert.equal(status.state, "external");
   });
@@ -64,11 +115,28 @@ describe("local qwen3-tts runtime", () => {
 });
 
 describe("ensureQwen3TTSService", () => {
-  it("adopts the fake external service and reports ok", async () => {
+  it("adopts the fake external service and reports its full status", async () => {
+    healthMode = "ready";
     __setTestTtsPort(healthPort);
-    const { ensureQwen3TTSService } = await import("@/lib/server/local-qwen3-tts-runtime");
     const result = await ensureQwen3TTSService();
     assert.equal(result.ok, true);
-    if (result.ok) assert.equal(result.port, healthPort);
+    if (result.ok) {
+      assert.equal(result.status.port, healthPort);
+      assert.equal(result.status.state, "external");
+    }
+  });
+
+  it("shares one flight across concurrent callers", async () => {
+    healthMode = "ready";
+    __setTestTtsPort(healthPort);
+    const [first, second, third] = await Promise.all([
+      ensureQwen3TTSService(),
+      ensureQwen3TTSService(),
+      ensureQwen3TTSService(),
+    ]);
+    for (const result of [first, second, third]) {
+      assert.equal(result.ok, true);
+      if (result.ok) assert.equal(result.status.port, healthPort);
+    }
   });
 });

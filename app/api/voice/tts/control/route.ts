@@ -1,6 +1,6 @@
 import {
+  ensureQwen3TTSService,
   inspectLocalQwen3TtsRuntime,
-  startLocalQwen3TtsRuntime,
   stopLocalQwen3TtsRuntime,
 } from "@/lib/server/local-qwen3-tts-runtime";
 import { requireSession } from "@/lib/server/tts-relay";
@@ -34,7 +34,14 @@ export async function POST(request: Request): Promise<Response> {
         { status: 400 },
       );
     }
-    return Response.json(await startLocalQwen3TtsRuntime({}));
+    // Single-flight: shares the exact promise used by speech-time ensure and
+    // status kicks, so concurrent starts can never spawn two children.
+    const result = await ensureQwen3TTSService();
+    if (result.ok) return Response.json(result.status);
+    return Response.json(
+      { ...result.status, error: result.status.message },
+      { status: 400 },
+    );
   } catch (error) {
     return Response.json(
       { error: error instanceof Error ? error.message : "TTS control failed." },

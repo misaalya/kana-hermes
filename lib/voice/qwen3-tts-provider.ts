@@ -103,6 +103,9 @@ export class Qwen3TTSProvider implements VoiceProvider {
       for (let index = 0; index < chunks.length; index += 1) {
         if (operation !== this.operation) throw aborted();
         generatedAudio.push(current.audio.slice(0));
+        // Promote finished parts into lastAudio immediately so replay always
+        // reflects THIS utterance's played audio, not the previous one.
+        this.lastAudio = [...generatedAudio];
         const nextSynthesis =
           index + 1 < chunks.length
             ? this.synthesizeChunk(
@@ -140,7 +143,6 @@ export class Qwen3TTSProvider implements VoiceProvider {
         }
       }
 
-      this.lastAudio = generatedAudio;
       this.update({
         state: "ready",
         canReplay: true,
@@ -245,13 +247,7 @@ export class Qwen3TTSProvider implements VoiceProvider {
     this.request = null;
     if (request) {
       request.controller.abort();
-      void fetch(
-        qwen3TTSUrl(
-          this.options.baseUrl,
-          `/v1/requests/${encodeURIComponent(request.id)}/cancel`,
-        ),
-        { method: "POST", keepalive: true },
-      ).catch(() => undefined);
+      void this.cancelUpstream(request.id, this.operation);
     }
     this.lipSync.stop();
     if (wasActive) {
@@ -350,6 +346,29 @@ export class Qwen3TTSProvider implements VoiceProvider {
       };
     } finally {
       if (this.request?.controller === controller) this.request = null;
+    }
+  }
+
+  // Stop must not swallow a failed cancel: if the service cannot be told to
+  // stop synthesizing, the user has to know work may continue upstream. The
+  // operation token keeps a late failure from clobbering a newer turn.
+  private async cancelUpstream(requestId: string, operation: number): Promise<void> {
+    try {
+      const response = await fetch(
+        qwen3TTSUrl(
+          this.options.baseUrl,
+          `/v1/requests/${encodeURIComponent(requestId)}/cancel`,
+        ),
+        { method: "POST", keepalive: true, signal: AbortSignal.timeout(5_000) },
+      );
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+    } catch (error) {
+      if (operation !== this.operation) return;
+      this.update({
+        message: `Voice stopped locally, but the Qwen3-TTS service could not be told to cancel (${error instanceof Error ? error.message : "cancel failed"}).`,
+      });
     }
   }
 

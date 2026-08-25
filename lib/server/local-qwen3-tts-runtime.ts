@@ -2,6 +2,11 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { access } from "node:fs/promises";
 import { constants } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  QWEN3_TTS_API_VERSION,
+  QWEN3_TTS_SERVICE_NAME,
+} from "@/lib/voice/qwen3-tts-contract";
 
 // Server-side custody of the local Qwen3-TTS service process.
 //
@@ -32,7 +37,47 @@ type ManagedRuntime = {
 };
 
 const DEFAULT_TTS_PORT = Number(process.env.KANA_TTS_PORT ?? "7860");
-const PROJECT_DIR = path.resolve(process.cwd(), "services/qwen3-tts");
+const PROJECT_DIR_ENV = "KANA_QWEN3_TTS_PROJECT_DIR";
+
+function moduleDirectory(): string | null {
+  try {
+    if (typeof __dirname === "string" && __dirname.length > 0) return __dirname;
+  } catch {
+    // ESM: __dirname does not exist here.
+  }
+  try {
+    return path.dirname(fileURLToPath(import.meta.url));
+  } catch {
+    return null;
+  }
+}
+
+// Resolution order: KANA_QWEN3_TTS_PROJECT_DIR → this module's location →
+// cwd. Each candidate must contain pyproject.toml so a bundled/standalone
+// module path never wins over a real checkout, and a systemd unit with a
+// different WorkingDirectory still resolves the service source.
+async function resolveProjectDir(): Promise<string> {
+  const fromEnv = process.env[PROJECT_DIR_ENV]?.trim();
+  const moduleDir = moduleDirectory();
+  const candidates = [
+    ...(fromEnv ? [path.resolve(fromEnv)] : []),
+    ...(moduleDir
+      ? [path.resolve(moduleDir, "..", "..", "services", "qwen3-tts")]
+      : []),
+    path.resolve(process.cwd(), "services", "qwen3-tts"),
+  ];
+  for (const candidate of candidates) {
+    try {
+      await access(path.join(candidate, "pyproject.toml"), constants.R_OK);
+      return candidate;
+    } catch {
+      continue;
+    }
+  }
+  // Nothing verified: fail against the most explicit candidate so the start
+  // error names the misconfiguration instead of silently probing elsewhere.
+  return candidates[0];
+}
 
 const runtimeKey = Symbol.for("kana.localQwen3TtsRuntime");
 type RuntimeGlobal = typeof globalThis & { [runtimeKey]?: ManagedRuntime };
@@ -85,19 +130,89 @@ function resolveUv(): string | null {
   return null;
 }
 
-async function probe(port: number, timeoutMs = 750): Promise<boolean> {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+type Qwen3TtsHealthProbe =
+  | { kind: "ready" }
+  | { kind: "loading" }
+  | { kind: "error"; message: string }
+  | { kind: "foreign" }
+  | { kind: "unreachable" };
+
+// Classifies /v1/health instead of trusting any HTTP 200: only a payload that
+// identifies itself as this Kana service (D6 adoption guard) can be adopted,
+// and "loading"/"error" statuses stay distinct from "ready" (D5 cold start).
+async function probeHealth(
+  port: number,
+  timeoutMs = 750,
+): Promise<Qwen3TtsHealthProbe> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(`http://127.0.0.1:${port}/v1/health`, {
       signal: controller.signal,
+      headers: { Accept: "application/json" },
       cache: "no-store",
     });
-    return response.ok;
+    if (!response.ok) return { kind: "foreign" };
+    const value: unknown = await response.json();
+    if (
+      !isRecord(value) ||
+      value.service !== QWEN3_TTS_SERVICE_NAME ||
+      value.api_version !== QWEN3_TTS_API_VERSION
+    ) {
+      return { kind: "foreign" };
+    }
+    if (value.status === "ready") return { kind: "ready" };
+    if (value.status === "loading") return { kind: "loading" };
+    if (value.status === "error") {
+      return {
+        kind: "error",
+        message:
+          typeof value.error === "string" && value.error.length > 0
+            ? value.error
+            : "The Qwen3-TTS model failed to load.",
+      };
+    }
+    return { kind: "foreign" };
   } catch {
-    return false;
+    return { kind: "unreachable" };
   } finally {
     clearTimeout(timer);
+  }
+}
+
+function adoptableHealth(probe: Qwen3TtsHealthProbe): boolean {
+  return probe.kind === "ready" || probe.kind === "loading" || probe.kind === "error";
+}
+
+function externalServiceMessage(probe: Qwen3TtsHealthProbe, port: number): string {
+  switch (probe.kind) {
+    case "ready":
+      return `A Qwen3-TTS service was found on port ${port}.`;
+    case "loading":
+      return `A Qwen3-TTS service was found on port ${port}; the model is still loading.`;
+    case "error":
+      return `A Qwen3-TTS service was found on port ${port} but its model failed to load.`;
+    case "foreign":
+    case "unreachable":
+      return "";
+  }
+}
+
+function managedServiceMessage(probe: Qwen3TtsHealthProbe): string {
+  switch (probe.kind) {
+    case "ready":
+      return "Qwen3-TTS is running under Kana.";
+    case "loading":
+      return "Qwen3-TTS is running under Kana; the model is still loading.";
+    case "error":
+      return `Qwen3-TTS is running under Kana but failed to load: ${probe.message}`;
+    case "foreign":
+    case "unreachable":
+      return "Qwen3-TTS is running under Kana.";
   }
 }
 
@@ -108,9 +223,10 @@ export async function inspectLocalQwen3TtsRuntime(
 
   // A managed child owns its port exclusively.
   if (current.child && current.child.exitCode === null) {
-    if (await probe(current.port)) {
+    const health = await probeHealth(current.port);
+    if (adoptableHealth(health)) {
       current.state = "running";
-      current.lastMessage = "Qwen3-TTS is running under Kana.";
+      current.lastMessage = managedServiceMessage(health);
       return publicStatus(current);
     }
     if (current.state === "starting" || current.state === "stopping") {
@@ -139,14 +255,14 @@ export async function inspectLocalQwen3TtsRuntime(
       value <= 65_535,
   );
   for (const port of new Set(candidates)) {
-    if (await probe(port)) {
-      current.port = port;
-      current.child = null;
-      current.state = "external";
-      current.lastMessage = `A Qwen3-TTS service was found on port ${port}.`;
-      current.stderrTail = [];
-      return publicStatus(current);
-    }
+    const health = await probeHealth(port);
+    if (!adoptableHealth(health)) continue;
+    current.port = port;
+    current.child = null;
+    current.state = "external";
+    current.lastMessage = externalServiceMessage(health, port);
+    current.stderrTail = [];
+    return publicStatus(current);
   }
 
   if (current.state !== "starting" && current.state !== "stopping") {
@@ -175,7 +291,12 @@ async function waitUntilReady(
           }`,
       );
     }
-    if (await probe(current.port, 1_000)) return;
+    // HTTP 200 alone is not ready: the Python service answers 200 with
+    // status "loading" until the model load finishes. A reported load error
+    // fails fast instead of burning the whole deadline.
+    const health = await probeHealth(current.port, 1_000);
+    if (health.kind === "ready") return;
+    if (health.kind === "error") throw new Error(health.message);
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
   throw new Error(
@@ -199,11 +320,12 @@ export async function startLocalQwen3TtsRuntime(options: {
   if (current.child && current.child.exitCode === null) {
     throw new Error("Kana already manages a running Qwen3-TTS process.");
   }
-  if (await probe(port)) {
+  const existing = await probeHealth(port);
+  if (adoptableHealth(existing)) {
     current.port = port;
     current.child = null;
     current.state = "external";
-    current.lastMessage = `A Qwen3-TTS service is already running on port ${port}.`;
+    current.lastMessage = externalServiceMessage(existing, port);
     return publicStatus(current);
   }
   const uv = resolveUv();
@@ -213,11 +335,12 @@ export async function startLocalQwen3TtsRuntime(options: {
       "The uv tool was not found on this machine; install uv or set KANA_TTS_UV_BIN.";
     throw new Error(current.lastMessage);
   }
+  const projectDir = await resolveProjectDir();
   try {
-    await access(PROJECT_DIR, constants.R_OK);
+    await access(projectDir, constants.R_OK);
   } catch {
     current.state = "failed";
-    current.lastMessage = `The Qwen3-TTS project directory is missing: ${PROJECT_DIR}`;
+    current.lastMessage = `The Qwen3-TTS project directory is missing: ${projectDir}`;
     throw new Error(current.lastMessage);
   }
 
@@ -226,7 +349,7 @@ export async function startLocalQwen3TtsRuntime(options: {
   current.stderrTail = [];
   current.lastMessage = "Starting the Qwen3-TTS service…";
 
-  const child = spawn(uv, ["run", "--project", PROJECT_DIR, "kana-qwen3-tts"], {
+  const child = spawn(uv, ["run", "--project", projectDir, "kana-qwen3-tts"], {
     env: {
       ...process.env,
       KANA_TTS_HOST: "127.0.0.1",
@@ -302,7 +425,7 @@ export async function stopLocalQwen3TtsRuntime(): Promise<LocalQwen3TtsRuntimeSt
 }
 
 export type EnsureQwen3TtsResult =
-  | { ok: true; port: number; state: "running" | "external" }
+  | { ok: true; status: LocalQwen3TtsRuntimeStatus }
   | { ok: false; status: LocalQwen3TtsRuntimeStatus };
 
 const ensureKey = Symbol.for("kana.localQwen3TtsEnsure");
@@ -311,20 +434,18 @@ type EnsureGlobal = typeof globalThis & {
 };
 
 // Ensure-on-use with a single-flight guard: concurrent relay requests share
-// one discovery/spawn attempt instead of racing to spawn two children.
+// one discovery/spawn attempt instead of racing to spawn two children. This
+// is the ONLY spawn entry point — control start/restart and status kicks use
+// this same flight, never startLocalQwen3TtsRuntime directly.
 export async function ensureQwen3TTSService(): Promise<EnsureQwen3TtsResult> {
   const shared = globalThis as EnsureGlobal;
   shared[ensureKey] ??= (async (): Promise<EnsureQwen3TtsResult> => {
     const inspected = await inspectLocalQwen3TtsRuntime();
     if (inspected.state === "running" || inspected.state === "external") {
-      return { ok: true, port: inspected.port, state: inspected.state };
+      return { ok: true, status: inspected };
     }
     try {
-      const started = await startLocalQwen3TtsRuntime({});
-      if (started.state === "external") {
-        return { ok: true, port: started.port, state: "external" };
-      }
-      return { ok: true, port: started.port, state: "running" };
+      return { ok: true, status: await startLocalQwen3TtsRuntime({}) };
     } catch (error) {
       const status = await inspectLocalQwen3TtsRuntime();
       status.message =
