@@ -85,6 +85,11 @@ if (!Number.isInteger(port) || port < 1024 || port > 65535) {
   throw new Error("Kana port must be an integer between 1024 and 65535.");
 }
 
+// The web server resolves its data directory the same way this launcher does:
+// explicit KANA_DATA_DIR wins, otherwise the XDG user data root. HOME is
+// forwarded explicitly so the child never depends on the invoking shell.
+const resolvedDataRoot = process.env.KANA_DATA_DIR?.trim() || dataRoot;
+
 const children = [];
 if (launcherConfig.qwenEnabled) {
   const qwen = await startQwen();
@@ -102,6 +107,8 @@ const app = spawn(
       ...process.env,
       HOSTNAME: "127.0.0.1",
       PORT: String(port),
+      HOME: process.env.HOME || userHome,
+      KANA_DATA_DIR: resolvedDataRoot,
     },
     stdio: "inherit",
   },
@@ -204,6 +211,7 @@ async function printDoctor(current) {
     [
       "Kana doctor",
       `Web runtime: ${runtimeRoot}`,
+      `Data directory: ${resolvedDataRoot}`,
       `Hermes: ${hermes || "not found"}`,
       `uv: ${uv || "not found"}`,
       `Qwen enabled: ${current.qwenEnabled ? "yes" : "no"}`,
