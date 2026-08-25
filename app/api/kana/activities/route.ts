@@ -21,7 +21,8 @@ function parseKey(value: unknown): string | null {
 /**
  * GET /api/kana/activities?session=<hermes_session_key>
  * Returns every stored per-turn activity log for the session, oldest first:
- * [{ turn_anchor_ms, activities }, ...]
+ * [{ turnAnchorMs, turnIndex, activities }, ...] — turnIndex is null for
+ * legacy v1 rows that predate ordinal anchoring.
  */
 export async function GET(request: Request): Promise<Response> {
   if (!(await requestAuthorized(request))) {
@@ -32,17 +33,22 @@ export async function GET(request: Request): Promise<Response> {
   if (!sessionKey) {
     return Response.json({ error: "Invalid or missing session" }, { status: 400, headers: NO_STORE });
   }
-  const turns = listTurnActivities(sessionKey).map(({ turn_anchor_ms, activities }) => ({
-    turnAnchorMs: turn_anchor_ms,
-    activities,
-  }));
+  const turns = listTurnActivities(sessionKey).map(
+    ({ turn_anchor_ms, turn_index, activities }) => ({
+      turnAnchorMs: turn_anchor_ms,
+      turnIndex: turn_index,
+      activities,
+    }),
+  );
   return Response.json({ turns }, { headers: NO_STORE });
 }
 
 /**
  * PUT /api/kana/activities
- * Body: { session: "<key>", turnAnchorMs: <number>, activities: [...] }
- * Upserts one turn's activity snapshot. Idempotent per (session, anchor).
+ * Body: { session, turnAnchorMs, activities, turnIndex? }
+ * Upserts one turn's activity snapshot. With turnIndex (non-negative int)
+ * the snapshot is keyed by (session, turnIndex) so live and reconstructed
+ * writes converge on one row; without it the anchor stays the identity.
  */
 export async function PUT(request: Request): Promise<Response> {
   if (!(await requestAuthorized(request))) {
@@ -51,6 +57,7 @@ export async function PUT(request: Request): Promise<Response> {
   let body: {
     session?: unknown;
     turnAnchorMs?: unknown;
+    turnIndex?: unknown;
     activities?: unknown;
   };
   try {
@@ -70,9 +77,20 @@ export async function PUT(request: Request): Promise<Response> {
       { status: 400, headers: NO_STORE },
     );
   }
+  let turnIndex: number | undefined;
+  if (body.turnIndex !== undefined && body.turnIndex !== null) {
+    const parsed = Number(body.turnIndex);
+    if (!Number.isInteger(parsed) || parsed < 0) {
+      return Response.json(
+        { error: "Field 'turnIndex' must be a non-negative integer." },
+        { status: 400, headers: NO_STORE },
+      );
+    }
+    turnIndex = parsed;
+  }
   if (!Array.isArray(body.activities)) {
     return Response.json({ error: "Field 'activities' must be an array." }, { status: 400, headers: NO_STORE });
   }
-  saveTurnActivities(sessionKey, anchor, body.activities);
+  saveTurnActivities(sessionKey, anchor, body.activities, turnIndex);
   return Response.json({ ok: true }, { headers: NO_STORE });
 }

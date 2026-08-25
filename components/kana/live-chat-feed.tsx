@@ -7,6 +7,8 @@ import { ActivityStack } from "./activity-stack";
 
 type ServerActivityTurn = {
   turnAnchorMs: number;
+  /** Assistant-reply ordinal; null for legacy v1 rows (anchor-addressed). */
+  turnIndex: number | null;
   activities: ActivityItem[];
 };
 
@@ -50,19 +52,23 @@ export const LiveChatFeed = memo(function LiveChatFeed({
   const [pinnedToBottom, setPinnedToBottom] = useState(true);
 
   // Merge persisted messages and activity logs into one chronological
-  // timeline. Sources, deduped by turn anchor:
+  // timeline. Sources, deduped by turn ordinal:
   // - assistant messages carry their turn's activities (IndexedDB snapshot);
-  // - server turns carry the same logs cross-browser. A server turn whose
-  //   anchor matches a message's timestamp is skipped — the message already
-  //   has the log;
+  // - server turns carry the same logs cross-browser. Indexed turns splice
+  //   just before their (turnIndex+1)-th assistant message — deterministic
+  //   in every browser, since reconstructed history has no real timestamps.
+  //   Legacy rows (turnIndex null) fall back to their stored anchor;
   // - live activities attach after the last user message (running turn).
   const entries = useMemo<FeedEntry[]>(() => {
     const timeline: FeedEntry[] = [];
     // Restored tool history comes from ONE source only: the server store
-    // (cross-browser, anchored to each assistant reply's Hermes timestamp).
+    // (cross-browser, keyed by each turn's assistant-reply ordinal).
     // message.activities is the PUT payload that feeds that store — never a
     // second render source, or every restored turn renders twice (once above,
     // once below Kana's reply).
+    const assistantTimestamps = messages
+      .filter((message) => message.role === "assistant")
+      .map((message) => message.timestamp);
     for (const message of messages) {
       if (message.role !== "system") {
         timeline.push({ kind: "message", at: message.timestamp, message });
@@ -70,9 +76,13 @@ export const LiveChatFeed = memo(function LiveChatFeed({
     }
     for (const turn of serverActivityTurns) {
       if (!turn.activities.length) continue;
+      const replyTimestamp = assistantTimestamps[turn.turnIndex ?? -1];
       timeline.push({
         kind: "activity",
-        at: turn.turnAnchorMs,
+        at:
+          typeof replyTimestamp === "number"
+            ? replyTimestamp - 0.5
+            : turn.turnAnchorMs,
         activities: turn.activities,
       });
     }

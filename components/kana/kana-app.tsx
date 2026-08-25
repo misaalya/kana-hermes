@@ -150,17 +150,38 @@ export function KanaApp({ appVersion }: KanaAppProps) {
     gateConnectAttemptsRef.current = 0;
   }, []);
 
+  // Latest-ref mirror: the timer below must always call the connectAgent of
+  // the current render. Capturing the closure once per showGate flip invoked
+  // a stale copy whose activeConversationId snapshot was outdated — the retry
+  // then created a duplicate empty conversation instead of connecting the
+  // one already on screen.
+  const connectAgentRef = useRef(kana.connectAgent);
+  useEffect(() => {
+    connectAgentRef.current = kana.connectAgent;
+  });
+
+  const handleConnectHermesRef = useRef(handleConnectHermes);
+  useEffect(() => {
+    handleConnectHermesRef.current = handleConnectHermes;
+  });
+
   useEffect(() => {
     if (!showGate) return;
-    const attempt = gateConnectAttemptsRef.current;
-    if (attempt >= 3) return;
-    const delay = [300, 4_000, 15_000][attempt];
-    const timer = setTimeout(() => {
-      gateConnectAttemptsRef.current += 1;
-      void kana.connectAgent();
-    }, delay);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const delays = [300, 4_000, 15_000];
+    const timers = delays.map((delay, index) =>
+      setTimeout(() => {
+        // The manual smart flow claims the ref with a sentinel so late
+        // timers never race its own start-then-connect sequence.
+        if (gateConnectAttemptsRef.current >= 100) return;
+        gateConnectAttemptsRef.current += 1;
+        if (index === delays.length - 1) {
+          void handleConnectHermesRef.current();
+          return;
+        }
+        void connectAgentRef.current();
+      }, delay),
+    );
+    return () => timers.forEach(clearTimeout);
   }, [showGate]);
 
   // Local gateway control: the gate checks whether the server-side Hermes
