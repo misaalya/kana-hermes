@@ -125,6 +125,23 @@ probe, not that the gate should be marked as passed. Preserve the resulting
 JSON with the release evidence. Only after those results may streaming be
 reconsidered or experimental sentence delivery be promoted beyond opt-in.
 
+## 4b. Zombie grandchild check (owner, live hardware)
+
+Node spawns `uv run`, which spawns the Python grandchild; verify stop really
+ends it. On the target host:
+
+1. Start the service from Kana (Settings control panel or `POST
+   /api/voice/tts/control {"action":"start"}`).
+2. Stop it the same way, then immediately run `ss -ltnp | grep 7860`.
+3. Pass: nothing listens on 7860 and no `kana-qwen3-tts`/uv python process
+   remains (`pgrep -af kana-qwen3-tts`).
+4. If a zombie survives: switch the spawn to the resolved venv python directly,
+   or keep `uv run --no-sync` and kill the negative process group
+   (`detached: false` + `process.kill(-child.pid)`), then repeat steps 1–3.
+
+Record the outcome (and which spawn strategy was needed) in the release
+evidence alongside the latency JSON.
+
 ## Decision
 
 Streaming TTS is deferred. The current direct WAV API is deterministic,

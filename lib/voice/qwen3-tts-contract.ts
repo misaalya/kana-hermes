@@ -92,6 +92,33 @@ export function qwen3TTSUrl(baseUrl: string, path: string): string {
   return `/api/voice/tts${stripped}`;
 }
 
+// Voice deletion uses a query parameter (`DELETE /api/voice/tts/voices?id=…`)
+// because the relay route is method-dispatched on /voices and reads `id` from
+// the query string before forwarding upstream as a path segment. This builder
+// and the route parser must stay paired; tests/voice locks both sides.
+export function deleteQwen3VoiceCloneUrl(baseUrl: string, voiceId: string): string {
+  return `${qwen3TTSUrl(baseUrl, "/v1/voices")}?id=${encodeURIComponent(voiceId)}`;
+}
+
+// The relay health route answers probe-only (it never spawns the Python
+// service). When no ready-or-loading Kana service answers, it returns this
+// envelope instead of upstream health JSON so the UI can show an honest
+// "stopped"/"loading model" state. Presence of `relay_status` distinguishes
+// it from a real health payload; additive to API version 2.
+export type Qwen3TTSRelayHealthNotice = {
+  service: string;
+  api_version: string;
+  relay_status: "stopped" | "loading";
+  message?: string;
+};
+
+function isRelayHealthNotice(value: unknown): value is Qwen3TTSRelayHealthNotice {
+  return (
+    isRecord(value) &&
+    (value.relay_status === "stopped" || value.relay_status === "loading")
+  );
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -202,6 +229,21 @@ export async function inspectQwen3TTSService(
       qwen3TTSUrl(baseUrl, "/v1/health"),
       controller.signal,
     );
+    if (isRelayHealthNotice(healthValue)) {
+      return healthValue.relay_status === "loading"
+        ? {
+            state: "loading",
+            voices: [],
+            message:
+              healthValue.message ?? "The Qwen3-TTS model is still loading.",
+          }
+        : {
+            state: "unavailable",
+            voices: [],
+            message:
+              healthValue.message ?? "The Qwen3-TTS service is not running.",
+          };
+    }
     if (!isHealthResponse(healthValue)) {
       throw new Error("The service returned an incompatible health response.");
     }
@@ -344,9 +386,9 @@ export async function deleteQwen3VoiceClone(
   if (!voiceId.startsWith("clone-")) {
     throw new Error("Only user-created cloned voices can be deleted.");
   }
-  const response = await fetch(
-    qwen3TTSUrl(baseUrl, `/v1/voices/${encodeURIComponent(voiceId)}`),
-    { method: "DELETE", headers: { Accept: "application/json" } },
-  );
+  const response = await fetch(deleteQwen3VoiceCloneUrl(baseUrl, voiceId), {
+    method: "DELETE",
+    headers: { Accept: "application/json" },
+  });
   if (!response.ok) throw await serviceError(response, "Could not delete the voice");
 }
