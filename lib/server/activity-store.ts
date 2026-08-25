@@ -1,6 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
+import { adoptLegacyKanaFile, resolveKanaDataDir } from "@/lib/server/data-dir";
 
 /**
  * Server-side store for per-turn tool activity logs.
@@ -31,13 +32,14 @@ export type StoredTurnActivities = {
   activities: unknown[];
 };
 
-const DB_DIR_ENV = "KANA_DATA_DIR";
 const SCHEMA_VERSION = 2;
 
 function dbPath(): string {
-  const dir =
-    process.env[DB_DIR_ENV]?.trim() ||
-    path.join(process.env.HOME || process.cwd(), ".kana");
+  // One authoritative data root (KANA_DATA_DIR -> XDG -> HOME). Legacy
+  // activities.db from the pre-consolidation root ($HOME/.kana) is adopted
+  // on first use so a machine switch no longer strands the activity log.
+  adoptLegacyKanaFile("activities.db");
+  const dir = resolveKanaDataDir();
   fs.mkdirSync(dir, { recursive: true });
   return path.join(dir, "activities.db");
 }
