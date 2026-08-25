@@ -67,11 +67,17 @@ async function registerWithService(
       `Voice registration failed (HTTP ${response.status}).${detail ? ` ${detail.slice(0, 300)}` : ""}`,
     );
   }
-  const value = (await response.json()) as { id?: unknown };
-  if (typeof value.id !== "string" || !value.id) {
+  const value = (await response.json()) as {
+    id?: unknown;
+    voice?: { id?: unknown };
+  };
+  // The service nests the profile under `voice` (v2 API shape): the top-level
+  // id is accepted too so older builds keep working.
+  const rawId = value.voice?.id ?? value.id;
+  if (typeof rawId !== "string" || !rawId) {
     throw new Error("Voice registration returned no id.");
   }
-  return value.id;
+  return rawId;
 }
 
 /** Register one library row; returns the service voice id or null (pending). */
