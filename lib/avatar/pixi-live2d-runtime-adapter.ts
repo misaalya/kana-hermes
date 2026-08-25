@@ -175,6 +175,21 @@ async function ensureCanvasRuntime(
           registerTicker(tickerClass: unknown): void;
         }
       ).registerTicker(Ticker);
+      // Motion definitions may carry sample Sound files (e.g. the official
+      // Haru TapBody motions reference raw.githubusercontent.com WAVs). Left
+      // enabled, the library plays those instead of Kana's Qwen3-TTS voice
+      // and motionSync can block the mouth on a failed cross-origin audio —
+      // the reported "no sound" bug. Speech audio comes only from the voice
+      // layer, so the library's own sound path stays off.
+      const displayConfig = (
+        display as unknown as {
+          config?: { sound?: boolean; motionSync?: boolean };
+        }
+      ).config;
+      if (displayConfig) {
+        displayConfig.sound = false;
+        displayConfig.motionSync = false;
+      }
       live2dTickerRegistered = true;
     }
 
