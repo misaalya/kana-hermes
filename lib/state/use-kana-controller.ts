@@ -136,6 +136,15 @@ function shortTitle(text: string): string {
   return title.length > 42 ? `${title.slice(0, 42)}\u2026` : title;
 }
 
+// A conversation with zero displayed messages is still "fresh": either no
+// Hermes session was opened for it yet, or the opened one is empty. Both are
+// equivalent — clicking "new" while on one must reuse it, not mint another.
+function isFreshConversation(
+  conversation: Conversation | undefined,
+): boolean {
+  return Boolean(conversation && conversation.messages.length === 0);
+}
+
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === "AbortError";
 }
@@ -1175,6 +1184,16 @@ export function useKanaController(appVersion: string) {
       }
 
       if (commandName === "new") {
+        if (isFreshConversation(conversation)) {
+          // Reuse the blank conversation instead of stacking another one.
+          // An explicit title argument still applies to it.
+          if (commandArg) {
+            await saveConversation({ ...conversation, title: commandArg });
+          }
+          setStatus("Already on a new conversation");
+          setCommandSuggestions([]);
+          return;
+        }
         const created = await conversationStore.create({
           title: commandArg || "New conversation",
           subtitleLanguage: preferencesRef.current.subtitleLanguage,
@@ -1508,6 +1527,14 @@ export function useKanaController(appVersion: string) {
   // ---- Conversation CRUD ----
   const createConversation = useCallback(async () => {
     if (busy) return;
+    const current = conversationsRef.current.find(
+      (item) => item.id === activeConversationIdRef.current,
+    );
+    if (isFreshConversation(current)) {
+      setStatus("Already on a new conversation");
+      setError(null);
+      return;
+    }
     const conversation = await conversationStore.create({
       subtitleLanguage: preferencesRef.current.subtitleLanguage,
     });
