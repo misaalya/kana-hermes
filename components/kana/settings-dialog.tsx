@@ -180,6 +180,20 @@ export function SettingsDialog({
                 onChange={(subtitleLanguage) => setDraft((prev) => ({ ...prev, subtitleLanguage }))}
               />
             </div>
+            <label className="flex flex-col gap-1.5">
+              <span className="text-[11px] font-semibold text-muted">Interface language</span>
+              <select
+                className="rounded-xl border border-line-strong bg-surface px-3 py-2 text-xs font-semibold text-ink"
+                value={draft.uiLocale}
+                onChange={(event) =>
+                  setDraft((prev) => ({ ...prev, uiLocale: event.target.value as KanaPreferences["uiLocale"] }))
+                }
+              >
+                <option value="id">Indonesia</option>
+                <option value="en">English</option>
+              </select>
+              <span className="text-[10px] text-faint">Berlaku setelah Done.</span>
+            </label>
           </div>
 
           <div className="flex flex-col gap-2">
