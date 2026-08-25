@@ -15,6 +15,7 @@ import {
   type AuthStatus,
 } from "@/lib/runtime/auth-client";
 import { useDialogFocus } from "@/lib/accessibility/use-dialog-focus";
+import { getCopy } from "@/lib/ui/copy";
 import { HermesControlPanel } from "./hermes-control-panel";
 import { TtsControlPanel } from "./tts-control-panel";
 import { VoicePanel } from "./voice-panel";
@@ -149,6 +150,7 @@ export function SettingsDialog({
   const { dialogRef, onDialogKeyDown } = useDialogFocus(onClose);
   const [draft, setDraft] = useState(() => ({ ...preferences }));
   const [saving, setSaving] = useState(false);
+  const panelCopy = getCopy(draft.uiLocale).panels;
 
   const save = async () => {
     setSaving(true);
@@ -255,7 +257,7 @@ export function SettingsDialog({
           {/* Hermes gateway tile */}
           <details className={`${bentoCard} lg:col-span-2`} open>
             <summary className="cursor-pointer text-xs font-bold text-ink-dim marker:content-none [&::-webkit-details-marker]:hidden">
-              Hermes gateway
+              {panelCopy.hermesTitle}
             </summary>
             <div className="flex flex-col gap-3 pt-3">
               <p className="text-[11px] leading-relaxed text-faint">
@@ -263,6 +265,7 @@ export function SettingsDialog({
                 token sesi — semuanya ditangani otomatis oleh relay Kana.
               </p>
               <HermesControlPanel
+                locale={draft.uiLocale}
                 cwd={draft.hermes.cwd ?? ""}
                 onCwdChange={(cwd) => setDraft((prev) => ({ ...prev, hermes: { ...prev.hermes, cwd } }))}
                 onInspect={() => onInspectHermesControl()}
@@ -275,7 +278,7 @@ export function SettingsDialog({
           {/* Qwen3-TTS service tile */}
           <details className={`${bentoCard} lg:col-span-2`}>
             <summary className="cursor-pointer text-xs font-bold text-ink-dim marker:content-none [&::-webkit-details-marker]:hidden">
-              Qwen3-TTS voice service
+              {panelCopy.ttsTitle}
             </summary>
             <div className="flex flex-col gap-3 pt-3">
               <p className="text-[11px] leading-relaxed text-faint">
@@ -283,6 +286,7 @@ export function SettingsDialog({
                 saat dibutuhkan. Browser mengaksesnya hanya lewat relay Kana.
               </p>
               <TtsControlPanel
+                locale={draft.uiLocale}
                 onInspect={inspectTtsRuntime}
                 onStart={({ restart }) => controlTtsRuntime({ action: restart ? "restart" : "start" })}
                 onStop={() => controlTtsRuntime({ action: "stop" })}

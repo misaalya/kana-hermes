@@ -1,4 +1,8 @@
+"use client";
+
 import { useCallback, useEffect, useState } from "react";
+import type { UiLocale } from "@/lib/ui/copy";
+import { getCopy } from "@/lib/ui/copy";
 import { btnGhost, btnSecondary } from "./ui";
 
 export type TtsRuntimeStatus = {
@@ -13,6 +17,7 @@ export type TtsRuntimeStatus = {
 };
 
 type TtsControlPanelProps = {
+  locale: UiLocale;
   onInspect(): Promise<TtsRuntimeStatus>;
   onStart(options: { restart?: boolean }): Promise<TtsRuntimeStatus>;
   onStop(): Promise<TtsRuntimeStatus>;
@@ -27,15 +32,17 @@ const STATE_STYLE: Record<string, string> = {
   stopped: "border-line-strong text-muted",
 };
 
-// Control panel for the managed Qwen3-TTS service. Mirrors the Hermes control
-// panel: no address fields on purpose — the browser reaches the service only
-// through Kana's relay, and the server decides where it actually runs.
+// Human-facing control for the managed Qwen3-TTS service. The service starts
+// on demand and idles at zero cost, so the panel is just a status chip plus
+// manual overrides — no addresses, PIDs, or ownership details.
 
-export function TtsControlPanel({ onInspect, onStart, onStop }: TtsControlPanelProps) {
+export function TtsControlPanel({ locale, onInspect, onStart, onStop }: TtsControlPanelProps) {
+  const copy = getCopy(locale).panels;
   const [status, setStatus] = useState<TtsRuntimeStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const stateLabel = status?.state.replaceAll("_", " ") ?? "checking";
+  const stateLabel =
+    copy.states[status?.state ?? ""] ?? status?.state ?? "";
 
   useEffect(() => {
     let active = true;
@@ -88,8 +95,8 @@ export function TtsControlPanel({ onInspect, onStart, onStop }: TtsControlPanelP
     <section className="rounded-2xl border border-line bg-bg p-3.5" aria-label="Qwen3-TTS process control">
       <div className="mb-3 flex items-center justify-between gap-2">
         <div>
-          <p className="text-xs font-bold text-ink">Local Qwen3-TTS</p>
-          <p className="text-[10px] text-faint">Japanese voice service on this machine.</p>
+          <p className="text-xs font-bold text-ink">{copy.ttsTitle}</p>
+          <p className="text-[10px] text-faint">{copy.ttsSubtitle}</p>
         </div>
         <span
           className={`rounded-full border px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase ${STATE_STYLE[status?.state ?? ""] ?? "border-line-strong text-muted"}`}
@@ -98,57 +105,35 @@ export function TtsControlPanel({ onInspect, onStart, onStop }: TtsControlPanelP
         </span>
       </div>
 
-      <dl className="mb-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-xl bg-surface px-3 py-2.5 text-[11px]">
-        <dt className="text-faint">Ownership</dt>
-        <dd className="text-ink-dim">
-          {status?.state === "external"
-            ? "External (started outside Kana)"
-            : status?.managed
-              ? "Managed by Kana"
-              : "Not running"}
-        </dd>
-        <dt className="text-faint">Process</dt>
-        <dd className="text-ink-dim">{status?.pid ? `PID ${status.pid}` : "—"}</dd>
-        <dt className="text-faint">Endpoint</dt>
-        <dd className="truncate font-mono text-ink-dim">{`http://127.0.0.1:${status?.port ?? 7860} (server-side)`}</dd>
-        <dt className="text-faint">Access</dt>
-        <dd className="text-ink-dim">Through the Kana relay only</dd>
-      </dl>
+      <p className="mb-2 text-[11px] leading-relaxed text-faint">{copy.ttsAutoNote}</p>
 
       {status?.state === "starting" ? (
-        <p className="text-[11px] leading-relaxed text-muted">
-          Loading the Qwen3-TTS model — the first start can download about
-          2.3&nbsp;GB and take several minutes.
-        </p>
+        <p className="text-[11px] leading-relaxed text-muted">{copy.ttsFirstStart}</p>
       ) : null}
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        {["running", "external"].includes(status?.state ?? "") && (
+      <div className="flex flex-wrap items-center gap-2">
+        {["running", "external"].includes(status?.state ?? "") && status?.managed ? (
           <>
-            {status?.managed ? (
-              <>
-                <button type="button" className={btnSecondary} disabled={busy} onClick={() => void run("restart")}>
-                  Restart TTS
-                </button>
-                <button
-                  type="button"
-                  className={`${btnSecondary} hover:border-danger hover:text-danger`}
-                  disabled={busy || status.state === "external"}
-                  onClick={() => void run("stop")}
-                >
-                  Stop TTS
-                </button>
-              </>
-            ) : null}
+            <button type="button" className={btnSecondary} disabled={busy} onClick={() => void run("restart")}>
+              {copy.restart}
+            </button>
+            <button
+              type="button"
+              className={`${btnSecondary} hover:border-danger hover:text-danger`}
+              disabled={busy || status.state === "external"}
+              onClick={() => void run("stop")}
+            >
+              {copy.stop}
+            </button>
           </>
-        )}
+        ) : null}
         {!["running", "external", "starting"].includes(status?.state ?? "") && (
           <button type="button" className={btnSecondary} disabled={busy} onClick={() => void run("start")}>
-            {busy ? "Starting…" : "Start TTS"}
+            {busy ? copy.starting : copy.start}
           </button>
         )}
         <button type="button" className={btnGhost} disabled={busy} onClick={() => void onInspect().then(setStatus)}>
-          Refresh status
+          {copy.refresh}
         </button>
       </div>
       <p className="mt-2 min-h-4 text-[11px] text-muted">{notice ?? status?.message ?? ""}</p>
