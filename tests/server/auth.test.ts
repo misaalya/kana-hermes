@@ -4,55 +4,61 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, describe, it } from "node:test";
 import {
-  bootstrapPassword,
   changeAccessPassword,
   isAuthEnabled,
+  isDefaultPassword,
+  isUsingDefaultPassword,
+  resetPasswordStoreForTests,
   verifyAccessPassword,
 } from "@/lib/server/auth/password-store";
 import { checkLock, recordFail, recordSuccess } from "@/lib/server/auth/login-limiter";
 import { createSessionToken, verifySessionToken } from "@/lib/server/auth/session";
 
-// All auth configuration is read lazily, so pointing KANA_DATA_DIR at a
-// temporary directory here isolates every test run.
+// All auth state lives in SQLite under KANA_DATA_DIR, read lazily through a
+// cached handle — pointing the variable at a temporary directory here
+// isolates every test run.
 const dataDir = mkdtempSync(path.join(tmpdir(), "kana-auth-test-"));
 process.env.KANA_DATA_DIR = dataDir;
 delete process.env.KANA_ACCESS_PASSWORD;
 delete process.env.KANA_JWT_SECRET;
 
 after(() => {
+  resetPasswordStoreForTests();
   rmSync(dataDir, { recursive: true, force: true });
 });
 
 describe("access password store", () => {
-  it("reports auth disabled with no bootstrap password and no stored hash", () => {
-    assert.equal(bootstrapPassword(), null);
-    assert.equal(isAuthEnabled(), false);
+  it("always enables auth by seeding the default-password hash", () => {
+    assert.equal(isDefaultPassword("123456"), true);
+    assert.equal(isAuthEnabled(), true);
+    assert.equal(isUsingDefaultPassword(), true);
   });
 
-  it("verifies against the bootstrap environment password", async () => {
-    process.env.KANA_ACCESS_PASSWORD = "bootstrap-secret";
-    try {
-      assert.equal(isAuthEnabled(), true);
-      assert.equal(await verifyAccessPassword("bootstrap-secret"), true);
-      assert.equal(await verifyAccessPassword("wrong"), false);
-      assert.equal(await verifyAccessPassword(""), false);
-    } finally {
-      delete process.env.KANA_ACCESS_PASSWORD;
-    }
+  it("verifies the seeded default and rejects everything else", async () => {
+    assert.equal(await verifyAccessPassword("123456"), true);
+    assert.equal(await verifyAccessPassword("wrong"), false);
+    assert.equal(await verifyAccessPassword(""), false);
+    // The plaintext default must never exist in the data directory.
   });
 
-  it("prefers a persisted bcrypt hash over the environment value", async () => {
-    process.env.KANA_ACCESS_PASSWORD = "bootstrap-secret";
-    try {
-      await changeAccessPassword("persistent-secret");
-      assert.equal(await verifyAccessPassword("persistent-secret"), true);
-      assert.equal(await verifyAccessPassword("bootstrap-secret"), false);
-      // A wrong current password must never be accepted for a change.
-      await assert.rejects(() => changeAccessPassword(""));
-    } finally {
-      delete process.env.KANA_ACCESS_PASSWORD;
-      rmSync(path.join(dataDir, "auth.json"), { force: true });
-    }
+  it("replaces the default after a password change and never looks back", async () => {
+    await changeAccessPassword("persistent-secret");
+    assert.equal(isUsingDefaultPassword(), false);
+    assert.equal(await verifyAccessPassword("persistent-secret"), true);
+    assert.equal(await verifyAccessPassword("123456"), false);
+    await assert.rejects(() => changeAccessPassword(""));
+    await assert.rejects(() => changeAccessPassword("short"));
+  });
+
+  it("stores only a bcrypt hash in SQLite — no plaintext anywhere", () => {
+    const { DatabaseSync } = require("node:sqlite") as typeof import("node:sqlite");
+    const db = new DatabaseSync(path.join(dataDir, "appstate.db"));
+    const row = db.prepare("SELECT password_hash FROM auth_password WHERE id = 1").get() as {
+      password_hash: string;
+    };
+    db.close();
+    assert.match(row.password_hash, /^\$2[aby]\$/);
+    assert.doesNotMatch(row.password_hash, /persistent-secret/);
   });
 });
 

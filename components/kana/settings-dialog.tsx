@@ -50,21 +50,12 @@ function SecuritySection() {
     let active = true;
     fetchAuthStatus()
       .then((next) => { if (active) setStatus(next); })
-      .catch(() => { if (active) setStatus({ authEnabled: false, authenticated: false }); });
+      .catch(() => { if (active) setStatus({ authEnabled: true, authenticated: false }); });
     return () => { active = false; };
   }, []);
 
   if (!status) {
     return <p className="text-[11px] text-faint">Checking security status…</p>;
-  }
-
-  if (!status.authEnabled) {
-    return (
-      <p className="text-[11px] leading-relaxed text-faint">
-        Password protection is off. Set <code className="font-mono text-muted">KANA_ACCESS_PASSWORD</code> and
-        restart Kana to require login on this machine.
-      </p>
-    );
   }
 
   const submit = async () => {
@@ -94,6 +85,12 @@ function SecuritySection() {
 
   return (
     <div className="flex flex-col gap-2.5">
+      {status.usingDefaultPassword && (
+        <p className="rounded border border-danger/40 bg-danger/5 px-2 py-1.5 text-[11px] leading-relaxed text-danger">
+          The default password is still active. Change it below — the default is public
+          knowledge and must never protect a reachable instance.
+        </p>
+      )}
       <label className="flex flex-col gap-1">
         <span className={fieldLabel}>Current password</span>
         <input type="password" autoComplete="current-password" className={inputBase}

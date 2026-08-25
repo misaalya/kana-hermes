@@ -1,6 +1,7 @@
 export type AuthStatus = {
   authEnabled: boolean;
   authenticated: boolean;
+  usingDefaultPassword?: boolean;
 };
 
 export async function fetchAuthStatus(): Promise<AuthStatus> {

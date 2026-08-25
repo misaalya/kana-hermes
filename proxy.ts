@@ -1,62 +1,20 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import {
-  isAuthEnabled,
-  isInsecureNoAuthMode,
-  isNoAuthExplicitlyAllowed,
-} from "@/lib/server/auth/password-store";
 import { verifySessionToken } from "@/lib/server/auth/session";
 import { isLoopbackRequest } from "@/lib/server/auth/loopback";
 
 // Auth guard following 9Router's deny-by-default dashboard model:
 // - auth APIs needed to bootstrap a session stay public;
-// - every other /api/* route requires a valid session cookie once auth is
-//   enabled, and spawn-capable local control routes additionally require a
-//   loopback peer (with or without auth enabled);
-// - the Hermes relay (/api/hermes/*) is authenticated with the session cookie
-//   only — it runs on the server, so the loopback restriction does not apply;
-// - pages redirect to /login when a password is configured.
+// - every other /api/* route requires a valid session cookie. Authentication
+//   is always enabled: the password store seeds a default bcrypt hash in
+//   SQLite on first use, so there is no unauthenticated mode to warn about;
+// - spawn-capable local control routes additionally require a loopback peer;
+// - pages redirect to /login.
 
 const PUBLIC_API_PATHS = ["/api/auth/login", "/api/auth/logout", "/api/auth/status"];
 
 // Routes that spawn child processes or read host state — loopback only.
 const LOCAL_ONLY_PREFIXES = ["/api/local-runtime/"];
-
-const INSECURE_NO_AUTH_HEADER = "x-kana-insecure-no-auth";
-
-let insecureNoAuthWarned = false;
-
-function warnInsecureNoAuthOnce(): void {
-  if (insecureNoAuthWarned || !isInsecureNoAuthMode()) return;
-  insecureNoAuthWarned = true;
-  const acknowledged = isNoAuthExplicitlyAllowed();
-  console.warn(
-    acknowledged
-      ? "[kana] SECURITY WARNING: authentication is disabled by explicit configuration (KANA_ALLOW_NO_AUTH=1). Every visitor can read conversations and drive local process control."
-      : "[kana] SECURITY WARNING: production is running WITHOUT authentication (no auth.json, no KANA_ACCESS_PASSWORD). Set KANA_ACCESS_PASSWORD, or set KANA_ALLOW_NO_AUTH=1 to acknowledge an intentionally open instance.",
-  );
-}
-
-function surfaceInsecureNoAuth(response: NextResponse): NextResponse {
-  warnInsecureNoAuthOnce();
-  if (isInsecureNoAuthMode()) response.headers.set(INSECURE_NO_AUTH_HEADER, "1");
-  return response;
-}
-
-function unauthorized(): NextResponse {
-  return surfaceInsecureNoAuth(
-    NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
-  );
-}
-
-function forbidden(): NextResponse {
-  return surfaceInsecureNoAuth(
-    NextResponse.json(
-      { error: "Local process control accepts loopback requests only." },
-      { status: 403 },
-    ),
-  );
-}
 
 async function hasValidSession(request: NextRequest): Promise<boolean> {
   return verifySessionToken(request.cookies.get("kana_session")?.value);
@@ -64,34 +22,35 @@ async function hasValidSession(request: NextRequest): Promise<boolean> {
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const authEnabled = isAuthEnabled();
 
   if (pathname.startsWith("/api/")) {
     if (PUBLIC_API_PATHS.some((path) => pathname === path)) {
-      return surfaceInsecureNoAuth(NextResponse.next());
+      return NextResponse.next();
     }
 
     if (LOCAL_ONLY_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
       if (!isLoopbackRequest(request)) return forbidden();
-      if (authEnabled && !(await hasValidSession(request))) return unauthorized();
-      return surfaceInsecureNoAuth(NextResponse.next());
+      if (!(await hasValidSession(request))) return unauthorized();
+      return NextResponse.next();
     }
 
-    if (!authEnabled) return surfaceInsecureNoAuth(NextResponse.next());
     if (!(await hasValidSession(request))) return unauthorized();
-    return surfaceInsecureNoAuth(NextResponse.next());
+    return NextResponse.next();
   }
 
-  warnInsecureNoAuthOnce();
-
-  if (pathname === "/login") {
-    // With no password configured the login page has nothing to do.
-    return authEnabled ? NextResponse.next() : NextResponse.redirect(new URL("/", request.url));
-  }
-
-  if (!authEnabled) return NextResponse.next();
   if (await hasValidSession(request)) return NextResponse.next();
   return NextResponse.redirect(new URL("/login", request.url));
+}
+
+function unauthorized(): NextResponse {
+  return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+}
+
+function forbidden(): NextResponse {
+  return NextResponse.json(
+    { error: "Local process control accepts loopback requests only." },
+    { status: 403 },
+  );
 }
 
 export const config = {
