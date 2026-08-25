@@ -502,6 +502,53 @@ export function useKanaController(appVersion: string) {
     [commitConversations, conversationStore],
   );
 
+  // Hold-UX plumbing: a reply stays invisible while its voice synthesizes.
+  // heldMessageRef is the single pending reply (abort/disconnect flush it);
+  // the chain serializes turns so two replies can never interleave commits.
+  const heldMessageRef = useRef<{ conversationId: string; message: KanaMessage } | null>(null);
+  const ttsChainRef = useRef<Promise<void>>(Promise.resolve());
+
+  const commitAssistantMessage = useCallback(
+    async (conversationId: string, message: KanaMessage) => {
+      const conversation = conversationsRef.current.find(
+        (item) => item.id === conversationId,
+      );
+      if (!conversation) return;
+      await saveConversation({
+        ...conversation,
+        messages: [...conversation.messages, message],
+      });
+      const hermesSessionKey = conversation.agent?.persistentSessionId;
+      const turnActivities = message.activities ?? [];
+      if (hermesSessionKey && turnActivities.length) {
+        const lastToolTs = Math.max(
+          ...turnActivities.map((activity) => activity.timestamp),
+        );
+        void fetch("/api/kana/activities", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({
+            session: hermesSessionKey,
+            turnAnchorMs: Math.min(lastToolTs + 1, message.timestamp),
+            turnIndex: conversation.messages.filter(
+              (item) => item.role === "assistant",
+            ).length,
+            activities: turnActivities,
+          }),
+        }).catch(() => {});
+      }
+    },
+    [saveConversation],
+  );
+
+  const flushHeldMessage = useCallback(() => {
+    const held = heldMessageRef.current;
+    if (!held) return;
+    heldMessageRef.current = null;
+    void commitAssistantMessage(held.conversationId, held.message);
+  }, [commitAssistantMessage]);
+
   // ---- Activities ----
   const addActivity = useCallback((activity: ActivityItem) => {
     // Mirror into the per-turn log: the snapshot lands on the assistant
@@ -680,64 +727,64 @@ export function useKanaController(appVersion: string) {
           subtitle: { ...event.response.subtitle },
           emotion: event.response.emotion ?? "neutral",
           timestamp: Date.now(),
-          // Persist the tool activity log for this turn so the live-chat feed
-          // can restore it after a page refresh.
           activities: [...turnActivitiesRef.current],
         };
-        await saveConversation({
-          ...conversation,
-          messages: [...conversation.messages, assistantMessage],
-        });
-        // Mirror the turn's activity log to the server-side store. Anchor =
-        // last tool's timestamp + 1ms: the block must sit between the tools
-        // and Kana's reply in the chronological feed. Anchoring on the reply
-        // time (Date.now() at save) lands AFTER the reply row from Hermes
-        // and pushes the tools below the summary. The ordinal turnIndex is
-        // the durable identity: reconstructed writes for this same turn
-        // converge on this row instead of duplicating it.
-        const hermesSessionKey = conversation.agent?.persistentSessionId;
-        const turnActivities = assistantMessage.activities ?? [];
-        if (hermesSessionKey && turnActivities.length) {
-          const lastToolTs = Math.max(
-            ...turnActivities.map((activity) => activity.timestamp),
-          );
-          void fetch("/api/kana/activities", {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            credentials: "same-origin",
-            body: JSON.stringify({
-              session: hermesSessionKey,
-              turnAnchorMs: Math.min(lastToolTs + 1, assistantMessage.timestamp),
-              turnIndex: conversation.messages.filter(
-                (message) => message.role === "assistant",
-              ).length,
-              activities: turnActivities,
-            }),
-          }).catch(() => {});
+
+        if (!preferencesRef.current.voiceEnabled) {
+          avatarController.presentEmotion(assistantMessage.emotion);
+          await commitAssistantMessage(conversation.id, assistantMessage);
+          return;
         }
-        avatarController.presentEmotion(assistantMessage.emotion);
-        if (preferencesRef.current.voiceEnabled) {
-          void getVoice()
+
+        // Hold-UX: synthesis runs FIRST; the reply only becomes visible the
+        // moment her voice actually starts (or as text-only fallback when
+        // synthesis fails or is aborted). heldMessageRef lets abort and
+        // disconnect flush the text so a reply can never be lost.
+        heldMessageRef.current = {
+          conversationId: conversation.id,
+          message: assistantMessage,
+        };
+        setStatus("Kana menyiapkan suara…");
+        const previousChain = ttsChainRef.current ?? Promise.resolve();
+        ttsChainRef.current = previousChain.then(() => {
+          const commitOnce = async () => {
+            if (heldMessageRef.current?.message.id !== assistantMessage.id) return;
+            heldMessageRef.current = null;
+            await commitAssistantMessage(conversation.id, assistantMessage);
+          };
+          return getVoice()
             .speak({
               text: event.response.speech_ja,
               language: "ja",
               emotion: assistantMessage.emotion,
               voiceId: preferencesRef.current.qwen3Tts.voiceId || undefined,
+              onAudioStart: () => {
+                avatarController.presentEmotion(assistantMessage.emotion);
+                setStatus("Kana berbicara…");
+                void commitOnce();
+              },
             })
-            .catch((voiceError) => {
-              if (isAbortError(voiceError)) return;
-              reportError(
-                "voice",
-                voiceError instanceof Error
-                  ? voiceError.message
-                  : "Voice playback failed.",
-                "voice",
-              );
+            .then(async () => {
+              await commitOnce();
+              setStatus("Ready when you are");
+            })
+            .catch(async (voiceError) => {
+              if (!isAbortError(voiceError)) {
+                reportError(
+                  "voice",
+                  voiceError instanceof Error
+                    ? voiceError.message
+                    : "Voice playback failed.",
+                );
+              }
+              avatarController.presentEmotion(assistantMessage.emotion);
+              await commitOnce();
+              setStatus("Ready when you are");
             });
-        }
+        });
       }
     },
-    [avatarController, getVoice, reportError, saveConversation],
+    [avatarController, commitAssistantMessage, flushHeldMessage, getVoice, reportError],
   );
 
   const handleAgentEvent = useCallback(
@@ -772,6 +819,7 @@ export function useKanaController(appVersion: string) {
           setRespondingToInput(false);
           openedConversationRef.current = null;
           openingConversationRef.current = null;
+          flushHeldMessage();
           setBusy(false);
           setStatus("Reconnecting\u2026");
           if (event.message) {
@@ -791,6 +839,7 @@ export function useKanaController(appVersion: string) {
           openedConversationRef.current = null;
           openingConversationRef.current = null;
           turnConversationRef.current = null;
+          flushHeldMessage();
           setBusy(false);
           setStatus(
             event.state === "authentication_failed"
@@ -990,6 +1039,7 @@ export function useKanaController(appVersion: string) {
         setPendingInput(null);
         setRespondingToInput(false);
         setBusy(false);
+        flushHeldMessage();
         setStatus("Turn stopped");
         avatarController.presentEmotion("neutral");
         turnConversationRef.current = null;
@@ -1817,12 +1867,13 @@ export function useKanaController(appVersion: string) {
     openedConversationRef.current = null;
     openingConversationRef.current = null;
     turnConversationRef.current = null;
+    flushHeldMessage();
     setPendingInput(null);
     setRespondingToInput(false);
     setBusy(false);
     setConnectionState("disconnected");
     setStatus("Agent disconnected");
-  }, []);
+  }, [flushHeldMessage]);
 
   // ---- Abort ----
   const abort = useCallback(async () => {

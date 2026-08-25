@@ -11,7 +11,7 @@ export class AudioLipSyncController {
 
   constructor(private readonly avatar: AvatarController) {}
 
-  async play(audioData: ArrayBuffer): Promise<void> {
+  async play(audioData: ArrayBuffer, onStarted?: () => void): Promise<void> {
     this.stop();
     const epoch = this.epoch;
     const context = (this.context ??= new AudioContext());
@@ -54,6 +54,7 @@ export class AudioLipSyncController {
         { once: true },
       );
       source.start();
+      onStarted?.();
       updateMouth();
     });
   }

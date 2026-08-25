@@ -7,6 +7,8 @@ export type VoiceSpeakOptions = {
   voiceId?: string;
   language?: string;
   emotion?: Emotion;
+  /** Fires the moment audible playback begins (synthesis already done). */
+  onAudioStart?: () => void;
 };
 
 export type VoiceDescriptor = {
