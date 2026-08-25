@@ -77,6 +77,14 @@ export class Qwen3TTSProvider implements VoiceProvider {
     const generatedAudio: ArrayBuffer[] = [];
     let synthesisDuration = 0;
     let playbackDuration = 0;
+    // The hold-UI-until-audio UX keys on this: fire exactly once, when the
+    // first audible chunk actually starts playing.
+    let audioStartFired = false;
+    const fireAudioStart = () => {
+      if (audioStartFired) return;
+      audioStartFired = true;
+      options.onAudioStart?.();
+    };
 
     this.update({
       state: "synthesizing",
@@ -132,7 +140,7 @@ export class Qwen3TTSProvider implements VoiceProvider {
               : "Playing Japanese speech…",
         });
         const [, next] = await Promise.all([
-          this.lipSync.play(current.audio),
+          this.lipSync.play(current.audio, fireAudioStart),
           nextSynthesis,
         ]);
         playbackDuration += performance.now() - playbackStartedAt;
