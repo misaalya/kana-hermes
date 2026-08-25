@@ -1,4 +1,5 @@
 import { DEFAULT_SUBTITLE_LANGUAGE } from "@/lib/presentation/languages";
+import { isUiLocale } from "@/lib/ui/copy";
 import {
   DEFAULT_HARU_BINDINGS,
   OFFICIAL_CUBISM_CORE_URL,
@@ -46,6 +47,7 @@ type StoredPreferences = Partial<
 
 export const DEFAULT_PREFERENCES: KanaPreferences = {
   onboardingCompleted: false,
+  uiLocale: "id",
   subtitleLanguage: DEFAULT_SUBTITLE_LANGUAGE,
   agentMode: "hermes",
   voiceEnabled: true,
@@ -78,6 +80,7 @@ export function normalizeKanaPreferences(
     agentMode: "hermes",
     voiceMode: "qwen3",
     avatarMode: "live2d",
+    uiLocale: isUiLocale(preferences.uiLocale) ? preferences.uiLocale : "id",
     hermes: {
       cwd: preferences.hermes.cwd,
     },

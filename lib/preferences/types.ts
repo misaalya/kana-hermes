@@ -14,6 +14,8 @@ export type HostedAvatarModel = {
 
 export type KanaPreferences = {
   onboardingCompleted: boolean;
+  /** Interface copy language; dictionary lives in lib/ui/copy.ts. */
+  uiLocale: "id" | "en";
   subtitleLanguage: SubtitleLanguage;
   agentMode: AgentMode;
   voiceEnabled: boolean;
