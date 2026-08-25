@@ -184,6 +184,45 @@ describe("HermesAgentClient (relay transport)", () => {
     restoreBrowserGlobals();
   });
 
+  it("lands a failed first connect in a terminal error state instead of staying connecting", async () => {
+    class UnreachableSource extends EventTarget {
+      constructor() {
+        super();
+        queueMicrotask(() => {
+          this.dispatchEvent(new Event("open"));
+          this.dispatchEvent(
+            new MessageEvent("gateway", {
+              data: JSON.stringify({
+                connected: false,
+                message: "Kana is not managing a Hermes gateway with a known session token.",
+              }),
+            }),
+          );
+        });
+      }
+      close(): void {}
+    }
+    Object.defineProperty(globalThis, "EventSource", {
+      configurable: true,
+      value: UnreachableSource,
+    });
+
+    const client = new HermesAgentClient();
+    activeClients.push(client);
+    const events: AgentEvent[] = [];
+    client.subscribe((event) => events.push(event));
+
+    await assert.rejects(client.connect(), /not managing a Hermes gateway/);
+
+    const last = events.at(-1);
+    assert.ok(last);
+    assert.equal(last.type, "connection.changed");
+    if (last.type === "connection.changed") {
+      assert.equal(last.state, "error");
+      assert.match(last.message ?? "", /not managing a Hermes gateway/);
+    }
+  });
+
   it("never puts a token in a URL and creates a Kana-scoped session", async () => {
     const client = await connectedClient((request) => {
       if (request.method === "session.create") {
@@ -567,6 +606,61 @@ describe("HermesAgentClient (relay transport)", () => {
           event.title === "Renamed outside Kana",
       ),
     );
+  });
+
+  it("delivers resumed transcript rows via history.restored and fetchHistory uses the runtime id", async () => {
+    const events: AgentEvent[] = [];
+    const client = await connectedClient((request) => {
+      if (request.method === "session.create") {
+        return { session_id: "runtime-1", stored_session_id: "stored-1" };
+      }
+      if (request.method === "session.resume") {
+        return {
+          session_id: "runtime-2",
+          session_key: "stored-1",
+          resumed: "stored-1",
+          running: false,
+          messages: [
+            { role: "user", text: "hello" },
+            { role: "assistant", text: responseText() },
+          ],
+        };
+      }
+      if (request.method === "session.history") {
+        return { count: 0, messages: [] };
+      }
+      return {};
+    });
+    client.subscribe((event) => events.push(event));
+
+    await client.openSession({
+      persistentSessionId: "stored-1",
+      subtitleLanguage: "en",
+    });
+
+    const restored = events.find((event) => event.type === "history.restored");
+    assert.ok(restored && restored.type === "history.restored");
+    assert.equal(restored.persistentSessionId, "stored-1");
+    assert.equal(restored.sessionId, "runtime-2");
+    assert.deepEqual(
+      restored.messages.map((message) => message.role),
+      ["user", "assistant"],
+    );
+
+    // session.history resolves runtime ids only — never the durable key.
+    const history = await client.fetchHistory();
+    assert.deepEqual(history, { count: 0, messages: [] });
+    const historyCall = FakeRelay.requests.find(
+      (request) => request.method === "session.history",
+    );
+    assert.ok(historyCall);
+    assert.equal(historyCall.params.session_id, "runtime-2");
+
+    // Without an opened session the client refuses instead of sending a
+    // doomed lookup (durable keys fail with JSON-RPC 4001).
+    const detached = new HermesAgentClient({ requestTimeoutMs: 500 });
+    activeClients.push(detached);
+    await assert.rejects(detached.fetchHistory(), /open a hermes session/i);
   });
 
   it("shares one in-flight connection and automatically resumes after a drop", async () => {

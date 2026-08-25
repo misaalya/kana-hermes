@@ -26,6 +26,8 @@ export type HermesSessionResponse = {
   messages?: Array<{
     role?: string;
     text?: string;
+    name?: string;
+    context?: string;
   }>;
   inflight?: {
     assistant?: string;

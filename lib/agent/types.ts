@@ -26,6 +26,18 @@ export type ActivityItem = {
   durationMs?: number;
 };
 
+/**
+ * One display row of a restored Hermes transcript (the `_history_to_messages`
+ * projection of `session.resume` / `session.history`). Hermes does not put
+ * timestamps on these rows — ordering is positional.
+ */
+export type AgentHistoryRow = {
+  role: string;
+  text?: string;
+  name?: string;
+  context?: string;
+};
+
 export type AgentInputRequestKind =
   | "approval"
   | "clarification"
@@ -93,6 +105,12 @@ export type AgentEvent =
       sessionId: string;
       persistentSessionId: string;
       resumed: boolean;
+    }
+  | {
+      type: "history.restored";
+      sessionId: string;
+      persistentSessionId: string;
+      messages: AgentHistoryRow[];
     }
   | {
       type: "session.updated";
@@ -214,17 +232,12 @@ export interface AgentClient {
    */
   enqueuePrompt(message: string, subtitleLanguage: string): void;
   /**
-   * Fetch the persisted transcript of a stored Hermes session
-   * (session.history relayed server-side).
+   * Fetch the persisted transcript of the currently open Hermes session.
+   * Hermes resolves `session.history` only by RUNTIME session id, so this
+   * takes no argument: open the session first (openSession), then call.
    */
-  fetchHistory(hermesSessionKey: string): Promise<{
-    messages?: Array<{
-      role: string;
-      text?: string;
-      name?: string;
-      context?: string;
-      timestamp?: number;
-    }>;
+  fetchHistory(): Promise<{
+    messages?: AgentHistoryRow[];
   }>;
   sendMessage(input: AgentMessageInput): Promise<void>;
   executeCommand(input: AgentCommandInput): Promise<AgentCommandResult>;
