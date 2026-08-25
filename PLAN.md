@@ -1,469 +1,441 @@
-# Kana Product Maturity Plan
-
-Dokumen ini adalah roadmap dari foundation MVP Kana menuju produk lokal yang
-stabil dan nyaman dipakai setiap hari. Sumber kebenaran untuk batas arsitektur
-tetap berada di `AGENTS.md`; roadmap ini menjelaskan urutan produk, quality
-gate, dan pekerjaan berikutnya.
-
-Terakhir diperbarui: 2026-08-22.
-
-## Posisi Kana sekarang
-
-### Hasil permatangan lanjutan 2026-08-22 (goal 12 poin)
-
-Status jujur terhadap goal permatangan terbaru:
-
-1. **Voice cloning Qwen3-TTS** — selesai di sisi kontrak (API v2), service
-   Python, dan UI settings. Validasi suara asli tetap butuh host target.
-2. **Performa web/Live2D** — generation guard pergantian model, pause render
-   saat stage/tab tersembunyi, cap resolusi per kemampuan perangkat.
-3. **Paket npm launcher** — `bin/kana.mjs` + `scripts/prepare-npm-package.mjs`;
-   model besar diunduh terpisah saat setup. Publikasi ke registry sendiri masih
-   langkah rilis manual.
-4. **Katalog slash** — tetap dibaca live dari `commands.catalog` Hermes; quick
-   controls (`/model`, konfigurasi) memakai registry, bukan daftar statis.
-5. **Ganti model LLM** — mengikuti konfigurasi Hermes pengguna melalui
-   `/model` dan perintah konfigurasi resmi; Kana tidak menyimpan model sendiri.
-6. **Mock gating** — `NEXT_PUBLIC_KANA_DEVELOPMENT_MODE=false` menghilangkan
-   seluruh mock dari build produksi.
-7. **Hermes control panel** — start/restart/stop `hermes serve` + token via UI,
-   hanya aktif lewat launcher (`KANA_LOCAL_RUNTIME_CONTROL=1`).
-8. **Bug Live2D bertumpuk** — generation guard; perlu satu verifikasi manual
-   pada WebGL nyata dengan dua model berat.
-9. **Approve/deny asli** — dialog approval Hermes diteruskan ke UI (sudah ada
-   sejak fase 1; tidak ada perubahan perilaku).
-10. **Tema visual-novel** — langit pastel, avatar tengah, balon dialog
-    bernama, HUD, composer mengambang; diverifikasi via screenshot desktop +
-    mobile terhadap tiga gambar referensi.
-11. **Loop verifikasi visual** — 6+ putaran screenshot Playwright dengan
-    perbaikan (mata avatar, ekor balon, siluet scene, ikon mobile, skala
-    avatar). Referensi asli pemilik produk tetap hakim akhir.
-12. **PLAN.md** — bagian ini adalah pembaruannya; item gate eksternal di bawah
-    tetap menjadi syarat beta.
-
-### Fondasi utama sudah tersedia:
-
-- koneksi nyata ke Hermes melalui `hermes serve`, termasuk sesi, event,
-  approval, clarification, reconnect, dan katalog slash command dinamis;
-- riwayat percakapan lokal berbasis IndexedDB yang mempertahankan subtitle
-  persis seperti saat ditampilkan;
-- Qwen3-TTS lokal dengan playback WAV, pembatalan request, dan lip sync;
-- Live2D nyata dengan Haru dan Mao resmi sebagai contoh berbeda, impor model
-  pengguna, serta binding per model;
-- mock agent, voice, avatar, dan conversation store untuk pengembangan;
-- UI putih minimal, avatar di tengah, serta layout desktop dan mobile;
-- build standalone, metadata installable, dan offline application shell.
-
-Kana sudah melewati foundation MVP dan hardening internal utama, tetapi belum
-boleh disebut beta sebelum validasi target-host selesai. Quality gate,
-diagnostics, onboarding, recovery adapter, model library, security, backup,
-migration, browser journeys, dan proses rilis sekarang sudah tersedia. Gap
-terbesar tersisa memerlukan lingkungan nyata: restart Hermes pada turn dan
-protected input aktif, benchmark Qwen di hardware target, dua package Live2D
-pengguna, serta dogfood minimal satu minggu. Restart Hermes saat idle sekarang
-sudah diuji otomatis terhadap binary terpasang dengan home yang sepenuhnya
-terisolasi.
-
-## Hasil maturity pass 2026-08-22
-
-- `npm run quality` lulus dengan lint, TypeScript, 42 unit/integration test,
-  16 perjalanan Playwright desktop/mobile, satu audit installability/offline
-  production, build, dan package assembly.
-- Audit live Hermes 0.20.1 berhasil membaca `gateway.ready`, 6 kategori, 165
-  command pada instalasi saat itu, 15 completion, status sesi, dan close sesi
-  test tanpa mengirim prompt LLM. Angka registry bukan konstanta aplikasi.
-- Paket standalone dijalankan dari direktori sementara di luar checkout dan
-  merespons HTTP 200 dengan CSP produksi aktif.
-- `npm audit --omit=dev --audit-level=high` melaporkan 0 vulnerability.
-- Heavy Qwen inference sengaja tidak diulang pada laptop ini. Prosedur,
-  benchmark otomatis p50/p95/RTF/cancellation, expected output, dan success
-  criteria VPS berada di
-  `docs/QWEN3_TTS_VPS_ACCEPTANCE.md`.
-- Restart idle nyata berhasil melewati stop/start server, reconnect, resume ID
-  persisten, rekonstruksi adapter seperti page refresh, dan `/status`
-  menggunakan temporary `HERMES_HOME` tanpa menyentuh data Hermes pengguna.
-  Kasus turn/protected input aktif tetap gate manual.
-- Haru dan Mao dari koleksi sampel resmi dapat dimuat, diganti, disimpan,
-  direload, lalu diganti kembali dengan binding mulut berbeda
-  (`ParamMouthOpenY` dan `ParamA`). Uji ini juga menjaga lifecycle satu renderer
-  WebGL per canvas agar pergantian model tidak membekukan tab.
-- Manifest production, installability Chrome, service worker application shell,
-  dan reload offline pada profil mobile sudah diuji otomatis. Service worker
-  tidak mencegat origin eksternal maupun endpoint `/api`.
-- Opsi sentence chunk Qwen eksperimental menjaga teks dan urutan, prefetch,
-  cancellation, serta replay tanpa request Hermes kedua. Complete WAV tetap
-  default sampai benchmark target mendukung perubahan.
-- Jurnal dogfood dan matrix beta sekarang dapat divalidasi dengan
-  `npm run dogfood:check`; 7 dari 13 kasus sudah memiliki bukti. Gate tetap
-  gagal sampai enam kasus target-environment dan tujuh hari pemakaian selesai.
-- Pencatatan hari dan matrix dogfood kini memakai perintah tervalidasi yang
-  menolak hari duplikat, ID salah, dan bentuk credential umum. Lima kasus
-  restart aktif Hermes memiliki evidence schema dan validator tersendiri;
-  seluruh gate eksternal dirangkum di `docs/BETA_ACCEPTANCE_HANDOFF.md`.
-- Gate beta tetap terbuka sampai semua item Phase 6 yang belum dicentang selesai.
-
-## Definisi “matang”
-
-Kana layak disebut matang apabila:
-
-1. pengguna dapat memasang, menghubungkan, dan mendiagnosis Hermes/Qwen tanpa
-   membaca source code;
-2. restart, disconnect, cancel, resume, dan kegagalan layanan tidak membuat
-   pesan ganda, kehilangan riwayat, atau meninggalkan UI dalam kondisi palsu;
-3. semua kontrol Hermes yang relevan tersedia melalui RPC resmi atau slash
-   command hidup, tanpa meniru konteks Telegram/Discord yang tidak ada;
-4. suara dan avatar bisa diganti, diuji, dihentikan, dan dipulihkan secara
-   aman;
-5. percakapan, preferensi, subtitle historis, dan model lokal tahan terhadap
-   reload serta migrasi versi;
-6. desktop dan mobile dapat digunakan dengan keyboard, sentuhan, dan pembaca
-   layar pada alur utama;
-7. paket rilis dapat dibuat ulang, di-upgrade, dan di-rollback tanpa menyentuh
-   instalasi Hermes milik pengguna;
-8. mock mode tetap berfungsi ketika Hermes, Qwen3-TTS, internet, atau WebGL
-   tidak tersedia.
-
-## Prinsip pelaksanaan
-
-- Hermes tetap satu-satunya agent. Tidak ada Kana LLM, translator LLM, agent
-  loop, tool runner, MCP implementation, atau memory system kedua.
-- Integrasi nyata tetap melalui interface publik Hermes dan adapter Kana.
-  Hermes tidak boleh dipatch atau dibundel ke dalam Kana.
-- `speech_ja` selalu bahasa Jepang. Perubahan bahasa subtitle hanya berlaku
-  untuk respons baru dan tidak menulis ulang histori.
-- Reliability dan recovery dikerjakan sebelum visual polish lanjutan.
-- Setiap fitur nyata harus memiliki fallback atau status gagal yang jujur.
-- Dependency baru hanya ditambahkan setelah kebutuhan dan alternatif bawaan
-  browser/proyek diperiksa.
-- Data lokal dan nilai rahasia harus memiliki skema, migrasi, dan batas umur
-  yang eksplisit.
-
-## Urutan prioritas
-
-| Prioritas | Hasil yang dicari | Alasan |
-| --- | --- | --- |
-| P0 | Quality gate, diagnostics, dan automated user journeys | Membuat regresi terlihat sebelum fitur bertambah |
-| P1 | Hermes yang tahan restart/disconnect dan mudah dikendalikan | Hermes adalah jalur kritis Kana |
-| P2 | Voice yang terukur, dapat dibatalkan, dan mudah disiapkan | Saat ini nyata tetapi CPU masih lambat |
-| P3 | Library dan validasi model Live2D | Impor sudah ada, lifecycle aset belum lengkap |
-| P4 | Onboarding, accessibility, dan UX harian | Mengubah fondasi teknis menjadi produk yang mudah dipakai |
-| P5 | Packaging, security, migration, dan release discipline | Diperlukan sebelum beta yang bisa di-upgrade |
-
-Estimasi kasar untuk satu pengembang adalah 12–18 minggu hingga beta yang
-solid. Ini adalah urutan kerja, bukan janji tanggal; beberapa fase dapat
-berjalan paralel setelah P0 selesai.
-
-## Phase 0 — Baseline kualitas dan observability
-
-Target: setiap kegagalan penting dapat direproduksi, terlihat, dan diuji tanpa
-membaca log internal Hermes secara manual.
-
-### Pekerjaan
-
-- [x] Buat matriks user journey utama: mock chat, koneksi Hermes, membuat dan
-      melanjutkan sesi, slash command, approval, clarification, stop, reconnect,
-      ganti subtitle, voice, serta avatar.
-- [x] Tambahkan automated browser tests untuk alur kritis pada viewport desktop
-      dan mobile. Pilih runner setelah memeriksa kemampuan proyek yang sudah
-      ada; jangan menambah dependency hanya karena kebiasaan.
-- [x] Tambahkan test fixture untuk WebSocket Hermes agar error, event terlambat,
-      duplicate event, out-of-order event, dan reconnect dapat diuji deterministik.
-- [x] Satukan kategori error internal: connection, authentication, protocol,
-      session, model response, storage, voice, avatar, dan user cancellation.
-- [x] Buat panel diagnostics yang aman untuk menyalin status versi, mode aktif,
-      kesehatan provider, dan error terakhir tanpa token, password, secret,
-      prompt pribadi, atau isi tool yang sensitif.
-- [x] Catat metrik lokal yang berguna: waktu connect, waktu respons Hermes,
-      waktu sintesis TTS, durasi audio, waktu load avatar, dan jumlah reconnect.
-      Jangan kirim telemetry keluar secara default.
-- [x] Tambahkan satu perintah quality gate yang menjalankan lint, TypeScript,
-      unit/integration tests, TTS tests yang sesuai, build, dan package check.
-- [x] Jalankan pemeriksaan aksesibilitas dasar serta cek horizontal overflow
-      pada lebar 360, 390, 768, dan 1440 px.
-
-### Exit criteria
-
-- Semua user journey P0 memiliki test atau checklist manual yang dapat diulang.
-- Kegagalan provider terlihat sebagai status yang jelas dan tidak disamarkan
-  sebagai sukses.
-- Diagnostics tidak menyimpan atau mengekspos credential.
-- `npm run lint`, `npx tsc --noEmit`, `npm test`, `npm run build`, dan
-  `npm run package:local` lulus.
-
-## Phase 1 — Hermes reliability dan control surface
-
-Target: Kana terasa seperti client Hermes resmi yang tahan terhadap penggunaan
-harian, bukan sekadar WebSocket yang kebetulan tersambung.
-
-### Pekerjaan
-
-- [x] Buat state machine koneksi yang eksplisit: idle, connecting, connected,
-      reconnecting, authentication failed, incompatible, dan disconnected.
-- [x] Terapkan reconnect backoff dengan cancel manual serta pesan status yang
-      tidak menutupi transcript.
-- [x] Uji restart nyata `hermes serve` ketika idle dengan binary terpasang,
-      temporary home, reconnect adapter, resume durable ID, dan `/status`.
-- [ ] Selesaikan matrix restart ketika agent sedang berpikir, menunggu
-      approval, menunggu secret, setelah jawaban tersedia tetapi event akhir
-      belum diterima, dan sesaat setelah completion. Ikuti
-      `docs/HERMES_RESTART_ACCEPTANCE.md` dan jangan gunakan secret produksi.
-- [x] Pastikan resume tidak menghasilkan assistant message ganda dan tidak
-      mengirim prompt pengguna dua kali.
-- [x] Selesaikan reconciliation untuk sesi Hermes yang dihapus, di-branch,
-      di-rename, atau dikompres dari client lain.
-- [x] Audit katalog Hermes pada versi terpasang untuk kontrol yang pantas diberi
-      UI khusus, terutama model, profile, usage, reasoning, context, agent,
-      memory, dan session management. Tetap gunakan RPC resmi dan registry
-      hidup sebagai sumber kebenaran.
-- [x] Buat tampilan session picker yang membedakan conversation lokal, linked
-      Hermes session, sesi yang hilang, dan branch.
-- [x] Perjelas command yang messaging-only atau platform-only dengan status
-      unavailable dan alasan, tanpa membuat identitas Telegram/Discord palsu.
-- [x] Tambahkan integration harness terhadap server Hermes sementara pada port
-      non-default. Gunakan hanya sesi test `source: "kana"` dan bersihkan hanya
-      data test tersebut.
-- [x] Tambahkan pemeriksaan kompatibilitas protocol agar perubahan Hermes yang
-      tidak dikenali menghasilkan pesan upgrade yang jelas, bukan crash.
-
-### Exit criteria
-
-- Skenario restart/disconnect/resume lulus tanpa kehilangan atau menggandakan
-  pesan.
-- Approval, clarification, sudo, dan secret dapat dipulihkan atau dibatalkan
-  dengan status yang benar.
-- Slash command dan skill baru tetap muncul tanpa perubahan source Kana.
-- Kana dapat menjelaskan apakah masalah berasal dari koneksi, token, versi,
-  sesi, atau respons model.
-
-## Phase 2 — Voice maturity dan latency
-
-Target: Qwen3-TTS mudah disiapkan dan perilakunya dapat diprediksi pada hardware
-lemah maupun kuat.
-
-### Pekerjaan
-
-- [x] Tambahkan setup check untuk versi service, ruang disk, model cache,
-      speaker catalog, device, dan estimasi kondisi CPU/GPU.
-- [x] Tampilkan lifecycle voice dengan jelas: offline, loading model,
-      synthesizing, playing, stopping, ready, dan failed.
-- [ ] Ukur p50/p95 waktu sintesis berdasarkan panjang teks pada mesin target;
-      simpan hasil sebagai baseline dokumentasi, bukan janji realtime.
-- [x] Pastikan stop membatalkan request server, playback browser, analyser, dan
-      status talking avatar secara idempotent.
-- [x] Tambahkan replay audio terakhir tanpa memanggil Hermes atau menghasilkan
-      terjemahan baru.
-- [x] Tambahkan kebijakan antrean: respons lama tidak boleh mulai berbicara
-      setelah pengguna sudah berpindah conversation atau menghentikannya.
-- [x] Lakukan spike streaming TTS yang terbatas waktu. Service terpasang
-      menerima waveform lengkap dari `generate_custom_voice` lalu mengirim
-      `Response` WAV utuh; tidak ada stream PCM stabil pada kontrak v1. Streaming
-      ditunda, bukan ditiru dengan buffering palsu. Lihat ADR-002.
-- [x] Jika streaming belum layak, evaluasi chunking per kalimat dengan tetap
-      menjaga urutan, cancellation, dan satu respons Hermes. Jangan menambah LLM.
-      Implementasi tersedia sebagai opsi eksperimental; complete WAV tetap
-      default sampai bukti target-host tersedia.
-- [x] Dokumentasikan profil hardware yang realistis serta degraded mode saat
-      Qwen tidak tersedia.
-
-### Exit criteria
-
-- Bahasa yang dikirim ke Qwen tetap `ja` dan teks selalu berasal dari
-  `speech_ja` pada respons yang sama.
-- Stop dan perpindahan conversation tidak meninggalkan audio atau lip sync
-  berjalan.
-- Pengguna mengetahui apakah lambat disebabkan model loading, CPU inference,
-  antrean, download, atau playback.
-- Keputusan streaming dicatat sebagai ADR singkat: diterapkan, ditunda, atau
-  ditolak beserta hasil pengukurannya.
-
-## Phase 3 — Live2D model library dan robustness
-
-Target: pengguna dapat mengelola beberapa avatar tanpa asumsi bahwa semuanya
-memiliki struktur Haru.
-
-### Pekerjaan
-
-- [x] Buat model library untuk melihat, memilih, mengganti nama lokal, dan
-      menghapus model URL/folder yang pernah diimpor.
-- [x] Validasi `.model3.json` dan seluruh referensi aset sebelum model dijadikan
-      aktif; tampilkan daftar file yang hilang secara manusiawi.
-- [x] Tambahkan preview/test untuk mouth parameter, setiap emotion expression,
-      motion group, talking state, dan lip sync.
-- [x] Tampilkan ukuran IndexedDB per model dan pastikan delete benar-benar
-      melepaskan blob yang tidak lagi digunakan.
-- [x] Tangani quota exceeded, context loss WebGL, model corrupt, cross-origin
-      URL, remote asset hilang, dan reload saat proses impor.
-- [x] Pastikan pergantian model membersihkan Pixi texture, audio binding, event
-      listener, object URL, dan WebGL resources lama.
-- [x] Tambahkan export/import konfigurasi binding tanpa menyalin aset model
-      berlisensi secara tidak sengaja.
-- [x] Pertahankan Haru hanya sebagai sample resmi development beserta notice;
-      jangan jadikan ID parameter Haru sebagai default universal.
-
-### Exit criteria
-
-- Sedikitnya dua package model dengan struktur/binding berbeda dapat dipakai
-  bergantian dan tetap aktif setelah reload.
-- Model rusak tidak merusak model aktif sebelumnya.
-- Delete model menghapus aset lokal yang tepat dan tidak menghapus binding
-  model lain.
-- Mock avatar tetap menjadi fallback ketika WebGL/Core/model gagal.
-
-## Phase 4 — Onboarding dan UX harian
-
-Target: pengguna non-teknis dapat memahami mode yang sedang dipakai dan pulih
-dari masalah umum langsung dari UI.
-
-### Pekerjaan
-
-- [x] Buat first-run setup ringkas: pilih mock/Hermes, tes koneksi, pilih bahasa
-      subtitle, pilih voice, dan konfirmasi avatar.
-- [x] Buat status provider yang selalu dapat ditemukan tetapi tidak bersaing
-      dengan avatar dan percakapan di viewport utama.
-- [x] Lengkapi empty, loading, offline, reconnecting, permission, storage-full,
-      dan incompatible-version states.
-- [x] Tambahkan pencarian conversation, rename, delete confirmation, serta
-      penanda percakapan dengan linked/missing Hermes session.
-- [x] Polish composer untuk keyboard virtual, safe-area mobile, multiline,
-      slash completion, queued prompt, stop, dan draft per conversation.
-- [x] Pastikan fokus dialog kembali ke elemen asal, semua command bisa dipakai
-      via keyboard, status dibaca screen reader, dan animasi mengikuti
-      `prefers-reduced-motion`.
-- [x] Verifikasi contrast, ukuran target sentuh, zoom 200%, serta layout pada
-      orientasi portrait dan landscape.
-- [x] Tambahkan halaman bantuan singkat untuk arsitektur lokal, cara menjalankan
-      Hermes/Qwen, arti mock mode, dan lokasi data browser.
-
-### Exit criteria
-
-- Pengguna baru dapat masuk mock mode tanpa setup eksternal dan dapat
-  menghubungkan Hermes melalui petunjuk UI setelah server siap.
-- Tidak ada horizontal overflow atau composer tertutup keyboard pada ukuran
-  mobile target.
-- Semua alur utama dapat diselesaikan tanpa mouse.
-- Pergantian subtitle hanya memengaruhi respons baru; test histori lama tetap
-  byte-for-byte sama.
-
-## Phase 5 — Security, data lifecycle, dan packaging
-
-Target: beta dapat di-upgrade, dipindahkan, dan didiagnosis dengan risiko data
-serta credential yang terkendali.
-
-### Pekerjaan
-
-- [x] Threat-model localhost: WebSocket origin, CORS Qwen, XSS dari markdown/
-      tool output, URL model, file import, object URL, dan diagnostic export.
-- [x] Terapkan Content Security Policy yang kompatibel dengan Cubism Core,
-      model remote yang diizinkan, WebSocket lokal, dan TTS lokal tanpa membuka
-      origin secara berlebihan.
-- [x] Audit ulang bahwa Hermes token, sudo password, secret tool, dan protected
-      input tidak pernah masuk localStorage, IndexedDB, transcript, log, URL,
-      atau diagnostics.
-- [x] Versikan semua schema persisten dan buat migration tests menggunakan
-      fixture dari versi aplikasi sebelumnya.
-- [x] Buat backup/export-import untuk conversation dan preference yang aman.
-      Exclude credential serta aset avatar berlisensi secara default.
-- [x] Tambahkan recovery sebelum destructive migration dan pesan yang jelas
-      ketika storage tidak dapat dibaca.
-- [x] Bekukan proses release: version bump, changelog, license/notice audit,
-      dependency audit, build, smoke test, package, checksum, dan rollback note.
-- [x] Verifikasi paket standalone di lingkungan bersih tanpa source checkout.
-      Hermes dan Qwen tetap dependency eksternal.
-- [x] Tulis ADR sebelum menambah desktop wrapper. Wrapper hanya layak jika ada
-      kebutuhan nyata untuk process supervision, keychain, auto-start, atau
-      native update; ia tetap tidak boleh memodifikasi Hermes.
-
-### Exit criteria
-
-- Upgrade dari dua schema fixture sebelumnya mempertahankan conversation dan
-  subtitle historis.
-- Security checklist dan license notices lulus.
-- Paket dapat dijalankan dan dihapus tanpa mengubah instalasi/config Hermes.
-- Prosedur backup, restore, upgrade, dan rollback telah diuji.
-
-## Phase 6 — Beta dan release readiness
-
-Target: Kana siap dipakai rutin oleh pengguna awal dengan scope dan batasan
-yang terdokumentasi.
-
-### Pekerjaan
-
-- [ ] Jalankan dogfood minimal satu minggu dengan jurnal issue: frekuensi,
-      severity, reproduksi, provider terkait, dan apakah ada data hilang.
-- [ ] Uji matrix minimum: mock-only, Hermes-only, Hermes+Qwen, offline avatar,
-      custom Live2D, refresh, restart service, dan mobile installable web app.
-- [ ] Triage semua issue P0/P1; jangan rilis beta dengan risiko credential leak,
-      data loss, prompt ganda, atau sesi salah.
-- [x] Dokumentasikan supported environment, kebutuhan storage, kebutuhan
-      hardware Qwen, known limitations, dan cara mengumpulkan diagnostics.
-- [x] Siapkan changelog pengguna dan migration note untuk setiap rilis.
-- [x] Tetapkan kanal alpha/beta/stable serta aturan kompatibilitas minimum
-      terhadap versi Hermes yang benar-benar telah diuji.
-
-### Release gate
-
-Beta hanya boleh dirilis apabila:
-
-- tidak ada issue P0/P1 terbuka;
-- quality gate penuh lulus dari checkout bersih;
-- reconnect/resume, protected input, history migration, voice cancellation,
-  dan avatar fallback lulus;
-- mobile dan keyboard flows lulus;
-- paket bersih dapat terhubung ke instalasi Hermes yang tidak dimodifikasi;
-- mock mode tetap dapat dipakai tanpa Hermes dan Qwen.
-
-## Sprint berikutnya yang direkomendasikan
-
-Fondasi reliability sudah selesai. Sprint berikutnya adalah acceptance dan
-dogfood 7–10 hari, bukan penambahan fitur besar:
-
-1. jalankan `npm run tts:acceptance` pada VPS, dengarkan satu WAV, dan simpan
-   JSON baseline;
-2. jalankan matrix restart Hermes aktif (thinking, approval, secret, answer
-   boundary), isi `acceptance/hermes-active-restart.json`, dan pastikan
-   `npm run hermes:active-check` lulus;
-3. impor dua package Live2D legal dengan binding berbeda, reload, ganti model,
-   uji fallback, lalu hapus salah satunya;
-4. mulai jurnal harian melalui `npm run dogfood:record`, selesaikan semua
-   matrix provider, dan masukkan setiap issue dengan severity;
-5. jalankan `npm run quality`, `npm run dogfood:check`, audit dependency, dan
-   release checklist setelah semua P0/P1 terverifikasi.
-
-Hasil sprint yang benar adalah bukti target environment dan daftar defect yang
-jujur. Jangan mencentang gate hardware atau tujuh hari berdasarkan test mock.
-
-## Keputusan yang harus berbasis bukti
-
-Keputusan berikut tidak perlu dibuat sekarang:
-
-- **Streaming TTS:** putuskan setelah latency spike membuktikan manfaat nyata
-  dan cancellation tetap benar.
-- **Desktop wrapper:** tunda sampai process supervision, keychain, atau
-  auto-start menjadi kebutuhan pengguna yang jelas.
-- **Cloud sync:** jangan dikerjakan sebelum ada kebutuhan multi-device dan
-  model keamanan/privasi yang disepakati.
-- **Telemetry cloud:** tidak aktif secara default; gunakan diagnostics lokal
-  lebih dahulu.
-- **Live2D marketplace:** model library lokal didahulukan. Kana tidak boleh
-  mendistribusikan model pihak ketiga tanpa hak yang sesuai.
-- **UI visual lanjutan:** polish hanya setelah reliability, accessibility, dan
-  mobile flows memenuhi gate.
-
-## Hal yang sengaja bukan scope Kana
-
-- Mengganti atau mem-fork agent loop Hermes.
-- Menjalankan tool, shell, filesystem, MCP, memory, subagent, atau compaction
-  secara mandiri.
-- Membuat model tambahan untuk persona atau subtitle.
-- Menyimpan credential Hermes secara permanen di browser.
-- Mengemas model Qwen multi-gigabyte atau source Hermes ke paket web Kana.
-- Meniru identity/topic/platform context milik Telegram, Discord, atau Slack.
-
-## Cara memelihara roadmap ini
-
-- Centang pekerjaan hanya setelah exit criteria terkait terbukti.
-- Tambahkan tautan issue/ADR/test report di bawah item yang memerlukan keputusan.
-- Jika kontrak Hermes, Qwen, atau Live2D berubah, perbarui `AGENTS.md` terlebih
-  dahulu sebagai handoff arsitektur, lalu sesuaikan roadmap ini.
-- Setelah setiap rilis, pindahkan pekerjaan selesai ke changelog dan pertahankan
-  `PLAN.md` sebagai daftar langkah yang masih relevan.
+# Kana Remediation Plan
+
+Dokumen ini menggantikan roadmap produk lama. Sumbernya adalah audit menyeluruh
+2026-08-25 atas seluruh codebase (controller, agent client, bridge server,
+runtime Hermes, TTS relay, auth/persistence, React layer) yang diverifikasi
+silang dengan source Hermes terpasang di `/home/kenobu/.hermes/hermes-agent`.
+
+Konteks: pemilik menambal kode sepanjang hari dan banyak bug tersisa, sebagian
+muncul setelah pindah mesin. Aplikasi didesain untuk di-deploy di VPS (satu
+user), sehingga bug akibat perbedaan mesin harus minimal. Keluhan utama:
+resume sering mengembalikan transcript kosong/error, caching sisa bermasalah,
+dan pemanfaatan React (state management) masih lemah.
+
+Terakhir diperbarui: 2026-08-25.
+
+---
+
+## 1. Ringkasan eksekutif — root cause terkonfirmasi
+
+| ID | Root cause | Bukti | Dampak |
+| --- | --- | --- | --- |
+| RC-1 | `fetchHistory` mengirim **durable key** ke `session.history`, padahal Hermes hanya menerima **runtime session id** (`_sessions` map berisi uuid acak) | `lib/agent/hermes/hermes-agent-client.ts:395-418`, `use-kana-controller.ts:383`; Hermes: `tui_gateway/server.py:2386` + `methods_session.py:2444` | Resume hampir selalu error 4001 "session not found", `.catch` menelannya → **transcript kosong** |
+| RC-2 | Proyeksi `_history_to_messages` Hermes **tidak memuat timestamp**; Kana mengalikan `row.timestamp * 1000` yang selalu undefined → fallback `Date.now()` | Hermes `server.py:7254-7267`; Kana `use-kana-controller.ts:412-415` | Anchor aktivitas hasil rekonstruksi ≠ anchor live turn → blok tool duplikat/misposisi antar browser |
+| RC-3 | Data dir terpecah 3 root (`$CWD/data`, `$HOME/.kana`, XDG) tanpa `KANA_DATA_DIR` yang diteruskan launcher | `password-store.ts:12-18`, `session.ts:24-34`, `activity-store.ts:29-35`, `bin/kana.mjs:100-107` | Pindah mesin/redeploy = password hash tertinggal, JWT regenerasi, **activities.db hilang** (terbukti: `~/.kana` tidak ada di mesin ini) |
+| RC-4 | Auth bisa silent-off: `.env.production` kosong & ter-commit, tanpa `auth.json` → `isAuthEnabled()` false | `password-store.ts:27-29`, `proxy.ts:49-59` | VPS publik terbuka tanpa login. Bonus: `.env.development` berisi password asli di git |
+| RC-5 | Relay TTS tidak punya route cancel; abort browser tidak diteruskan upstream; delete voice clone salah mapping path/query | provider `qwen3-tts-provider.ts:248-254`; `app/api/voice/tts/` (tanpa `[voiceId]`); `speech/route.ts:20-25` | Stop tidak menghentikan sintesis CPU (sampai 300 s), fitur delete voice mati total |
+| RC-6 | God-hook 1.931 baris dengan ref paralel, subscription stale, cache module-level, debug overlay di production | `use-kana-controller.ts` (60, 895-925, 946-985), `memory-conversation-store.ts:22-38`, `kana-app.tsx:153-164, 291-295` | Bug stale-state halus, keystroke me-re-run seluruh hook, cache basi antar mesin |
+
+Fakta kunci yang membuat fix RC-1 mudah: **`session.resume` sudah
+mengembalikan seluruh transcript** (`messages`) dalam responsnya
+(`methods_session.py:556-572`). Tidak perlu RPC kedua.
+
+---
+
+## 2. Aturan main (tidak bisa ditawar)
+
+Sumber lengkap: `AGENTS.md`. Poin kritis untuk pekerjaan ini:
+
+1. Tidak memodifikasi `/home/kenobu/.local/bin/hermes` maupun
+   `/home/kenobu/.hermes/hermes-agent`. Semua fix dilakukan di sisi Kana.
+2. Hermes tetap satu-satunya agent. Tidak ada LLM/loop/tool runner kedua.
+3. `speech_ja` selalu Jepang; subtitle historis tidak pernah diretranslate.
+4. Integrasi gagal secara jujur saat service eksternal tidak ada.
+5. Sebelum coding, baca guide Next.js terpasang di `node_modules/next/dist/docs/`.
+6. Test Hermes memakai `hermes serve` temporary di port non-default,
+   session test `source: "kana"`, bersihkan hanya data test sendiri.
+7. Handoff wajib lulus: `npm run lint && npx tsc --noEmit && npm run build`.
+
+---
+
+## 3. Peta workstream & paralelisasi
+
+Empat track yang saling lepas berdasarkan **file yang disentuh**. Track dalam
+kolom yang sama aman dikerjakan subagent berbeda secara bersamaan.
+
+```
+Track 1 (Hermes/resume) : R1 -> A1 -> A2 -> A3 -> A4     [use-kana-controller.ts,
+                                                          hermes-agent-client.ts]
+Track 2 (TTS/voice)     : D1 .. D9 (bebas urut)           [lib/voice/*, app/api/voice/*,
+                                                          lib/server/local-qwen3-tts-runtime.ts]
+Track 3 (Server/data)   : B1 -> B2 -> C1 -> C2 -> C3      [lib/server/auth/*, activity-store.ts,
+                                                          proxy.ts, .env*, bin/kana.mjs, docs]
+Track 4 (React refactor): E1 -> E2 -> E3 -> E4 -> E5 -> E6 [components/kana/*, lib/state/*]
+
+Aturan dependensi antar track:
+- Track 4 HARUS menunggu Track 1 selesai (sama-sama menulis
+  use-kana-controller.ts; refactor di atas bug = refactor bug).
+- Track 2 dan Track 3 bebas paralel dengan semua track.
+- R1 (quick wins lintas file kecil) dikerjakan paling awal, sendirian.
+```
+
+Estimasi ukuran: XS < 30 menit, S < 2 jam, M < 1 hari, L > 1 hari.
+
+---
+
+## 4. R — Rapid fixes (sebelum semuanya, satu PR kecil)
+
+### R1 — Guard init race & turnActivitiesRef per-instance `[XS]`
+- **Masalah**: promise `initializationRef` tanpa flag "sudah fallback 30 dtk"
+  dapat menimpa state live ketika resolve belakangan
+  (`use-kana-controller.ts:946-985`). `turnActivitiesRef` module-level
+  (`:60`) dibagi semua instance hook.
+- **Fix**: tambah boolean `fellBack` di closure effect; pindahkan
+  `turnActivitiesRef` menjadi `useRef` di dalam hook (masih dibagikan lewat
+  closure handler sampai E2 merapikannya).
+- **Verifikasi**: `npx tsc --noEmit`, manual refresh halaman.
+- **Sentuh**: `use-kana-controller.ts` saja.
+
+---
+
+## 5. Track 1 — Resume, history, dan activity log (prioritas tertinggi)
+
+### A1 — Fix fetchHistory: runtime id + restore dari session.resume `[M]`
+Bug utama pemilik. Dua perubahan saling melengkapi:
+
+1. **Sumber transcript utama = respons `session.resume`.**
+   - `openSession` di `hermes-agent-client.ts` sudah menerima `response.messages`.
+     Emit event baru `{ type: "history.restored", messages }` (atau simpan di
+     client dan expose `getResumedMessages()`) agar controller bisa memakainya.
+   - `loadHermesTranscript` (`use-kana-controller.ts:378-504`) diubah: jika
+     transcript belum ada lokal, parse `messages` hasil resume; panggil
+     `session.history` HANYA sebagai fallback.
+2. **fetchHistory memakai runtime session id.**
+   - Ganti signature menjadi `fetchHistory()` tanpa argumen durable key;
+     di dalamnya pakai `this.session.sessionId` (runtime) dan tolak jika
+     `!this.session` ("open the session first").
+   - Pemanggil lama dengan durable key dihapus; kalau butuh history sesi yang
+     BELUM dibuka, alurnya: `ensureAgent(conversation)` dulu (yang melakukan
+     `session.resume` dengan durable key — itu valid, resume memang resolve
+     durable key via `db.get_session`), baru ambil `messages`.
+
+- **Kontrak Hermes yang dipakai** (terverifikasi di source terpasang):
+  - `session.resume { session_id: <durable>, source: "kana",
+    close_on_disconnect: false }` → `{ session_id: <runtime>, resumed:
+    <durable>, session_key: <durable>, messages: [...], running, inflight }`.
+  - `session.history { session_id: <runtime> }` → `{ count, messages }`;
+    durable key → error 4001.
+- **Verifikasi**:
+  1. Unit test adapter: mock relay — resume mengembalikan messages → event
+     history.restored membawa isi sama; fetchHistory tanpa openSession reject.
+  2. Live: `npm run dev`, kirim 1 pesan, refresh halaman → transcript harus
+     muncul otomatis; cek overlay debug tidak lagi menampilkan
+     "transcript restore failed".
+  3. Live: buka percakapan lain dari sidebar → transcript termuat.
+- **Sentuh**: `hermes-agent-client.ts`, `agent/types.ts` (event baru),
+  `use-kana-controller.ts`.
+
+### A2 — Timestamp & anchor strategi rekonstruksi `[M]`
+- **Masalah**: RC-2. Barisan rekonstruksi tidak punya timestamp nyata;
+  anchor ms antar-browser tidak konsisten.
+- **Desain**:
+  - Rekonstruksi dari resume/history TIDAK lagi mensintesis anchor ms dari
+    `Date.now()`. Anchor untuk PUT `/api/kana/activities` hasil rekonstruksi
+    memakai skema deterministik: index pasangan (user→assistant) ke-N →
+    anchor sintetis stabil, ATAU lebih baik: ubah kontrak penyimpanan menjadi
+    **per-turn ordinal** (`turn_index`) sebagai kunci sekunder, bukan ms.
+  - Skema baru SQLite: kolom `turn_index INTEGER` + UNIQUE
+    `(hermes_session_key, turn_index)`; `turn_anchor_ms` tetap disimpan untuk
+    sorting tapi bukan kunci identitas. Live turn menghitung `turn_index` =
+    jumlah assistant message sebelumnya di conversation.
+  - Migrasi: tabel `schema_version` / `PRAGMA user_version`; migrasi v1→v2
+    idempoten (lihat juga B3).
+- **Verifikasi**: dua browser (atau window normal + incognito) melihat blok
+  tool di posisi sama setelah refresh; PUT ulid tidak menduplikasi baris.
+- **Sentuh**: `activity-store.ts`, `app/api/kana/activities/route.ts`,
+  `use-kana-controller.ts` (live PUT + loadHermesTranscript),
+  `live-chat-feed.tsx` (splice by ordinal).
+
+### A3 — Dedup live-vs-reconstructed activities `[S]`
+- **Masalah**: PUT live (`use-kana-controller.ts:585-594`) dan PUT
+  rekonstruksi (`:490-501`) bisa menulis dua baris untuk turn yang sama
+  (anchor berbeda). Setelah A2 (ordinal) ini hilang by-construction, tapi
+  tambahkan guard: GET activities → merge by `turn_index`, reconstructed row
+  kalah jika live row sudah ada.
+- **Verifikasi**: refresh 2× pada conversation ber-tool → jumlah baris SQLite
+  konstan (cek via sqlite3 read-only).
+- **Sentuh**: `use-kana-controller.ts`, `activity-store.ts`.
+
+### A4 — Stale connectAgent pada auto-retry + dedup assistant `[S]`
+- **Masalah**: efek retry di `kana-app.tsx:153-164` menangkap `connectAgent`
+  basi (eslint-disable) → bisa menciptakan conversation duplikat kosong.
+  Dedup assistant message (`updateConversationFromEvent:546-558`) membandingkan
+  hanya message terakhir — rapuh terhadap race history-load vs live event.
+- **Fix**: ganti pola retry dengan `useRef` ke fungsi terkini (latest-ref) atau
+  pindahkan logika retry ke dalam controller (E4 akan memindahkan ini permanen
+  ke hermes-session-manager). Untuk dedup: bandingkan juga `timestamp` dalam
+  toleransi + abaikan dedup saat restore sedang berjalan (flag ref).
+- **Verifikasi**: throttle network (DevTools), toggle connect/disconnect,
+  pastikan tidak ada conversation baru tak terduga dan tidak ada pesan ganda.
+- **Sentuh**: `kana-app.tsx`, `use-kana-controller.ts`.
+
+### Exit criteria Track 1
+- Refresh / pindah browser / reconnect → transcript SELALU termuat atau error
+  eksplisit yang terlihat user (tidak pernah kosong diam-diam).
+- Aktivitas tool tampil tepat sekali per turn, posisi benar, di semua browser.
+- `npm run test:hermes:restart` tetap lulus.
+
+---
+
+## 6. Track 2 — TTS relay & voice (paralel penuh)
+
+### D1 — Route cancel + propagasi abort `[S]` `P0`
+- Tambah route `app/api/voice/tts/requests/[requestId]/cancel/route.ts`
+  (POST) meneruskan ke Python `POST /v1/requests/{id}/cancel`.
+- Di `speech/route.ts`: gabungkan `AbortSignal.any([request.signal,
+  AbortSignal.timeout(...)])` sehingga abort browser memutus fetch upstream
+  → `request.is_disconnected()` Python aktif.
+- Hapus `.catch(() => undefined)` penelan di provider stop; laporkan gagal
+  cancel sebagai status, bukan diam.
+- **Verifikasi**: mulai sintesis kalimat panjang, tekan stop ≤ 2 dtk → log
+  Python menunjukkan cancel; CPU turun.
+
+### D2 — Delete voice clone: samakan kontrak `[XS]` `P0`
+- Pilih satu bentuk: dynamic route `[voiceId]` ATAU query param di
+  `voices/route.ts` + ubah contract builder (`qwen3-tts-contract.ts:347-350`)
+  agar konsisten. Query param paling murah (tidak perlu route baru).
+- Tambahkan test kontrak sederhana (URL builder ↔ route parsing).
+
+### D3 — Single-flight start guard `[S]` `P1`
+- `/control` POST & `/status` POST memanggil `startLocalQwen3TtsRuntime`
+  langsung tanpa mutex → race double-spawn (`local-qwen3-tts-runtime.ts`,
+  `control/route.ts:37`, `status/route.ts:30`).
+- Bungkus dengan promise single-flight yang sama dipakai
+  `ensureQwen3TTSService`; status POST tidak boleh fire-and-forget tanpa
+  pelaporan error (sekarang `.catch(() => {})`).
+
+### D4 — PROJECT_DIR & uv resolution portable `[S]` `P1`
+- `path.resolve(process.cwd(), "services/qwen3-tts")` gagal di standalone/
+  systemd dengan WorkingDirectory lain. Urutan resolusi: env
+  `KANA_QWEN3_TTS_PROJECT_DIR` → path relatif module (import.meta.url) → cwd.
+- Windows: tangani PATHEXT untuk `uv` (best effort; target utama Linux).
+
+### D5 — Health cold-start jujur `[S]` `P1`
+- `waitUntilReady` menganggap HTTP 200 = siap; Python balas 200 dengan
+  `status:"loading"` → UI "unavailable" 5 detik lalu flip. Perbaiki:
+  - probe membaca payload `/v1/health` dan menunggu `status==="ready"`;
+  - health route relay TIDAK men-trigger spawn (hanya probe); spawn hanya via
+    ensure-on-use speech/control eksplisit; UI punya state "loading model".
+
+### D6 — Adopt probe validasi `[XS]` `P2`
+- `probe()` menerima 200 apa pun di port 7860 (Gradio/A1111 default). Wajib
+  validasi payload `/v1/health` (field service/version Kana) sebelum adopt.
+
+### D7 — Analyser/AudioContext lifecycle `[S]` `P2`
+- `audio-lip-sync.ts`: disconnect analyser di `finishPlayback`; close()
+  AudioContext pada cleanup; `context.resume()` diberi timeout + pesan
+  "ketuk untuk mengaktifkan audio" (autoplay policy) alih-alih hang diam.
+
+### D8 — Verifikasi zombie grandchild (butuh mesin nyata) `[S]` `P2`
+- Node spawn `uv run` → Python cucu. Uji: start via Kana → stop →
+  `ss -ltnp | grep 7860`. Jika masih hidup, spawn langsung ke venv python
+  atau `uv run --no-sync` + process group kill (`detached: false` +
+  kill `-pid`). Catat hasil di docs.
+
+### D9 — Sentence-mode replay & canReplay `[XS]` `P3`
+- `qwen3-tts-provider.ts:105,119,143`: promosikan chunk ke `lastAudio`
+  incrementally; `canReplay` mencerminkan utterance berjalan, bukan sebelumnya.
+
+### Exit criteria Track 2
+- Stop benar-benar menghentikan inferensi; delete clone berfungsi; dua start
+  bersamaan menghasilkan tepat satu proses; status loading jujur.
+- `npm run tts:acceptance` tetap lulus di mesin target (gate terpisah).
+
+---
+
+## 7. Track 3 — Data dir, deploy VPS, security (paralel penuh)
+
+### B1 — Satukan data dir di `KANA_DATA_DIR` `[S]` `P0`
+- Satu resolver bersama `lib/server/data-dir.ts`:
+  `KANA_DATA_DIR` → error jelas jika unset di production (fail-loud), default
+  dev `~/.local/share/kana` (XDG), BUKAN cwd.
+- Dipakai oleh: `password-store.ts`, `session.ts` (jwt-secret),
+  `activity-store.ts`. Migrasi kecil: jika file lama ditemukan di lokasi lama
+  (`$CWD/data`, `$HOME/.kana`) dan lokasi baru kosong → pindahkan + log.
+- **Verifikasi**: jalankan standalone dari direktori lain → auth & activities
+  tetap menemukan data.
+
+### B2 — Launcher meneruskan env data dir `[XS]` `P1`
+- `bin/kana.mjs` men-set `KANA_DATA_DIR` (dan `HOME` eksplisit) untuk child
+  Next server; dokumentasikan unit systemd contoh
+  (`Environment=KANA_DATA_DIR=/var/lib/kana`, `User=non-root`).
+
+### B3 — SQLite migration versioning `[XS]` `P2`
+- `PRAGMA user_version`; v2 untuk skema ordinal A2. Tulis migrasi idempoten +
+  test dengan fixture DB v1.
+
+### C1 — Hygiene credential git `[XS]` `P0`
+- Hapus nilai asli dari `.env.development`; ganti placeholder; rotasi
+  password tersebut di mana pun dipakai. Pastikan `.env.production` di
+  `.gitignore` (atau tetap tracked tapi tanpa nilai).
+
+### C2 — Fail-loud auth production `[S]` `P0`
+- Production (`NODE_ENV=production`): jika auth disabled DAN tidak ada
+  flag eksplisit `KANA_ALLOW_NO_AUTH=1` → log warning besar + tampilkan
+  banner di UI "AUTH OFF"; idealnya tolak start kecuali flag diset.
+- Bootstrap: `KANA_ACCESS_PASSWORD` di production otomatis menulis
+  `auth.json` saat pertama kali (sehingga .env cukup untuk first-run).
+
+### C3 — Trusted-proxy & cookie hardening `[S]` `P1`
+- `loopback.ts:26-29`: `x-kana-trusted-proxy: 1` bisa di-spoof kecuali nginx
+  mem-blank header. Ganti menjadi shared secret env
+  (`KANA_TRUSTED_PROXY_SECRET`) ATAU minimal dokumentasikan wajib
+  `proxy_set_header X-Kana-Trusted-Proxy "";` di docs deploy.
+- Cookie: dokumen/contoh nginx wajib `X-Forwarded-Proto`; rekomendasikan
+  `AUTH_COOKIE_SECURE=true` di VPS checklist.
+- Simulasi spoof: curl dengan header palsu harus 403 tanpa secret.
+
+### C4 — CSP loopback cleanup `[XS]` `P3`
+- `next.config.ts:8,12`: hole `connect-src`/`img-src` http://127.0.0.1 sudah
+  tidak diperlukan era relay — evaluasi & kecilkan.
+
+### Exit criteria Track 3
+- Redeploy/migrasi mesin tidak lagi menghilangkan data; fresh VPS dengan
+  checklist di §10 menghasilkan auth aktif sejak request pertama.
+
+---
+
+## 8. Track 4 — Refactor React/state (setelah Track 1)
+
+Prinsip: inkremental, tiap langkah shippable, fitur tidak berubah. zustand v5
+sudah ada di `package.json` — dipakai, bukan dependency baru.
+
+### E1 — Buang dead code & debug dari production `[S]`
+- Hapus/nonaktifkan (dev-only): `FetchDebugOverlay`, `FetchIndicator`
+  (`kana-app.tsx:291-295`), state `fetchDebugRecords` unbounded
+  (`use-kana-controller.ts:313-321`).
+- Dead plumbing: props avatar-model yang tidak dipakai SettingsDialog
+  (`settings-dialog.tsx:138-148` vs `kana-app.tsx:496-503`),
+  `gateInputClass`, `selectedCommandIndexRef`, `replayVoice`/`voiceCanReplay`
+  tanpa konsumen, `recreateVoice` tak terpakai.
+- Duplikat: satukan `formatTime` (3×), pertimbangkan merge
+  `DialogueHistory` ke `LiveChatFeed` (satu renderer, mode modal).
+
+### E2 — Activity slice `[S]`
+- Pindahkan log turn (eks `turnActivitiesRef`) + `serverActivityTurns` +
+  `activities` ke zustand slice `activity-store`. Identitas per-mount aman.
+
+### E3 — UI store (keystroke decoupling) `[M]`
+- Draft per conversation, modals (settings/onboarding/dialogue), gate phase,
+  slash-menu index → `ui-store`. Efek: mengetik tidak lagi me-re-run body
+  god-hook. Fix inline-arrow `onAdopt` (`kana-app.tsx:422`) dengan action
+  store (stabil by design).
+
+### E4 — hermes-session-manager singleton `[L]` (inti refactor)
+- Class non-React pemilik `HermesAgentClient`: connect/reconnect, subscribe
+  SEKALI, dispatch event ke slices. Menuntaskan class bug stale-subscription
+  (`use-kana-controller.ts:895-925`) secara struktural. Controller hook tinggal
+  selector + aksi tipis.
+
+### E5 — Conversation slice & pembunuhan cache module `[M]`
+- Conversations + activeId + messages → `conversation-store` (zustand);
+  hapus `MemoryConversationStore` module Map (cache remnant RC-6).
+  Ref paralel (`conversationsRef` dll) dihapus; single source of truth.
+- Tambah token monotonik untuk fetch activities/sessions (pola
+  `completionRequestRef`) — anti out-of-order.
+- **Backup regression** ikut fix di sini: export membaca dari slice yang
+  kini selalu memuat messages ter-restor; tambah guard "backup dengan N
+  conversation tapi 0 message total → warning".
+
+### E6 — Slices sisa & slim-down kana-app `[M]`
+- `command-store` (suggestions+token), `input-request-store`,
+  `preferences-store` (persist middleware), `error-store` (dedup di store,
+  bukan ref). Target: `kana-app.tsx` ≈ layout+komposisi (~150 baris),
+  controller hook tinggil orkestrasi tipis atau terdecomposisi penuh.
+
+### Exit criteria Track 4
+- `npm run quality` lulus; perilaku user tidak berubah; tidak ada module-level
+  mutable cache tersisa; mengetik di composer tidak memicu re-render sidebar
+  list (profiler check).
+
+---
+
+## 9. Urutan eksekusi yang disarankan
+
+```
+1. [x] R1                                  (selesai 2026-08-25)
+2. [x] Paralel:  Track 1 (A1→A4)           (selesai — event-driven restore,
+                                            schema v2 ordinal, dedup, retry fix)
+        [x] Track 2 (D1..D7, D9)           (selesai — cancel relay route,
+                                            single-flight spawn, portable dir,
+                                            honest health, adoption guard)
+        [x] Track 3 (B1→B2, C1→C3)         (selesai — KANA_DATA_DIR resolver +
+                                            migrasi legacy, launcher env,
+                                            placeholder credentials, fail-loud
+                                            flag insecureNoAuth, trusted-proxy
+                                            secret; C4 skip dengan alasan)
+   [ ] B3-lite menyusul: rewire activity-store.ts dbPath ke
+       lib/server/data-dir.ts + adopsi legacy activities.db
+3. [ ] Setelah Track 1 merge: Track 4 (E1..E5 — keputusan pemilik: berhenti di E5)
+4. [ ] Final: verifikasi menyeluruh §11 + live-test resume/TTS pada mesin &
+      VPS + update AGENTS.md (arsitektur relay, KANA_DATA_DIR, store slices)
+
+Hotfix pasca-merge (2026-08-25, di luar task awal):
+- [x] Gate "Menghubungkan…" abadi → first-connect failure kini mendarat di
+      state error; tangga retry otomatis diperbaiki; attempt terakhir
+      menjalankan smart-flow (auto-start hermes serve). Test regresi ditambah.
+- [x] Resume kosong saat memilih conversation → selectConversation kini
+      membuka sesi terlink (pemicu history.restored); connectAgent mengadopsi
+      sesi Hermes terakhir yang berisi pesan sebagai landing conversation
+      (bukan membuat sesi kosong baru tiap refresh).
+```
+
+Status verifikasi gabungan pasca-merge (2026-08-25): `tsc --noEmit` bersih,
+79/79 unit test lulus, lint tanpa error baru (1 error pre-existing React
+Compiler di kana-app.tsx), `npm run build` sukses, `npm run package:local`
+sukses.
+
+Subagent per track diberikan: bagian plan ini + daftar file yang boleh
+disentuh + larangan menyentuh file track lain (hindari konflik merge).
+
+---
+
+## 10. Checklist deploy VPS (hasil akhir Track 3)
+
+```bash
+# Environment (systemd Environment= atau .env.production TIDAK di-commit):
+KANA_ACCESS_PASSWORD=<bootstrap>   # atau pre-seed auth.json
+KANA_JWT_SECRET=<64-hex>           # bertahan antar redeploy
+KANA_DATA_DIR=/var/lib/kana        # SATU root: auth.json, jwt-secret, activities.db
+AUTH_COOKIE_SECURE=true            # jika nginx tidak set X-Forwarded-Proto
+
+# nginx wajib:
+proxy_set_header Host $host;
+proxy_set_header X-Forwarded-Proto $scheme;
+proxy_set_header X-Kana-Trusted-Proxy "";   # blank kecuali memang sengaja
+
+# Runtime: non-root user pemilik KANA_DATA_DIR;
+# node .next/standalone/server.js dengan HOSTNAME=127.0.0.1 PORT=3000.
+```
+
+---
+
+## 11. Verifikasi menyeluruh (definition of done remediation)
+
+1. **Resume**: kirim pesan → refresh → transcript + activities muncul; ulangi
+   di window incognito; ulangi setelah restart `hermes serve`.
+2. **Aktivitas**: conversation ber-tool → blok tool tepat 1× per turn di dua
+   browser; `sqlite3 $KANA_DATA_DIR/activities.db "SELECT COUNT(*)"` konstan
+   setelah refresh berulang.
+3. **TTS**: stop ≤ 2 dtk menghentikan CPU; delete clone sukses; double-start
+   aman; cold-start menampilkan "loading model" bukan "unavailable".
+4. **Auth**: fresh VPS simulasi (env kosong) → banner/fail-loud; login works;
+   spoof trusted-proxy ditolak.
+5. **Refactor**: `npm run lint && npx tsc --noEmit && npm run build &&
+   npm run package:local`; e2e critical journeys lulus; tidak ada regresi
+   subtitle historis (byte-for-byte).
+6. **AGENTS.md** diperbarui: arsitektur relay, KANA_DATA_DIR, store slices,
+   kontrak session.resume-messages.
+
+---
+
+## 12. Terbuka — butuh keputusan pemilik
+
+(Semua sudah diputuskan 2026-08-25:)
+
+- **A2 skema anchor**: ✅ ordinal `turn_index` — sudah diimplementasikan Track 1.
+- **C2 kekerasan fail-loud**: ✅ warning keras + flag `insecureNoAuth`
+  (bukan tolak-start) — sudah diimplementasikan Track 3.
+- **E6 skala refactor**: ✅ berhenti di E5; E6 tidak dikerjakan untuk saat ini.
+- **D8 zombie uv**: ✅ boleh diuji di mesin ini — **belum dieksekusi**, masuk
+  daftar sisa kerja (§13).
