@@ -10,14 +10,18 @@ export type LibraryVoice = {
   isDefault: boolean;
 };
 
-export async function listKanaVoices(): Promise<LibraryVoice[]> {
+export type VoiceLibrarySnapshot = {
+  voices: LibraryVoice[];
+  engine?: { state?: string };
+};
+
+export async function listKanaVoices(): Promise<VoiceLibrarySnapshot> {
   const response = await fetch("/api/kana/voices", {
     credentials: "same-origin",
     cache: "no-store",
   });
   if (!response.ok) throw new Error("Could not load the voice library.");
-  const value = (await response.json()) as { voices?: LibraryVoice[] };
-  return value.voices ?? [];
+  return (await response.json()) as VoiceLibrarySnapshot;
 }
 
 export type UploadedVoice = { voice: LibraryVoice; warning?: string };

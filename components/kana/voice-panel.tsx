@@ -1,21 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { VoiceProviderStatus } from "@/lib/voice/types";
 import {
   deleteKanaVoice,
   listKanaVoices,
   uploadKanaVoice,
   type LibraryVoice,
 } from "@/lib/runtime/voice-library-client";
+import { convertToWav } from "@/lib/voice/audio-to-wav";
 import { btnGhost, btnPrimary, inputBase } from "./ui";
 
 type VoicePanelProps = {
   selectedVoiceId: string;
   onVoiceSelect(serviceVoiceId: string): void;
-  /** Service health line under the list (probe-only, never spawns). */
-  onInspectService(): Promise<VoiceProviderStatus>;
 };
+
+type EngineState = "ready" | "loading" | "error" | "stopped";
 
 // Per-voice accent dot colors. The default "Kana" voice is white; new clones
 // cycle through the remaining palette so every radio is visually distinct.
@@ -26,45 +26,54 @@ function voiceDotColor(voice: LibraryVoice, index: number): string {
   return VOICE_DOTS[1 + (index % (VOICE_DOTS.length - 1))];
 }
 
+const ENGINE_LINES: Record<EngineState, string> = {
+  ready: "",
+  loading: "Mesin suara sedang menyiapkan model — suara terdaftar otomatis begitu siap.",
+  error: "Mesin suara gagal dimuat (kemungkinan cache model hilang/rusak). Perbaiki lewat panel mesin suara di bawah.",
+  stopped: "Mesin suara belum menyala. Suara terdaftar otomatis saat pertama dibutuhkan.",
+};
+
+const ENGINE_HINT_PENDING = "menunggu mesin suara siap…";
+
 function VoiceRadio({
   active,
   dotColor,
   label,
   hint,
+  selectable,
   deletable,
   onSelect,
   onDelete,
-  disabled,
 }: {
   active: boolean;
   dotColor: string;
   label: string;
   hint: string | null;
+  selectable: boolean;
   deletable: boolean;
   onSelect(): void;
   onDelete(): void;
-  disabled: boolean;
 }) {
   return (
     <div
       role="radio"
       aria-checked={active}
-      aria-disabled={disabled || !deletable ? undefined : undefined}
-      tabIndex={0}
+      aria-disabled={!selectable}
+      tabIndex={selectable ? 0 : -1}
       onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
+        if ((event.key === "Enter" || event.key === " ") && selectable) {
           event.preventDefault();
-          if (!disabled) onSelect();
+          onSelect();
         }
       }}
       onClick={() => {
-        if (!disabled) onSelect();
+        if (selectable) onSelect();
       }}
-      className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border px-3.5 py-3 transition-all duration-150 ${
+      className={`flex items-center justify-between gap-3 rounded-xl border px-3.5 py-3 transition-all duration-150 ${
         active
           ? "border-accent/70 bg-white/8 shadow-[0_0_0_1px_rgba(255,255,255,0.15)]"
           : "border-line bg-surface hover:border-line-strong hover:bg-white/5"
-      } ${disabled ? "opacity-60" : ""}`}
+      } ${selectable ? "cursor-pointer" : "cursor-not-allowed opacity-60"}`}
     >
       <span className="flex min-w-0 items-center gap-3">
         <span
@@ -85,7 +94,6 @@ function VoiceRadio({
         <button
           type="button"
           className="shrink-0 text-[11px] font-medium text-faint transition-colors hover:text-danger"
-          disabled={disabled}
           onClick={(event) => {
             event.stopPropagation();
             onDelete();
@@ -100,17 +108,16 @@ function VoiceRadio({
 
 // Voice management backed by Kana's persistent library (data/voices +
 // SQLite). The shipped default voice is always present, so the radio group
-// is never empty; user clones survive service cache wipes because the
-// reference audio lives on the Kana side.
+// is never empty; pending rows stay visible with an honest hint while the
+// engine registers them.
 
 export function VoicePanel({
   selectedVoiceId,
   onVoiceSelect,
-  onInspectService,
 }: VoicePanelProps) {
   const [voices, setVoices] = useState<LibraryVoice[]>([]);
+  const [engineState, setEngineState] = useState<EngineState>("stopped");
   const [loadingVoices, setLoadingVoices] = useState(true);
-  const [serviceStatus, setServiceStatus] = useState<VoiceProviderStatus | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [cloneName, setCloneName] = useState("");
@@ -120,25 +127,23 @@ export function VoicePanel({
   const refresh = useCallback(async () => {
     setLoadingVoices(true);
     try {
-      setVoices(await listKanaVoices());
+      const value = await listKanaVoices();
+      setVoices(value.voices);
+      setEngineState((value.engine?.state as EngineState) ?? "stopped");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Voice check failed.");
     } finally {
       setLoadingVoices(false);
     }
-    try {
-      setServiceStatus(await onInspectService());
-    } catch {
-      // Service line is informational only.
-    }
-  }, [onInspectService]);
+  }, []);
 
   useEffect(() => {
     let active = true;
     void listKanaVoices()
-      .then((next) => {
+      .then((value) => {
         if (!active) return;
-        setVoices(next);
+        setVoices(value.voices);
+        setEngineState((value.engine?.state as EngineState) ?? "stopped");
         setLoadingVoices(false);
       })
       .catch((error) => {
@@ -146,24 +151,20 @@ export function VoicePanel({
         setNotice(error instanceof Error ? error.message : "Voice check failed.");
         setLoadingVoices(false);
       });
-    void onInspectService()
-      .then((next) => {
-        if (active) setServiceStatus(next);
-      })
-      .catch(() => undefined);
     return () => {
       active = false;
     };
   }, []);
 
-  // Register pending voices in the background while the panel is open.
+  // Retry registration while something is pending and the panel is open.
+  const hasPending = voices.some((voice) => !voice.registered) && engineState !== "error";
   useEffect(() => {
-    if (!voices.some((voice) => !voice.registered)) return;
+    if (!hasPending) return;
     const timer = setInterval(() => {
-      void listKanaVoices().then(setVoices).catch(() => undefined);
-    }, 10_000);
+      void refresh();
+    }, 15_000);
     return () => clearInterval(timer);
-  }, [voices]);
+  }, [hasPending, refresh]);
 
   const upload = async () => {
     if (!cloneAudio || !cloneName.trim() || !cloneConsent) {
@@ -173,7 +174,8 @@ export function VoicePanel({
     setBusy(true);
     setNotice(null);
     try {
-      const result = await uploadKanaVoice(cloneName.trim(), cloneAudio, cloneConsent);
+      const wav = await convertToWav(cloneAudio);
+      const result = await uploadKanaVoice(cloneName.trim(), wav, cloneConsent);
       if (result.voice.registered && result.voice.serviceVoiceId) {
         onVoiceSelect(result.voice.serviceVoiceId);
       }
@@ -201,21 +203,28 @@ export function VoicePanel({
     }
   };
 
-  const registered = voices.filter((voice) => voice.registered && voice.serviceVoiceId);
+  const registeredIds = new Set(
+    voices.filter((voice) => voice.registered && voice.serviceVoiceId).map((voice) => voice.serviceVoiceId),
+  );
   const effectiveSelected =
-    selectedVoiceId && registered.some((voice) => voice.serviceVoiceId === selectedVoiceId)
+    selectedVoiceId && registeredIds.has(selectedVoiceId)
       ? selectedVoiceId
-      : (registered[0]?.serviceVoiceId ?? "");
+      : (voices.find((voice) => voice.registered)?.serviceVoiceId ?? "");
 
   return (
     <div className="flex flex-col gap-3">
       <fieldset className="flex flex-col gap-1.5" role="radiogroup" aria-label="Pilih suara Kana">
-        <legend className="mb-1 text-[11px] font-bold tracking-wider text-ink-dim uppercase">Voice</legend>
+        <div className="mb-1 flex items-center justify-between">
+          <legend className="text-[11px] font-bold tracking-wider text-ink-dim uppercase">Voice</legend>
+          <button type="button" className={btnGhost} onClick={() => void refresh()}>
+            Refresh
+          </button>
+        </div>
         {loadingVoices && voices.length === 0 ? (
           <p className="rounded-xl border border-line bg-surface px-3.5 py-2.5 text-[11px] text-muted">Memuat suara…</p>
-        ) : registered.length === 0 ? (
-          <p className="rounded-xl border border-danger/40 bg-danger/5 px-3.5 py-2.5 text-[11px] leading-relaxed text-danger">
-            Suara bawaan masih didaftarkan ke mesin suara. Tunggu sebentar lalu tekan Refresh.
+        ) : voices.length === 0 ? (
+          <p className="rounded-xl border border-line bg-surface px-3.5 py-2.5 text-[11px] text-muted">
+            Belum ada suara. Clone suaramu lewat formulir di bawah.
           </p>
         ) : (
           voices.map((voice, index) => (
@@ -223,18 +232,24 @@ export function VoicePanel({
               key={voice.id}
               active={Boolean(voice.registered && voice.serviceVoiceId === effectiveSelected)}
               dotColor={voiceDotColor(voice, index)}
-              label={voice.name}
-              hint={voice.registered ? null : "menunggu pendaftaran ke mesin suara…"}
+              label={voice.name + (voice.isDefault ? " (bawaan)" : "")}
+              hint={voice.registered ? null : ENGINE_HINT_PENDING}
+              selectable={voice.registered}
               deletable={!voice.isDefault}
               onSelect={() => {
                 if (voice.registered && voice.serviceVoiceId) onVoiceSelect(voice.serviceVoiceId);
               }}
               onDelete={() => void remove(voice.id)}
-              disabled={busy || !voice.registered}
             />
           ))
         )}
       </fieldset>
+
+      {engineState !== "ready" ? (
+        <p className={`text-[10px] leading-relaxed ${engineState === "error" ? "text-danger" : "text-faint"}`}>
+          {ENGINE_LINES[engineState]}
+        </p>
+      ) : null}
 
       <details className="rounded-xl border border-line px-3 py-2.5">
         <summary className="cursor-pointer text-[11px] font-bold text-ink-dim marker:content-none [&::-webkit-details-marker]:hidden">
@@ -262,20 +277,11 @@ export function VoicePanel({
             />
             Audio ini adalah suaraku / aku punya izin untuk menggunakannya.
           </label>
-          <div className="flex items-center gap-2">
-            <button type="button" className={btnPrimary} disabled={busy} onClick={() => void upload()}>
-              {busy ? "Memproses…" : "Clone"}
-            </button>
-            <button type="button" className={btnGhost} disabled={busy} onClick={() => void refresh()}>
-              Refresh
-            </button>
-          </div>
+          <button type="button" className={btnPrimary} disabled={busy} onClick={() => void upload()}>
+            {busy ? "Menyimpan…" : "Clone"}
+          </button>
         </div>
       </details>
-
-      {serviceStatus?.state !== "ready" && serviceStatus ? (
-        <p className="text-[10px] text-faint">Layanan TTS: {serviceStatus.message}</p>
-      ) : null}
       <p className="min-h-4 text-[11px] text-muted">{notice ?? ""}</p>
     </div>
   );
