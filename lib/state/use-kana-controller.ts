@@ -746,7 +746,9 @@ export function useKanaController(appVersion: string) {
         };
         setStatus("Kana menyiapkan suara…");
         const previousChain = ttsChainRef.current ?? Promise.resolve();
-        ttsChainRef.current = previousChain.then(() => {
+        ttsChainRef.current = previousChain.then(async () => {
+          // Let React flush the held status before the long synth.
+          await new Promise((resolve) => setTimeout(resolve, 0));
           const commitOnce = async () => {
             if (heldMessageRef.current?.message.id !== assistantMessage.id) return;
             heldMessageRef.current = null;
@@ -1029,7 +1031,12 @@ export function useKanaController(appVersion: string) {
         setPendingInput(null);
         setRespondingToInput(false);
         setBusy(false);
-        setStatus("Ready when you are");
+        // Don't overwrite "Kana menyiapkan suara…" / "Kana berbicara…" when
+        // the reply is being held for synthesis — it will resolve to "Ready
+        // when you are" once speech finishes or fails.
+        if (!heldMessageRef.current) {
+          setStatus("Ready when you are");
+        }
         turnConversationRef.current = null;
         return;
       }
