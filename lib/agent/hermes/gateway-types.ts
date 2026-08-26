@@ -28,6 +28,9 @@ export type HermesSessionResponse = {
     text?: string;
     name?: string;
     context?: string;
+    timestamp?: number;
+    row_id?: number;
+    display_kind?: string;
   }>;
   inflight?: {
     assistant?: string;
