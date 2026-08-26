@@ -36,6 +36,19 @@ if [ "${#MISSING[@]}" -gt 0 ]; then
     $SUDO apt-get install -y -qq "${MISSING[@]}"
 fi
 
+echo "==> applying Kana engine patches (if any)"
+PATCH_DIR="$(cd "$(dirname "$0")/.." && pwd)/services/qwen3-tts/engine-patches"
+if [ -d "$PATCH_DIR" ] && ls "$PATCH_DIR"/*.patch >/dev/null 2>&1; then
+    for patch in "$PATCH_DIR"/*.patch; do
+        if git -C "$ENGINE_DIR" apply --check "$patch" 2>/dev/null; then
+            git -C "$ENGINE_DIR" apply "$patch"
+            echo "  applied $(basename "$patch")"
+        else
+            echo "  skipped $(basename "$patch") (already applied or inapplicable)"
+        fi
+    done
+fi
+
 echo "==> detecting SIMD path"
 # Prefer the avx512bf16 target when silicon exposes AVX512-BF16: it enables
 # the native VDPBF16PS bf16 matvec (~20% faster than widen+FMA on Zen4/5).

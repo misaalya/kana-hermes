@@ -1,0 +1,24 @@
+diff --git a/third_party/ingot/src/safetensors.c b/third_party/ingot/src/safetensors.c
+index 2585e81..4938f2e 100644
+--- a/third_party/ingot/src/safetensors.c
++++ b/third_party/ingot/src/safetensors.c
+@@ -1,3 +1,6 @@
++#if !defined(_GNU_SOURCE)
++#define _GNU_SOURCE /* madvise/MADV_HUGEPAGE, posix_fadvise */
++#endif
+ /* safetensors reader.
+  *
+  * The JSON is hand-rolled so there is no cJSON to vendor. Every tensor is
+@@ -449,6 +452,12 @@ static int shard_open(ingot_st *st, uint32_t index, const char *path,
+         st_shard_close(s, 0);
+         return -1;
+     }
++    /* Kana experiment: best-effort transparent huge pages plus an async
++     * page-cache prefetch so the first request does not stall on minor
++     * faults while streaming bf16 weights from disk. Both calls are
++     * advisory; failures are deliberately ignored. */
++    madvise(s->map, (size_t)s->size, MADV_HUGEPAGE);
++    posix_fadvise(s->fd, 0, 0, POSIX_FADV_WILLNEED);
+     const uint64_t header_len = ingot_ld_u64(s->map);
+     if (header_len > s->size - 8) {
+         ingot_err(err, errsz, "'%s' declares a %" PRIu64 "-byte header in a %" PRIu64
