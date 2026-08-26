@@ -296,14 +296,14 @@ export function KanaApp({ appVersion }: KanaAppProps) {
 
   const closeMessages = useCallback(() => setMessagesOpen(false), []);
   const closeSessions = useCallback(() => setSessionsOpen(false), []);
-  const createConversation = kana.createConversation;
+  const startDraft = kana.startDraft;
   const selectConversation = kana.selectConversation;
   const renameConversation = kana.renameConversation;
   const deleteConversation = kana.deleteConversation;
   const createConversationFromModal = useCallback(() => {
-    void createConversation();
+    startDraft();
     setSessionsOpen(false);
-  }, [createConversation]);
+  }, [startDraft]);
   const selectConversationFromModal = useCallback((id: string) => {
     selectConversation(id);
     setSessionsOpen(false);

@@ -125,37 +125,56 @@ function recentFirst(conversations: Conversation[]): Conversation[] {
 // identity that survives refreshes: the linked Hermes session key. A brand-new
 // /new conversation has no Hermes session yet, so it is remembered as a
 // fresh-blank intent instead and materializes on the next boot.
-const ACTIVE_SESSION_KEY = "kana.active-session.v1";
+// "Current view" persistence: the user's place survives refreshes. Two
+// modes mirror ChatGPT-style UX:
+//   draft   -> a fresh empty view that belongs to NO session list yet; it
+//              materializes into a real session on the first sent message.
+//   session -> a linked Hermes conversation (key = persistentSessionId).
+// Legacy shapes ({fresh:true} / bare {key}) from earlier experiments are
+// migrated on read.
+const ACTIVE_VIEW_KEY = "kana.active-session.v1";
 
-type RememberedActiveSession = { key?: string; fresh?: boolean };
+type RememberedView =
+  | { mode: "draft" }
+  | { mode: "session"; key?: string };
 
-function readRememberedActiveSession(): RememberedActiveSession | null {
+function readRememberedView(): RememberedView | null {
   try {
-    const raw = localStorage.getItem(ACTIVE_SESSION_KEY);
+    const raw = localStorage.getItem(ACTIVE_VIEW_KEY);
     if (!raw) return null;
-    const value = JSON.parse(raw) as RememberedActiveSession;
-    if (typeof value !== "object" || value === null) return null;
-    return {
-      key: typeof value.key === "string" && value.key ? value.key : undefined,
-      fresh: value.fresh === true,
+    const parsed = JSON.parse(raw) as {
+      mode?: unknown;
+      key?: unknown;
+      fresh?: unknown;
     };
+    if (parsed.mode === "draft") return { mode: "draft" };
+    if (parsed.mode === "session") {
+      return {
+        mode: "session",
+        key:
+          typeof parsed.key === "string" && parsed.key ? parsed.key : undefined,
+      };
+    }
+    if (parsed.fresh === true) return { mode: "draft" };
+    if (typeof parsed.key === "string" && parsed.key)
+      return { mode: "session", key: parsed.key };
+    return null;
   } catch {
     return null;
   }
 }
 
-function writeRememberedActiveSession(value: RememberedActiveSession | null): void {
+function writeRememberedView(view: RememberedView | null): void {
   try {
-    if (value && (value.key || value.fresh)) localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(value));
-    else localStorage.removeItem(ACTIVE_SESSION_KEY);
+    if (view) localStorage.setItem(ACTIVE_VIEW_KEY, JSON.stringify(view));
+    else localStorage.removeItem(ACTIVE_VIEW_KEY);
   } catch {
-    // Non-fatal: worst case a refresh falls back to recency order.
+    // Non-fatal: worst case a refresh falls back to recency adoption.
   }
 }
 
-function rememberActiveConversation(conversation: Conversation | null): void {
-  const key = conversation?.agent?.persistentSessionId;
-  if (key) writeRememberedActiveSession({ key });
+function rememberSessionView(key: string | undefined): void {
+  writeRememberedView(key ? { mode: "session", key } : { mode: "draft" });
 }
 
 function createUserMessage(text: string): KanaMessage {
@@ -192,12 +211,6 @@ function shortTitle(text: string): string {
 // A conversation with zero displayed messages is still "fresh": either no
 // Hermes session was opened for it yet, or the opened one is empty. Both are
 // equivalent — clicking "new" while on one must reuse it, not mint another.
-function isFreshConversation(
-  conversation: Conversation | undefined,
-): boolean {
-  return Boolean(conversation && conversation.messages.length === 0);
-}
-
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === "AbortError";
 }
@@ -238,12 +251,19 @@ export function useKanaController(appVersion: string) {
   // connect, deletion fallback) ends with this conversation as active —
   // remembering its Hermes session key keeps "current" stable across
   // refreshes even though the local store starts empty.
+  // Every view change (/new draft, sidebar pick, /resume, branch, adoption
+  // after connect) funnels through this state — persisting the mode here is
+  // what keeps "current" stable across refreshes.
   useEffect(() => {
-    if (!activeConversationId) return;
+    if (!activeConversationId) {
+      writeRememberedView({ mode: "draft" });
+      return;
+    }
     const conversation = conversationsRef.current.find(
       (item) => item.id === activeConversationId,
     );
-    if (conversation) rememberActiveConversation(conversation);
+    if (conversation)
+      rememberSessionView(conversation.agent?.persistentSessionId);
   }, [activeConversationId, conversations]);
   const [preferences, setPreferences] = useState<KanaPreferences>(DEFAULT_PREFERENCES);
   const [connectionState, setConnectionState] = useState<AgentConnectionState>("disconnected");
@@ -300,6 +320,7 @@ export function useKanaController(appVersion: string) {
   // Activities captured during the current turn; snapshotted onto the assistant
   // message when the turn completes so tool history survives a page refresh.
   const turnActivitiesRef = useRef<ActivityItem[]>([]);
+  const draftTitleRef = useRef<string | null>(null);
   // True while a transcript restore is being applied: live assistant events
   // arriving in that window must skip last-message dedup, or restored history
   // can be mistaken for a duplicate of the incoming reply.
@@ -602,9 +623,7 @@ export function useKanaController(appVersion: string) {
       if (event.type === "session.opened") {
         openingConversationRef.current = null;
         openedConversationRef.current = conversationId;
-        writeRememberedActiveSession({
-          key: event.persistentSessionId,
-        });
+        rememberSessionView(event.persistentSessionId);
         await saveConversation({
           ...conversation,
           agent: {
@@ -656,22 +675,6 @@ export function useKanaController(appVersion: string) {
           activities: [...turnActivitiesRef.current],
         };
 
-        // TEMP DEBUG: trace the voice path (remove after diagnosis).
-        console.warn(
-          "[kana-debug] assistant.message received",
-          JSON.stringify({
-            voiceEnabled: preferencesRef.current.voiceEnabled,
-            voiceId: preferencesRef.current.qwen3Tts.voiceId,
-            speechLen: event.response.speech_ja?.length ?? 0,
-          }),
-        );
-        if (!preferencesRef.current.voiceEnabled) {
-          console.warn("[kana-debug] branch: voice disabled — no speak call");
-          avatarController.presentEmotion(assistantMessage.emotion);
-          await commitAssistantMessage(conversation.id, assistantMessage);
-          return;
-        }
-
         // Hold-UX: synthesis runs FIRST; the reply only becomes visible the
         // moment her voice actually starts (or as text-only fallback when
         // synthesis fails or is aborted). heldMessageRef lets abort and
@@ -690,7 +693,6 @@ export function useKanaController(appVersion: string) {
             heldMessageRef.current = null;
             await commitAssistantMessage(conversation.id, assistantMessage);
           };
-          console.warn("[kana-debug] calling speak()", new Date().toISOString());
           return getVoice()
             .speak({
               text: event.response.speech_ja,
@@ -698,14 +700,12 @@ export function useKanaController(appVersion: string) {
               emotion: assistantMessage.emotion,
               voiceId: preferencesRef.current.qwen3Tts.voiceId || undefined,
               onAudioStart: () => {
-                console.warn("[kana-debug] onAudioStart fired");
                 avatarController.presentEmotion(assistantMessage.emotion);
                 setStatus("Kana berbicara…");
                 void commitOnce();
               },
             })
             .then(async () => {
-              console.warn("[kana-debug] speak() resolved OK");
               await commitOnce();
               setStatus("Ready when you are");
             })
@@ -1031,24 +1031,29 @@ export function useKanaController(appVersion: string) {
   );
 
   // ---- Agent lifecycle ----
+  const ensureAgentClient = useCallback(async (): Promise<AgentClient> => {
+    // The agent connects through the Kana server relay: the browser never
+    // dials a Hermes WebSocket and never holds a session token.
+    const key = "hermes:relay";
+
+    if (!agentRef.current || agentKeyRef.current !== key) {
+      unsubscribeAgentRef.current?.();
+      await agentRef.current?.disconnect();
+      agentRef.current = new HermesAgentClient();
+      agentKeyRef.current = key;
+      openedConversationRef.current = null;
+      unsubscribeAgentRef.current =
+        agentRef.current.subscribe(handleAgentEvent);
+    }
+
+    const agent = agentRef.current;
+    if (agent.connectionState !== "connected") await agent.connect();
+    return agent;
+  }, [handleAgentEvent]);
+
   const ensureAgent = useCallback(
     async (conversation: Conversation): Promise<AgentClient> => {
-      // The agent connects through the Kana server relay: the browser never
-      // dials a Hermes WebSocket and never holds a session token.
-      const key = "hermes:relay";
-
-      if (!agentRef.current || agentKeyRef.current !== key) {
-        unsubscribeAgentRef.current?.();
-        await agentRef.current?.disconnect();
-        agentRef.current = new HermesAgentClient();
-        agentKeyRef.current = key;
-        openedConversationRef.current = null;
-        unsubscribeAgentRef.current =
-          agentRef.current.subscribe(handleAgentEvent);
-      }
-
-      const agent = agentRef.current;
-      if (agent.connectionState !== "connected") await agent.connect();
+      const agent = await ensureAgentClient();
       if (openedConversationRef.current !== conversation.id) {
         openingConversationRef.current = conversation.id;
         await agent.openSession({
@@ -1060,7 +1065,7 @@ export function useKanaController(appVersion: string) {
       }
       return agent;
     },
-    [handleAgentEvent],
+    [ensureAgentClient],
   );
 
   // ---- Initialization ----
@@ -1136,6 +1141,135 @@ export function useKanaController(appVersion: string) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Enters the empty draft view. Nothing is created here — no local record,
+  // no Hermes session — until the first message materializes both.
+  const startDraft = useCallback(() => {
+    if (busy) return;
+    activeConversationIdRef.current = null;
+    setActiveConversationId(null);
+    openedConversationRef.current = null;
+    setActivities([]);
+    turnActivitiesRef.current = [];
+    setError(null);
+    cleanupVoice();
+    avatarController.presentEmotion("neutral");
+    setStatus("Fresh conversation — say something to begin");
+    writeRememberedView({ mode: "draft" });
+  }, [avatarController, busy, cleanupVoice]);
+
+
+  // ---- Cross-browser Hermes sessions ----
+  // Sessions created on other surfaces/browsers have no local IndexedDB
+  // record. They are listed from Hermes (source=kana) and "adopted" into a
+  // lightweight local record on first open, linked via persistentSessionId.
+  const adoptHermesSession = useCallback(
+    async (hermesSessionKey: string, title: string) => {
+      if (busy) return;
+      const existing = conversationsRef.current.find(
+        (item) => item.agent?.persistentSessionId === hermesSessionKey,
+      );
+      turnActivitiesRef.current = [];
+      setActivities([]);
+      if (existing) {
+        activeConversationIdRef.current = existing.id;
+        setActiveConversationId(existing.id);
+        openedConversationRef.current = null;
+        return;
+      }
+      const created = await conversationStore.create({
+        title: title || "Imported session",
+        subtitleLanguage: preferencesRef.current.subtitleLanguage,
+      });
+      const saved = await saveConversation({
+        ...created,
+        agent: {
+          provider: "hermes",
+          persistentSessionId: hermesSessionKey,
+          status: "linked",
+          relationship: "primary",
+        },
+      });
+      activeConversationIdRef.current = saved.id;
+      setActiveConversationId(saved.id);
+      openedConversationRef.current = null;
+      setActivities([]);
+    },
+    [busy, conversationStore, saveConversation],
+  );
+
+  const selectConversation = useCallback(
+    (id: string) => {
+      if (busy || id === activeConversationId) return;
+      activeConversationIdRef.current = id;
+      setActiveConversationId(id);
+      rememberSessionView(
+        conversationsRef.current.find((item) => item.id === id)?.agent
+          ?.persistentSessionId,
+      );
+      openedConversationRef.current = null;
+      setActivities([]);
+      turnActivitiesRef.current = [];
+      setError(null);
+      cleanupVoice();
+      avatarController.presentEmotion("neutral");
+      const target = conversationsRef.current.find((item) => item.id === id);
+      if (!target?.agent?.persistentSessionId) return;
+      // Opening the linked session is what makes openSession emit
+      // history.restored — without it selection shows tool activity but no
+      // messages after a refresh or in a fresh browser.
+      void (async () => {
+        try {
+          await ensureAgent(target);
+        } catch {
+          setStatus("Could not reopen the Hermes session for this conversation.");
+        }
+      })();
+    },
+    [activeConversationId, avatarController, busy, cleanupVoice, ensureAgent],
+  );
+
+  const renameConversation = useCallback(
+    async (id: string, title: string) => {
+      const renamed = await conversationStore.rename(id, title);
+      if (!renamed) return;
+      commitConversations(
+        conversationsRef.current.map((item) =>
+          item.id === id ? renamed : item,
+        ),
+      );
+    },
+    [commitConversations, conversationStore],
+  );
+
+  const deleteConversation = useCallback(
+    async (id: string) => {
+      if (busy) return;
+      await conversationStore.delete(id);
+      const remaining = conversationsRef.current.filter(
+        (item) => item.id !== id,
+      );
+      commitConversations(remaining);
+      if (activeConversationId === id) {
+        // Deleted the current view -> drop back to an empty draft (no
+        // phantom blank records in any session list).
+        activeConversationIdRef.current = null;
+        setActiveConversationId(null);
+        openedConversationRef.current = null;
+        writeRememberedView({ mode: "draft" });
+        setActivities([]);
+        cleanupVoice();
+      }
+    },
+    [
+      activeConversationId,
+      busy,
+      commitConversations,
+      conversationStore,
+      startDraft,
+    ],
+  );
+
+
   // ---- sendMessage ----
   const sendMessage = useCallback(
     async (text: string) => {
@@ -1145,17 +1279,36 @@ export function useKanaController(appVersion: string) {
         ?.toLowerCase()
         .replaceAll("_", "-");
       const commandArg = commandMatch?.[2]?.trim() || "";
-      if (
-        !cleanText ||
-        !activeConversationId
-      )
-        return;
-      const wasBusy = busy;
+      if (!cleanText) return;
 
-      const conversation = conversationsRef.current.find(
-        (item) => item.id === activeConversationId,
-      );
+      // /new inside the draft view is a no-op (already fresh).
+      if (commandName === "new") {
+        setStatus("Already on a fresh conversation");
+        setCommandSuggestions([]);
+        return;
+      }
+
+      // Draft materialization: the first message turns the empty draft view
+      // into a real conversation; ensureAgent below opens its Hermes session.
+      const activeId =
+        activeConversationIdRef.current ?? activeConversationId ?? undefined;
+      let conversation = activeId
+        ? conversationsRef.current.find((item) => item.id === activeId) ?? null
+        : null;
+      if (!conversation && readRememberedView()?.mode === "draft") {
+        const created = await conversationStore.create({
+          title: draftTitleRef.current || "New conversation",
+          subtitleLanguage: preferencesRef.current.subtitleLanguage,
+        });
+        conversation = await saveConversation(created);
+        commitConversations([...conversationsRef.current, conversation]);
+        activeConversationIdRef.current = conversation.id;
+        setActiveConversationId(conversation.id);
+        draftTitleRef.current = null;
+        writeRememberedView({ mode: "session" }); // key via session.opened
+      }
       if (!conversation) return;
+      const wasBusy = busy;
 
       // Telegram-parity: a plain message typed while Kana is mid-turn is
       // queued and submitted automatically when the current turn completes,
@@ -1180,38 +1333,11 @@ export function useKanaController(appVersion: string) {
       }
 
       if (commandName === "new") {
-        if (isFreshConversation(conversation)) {
-          // Reuse the blank conversation instead of stacking another one.
-          // An explicit title argument still applies to it.
-          if (commandArg) {
-            await saveConversation({ ...conversation, title: commandArg });
-          }
-          setStatus("Already on a new conversation");
-          setCommandSuggestions([]);
-          return;
-        }
-        const created = await conversationStore.create({
-          title: commandArg || "New conversation",
-          subtitleLanguage: preferencesRef.current.subtitleLanguage,
-        });
-        const next = await saveConversation({
-          ...created,
-          messages: [
-            createUserMessage(cleanText),
-            createSystemMessage(
-              "Fresh Kana conversation created. A new Hermes session will open with the next prompt.",
-              cleanText,
-            ),
-          ],
-        });
-        activeConversationIdRef.current = next.id;
-        setActiveConversationId(next.id);
-        openedConversationRef.current = null;
-        // No Hermes session exists for it yet; remember the INTENT so a
-        // refresh right after /new does not adopt some older session.
-        writeRememberedActiveSession({ fresh: true });
-        setActivities([]);
-        setStatus("New conversation ready");
+        // Draft model: /new just enters the empty draft view. An optional
+        // title argument is held for the conversation that will
+        // materialize on the first message.
+        startDraft();
+        draftTitleRef.current = commandArg || null;
         setCommandSuggestions([]);
         return;
       }
@@ -1228,7 +1354,7 @@ export function useKanaController(appVersion: string) {
           if (target) {
             activeConversationIdRef.current = target.id;
             setActiveConversationId(target.id);
-            rememberActiveConversation(target);
+            rememberSessionView(target.agent?.persistentSessionId);
             openedConversationRef.current = null;
             setActivities([]);
             setStatus(`Resumed ${target.title}`);
@@ -1332,7 +1458,7 @@ export function useKanaController(appVersion: string) {
             });
             activeConversationIdRef.current = savedBranch.id;
             setActiveConversationId(savedBranch.id);
-            rememberActiveConversation(savedBranch);
+            rememberSessionView(savedBranch.agent?.persistentSessionId);
             openedConversationRef.current = savedBranch.id;
             turnConversationRef.current = null;
             setBusy(false);
@@ -1526,141 +1652,8 @@ export function useKanaController(appVersion: string) {
   }, []);
 
   // ---- Conversation CRUD ----
-  const createConversation = useCallback(async () => {
-    if (busy) return;
-    const current = conversationsRef.current.find(
-      (item) => item.id === activeConversationIdRef.current,
-    );
-    if (isFreshConversation(current)) {
-      setStatus("Already on a new conversation");
-      setError(null);
-      return;
-    }
-    const conversation = await conversationStore.create({
-      subtitleLanguage: preferencesRef.current.subtitleLanguage,
-    });
-    commitConversations([...conversationsRef.current, conversation]);
-    activeConversationIdRef.current = conversation.id;
-    setActiveConversationId(conversation.id);
-    openedConversationRef.current = null;
-    // Same fresh-intent contract as the /new command: a refresh right after
-    // clicking "+ New conversation" must reopen THIS blank conversation, not
-    // adopt whichever session exchanged messages last.
-    writeRememberedActiveSession({ fresh: true });
-    setActivities([]);
-    setError(null);
-  }, [busy, commitConversations, conversationStore]);
-
-  // ---- Cross-browser Hermes sessions ----
-  // Sessions created on other surfaces/browsers have no local IndexedDB
-  // record. They are listed from Hermes (source=kana) and "adopted" into a
-  // lightweight local record on first open, linked via persistentSessionId.
-  const adoptHermesSession = useCallback(
-    async (hermesSessionKey: string, title: string) => {
-      if (busy) return;
-      const existing = conversationsRef.current.find(
-        (item) => item.agent?.persistentSessionId === hermesSessionKey,
-      );
-      turnActivitiesRef.current = [];
-      setActivities([]);
-      if (existing) {
-        activeConversationIdRef.current = existing.id;
-        setActiveConversationId(existing.id);
-        openedConversationRef.current = null;
-        return;
-      }
-      const created = await conversationStore.create({
-        title: title || "Imported session",
-        subtitleLanguage: preferencesRef.current.subtitleLanguage,
-      });
-      const saved = await saveConversation({
-        ...created,
-        agent: {
-          provider: "hermes",
-          persistentSessionId: hermesSessionKey,
-          status: "linked",
-          relationship: "primary",
-        },
-      });
-      activeConversationIdRef.current = saved.id;
-      setActiveConversationId(saved.id);
-      openedConversationRef.current = null;
-      setActivities([]);
-    },
-    [busy, conversationStore, saveConversation],
-  );
-
-  const selectConversation = useCallback(
-    (id: string) => {
-      if (busy || id === activeConversationId) return;
-      activeConversationIdRef.current = id;
-      setActiveConversationId(id);
-      rememberActiveConversation(
-        conversationsRef.current.find((item) => item.id === id) ?? null,
-      );
-      openedConversationRef.current = null;
-      setActivities([]);
-      turnActivitiesRef.current = [];
-      setError(null);
-      cleanupVoice();
-      avatarController.presentEmotion("neutral");
-      const target = conversationsRef.current.find((item) => item.id === id);
-      if (!target?.agent?.persistentSessionId) return;
-      // Opening the linked session is what makes openSession emit
-      // history.restored — without it selection shows tool activity but no
-      // messages after a refresh or in a fresh browser.
-      void (async () => {
-        try {
-          await ensureAgent(target);
-        } catch {
-          setStatus("Could not reopen the Hermes session for this conversation.");
-        }
-      })();
-    },
-    [activeConversationId, avatarController, busy, cleanupVoice, ensureAgent],
-  );
-
-  const renameConversation = useCallback(
-    async (id: string, title: string) => {
-      const renamed = await conversationStore.rename(id, title);
-      if (!renamed) return;
-      commitConversations(
-        conversationsRef.current.map((item) =>
-          item.id === id ? renamed : item,
-        ),
-      );
-    },
-    [commitConversations, conversationStore],
-  );
-
-  const deleteConversation = useCallback(
-    async (id: string) => {
-      if (busy) return;
-      await conversationStore.delete(id);
-      let remaining = conversationsRef.current.filter(
-        (item) => item.id !== id,
-      );
-      if (!remaining.length) {
-        remaining = [
-          await conversationStore.create({
-            subtitleLanguage: preferencesRef.current.subtitleLanguage,
-          }),
-        ];
-      }
-      commitConversations(remaining);
-      if (activeConversationId === id) {
-        const nextConversationId = remaining[0]?.id ?? null;
-        activeConversationIdRef.current = nextConversationId;
-        setActiveConversationId(nextConversationId);
-        rememberActiveConversation(
-          remaining.find((item) => item.id === nextConversationId) ?? null,
-        );
-        openedConversationRef.current = null;
-      }
-    },
-    [activeConversationId, busy, commitConversations, conversationStore],
-  );
-
+  // "+ New conversation": enters the draft view. The real conversation (and
+  // its Hermes session) materializes on the first sent message.
   // ---- Preferences management ----
   const savePreferences = useCallback(
     async (next: KanaPreferences) => {
@@ -1729,17 +1722,18 @@ export function useKanaController(appVersion: string) {
       }
       // Wire contract: session.list rows arrive in true last-activity order
       // and expose no recency timestamp — started_at is creation time.
-      // The remembered current session wins over recency: a refresh must
-      // reopen whatever the user was actually viewing (/new blank included),
-      // not whichever session exchanged messages last. planHydration's
-      // Hermes-order remains only the fallback for first runs.
-      const remembered = readRememberedActiveSession();
-      const rememberedEntry =
-        remembered?.key
-          ? remote.find((entry) => entry.hermesSessionKey === remembered.key) ?? null
-          : null;
+      //
+      // Current-view resolution (ChatGPT-style):
+      //   1. remembered draft   -> stay in the empty draft (nothing adopted)
+      //   2. remembered session -> adopt THAT session even if another one has
+      //                            exchanged messages more recently
+      //   3. recency best       -> first non-empty entry (first run/no memory)
+      //   4. nothing at all     -> enter the draft view
+      // Hermes omits message-less kana sessions from the directory, so a
+      // freshly /new'd conversation is kept alive by recreating its local
+      // shell bound to the same persistentSessionKey until messages exist.
+      const remembered = readRememberedView();
       const { best: recencyBest, restOldestFirst } = planHydration(remote);
-      const best = rememberedEntry ?? recencyBest;
 
       let conversation = activeConversationId
         ? conversationsRef.current.find(
@@ -1771,81 +1765,87 @@ export function useKanaController(appVersion: string) {
         });
       }
 
-      // Remembered session missing from the directory: Hermes omits
-      // message-less kana sessions, so a freshly /new'd conversation
-      // disappears from session.list until the first exchange. Stay put —
-      // recreate its local shell bound to the SAME key instead of adopting
-      // whichever session exchanged messages last.
-      // Bare /new intent (no Hermes session opened yet): a refresh must
-      // materialize a brand-new blank conversation instead of adopting
-      // whichever session exchanged messages last.
-      if (
-        !conversation &&
-        remembered?.fresh === true &&
-        !remembered.key &&
-        !rememberedEntry
-      ) {
-        conversation = await conversationStore.create({
-          subtitleLanguage: preferencesRef.current.subtitleLanguage,
-        });
-        commitConversations([...conversationsRef.current, conversation]);
-      }
-      const existingShell =
-        conversationsRef.current.find(
-          (item) => item.agent?.persistentSessionId === remembered?.key,
-        ) ?? null;
-      if (!conversation && remembered?.key && !rememberedEntry && existingShell) {
-        conversation = existingShell;
-      }
-      if (!conversation && remembered?.key && !rememberedEntry) {
-        const created = await conversationStore.create({
-          title: "New conversation",
-          subtitleLanguage: preferencesRef.current.subtitleLanguage,
-        });
-        conversation = await saveConversation({
-          ...created,
-          agent: {
-            provider: "hermes",
-            persistentSessionId: remembered.key,
-            status: "linked",
-            relationship: "primary",
-          },
-        });
-        commitConversations([...conversationsRef.current, conversation]);
-      }
       if (!conversation) {
-        if (best) {
+        if (remembered?.mode === "draft") {
+          // Fresh intent survives refresh: stay in an empty draft without
+          // adopting or creating any records.
+          writeRememberedView({ mode: "draft" });
+          setStatus("Fresh conversation — say something to begin");
+          setActivities([]);
+          await ensureAgentClient();
+          return;
+        }
+
+        if (remembered?.mode === "session" && remembered.key) {
           const existing = conversationsRef.current.find(
-            (item) =>
-              item.agent?.persistentSessionId === best.hermesSessionKey,
+            (item) => item.agent?.persistentSessionId === remembered.key,
           );
           if (existing) {
             conversation = existing;
           } else {
+            const entry = remote.find(
+              (candidate) => candidate.hermesSessionKey === remembered.key,
+            );
+            const source =
+              entry ??
+              ({
+                hermesSessionKey: remembered.key,
+                title: "New conversation",
+                messageCount: 0,
+                startedAt: 0,
+              } as { hermesSessionKey: string; title: string; messageCount: number; startedAt: number });
             const created = await conversationStore.create({
-              title: best.title || "Untitled",
+              title: source.title || "Untitled",
               subtitleLanguage: preferencesRef.current.subtitleLanguage,
             });
             conversation = await saveConversation({
               ...created,
               agent: {
                 provider: "hermes",
-                persistentSessionId: best.hermesSessionKey,
+                persistentSessionId: source.hermesSessionKey,
+                status: "linked",
+                relationship: "primary",
+              },
+            });
+            commitConversations([...conversationsRef.current, conversation]);
+          }
+        } else if (recencyBest) {
+          const existing = conversationsRef.current.find(
+            (item) =>
+              item.agent?.persistentSessionId === recencyBest.hermesSessionKey,
+          );
+          if (existing) {
+            conversation = existing;
+          } else {
+            const created = await conversationStore.create({
+              title: recencyBest.title || "Untitled",
+              subtitleLanguage: preferencesRef.current.subtitleLanguage,
+            });
+            conversation = await saveConversation({
+              ...created,
+              agent: {
+                provider: "hermes",
+                persistentSessionId: recencyBest.hermesSessionKey,
                 status: "linked",
                 relationship: "primary",
               },
             });
           }
-        } else {
-          conversation = await conversationStore.create({
-            subtitleLanguage: preferencesRef.current.subtitleLanguage,
-          });
-          commitConversations([...conversationsRef.current, conversation]);
         }
+
+        if (!conversation) {
+          // Nothing adoptable anywhere -> enter the draft view.
+          writeRememberedView({ mode: "draft" });
+          setStatus("Fresh conversation — say something to begin");
+          setActivities([]);
+          await ensureAgentClient();
+          return;
+        }
+
         // Saved last => freshest updatedAt => pinned on top of the sidebar.
         activeConversationIdRef.current = conversation.id;
         setActiveConversationId(conversation.id);
-        rememberActiveConversation(conversation);
+        rememberSessionView(conversation.agent?.persistentSessionId);
         openedConversationRef.current = null;
       }
 
@@ -1859,7 +1859,16 @@ export function useKanaController(appVersion: string) {
           : "Could not connect to the agent.",
       );
     }
-  }, [activeConversationId, commitConversations, conversationStore, ensureAgent, reportError, saveConversation]);
+  }, [
+    activeConversationId,
+    commitConversations,
+    conversationStore,
+    ensureAgent,
+    ensureAgentClient,
+    readRememberedView,
+    reportError,
+    saveConversation,
+  ]);
 
   const disconnectAgent = useCallback(async () => {
     unsubscribeAgentRef.current?.();
@@ -2139,7 +2148,7 @@ export function useKanaController(appVersion: string) {
     sendMessage,
     completeCommands,
     clearCommandSuggestions,
-    createConversation,
+    startDraft,
     selectConversation,
     renameConversation,
     deleteConversation,
