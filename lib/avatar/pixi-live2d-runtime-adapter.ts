@@ -89,6 +89,7 @@ const canvasRuntimes = new WeakMap<
   Promise<CanvasRuntime>
 >();
 let live2dTickerRegistered = false;
+let unsafeEvalInstalled = false;
 
 /**
  * Render at (close to) the display's native pixel density so Live2D edges stay
@@ -167,6 +168,15 @@ async function ensureCanvasRuntime(
       import("pixi.js"),
       import("pixi-live2d-display/cubism4"),
     ]);
+
+    // Production CSP forbids unsafe-eval, which Pixi's shader system needs.
+    // The official shim rewrites the affected code paths without eval.
+    if (!unsafeEvalInstalled) {
+      const { install } = await import("@pixi/unsafe-eval");
+      const core = await import("@pixi/core");
+      install({ ShaderSystem: core.ShaderSystem });
+      unsafeEvalInstalled = true;
+    }
 
     if (!live2dTickerRegistered) {
       // https://guansss.github.io/pixi-live2d-display/#package-importing

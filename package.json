@@ -49,6 +49,7 @@
     "tts:test": "node --test services/qwen3-tts/test/server.test.mjs"
   },
   "dependencies": {
+    "@pixi/unsafe-eval": "^6.5.10",
     "bcryptjs": "^3.0.3",
     "jose": "^6.2.10",
     "next": "16.3.1",
