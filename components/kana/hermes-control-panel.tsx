@@ -4,12 +4,10 @@ import { useEffect, useState } from "react";
 import type { HermesRuntimeStatus } from "@/lib/runtime/hermes-control-client";
 import type { UiLocale } from "@/lib/ui/copy";
 import { getCopy } from "@/lib/ui/copy";
-import { btnGhost, btnSecondary, inputBase } from "./ui";
+import { btnGhost, btnSecondary } from "./ui";
 
 type HermesControlPanelProps = {
   locale: UiLocale;
-  cwd: string;
-  onCwdChange(cwd: string): void;
   onInspect(preferredPort?: number): Promise<HermesRuntimeStatus>;
   onStart(options: {
     port: number;
@@ -33,8 +31,6 @@ const STATE_STYLE: Record<string, string> = {
 
 export function HermesControlPanel({
   locale,
-  cwd,
-  onCwdChange,
   onInspect,
   onStart,
   onStop,
@@ -74,7 +70,6 @@ export function HermesControlPanel({
           ? await onStop()
           : await onStart({
               port,
-              cwd: cwd || undefined,
               restart: action === "restart",
             });
       setStatus(next);
@@ -87,13 +82,13 @@ export function HermesControlPanel({
   };
 
   return (
-    <section className="rounded-2xl border border-line bg-bg p-3.5" aria-label="Hermes process control">
+    <section aria-label="Hermes process control">
       <div className="mb-3 flex items-center justify-between gap-2">
         <div>
           <p className="text-xs font-bold text-ink">{copy.hermesTitle}</p>
           <p className="text-[10px] text-faint">{copy.hermesSubtitle}</p>
         </div>
-        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase ${STATE_STYLE[status?.state ?? ""] ?? "border-line-strong text-muted"}`}>
+        <span className={`border px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase ${STATE_STYLE[status?.state ?? ""] ?? "border-line-strong text-muted"}`}>
           {stateLabel}
         </span>
       </div>
@@ -125,35 +120,6 @@ export function HermesControlPanel({
             </button>
           </div>
 
-          <details className="mt-2">
-            <summary className="cursor-pointer text-[10px] font-semibold text-faint marker:content-none [&::-webkit-details-marker]:hidden">
-              {copy.advanced}
-            </summary>
-            <div className="mt-2 grid gap-2.5 sm:grid-cols-2">
-              <label className="flex flex-col gap-1">
-                <span className="text-[10px] font-semibold text-muted">{copy.portLabel}</span>
-                <input
-                  type="number"
-                  min={1024}
-                  max={65535}
-                  className={inputBase}
-                  value={port}
-                  disabled={status.managed}
-                  onChange={(event) => setPort(Number(event.target.value))}
-                />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-[10px] font-semibold text-muted">{copy.cwdLabel}</span>
-                <input
-                  type="text"
-                  className={inputBase}
-                  value={cwd}
-                  placeholder={copy.cwdPlaceholder}
-                  onChange={(event) => onCwdChange(event.target.value)}
-                />
-              </label>
-            </div>
-          </details>
         </>
       ) : (
         <p className="text-[11px] leading-relaxed text-faint">

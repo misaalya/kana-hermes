@@ -27,14 +27,15 @@ export type ToolVariant = {
   chipClass: string;
 };
 
-const WEB_CHIP = "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900 dark:bg-sky-950/60 dark:text-sky-300";
-const SHELL_CHIP = "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-300";
-const FILE_CHIP = "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/60 dark:text-amber-300";
-const MEDIA_CHIP = "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700 dark:border-fuchsia-900 dark:bg-fuchsia-950/60 dark:text-fuchsia-300";
-const BROWSER_CHIP = "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900 dark:bg-violet-950/60 dark:text-violet-300";
-const AGENT_CHIP = "border-teal-200 bg-teal-50 text-teal-700 dark:border-teal-900 dark:bg-teal-950/60 dark:text-teal-300";
-const SKILL_CHIP = "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/60 dark:text-rose-300";
-const MEMORY_CHIP = "border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-900 dark:bg-indigo-950/60 dark:text-indigo-300";
+const ACCENT_CHIP = "border-accent/25 bg-accent/10 text-accent-strong";
+const WEB_CHIP = ACCENT_CHIP;
+const SHELL_CHIP = ACCENT_CHIP;
+const FILE_CHIP = ACCENT_CHIP;
+const MEDIA_CHIP = ACCENT_CHIP;
+const BROWSER_CHIP = ACCENT_CHIP;
+const AGENT_CHIP = ACCENT_CHIP;
+const SKILL_CHIP = ACCENT_CHIP;
+const MEMORY_CHIP = ACCENT_CHIP;
 const GENERIC_CHIP = "border-line-strong bg-surface text-muted";
 
 type FamilyRule = {
