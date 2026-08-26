@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { HermesAgentClient } from "@/lib/agent/hermes/hermes-agent-client";
-import { classifyHermesTool } from "@/lib/agent/tool-kind";
 import type {
   AgentClient,
   AgentCommandSuggestion,
@@ -24,10 +23,18 @@ import {
 } from "@/lib/backup/kana-backup";
 import { MemoryConversationStore } from "@/lib/conversation/memory-conversation-store";
 import {
+  type HermesDirectoryEntry,
+  planHydration,
+} from "@/lib/conversation/session-recency";
+import {
   createId,
   type Conversation,
   type KanaMessage,
 } from "@/lib/conversation/types";
+import {
+  mergeRestoredMessages,
+  parseHermesTranscript,
+} from "@/lib/conversation/transcript-restore";
 import {
   classifyKanaError,
   serializeKanaDiagnostics,
@@ -157,161 +164,6 @@ function toolTitle(kind: AgentToolKind, tool: string): string {
   if (kind === "command") return `Running ${tool}`;
   if (kind === "file") return `Updating files with ${tool}`;
   return `Using ${tool}`;
-}
-
-type RestoredTurn = {
-  turnIndex: number;
-  anchorMs: number;
-  activities: ActivityItem[];
-};
-
-/**
- * Rebuild Kana's display model from Hermes display rows (session.resume
- * messages, or session.history as fallback). The projection carries NO
- * timestamps, so rows get synthetic strictly-increasing timestamps that
- * preserve transcript order, and every turn is numbered by its
- * assistant-reply ordinal — the cross-browser identity used by the
- * server-side activity store.
- */
-function parseHermesTranscript(rows: AgentHistoryRow[]): {
-  messages: KanaMessage[];
-  turns: RestoredTurn[];
-} {
-  const messages: KanaMessage[] = [];
-  const turns: RestoredTurn[] = [];
-  let pendingActivities: ActivityItem[] = [];
-  let assistantOrdinal = 0;
-  const baseTimestamp = Date.now() - rows.length - 1;
-
-  rows.forEach((row, rowIndex) => {
-    const timestamp = baseTimestamp + rowIndex;
-    if (row.role === "system") return;
-    if (row.role === "tool") {
-      const tool = row.name ?? "tool";
-      pendingActivities.push({
-        id: createId("activity"),
-        tool,
-        kind: classifyHermesTool(tool),
-        title: row.context || `${tool} finished`,
-        state: "complete",
-        timestamp,
-      });
-      return;
-    }
-    if (row.role === "user") {
-      let text = row.text ?? "";
-      // Unwrap the kana_request wrapper: the stored row is the full prompt
-      // Kana sent (prose + a JSON metadata envelope). Parse the envelope as
-      // real JSON instead of regex-scraping it — a regex breaks on escaped
-      // quotes and would leave the restored text as raw JSON, which then
-      // never matches the local copy during merge and drops messages.
-      const braceIndex = text.indexOf("{");
-      if (braceIndex !== -1) {
-        try {
-          const envelope = JSON.parse(text.slice(braceIndex)) as {
-            user_message?: unknown;
-          };
-          if (typeof envelope.user_message === "string" && envelope.user_message) {
-            // Keep any prose before the envelope (the resume seed prefix).
-            text = (
-              text.slice(0, braceIndex).trim() +
-              " " +
-              envelope.user_message
-            ).trim();
-          }
-        } catch {
-          /* not an envelope — keep raw text */
-        }
-      }
-      messages.push({ ...createUserMessage(text), timestamp });
-      return;
-    }
-    if (row.role !== "assistant" || !row.text?.trim()) return;
-    const turnIndex = assistantOrdinal;
-    assistantOrdinal += 1;
-    let turn: RestoredTurn | undefined;
-    if (pendingActivities.length) {
-      // Anchor just after the LAST tool so the block sorts between the
-      // tools and Kana's reply.
-      turn = {
-        turnIndex,
-        anchorMs:
-          Math.max(...pendingActivities.map((activity) => activity.timestamp)) +
-          1,
-        activities: pendingActivities,
-      };
-      turns.push(turn);
-      pendingActivities = [];
-    }
-    let speech_ja = "";
-    let subtitle: KanaMessage["subtitle"] = undefined;
-    let emotion: KanaMessage["emotion"] = "neutral";
-    try {
-      const envelope = JSON.parse(row.text) as {
-        speech_ja?: string;
-        subtitle?: { text?: string; language?: string };
-        emotion?: KanaMessage["emotion"];
-      };
-      speech_ja = envelope.speech_ja ?? "";
-      if (envelope.subtitle?.text) {
-        subtitle = {
-          text: envelope.subtitle.text,
-          language: envelope.subtitle.language ?? "id",
-        };
-      }
-      emotion = envelope.emotion ?? "neutral";
-    } catch {
-      speech_ja = row.text;
-      subtitle = { text: row.text, language: "id" };
-    }
-    messages.push({
-      id: createId("message"),
-      role: "assistant",
-      speech_ja,
-      subtitle,
-      emotion,
-      timestamp,
-      activities: turn ? [...turn.activities] : undefined,
-    });
-  });
-
-  return { messages, turns };
-}
-
-function restoredMessageMatches(
-  local: KanaMessage,
-  restored: KanaMessage,
-): boolean {
-  if (local.role !== restored.role) return false;
-  if (restored.role === "user") return local.text === restored.text;
-  if (restored.role === "assistant") {
-    return (
-      local.speech_ja === restored.speech_ja &&
-      local.subtitle?.text === restored.subtitle?.text
-    );
-  }
-  return false;
-}
-
-/**
- * Hermes rows are authoritative, but local-only rows must survive the
- * replace: the just-typed message that triggered the session open, queued
- * prompts, and system notices never exist in Hermes display rows. Each
- * restored row consumes at most one matching local copy; leftovers are
- * appended after the restored block.
- */
-function mergeRestoredMessages(
-  restored: KanaMessage[],
-  local: KanaMessage[],
-): KanaMessage[] {
-  const kept = [...local];
-  for (const message of restored) {
-    const index = kept.findIndex((candidate) =>
-      restoredMessageMatches(candidate, message),
-    );
-    if (index !== -1) kept.splice(index, 1);
-  }
-  return [...restored, ...kept];
 }
 
 export function useKanaController(appVersion: string) {
@@ -1788,27 +1640,20 @@ export function useKanaController(appVersion: string) {
       // a refresh (or in a fresh browser) memory is empty, and continuing the
       // most recent non-empty Hermes conversation beats minting a throwaway
       // blank session on every visit.
-      let remote: Array<{
-        hermesSessionKey: string;
-        title: string;
-        messageCount: number;
-        startedAt: number;
-      }> = [];
+      let remote: HermesDirectoryEntry[] = [];
       try {
         const directory = (await fetch("/api/kana/sessions", {
           credentials: "same-origin",
         }).then((response) => (response.ok ? response.json() : null))) as {
-          sessions?: Array<{
-            hermesSessionKey: string;
-            title: string;
-            messageCount: number;
-            startedAt: number;
-          }>;
+          sessions?: HermesDirectoryEntry[];
         } | null;
         remote = directory?.sessions ?? [];
       } catch {
         /* directory hydration is best-effort */
       }
+      // Wire contract: session.list rows arrive in true last-activity order
+      // and expose no recency timestamp — started_at is creation time.
+      const { best, restOldestFirst } = planHydration(remote);
 
       let conversation = activeConversationId
         ? conversationsRef.current.find(
@@ -1816,11 +1661,31 @@ export function useKanaController(appVersion: string) {
           ) ?? null
         : null;
 
+      // Insertion stamps updatedAt ascending; oldest-first keeps the
+      // server's recency order under recentFirst.
+      const known = new Set(
+        conversationsRef.current
+          .map((item) => item.agent?.persistentSessionId)
+          .filter(Boolean) as string[],
+      );
+      for (const entry of restOldestFirst) {
+        if (known.has(entry.hermesSessionKey)) continue;
+        const created = await conversationStore.create({
+          title: entry.title || "Untitled",
+          subtitleLanguage: preferencesRef.current.subtitleLanguage,
+        });
+        await saveConversation({
+          ...created,
+          agent: {
+            provider: "hermes",
+            persistentSessionId: entry.hermesSessionKey,
+            status: "linked",
+            relationship: "primary",
+          },
+        });
+      }
+
       if (!conversation) {
-        const candidates = remote
-          .filter((entry) => entry.messageCount > 0)
-          .sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0));
-        const best = candidates[0];
         if (best) {
           const existing = conversationsRef.current.find(
             (item) =>
@@ -1843,43 +1708,19 @@ export function useKanaController(appVersion: string) {
               },
             });
           }
-          activeConversationIdRef.current = conversation.id;
-          setActiveConversationId(conversation.id);
-          openedConversationRef.current = null;
         } else {
           conversation = await conversationStore.create({
             subtitleLanguage: preferencesRef.current.subtitleLanguage,
           });
           commitConversations([...conversationsRef.current, conversation]);
-          activeConversationIdRef.current = conversation.id;
-          setActiveConversationId(conversation.id);
-          openedConversationRef.current = null;
         }
+        // Saved last => freshest updatedAt => pinned on top of the sidebar.
+        activeConversationIdRef.current = conversation.id;
+        setActiveConversationId(conversation.id);
+        openedConversationRef.current = null;
       }
 
       await ensureAgent(conversation);
-
-      const known = new Set(
-        conversationsRef.current
-          .map((item) => item.agent?.persistentSessionId)
-          .filter(Boolean) as string[],
-      );
-      for (const entry of remote) {
-        if (known.has(entry.hermesSessionKey)) continue;
-        const created = await conversationStore.create({
-          title: entry.title || "Untitled",
-          subtitleLanguage: preferencesRef.current.subtitleLanguage,
-        });
-        await saveConversation({
-          ...created,
-          agent: {
-            provider: "hermes",
-            persistentSessionId: entry.hermesSessionKey,
-            status: "linked",
-            relationship: "primary",
-          },
-        });
-      }
       setStatus("Connected to Hermes");
     } catch (connectError) {
       reportError(
