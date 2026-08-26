@@ -8,8 +8,11 @@ treated as automatically trusted.
 - Hermes and Qwen are separate, user-controlled local services.
 - Hermes is the only agent and executes every tool. Kana does not execute shell
   commands, filesystem actions, MCP calls, or model requests itself.
-- The browser stores conversations, non-secret preferences, and imported
-  avatar packages. The Hermes token is tab-scoped session storage only.
+- The browser stores non-secret preferences, per-conversation drafts, and
+  imported avatar packages. Conversation transcripts are not browser-local:
+  they live in Hermes and are re-read through the Kana relay. The Hermes
+  session token never reaches the browser at all — the Kana server mints or
+  discovers it and keeps it in process memory.
 - Remote Live2D model URLs are untrusted data. Cubism Core is executable and is
   therefore restricted to Live2D's official HTTPS SDK path.
 
@@ -17,8 +20,8 @@ treated as automatically trusted.
 
 | Surface | Control |
 | --- | --- |
-| WebSocket origin | Hermes validates browser origin; Kana documents that hostname forms must match |
-| Hermes credential | Removed from persistent preferences and diagnostics; legacy URL/query tokens migrate to tab storage |
+| WebSocket origin | The browser opens no WebSocket to Hermes; the Kana server owns the single upstream connection and its token |
+| Hermes credential | Never stored in the browser (no preference, storage, or diagnostic copy); held only in Kana server process memory; legacy URL/query tokens are dropped on persist |
 | Protected input | Password/secret fields are uncontrolled, ephemeral, and submitted directly to Hermes |
 | Qwen CORS | Service defaults to `127.0.0.1`/`localhost`, no credentials, and a small method/header allow-list |
 | Rendered text | React text nodes render transcript/tool status; Kana does not inject response HTML or Markdown |
@@ -66,27 +69,29 @@ callers reach Hermes process control.
 Forwarding `X-Forwarded-Proto $scheme` keeps session cookies `Secure`
 automatically; if your proxy cannot forward it, set `AUTH_COOKIE_SECURE=true`.
 
-## Production without authentication
+## Authentication model
 
-Production boots with authentication disabled (no `auth.json`, no
-`KANA_ACCESS_PASSWORD`) only when `KANA_ALLOW_NO_AUTH=1` acknowledges it; the
-server logs a loud warning either way and surfaces the state as
-`insecureNoAuth: true` in `/api/auth/status` plus an
-`x-kana-insecure-no-auth: 1` response header from the auth guard. UI layers may
-use that flag to warn the operator; the flag stays `true` even while the opt-out
-is acknowledged because the exposure itself does not disappear.
+Authentication is always enabled. On first boot the SQLite-backed password
+store seeds a well-known default (`123456`), and the deny-by-default auth
+proxy redirects unauthenticated page requests to `/login`. `/api/auth/status`
+reports `authEnabled: true`, whether the visitor is `authenticated`, and
+`usingDefaultPassword: true` while the seed password is still active — the
+login screen and settings use that flag to push the operator toward setting a
+real password. There is no mode that silently serves Kana without
+authentication; change the seed password immediately after first boot,
+especially behind a VPS reverse proxy.
 
 ## CSP rationale
 
 The app remains statically renderable and uses a header CSP. Next/React require
 inline styles/scripts in this packaging mode; development additionally needs
 `unsafe-eval`. Remote JavaScript is allowed only from Live2D's official Core
-host. `connect-src` permits HTTPS model data plus loopback HTTP/WebSocket for
-Hermes and Qwen. Insecure arbitrary remote HTTP and remote WebSocket origins
-are not allowed.
+host. `connect-src` permits HTTPS model data plus loopback HTTP for Qwen;
+Hermes traffic needs no browser-side exception because it flows through the
+same-origin relay. Insecure arbitrary remote HTTP origins are not allowed.
 
 The policy intentionally does not use `upgrade-insecure-requests`, because it
-would break loopback `http://` Qwen and `ws://` Hermes services.
+would break loopback `http://` Qwen requests from the browser.
 
 ## Offline shell
 

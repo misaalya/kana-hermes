@@ -13,8 +13,9 @@ Kana 0.1.x is an alpha local web application.
 - Hermes Agent 0.20.1 (2026.8.13) through `hermes serve` JSON-RPC/WebSocket.
   The live audit observed the registry dynamically and does not pin command
   counts as a protocol guarantee.
-- Optional Qwen service Python 3.10–3.13 with `qwen-tts==0.1.1` and the pinned
-  0.6B CustomVoice revision.
+- Optional Qwen3-TTS through the bundled pure-C engine adapter
+  (`services/qwen3-tts`): pinned MIT engine build plus the official ~2.3 GB
+  `qwen3-tts-0.6b-base` model.
 - Official pinned Live2D Haru and Mao samples load and switch in Chrome with
   model-specific `ParamMouthOpenY`/`ParamA` bindings.
 
@@ -24,9 +25,10 @@ WebGL, Web Audio, and IndexedDB behavior.
 
 ## Browser capabilities
 
-Kana needs JavaScript, IndexedDB, local/session storage, WebSocket, Web Audio,
-Blob/object URLs, and WebGL for the real avatar. Mock avatar and voice remain
-available when WebGL, audio, internet, Hermes, or Qwen is unavailable.
+Kana needs JavaScript, IndexedDB, local/session storage, Web Audio,
+Blob/object URLs, and WebGL for the real avatar. When WebGL, audio, internet,
+Hermes, or Qwen is unavailable, Kana degrades to honest placeholder states —
+there are no mock agent or voice providers.
 
 ## Storage and hardware
 
@@ -34,17 +36,21 @@ available when WebGL, audio, internet, Hermes, or Qwen is unavailable.
   depends on history length and imported Live2D assets.
 - Every imported Live2D folder is shown with its browser-local size. Browser
   quota is implementation-specific.
-- Qwen needs an isolated Python environment, roughly 2.3 GB model download,
-  and at least 4 GB free disk before setup. CPU works but may be slower than
-  realtime. The reference MX330's 2 GB VRAM is not a supported CUDA target.
+- Qwen needs git plus a C compiler with OpenBLAS for the one-time engine
+  build, the roughly 2.3 GB model download, and at least 4 GB free disk before
+  setup. CPU inference runs sub-realtime on the reference host (RTF ≈
+  0.9–1.0); there is no GPU/CUDA path.
 
 ## Known limitations
 
-- Kana does not start or supervise Hermes/Qwen and is not a signed desktop app.
+- Not a signed desktop app. The npm launcher supervises the Qwen3-TTS
+  adapter, and the web app can start/stop/supervise `hermes serve` through
+  loopback-guarded local-runtime routes, but Kana ships no OS-native binary.
 - Qwen streaming is deferred. Complete WAV is the default; experimental
   sentence delivery plays ordered complete WAV parts and remains opt-in until
   target-host latency evidence supports changing the default.
-- History and avatar packages are browser-local; no cloud sync is provided.
+- History and imported avatar packages are browser-local or Hermes-owned;
+  no cloud sync is provided.
 - Real restart recovery while every kind of pending Hermes protected input,
   two custom Live2D packages, and real Qwen p50/p95 still need target-host
   acceptance before beta.
@@ -68,7 +74,8 @@ explicit data directory.
    `.env.production` next to the deployment):
 
    ```bash
-   KANA_ACCESS_PASSWORD=<bootstrap password, or pre-seed auth.json>
+   # There is no password env var: first boot seeds the default password
+   # ("123456"). Log in and change it in the Kana UI immediately.
    KANA_JWT_SECRET=<64-hex, survives redeploys>
    KANA_DATA_DIR=/var/lib/kana
    AUTH_COOKIE_SECURE=true            # if nginx does not forward X-Forwarded-Proto
@@ -87,7 +94,6 @@ explicit data directory.
    Group=kana
    WorkingDirectory=/var/lib/kana
    Environment=KANA_DATA_DIR=/var/lib/kana
-   Environment=KANA_ACCESS_PASSWORD=<bootstrap password>
    Environment=KANA_JWT_SECRET=<64-hex>
    Environment=KANA_TRUSTED_PROXY_SECRET=<same value as nginx>
    Environment=AUTH_COOKIE_SECURE=true
@@ -117,7 +123,7 @@ explicit data directory.
    spoofable value: `proxy_set_header X-Kana-Trusted-Proxy "";`. See
    docs/SECURITY.md for the full trust model.
 
-5. First-request sanity check: with auth configured, `/api/auth/status`
-   reports `"authEnabled": true` and never `insecureNoAuth: true`. If the
-   server logs the no-auth security warning at boot, fix the environment
-   before exposing the port.
+5. First-request sanity check: `/api/auth/status` reports
+   `"authEnabled": true`. While the seeded default password is still active it
+   also reports `"usingDefaultPassword": true` — log in and set a real
+   password before exposing the port.
