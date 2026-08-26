@@ -1776,6 +1776,20 @@ export function useKanaController(appVersion: string) {
       // disappears from session.list until the first exchange. Stay put —
       // recreate its local shell bound to the SAME key instead of adopting
       // whichever session exchanged messages last.
+      // Bare /new intent (no Hermes session opened yet): a refresh must
+      // materialize a brand-new blank conversation instead of adopting
+      // whichever session exchanged messages last.
+      if (
+        !conversation &&
+        remembered?.fresh === true &&
+        !remembered.key &&
+        !rememberedEntry
+      ) {
+        conversation = await conversationStore.create({
+          subtitleLanguage: preferencesRef.current.subtitleLanguage,
+        });
+        commitConversations([...conversationsRef.current, conversation]);
+      }
       const existingShell =
         conversationsRef.current.find(
           (item) => item.agent?.persistentSessionId === remembered?.key,
