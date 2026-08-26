@@ -149,7 +149,7 @@ async function runSetup(current) {
   if (process.stdin.isTTY && process.stdout.isTTY) {
     const prompt = readline.createInterface({ input: process.stdin, output: process.stdout });
     const answer = await prompt.question(
-      "Set up local Qwen3-TTS voice cloning? It needs Python, uv, and about 4 GB free [y/N] ",
+      "Set up local Qwen3-TTS voice? Needs git, a C compiler, OpenBLAS, and about 4 GB free (Linux) [y/N] ",
     );
     prompt.close();
     qwenEnabled = /^y(es)?$/i.test(answer.trim());
@@ -159,21 +159,35 @@ async function runSetup(current) {
     );
   }
   if (qwenEnabled) {
-    const uv = findExecutable("uv");
-    if (!uv) {
+    const setupScript = path.join(runtimeRoot, "services", "qwen3-tts", "setup-engine.sh");
+    try {
+      await access(setupScript, constants.R_OK);
+    } catch {
+      process.stdout.write(`! Engine setup script is missing: ${setupScript}\n`);
+      qwenEnabled = false;
+    }
+    if (qwenEnabled && !findExecutable("git")) {
       process.stdout.write(
-        "! uv was not found. Install uv, then run `kana setup` again to enable Qwen.\n",
+        "! git was not found. Install git, then run `kana setup` again to enable Qwen.\n",
       );
       qwenEnabled = false;
-    } else {
-      process.stdout.write("Preparing the isolated Qwen3-TTS Python environment…\n");
-      const serviceRoot = path.join(runtimeRoot, "services", "qwen3-tts");
-      await runChild(uv, ["sync", "--project", serviceRoot], {
-        UV_PROJECT_ENVIRONMENT: path.join(dataRoot, "qwen-runtime"),
-      });
+    }
+    if (qwenEnabled) {
       process.stdout.write(
-        "✓ Qwen runtime is ready. The voice-cloning model downloads separately when Kana starts it.\n",
+        "Building the local Qwen3-TTS engine. Compilation happens once; the model reuses an existing Hugging Face cache when present…\n",
       );
+      try {
+        await runChild("bash", [setupScript], {
+          KANA_TTS_ENGINE_DIR: path.join(cacheRoot, "qwen3-tts-engine"),
+          KANA_TTS_DATA_DIR: path.join(dataRoot, "qwen3-tts"),
+        });
+        process.stdout.write(
+          "✓ Qwen3-TTS engine is ready. Voice clones are created inside Kana settings.\n",
+        );
+      } catch (error) {
+        process.stdout.write(`! Engine setup failed: ${error.message}\n`);
+        qwenEnabled = false;
+      }
     }
   }
   const next = { version: 1, setupCompleted: true, qwenEnabled };
@@ -183,21 +197,16 @@ async function runSetup(current) {
 }
 
 async function startQwen() {
-  const uv = findExecutable("uv");
-  if (!uv) {
-    process.stderr.write("Qwen is enabled but uv is unavailable; continuing without voice.\n");
-    return null;
-  }
   const serviceRoot = path.join(runtimeRoot, "services", "qwen3-tts");
-  process.stdout.write(
-    "Starting Qwen3-TTS. Its Base model may download into the separate Kana cache on first use…\n",
-  );
-  return spawn(uv, ["run", "--project", serviceRoot, "kana-qwen3-tts"], {
+  const adapter = path.join(serviceRoot, "server.mjs");
+  process.stdout.write("Starting the local Qwen3-TTS engine…\n");
+  return spawn(process.execPath, [adapter], {
     cwd: serviceRoot,
     env: {
       ...process.env,
-      UV_PROJECT_ENVIRONMENT: path.join(dataRoot, "qwen-runtime"),
-      KANA_TTS_CACHE_DIR: path.join(cacheRoot, "qwen3-tts"),
+      KANA_TTS_HOST: "127.0.0.1",
+      KANA_TTS_PORT: String(process.env.KANA_TTS_PORT || "7860"),
+      KANA_TTS_ENGINE_DIR: path.join(cacheRoot, "qwen3-tts-engine"),
       KANA_TTS_DATA_DIR: path.join(dataRoot, "qwen3-tts"),
     },
     stdio: ["ignore", "inherit", "inherit"],
@@ -206,16 +215,20 @@ async function startQwen() {
 
 async function printDoctor(current) {
   const hermes = findExecutable("hermes");
-  const uv = findExecutable("uv");
+  const engineBin = path.join(cacheRoot, "qwen3-tts-engine", "qwen_tts");
+  let engineState = "not built (run `kana setup`)";
+  try {
+    await access(engineBin, constants.R_OK);
+    engineState = engineBin;
+  } catch {}
   process.stdout.write(
     [
       "Kana doctor",
       `Web runtime: ${runtimeRoot}`,
       `Data directory: ${resolvedDataRoot}`,
       `Hermes: ${hermes || "not found"}`,
-      `uv: ${uv || "not found"}`,
+      `Qwen engine: ${engineState}`,
       `Qwen enabled: ${current.qwenEnabled ? "yes" : "no"}`,
-      `Qwen model cache: ${path.join(cacheRoot, "qwen3-tts")}`,
       `Cloned voices: ${path.join(dataRoot, "qwen3-tts", "voices")}`,
       `Launcher config: ${configPath}`,
       "",

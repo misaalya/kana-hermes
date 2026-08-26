@@ -45,7 +45,7 @@
     "hermes:active-check": "node scripts/hermes-active-restart-check.mjs",
     "tts:dev": "node services/qwen3-tts/server.mjs",
     "tts:acceptance": "node scripts/qwen3-tts-acceptance.mjs",
-    "tts:setup": "bash scripts/setup-qwen3-tts-engine.sh",
+    "tts:setup": "bash services/qwen3-tts/setup-engine.sh",
     "tts:test": "node --test services/qwen3-tts/test/server.test.mjs"
   },
   "dependencies": {
