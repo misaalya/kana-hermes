@@ -1,4 +1,5 @@
 import type { AvatarController } from "@/lib/avatar/avatar-controller";
+import { createId } from "@/lib/conversation/types";
 import { AudioLipSyncController } from "./audio-lip-sync";
 import {
   inspectQwen3TTSService,
@@ -291,7 +292,9 @@ export class Qwen3TTSProvider implements VoiceProvider {
   ): Promise<{ audio: ArrayBuffer; durationMs: number }> {
     if (operation !== this.operation) throw aborted();
     const controller = new AbortController();
-    const requestId = crypto.randomUUID();
+    // crypto.randomUUID is secure-context-only; Kana also runs over plain
+    // HTTP from LAN/VPS IPs, so reuse the guarded conversation id generator.
+    const requestId = createId("tts");
     this.request = { controller, id: requestId };
     const synthesisStartedAt = performance.now();
     if (chunk === 1 || this.snapshot.state !== "playing") {
