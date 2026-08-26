@@ -93,15 +93,21 @@ export function buildKanaUserPrompt(
  * One-shot re-seed for resumed sessions. Hermes restores resumed-session
  * history from its DB without any client-supplied system message, so a
  * resumed session would otherwise run without the response contract. This
- * rides as a visible [System: …] prefix — the same convention Hermes itself
- * uses for personality-pivot markers — on the first prompt after resume only.
+ * rides on the first prompt after resume only.
+ *
+ * The opening marker MUST NOT be "[System:" (or start with one): verified
+ * against hermes serve (server.py `_is_display_hidden_marker`) — user-role
+ * rows whose text starts with "[System:" are dropped from EVERY display
+ * projection, so a seeded turn would vanish from all future transcript
+ * restores while still counting toward message_count.
  */
 export function buildKanaResumeSeedPrefix(
   subtitleLanguage: SubtitleLanguage,
 ): string {
   return [
-    "[System: Session re-attached from the Kana web UI. Re-stating the standing",
-    "presentation contract for this session. It applies from here on:]",
+    "[Kana presentation re-attach: Session restored from the Kana web UI.",
+    "Re-stating the standing presentation contract for this session. It",
+    "applies from here on:]",
     "",
     responseContract(subtitleLanguage),
     "]",
