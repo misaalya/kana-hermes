@@ -109,7 +109,14 @@ const KANA_COMMAND_SUGGESTIONS: AgentCommandSuggestion[] = [
 ];
 
 function recentFirst(conversations: Conversation[]): Conversation[] {
-  return [...conversations].sort((a, b) => b.updatedAt - a.updatedAt);
+  const seen = new Set<string>();
+  return [...conversations]
+    .filter((item) => {
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    })
+    .sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
 // The user's CURRENT conversation is an explicit choice (/new, sidebar pick,
@@ -1764,12 +1771,31 @@ export function useKanaController(appVersion: string) {
         });
       }
 
-      if (!conversation && remembered?.fresh && !rememberedEntry) {
-        // /new intent survives refresh: materialize a blank local
-        // conversation. Its Hermes session opens lazily on the first prompt,
-        // and session.opened upgrades the remembered key at that point.
-        conversation = await conversationStore.create({
+      // Remembered session missing from the directory: Hermes omits
+      // message-less kana sessions, so a freshly /new'd conversation
+      // disappears from session.list until the first exchange. Stay put —
+      // recreate its local shell bound to the SAME key instead of adopting
+      // whichever session exchanged messages last.
+      const existingShell =
+        conversationsRef.current.find(
+          (item) => item.agent?.persistentSessionId === remembered?.key,
+        ) ?? null;
+      if (!conversation && remembered?.key && !rememberedEntry && existingShell) {
+        conversation = existingShell;
+      }
+      if (!conversation && remembered?.key && !rememberedEntry) {
+        const created = await conversationStore.create({
+          title: "New conversation",
           subtitleLanguage: preferencesRef.current.subtitleLanguage,
+        });
+        conversation = await saveConversation({
+          ...created,
+          agent: {
+            provider: "hermes",
+            persistentSessionId: remembered.key,
+            status: "linked",
+            relationship: "primary",
+          },
         });
         commitConversations([...conversationsRef.current, conversation]);
       }
