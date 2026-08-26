@@ -4,12 +4,13 @@ Kana is a local web presentation layer for an existing [Hermes Agent](https://gi
 
 Kana adds:
 
-- a game-style visual-novel conversation surface: pastel sky stage, centered
-  avatar, and a named speech bubble in the manner of character games — without
-  copying any game's artwork, characters, or proprietary assets;
+- a restrained, white, Codex-inspired workspace: quiet conversation sidebar,
+  thin header, centered avatar stage, and an inline transcript — without
+  copying any product's artwork, characters, or proprietary assets;
 - a Japanese-speaking presentation persona and structured response protocol;
 - user-selectable subtitle languages for future responses;
-- locally persistent conversation history that preserves the exact subtitle text and language originally displayed;
+- conversation transcripts restored byte-for-byte from Hermes that preserve
+  the exact subtitle text and language originally displayed;
 - replaceable agent, voice, avatar, and conversation-store providers;
 - a responsive Live2D canvas with two official free sample avatars and
   replaceable, locally persistent URL/folder model sources;
@@ -46,12 +47,14 @@ kana doctor       # check Hermes/engine availability and data locations
 kana --port 4000  # choose the local web port
 ```
 
-When Kana runs through this launcher it sets `KANA_LOCAL_RUNTIME_CONTROL=1`,
-which enables **Settings → Hermes control panel**: start, restart, and stop the
-official `hermes serve` gateway, enter its session token, and see live process
-status. Kana only ever spawns the unmodified Hermes binary and never edits the
-Hermes installation. Running `next dev` directly keeps process control off
-unless `.env.development` enables it.
+The **Settings → Hermes gateway** panel can start, restart, and stop the
+official `hermes serve` process and shows live status. It is reachable only
+from a loopback origin, or through a reverse proxy that presents the shared
+`KANA_TRUSTED_PROXY_SECRET` header — there is no client-side flag that turns
+it on. Kana only ever spawns the unmodified Hermes binary (or adopts one you
+started yourself) and never edits the Hermes installation. The session token
+is minted or discovered by the Kana server and stays in server memory; it is
+never entered into or stored by the browser.
 
 ## Run in development
 
@@ -64,26 +67,25 @@ Open [http://127.0.0.1:3000](http://127.0.0.1:3000). Kana always connects to a r
 
 ## Connect to Hermes
 
-Kana uses Hermes's official headless JSON-RPC/WebSocket gateway. Start Hermes separately with a session token of your choice:
+You do not point Kana at Hermes by hand. On first connect the Kana server
+discovers a running `hermes serve` (process scan, Linux), adopts one you
+started yourself, or spawns the unmodified binary on a local port:
 
 ```bash
-HERMES_DASHBOARD_SESSION_TOKEN="replace-with-a-long-local-token" \
-  /home/kenobu/.local/bin/hermes serve --host 127.0.0.1 --port 9119
+/home/kenobu/.local/bin/hermes serve --host 127.0.0.1 --port 9119
 ```
 
-In Kana, open **Settings → Agent connection**, choose **Hermes**, and enter:
+The browser never dials Hermes and never holds its session token: it talks to
+same-origin Kana relay routes (`/api/hermes/rpc`, `/api/hermes/events`), and
+the Kana server owns the single authenticated WebSocket to `hermes serve`.
+The only connection-related setting is the optional working folder for new
+Hermes sessions, in **Settings → Hermes gateway**.
 
-- WebSocket URL: `ws://127.0.0.1:9119/api/ws`
-- Session token: the same value used to start `hermes serve`
-- Working folder: optional; new Hermes sessions use it as their workspace
-
-Use the same hostname for Kana and Hermes (`127.0.0.1` in the example). Hermes intentionally rejects browser WebSocket origins whose hostname does not match its bound host.
-
-The WebSocket URL and working folder persist locally. The session token does
-not: Kana keeps it in tab-scoped session storage and removes legacy copies from
-persistent preferences. Re-enter it after closing the browser tab.
-
-Kana does not update, patch, or write to the Hermes installation. New Kana conversations seed a per-session Hermes system message containing the Kana persona and response contract; the user's global Hermes configuration is not changed.
+Kana does not update, patch, or write to the Hermes installation. New Kana
+conversations seed a per-session Hermes system message containing the Kana
+persona and response contract; resumed conversations re-seed the contract
+once via a `[Kana presentation re-attach: …]` prefix on the first prompt
+after resuming. The user's global Hermes configuration is not changed.
 
 ## Hermes slash commands
 
@@ -230,10 +232,10 @@ sole discretion. See the [official sample model terms](https://www.live2d.com/en
 ```text
 Kana UI
   ├─ AgentClient
-  │    └─ HermesAgentClient → hermes serve /api/ws
+  │    └─ HermesAgentClient → same-origin relay → hermes serve /api/ws
   ├─ ConversationStore
-  │    └─ IndexedDbConversationStore
-  │         └─ LocalConversationStore migration/fallback
+  │    └─ MemoryConversationStore (in-memory; transcripts owned by Hermes,
+  │         restored via session.resume through TranscriptRestore)
   ├─ VoiceProvider
   │    └─ Qwen3TTSProvider → local API v2 (speech + voice clones)
   │                         → AudioLipSyncController

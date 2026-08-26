@@ -12,7 +12,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 This file is the implementation handoff and operating guide for agents working
 on Kana. Read it completely before changing the project. The status below was
-last reviewed on 2026-08-25. Active remediation work is tracked in `PLAN.md`.
+last reviewed on 2026-08-26. Active remediation work is tracked in `PLAN.md`.
 
 ## Product definition
 
@@ -135,9 +135,10 @@ RPC  POST /api/hermes/rpc    ->  allow-listed JSON-RPC forward
   under one data root resolved by `lib/server/data-dir.ts`
   (`KANA_DATA_DIR` → XDG → HOME; production fails loudly without it). Legacy
   files from `$HOME/.kana` / `$CWD/data` are adopted on first use.
-- Login is password-based with a deny-by-default proxy. Production without
-  auth config surfaces `insecureNoAuth` (header + auth status) and logs
-  loudly unless `KANA_ALLOW_NO_AUTH=1`. Local process-control routes trust a
+- Login is password-based with a deny-by-default proxy. Authentication is
+  always enabled: first boot seeds a default password (`123456`) and
+  `/api/auth/status` surfaces `usingDefaultPassword: true` until the operator
+  changes it in the UI. Local process-control routes trust a
   shared-secret header (`KANA_TRUSTED_PROXY_SECRET`), not a spoofable flag.
 - The Qwen3-TTS adapter is spawned/probed by the Node runtime and reached by
   the browser only through `/api/voice/tts/*` relay routes, including request
@@ -209,6 +210,14 @@ discoverable without changing Kana's source.
 
 ## Kana response and language contract
 
+Delivery paths for the contract (verified against hermes serve): new sessions
+receive it once as a system-role seed on `session.create`. Resumed sessions
+re-seed via a `[Kana presentation re-attach: …]` prefix on the FIRST prompt
+after resume — never a `[System:` prefix, because hermes serve hides
+user-role rows starting with `[System:` from every display projection
+(`_is_display_hidden_marker`), which would erase the turn from all future
+transcript restores.
+
 Hermes must return one structured user-facing response per normal assistant
 turn:
 
@@ -272,12 +281,16 @@ ornamental dashboard. This is a product direction, not a temporary theme.
   allow-listed JSON-RPC (`/api/hermes/events`, `/api/hermes/rpc`), session
   create/resume, prompt submission, interruption, and event translation.
 - Event-driven transcript restore: `session.resume` responses carry the full
-  display transcript; the adapter emits `history.restored` and the controller
-  parses it (kana_request unwrap, response envelope, tool rows). Selecting a
-  linked conversation or auto-connecting opens the session first, so
-  refreshes and fresh browsers always repopulate the transcript. Auto-connect
-  lands on the most recent non-empty Hermes session instead of minting a
-  blank one per visit.
+  display transcript; the adapter emits `history.restored`, and the pure
+  projection in `lib/conversation/transcript-restore.ts` maps Hermes rows to
+  Kana's display model (kana_request unwrap, response envelope, tool rows)
+  before the controller merges them into local state. Selecting a linked
+  conversation or auto-connecting opens the session first, so refreshes and
+  fresh browsers always repopulate the transcript. Auto-connect lands on the
+  most recent non-empty Hermes session — `lib/conversation/session-recency.ts`
+  trusts Hermes's `session.list` true-last-activity array order and must never
+  re-sort by `started_at` (creation time) — instead of minting a blank one per
+  visit.
 - Per-turn tool activity logs in SQLite (schema v2, `turn_index` ordinal with
   idempotent v1 migration), reconstructed from restored history and mirrored
   by live turns; `LiveChatFeed` splices them by ordinal across browsers.
@@ -293,7 +306,8 @@ ornamental dashboard. This is a product direction, not a temporary theme.
 - Local user preferences in browser storage; the Hermes session token is
   server-side only and never enters browser storage in any form.
 - Password-based login behind a deny-by-default proxy, single data root for
-  auth/JWT/activity state, production no-auth surfacing (`insecureNoAuth`),
+  auth/JWT/activity state, seeded-default-password surfacing
+  (`usingDefaultPassword` in `/api/auth/status`),
   and a shared-secret trusted-proxy model — see the custody section above.
 - Browser audio decoding/playback and amplitude-based lip sync through the Web
   Audio API, with autoplay-policy timeouts and per-playback graph cleanup.
@@ -439,6 +453,11 @@ lib/presentation/persona.ts               Persona and response instructions
 lib/presentation/response-parser.ts       Structured response validation
 lib/conversation/memory-conversation-store.ts In-memory conversation state
                                           (transcripts live in Hermes)
+lib/conversation/transcript-restore.ts    Pure Hermes-row → display-model
+                                          projection (kana_request unwrap,
+                                          merge rules); unit-tested
+lib/conversation/session-recency.ts       Hydration plan; trusts session.list
+                                          last-activity order, never started_at
 lib/backup/kana-backup.ts                  Versioned credential-free backup format
 lib/avatar/avatar-controller.ts           Provider-independent avatar control
 lib/avatar/defaults.ts                     Official Haru/Mao URLs and bindings
@@ -520,6 +539,8 @@ Work incrementally and keep the application usable after every phase.
       the centered focal point.
 - [x] Move local history to IndexedDB and retain a localStorage
       migration/fallback; do not add cloud sync prematurely.
+      (Superseded: conversation state is in-memory now and transcripts are
+      owned and restored by Hermes — see `lib/conversation/`.)
 - [x] Reconcile Kana and Hermes session lifecycle edge cases, including deleted
       or externally renamed Hermes sessions.
 - [x] Maintain preference migrations through v5 for the versioned Qwen3-TTS
