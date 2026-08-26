@@ -1536,6 +1536,10 @@ export function useKanaController(appVersion: string) {
     activeConversationIdRef.current = conversation.id;
     setActiveConversationId(conversation.id);
     openedConversationRef.current = null;
+    // Same fresh-intent contract as the /new command: a refresh right after
+    // clicking "+ New conversation" must reopen THIS blank conversation, not
+    // adopt whichever session exchanged messages last.
+    writeRememberedActiveSession({ fresh: true });
     setActivities([]);
     setError(null);
   }, [busy, commitConversations, conversationStore]);
