@@ -13,12 +13,13 @@ npm run test:hermes:restart
 ```
 
 The harness starts the installed Hermes binary twice on a temporary port with a
-temporary `HERMES_HOME`. It creates and titles an empty Kana session so Hermes
-persists it without an LLM prompt, destroys and reconstructs the Kana adapter
-to simulate a page refresh, resumes from the durable ID, stops the first server, allows
-`HermesAgentClient` to reconnect, resumes the same durable session, runs
-`/status`, then deletes the temporary home. It never reads or writes the user's
-normal Hermes database.
+temporary `HERMES_HOME`. Driving the server-side bridge directly
+(`ensureHermesConnection` / `hermesRpc` from `lib/server/hermes-bridge`), it
+creates and titles an empty Kana session so Hermes persists it without an LLM
+prompt, resumes it from the durable ID, stops the first server, reconnects to
+the restarted one, and resumes the same durable session again. It never reads
+or writes the user's normal Hermes database and removes only the temporary
+home on exit.
 
 Expected result:
 
@@ -26,19 +27,17 @@ Expected result:
 {
   "isolatedHermesHome": true,
   "userHermesDataTouched": false,
-  "initialConnection": true,
-  "freshClientResumeBeforeRestart": true,
-  "reconnectObserved": true,
+  "tokenHeldServerSideOnly": true,
+  "initialSessionCreated": true,
   "resumedAfterRestart": true,
-  "persistentSessionIdStable": true,
-  "statusCommandAfterRestart": true,
+  "eventsObserved": true,
   "temporaryHomeRemovedOnExit": true
 }
 ```
 
 The command must exit with status 0. Repeated intermediate `error` and
-`reconnecting` states are allowed while the server is down; the final state
-must return to connected and resume the same persistent ID.
+`reconnecting` states are allowed while the server is down; the bridge must
+return to connected and resume the same persistent ID after the restart.
 
 ## Interactive active-turn matrix
 

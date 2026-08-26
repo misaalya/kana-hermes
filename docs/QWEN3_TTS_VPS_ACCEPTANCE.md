@@ -7,23 +7,29 @@ as passing real synthesis.
 
 ## 1. Prepare isolated storage
 
-From the Kana repository:
+The service is a zero-dependency Node adapter (`services/qwen3-tts/server.mjs`)
+driving a pure-C inference engine — no Python, no PyTorch. One-time engine and
+model provisioning:
 
 ```bash
-export KANA_TTS_RUNTIME_DIR=/srv/kana/qwen3-tts-runtime
-export KANA_TTS_CACHE_DIR=/srv/kana/qwen3-tts-cache
-export KANA_TTS_DEVICE=cpu
-UV_PROJECT_ENVIRONMENT="$KANA_TTS_RUNTIME_DIR" \
-  uv run --project services/qwen3-tts kana-qwen3-tts
+npm run tts:setup
 ```
 
-Use `KANA_TTS_DEVICE=cuda:0` only when the installed PyTorch build and GPU are
-compatible. Kana's checked lock currently selects CPU-only PyTorch; a CUDA
-deployment should use a separately reviewed lock/environment rather than
-silently changing the web package.
+This clones the pinned MIT-licensed engine (gabriele-mastrapasqua/qwen3-tts),
+builds it with OpenBLAS, and prepares the official ~2.3 GB
+`qwen3-tts-0.6b-base` model under `~/.cache/kana/qwen3-tts-engine` by default.
+Point it at external storage with `KANA_TTS_ENGINE_DIR`, `KANA_TTS_MODEL_DIR`,
+and `KANA_TTS_DATA_DIR`; tune builds with `KANA_TTS_ENGINE_JOBS`,
+`KANA_TTS_ENGINE_QUANT`, and runtime limits with `KANA_TTS_MAX_SYNTH_SECONDS`
+(see `services/qwen3-tts/README.md`). Then start the service:
 
-Expected startup: the HTTP server listens on `127.0.0.1:7860`; first start may
-download roughly 2.3 GB; health can report `loading` until model load finishes.
+```bash
+npm run tts:dev        # node services/qwen3-tts/server.mjs
+# host/port override: KANA_TTS_HOST / KANA_TTS_PORT
+```
+
+Expected startup: the HTTP server listens on `127.0.0.1:7860`; health can
+report `loading` until the engine and model are ready.
 
 ## 2. Check setup without inference
 
@@ -35,13 +41,17 @@ curl -s http://127.0.0.1:7860/v1/voices | python -m json.tool
 
 Success criteria:
 
-- service is `kana-qwen3-tts` and API version is `1`;
-- configured model is the pinned Qwen 0.6B CustomVoice model;
-- cache path is the selected external path and `model_cache_detected` becomes
-  true after download;
+- service is `kana-qwen3-tts` and `api_version` is `"2"` (the browser contract
+  rejects any other version);
+- configured model is the pinned Qwen 0.6B **Base** model
+  (`qwen3-tts-0.6b-base`);
+- cache path points at the prepared engine directory and
+  `model_cache_detected` is true after provisioning;
 - free disk reports at least 4 GB before installation;
 - health eventually becomes `ready`;
-- voices include `ono_anna` and it is the default voice.
+- voices include the built-in profile `builtin-kana` ("Kana", auto-cloned from
+  `assets/kana.wav` on first use); `default_voice_id` is the most recently
+  created profile.
 
 ## 3. Synthesize Japanese WAV
 
@@ -49,7 +59,7 @@ Success criteria:
 curl -sS \
   -H 'Content-Type: application/json' \
   -H 'X-Kana-Request-Id: vps-acceptance-001' \
-  -d '{"text":"こんにちは。カナの音声テストです。","language":"ja","voice_id":"ono_anna","emotion":"neutral"}' \
+  -d '{"text":"こんにちは。カナの音声テストです。","language":"ja"}' \
   http://127.0.0.1:7860/v1/speech \
   --output /tmp/kana-qwen-acceptance.wav
 
@@ -59,7 +69,8 @@ file /tmp/kana-qwen-acceptance.wav
 Success criteria: HTTP 200, non-empty RIFF/WAVE audio, `language` remains
 Japanese, duration is audible and not zero, and the service returns request,
 sample-rate, and voice headers. Listen once to confirm intelligible Japanese;
-do not judge emotion on the 0.6B fixed-style voice.
+do not judge emotion on the 0.6B fixed-style voice (`supports_instruction` is
+false — the service accepts no usable `emotion` field).
 
 ## 4. Verify cancellation
 
@@ -84,7 +95,6 @@ repository on the same machine:
 ```bash
 npm run tts:acceptance -- \
   --url http://127.0.0.1:7860 \
-  --voice ono_anna \
   --warmup 1 \
   --runs 20 \
   --hardware "VPS plan, CPU model, RAM, GPU and VRAM if present" \
@@ -127,20 +137,21 @@ reconsidered or experimental sentence delivery be promoted beyond opt-in.
 
 ## 4b. Zombie grandchild check (owner, live hardware)
 
-Node spawns `uv run`, which spawns the Python grandchild; verify stop really
-ends it. On the target host:
+The Node adapter spawns the pure-C `qwen_tts` engine CLI once per speech
+request and kills that child directly; verify stop really ends everything. On
+the target host:
 
 1. Start the service from Kana (Settings control panel or `POST
    /api/voice/tts/control {"action":"start"}`).
-2. Stop it the same way, then immediately run `ss -ltnp | grep 7860`.
-3. Pass: nothing listens on 7860 and no `kana-qwen3-tts`/uv python process
-   remains (`pgrep -af kana-qwen3-tts`).
-4. If a zombie survives: switch the spawn to the resolved venv python directly,
-   or keep `uv run --no-sync` and kill the negative process group
-   (`detached: false` + `process.kill(-child.pid)`), then repeat steps 1–3.
+2. Run one synthesis, then stop the service the same way and immediately run
+   `ss -ltnp | grep 7860`.
+3. Pass: nothing listens on 7860 and no `qwen_tts`/`kana-qwen3-tts` process
+   remains (`pgrep -af qwen_tts`).
+4. If an engine child survives a Stop during active synthesis, record it as a
+   failure — cancellation must kill the in-flight child process, not wait for
+   kernel completion — then fix the spawn guard and repeat steps 1–3.
 
-Record the outcome (and which spawn strategy was needed) in the release
-evidence alongside the latency JSON.
+Record the outcome in the release evidence alongside the latency JSON.
 
 ## Decision
 

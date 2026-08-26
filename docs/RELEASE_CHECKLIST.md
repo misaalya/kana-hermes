@@ -9,8 +9,9 @@
 5. Run `npm run quality` from a clean checkout with enough disk.
 6. Run the temporary Hermes live audit and isolated restart audit without
    sending an LLM prompt; complete the active-turn restart matrix for beta.
-7. If Qwen changed, run Python tests and `npm run tts:acceptance` on target
-   hardware; preserve its JSON evidence and one intelligibility check.
+7. If Qwen changed, run `npm run tts:test` (Node contract smoke tests) and
+   `npm run tts:acceptance` on target hardware; preserve its JSON evidence and
+   one intelligibility check.
 8. Start `.next/standalone/server.js` from outside the source checkout and run desktop/mobile smoke tests.
 9. Create a checksum for the package archive and record exact Node, Kana, Hermes, and optional Qwen versions.
 10. Run `npm run dogfood:check`; alpha may retain documented blockers, but beta
