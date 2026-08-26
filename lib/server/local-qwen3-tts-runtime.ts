@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { access } from "node:fs/promises";
-import { constants } from "node:fs";
+import { accessSync, constants, existsSync, statSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -10,10 +10,11 @@ import {
 
 // Server-side custody of the local Qwen3-TTS service process.
 //
-// Mirrors `local-hermes-runtime.ts`: the browser never talks to the Python
-// service directly. Kana's Node server discovers an already-running instance,
-// adopts it, or spawns one via `uv run --project services/qwen3-tts`. The
-// service binds to loopback only; the only public surface is Kana's own
+// Mirrors `local-hermes-runtime.ts`: the browser never talks to the engine
+// directly. Kana's Node server discovers an already-running instance, adopts
+// it, or spawns `services/qwen3-tts/server.mjs` — a zero-dependency adapter
+// that drives the pure-C qwen3-tts engine (no Python/PyTorch). The adapter
+// binds to loopback only; the only public surface is Kana's own
 // `/api/voice/tts/*` relay routes.
 
 export type LocalQwen3TtsRuntimeStatus = {
@@ -53,7 +54,7 @@ function moduleDirectory(): string | null {
 }
 
 // Resolution order: KANA_QWEN3_TTS_PROJECT_DIR → this module's location →
-// cwd. Each candidate must contain pyproject.toml so a bundled/standalone
+// cwd. Each candidate must contain server.mjs so a bundled/standalone
 // module path never wins over a real checkout, and a systemd unit with a
 // different WorkingDirectory still resolves the service source.
 async function resolveProjectDir(): Promise<string> {
@@ -68,7 +69,7 @@ async function resolveProjectDir(): Promise<string> {
   ];
   for (const candidate of candidates) {
     try {
-      await access(path.join(candidate, "pyproject.toml"), constants.R_OK);
+      accessSync(path.join(candidate, "server.mjs"), constants.R_OK);
       return candidate;
     } catch {
       continue;
@@ -114,20 +115,26 @@ function publicStatus(current: ManagedRuntime): LocalQwen3TtsRuntimeStatus {
   };
 }
 
-function resolveUv(): string | null {
-  if (process.env.KANA_TTS_UV_BIN) return process.env.KANA_TTS_UV_BIN;
-  for (const dir of (process.env.PATH ?? "").split(path.delimiter)) {
-    if (!dir) continue;
-    const candidate = path.join(dir, "uv");
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports -- sync check at spawn time
-      require("node:fs").accessSync(candidate);
-      return candidate;
-    } catch {
-      // keep scanning
-    }
+// Same resolution rules as services/qwen3-tts/server.mjs so the supervisor's
+// "configured?" check cannot disagree with what the adapter will actually use.
+function engineConfigured(): boolean {
+  const engineDir =
+    process.env.KANA_TTS_ENGINE_DIR?.trim() ||
+    path.join(os.homedir(), ".local/share/kana/qwen3-tts-engine");
+  const engineBin =
+    process.env.KANA_TTS_ENGINE_BIN?.trim() || path.join(engineDir, "qwen_tts");
+  const modelDir =
+    process.env.KANA_TTS_MODEL_DIR?.trim() ||
+    path.join(engineDir, "qwen3-tts-0.6b-base");
+  try {
+    return (
+      existsSync(engineBin) &&
+      statSync(engineBin).isFile() &&
+      existsSync(path.join(modelDir, "model.safetensors"))
+    );
+  } catch {
+    return false;
   }
-  return null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -267,9 +274,9 @@ export async function inspectLocalQwen3TtsRuntime(
   if (current.state !== "starting" && current.state !== "stopping") {
     current.state = current.child && current.child.exitCode !== null ? "failed" : "stopped";
   }
-  if (!resolveUv()) {
+  if (!engineConfigured()) {
     current.lastMessage =
-      "The uv tool was not found on this machine; install uv or set KANA_TTS_UV_BIN.";
+      "The qwen3-tts engine was not found; run scripts/setup-qwen3-tts-engine.sh or set KANA_TTS_ENGINE_DIR.";
   } else if (current.state === "stopped") {
     current.lastMessage = "No running Qwen3-TTS service was detected on this machine.";
   }
@@ -290,9 +297,9 @@ async function waitUntilReady(
           }`,
       );
     }
-    // HTTP 200 alone is not ready: the Python service answers 200 with
-    // status "loading" until the model load finishes. A reported load error
-    // fails fast instead of burning the whole deadline.
+    // The adapter answers 200 with status "ready" only after the engine and
+    // model files exist; a reported load error fails fast instead of burning
+    // the whole deadline.
     const health = await probeHealth(current.port, 1_000);
     if (health.kind === "ready") return;
     if (health.kind === "error") throw new Error(health.message);
@@ -327,19 +334,18 @@ export async function startLocalQwen3TtsRuntime(options: {
     current.lastMessage = externalServiceMessage(existing, port);
     return publicStatus(current);
   }
-  const uv = resolveUv();
-  if (!uv) {
+  if (!engineConfigured()) {
     current.state = "failed";
     current.lastMessage =
-      "The uv tool was not found on this machine; install uv or set KANA_TTS_UV_BIN.";
+      "The qwen3-tts engine was not found on this machine; run scripts/setup-qwen3-tts-engine.sh or set KANA_TTS_ENGINE_DIR.";
     throw new Error(current.lastMessage);
   }
   const projectDir = await resolveProjectDir();
   try {
-    await access(projectDir, constants.R_OK);
+    accessSync(path.join(projectDir, "server.mjs"), constants.R_OK);
   } catch {
     current.state = "failed";
-    current.lastMessage = `The Qwen3-TTS project directory is missing: ${projectDir}`;
+    current.lastMessage = `The Qwen3-TTS adapter script is missing: ${projectDir}`;
     throw new Error(current.lastMessage);
   }
 
@@ -348,7 +354,7 @@ export async function startLocalQwen3TtsRuntime(options: {
   current.stderrTail = [];
   current.lastMessage = "Starting the Qwen3-TTS service…";
 
-  const child = spawn(uv, ["run", "--project", projectDir, "kana-qwen3-tts"], {
+  const child = spawn(process.execPath, [path.join(projectDir, "server.mjs")], {
     env: {
       ...process.env,
       KANA_TTS_HOST: "127.0.0.1",

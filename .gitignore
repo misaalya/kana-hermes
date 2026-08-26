@@ -45,7 +45,8 @@ yarn-error.log*
 .vercel
 
 # Python service (not part of the Next.js app)
-/services/
+# NOTE: the Qwen3-TTS adapter (services/qwen3-tts) is tracked source; only its
+# local engine checkout lives outside the repo (~/.local/share by default).
 
 # typescript
 *.tsbuildinfo
