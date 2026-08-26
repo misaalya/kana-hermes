@@ -74,3 +74,6 @@ qwen3-tts-vps-baseline.json
 
 # Server-side activity store (SQLite)
 .kana/
+
+# Local-only docs (developer/agent handoff, not published)
+/README_FOR_LLM.md
