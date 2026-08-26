@@ -62,5 +62,15 @@ reference/
 /*.png
 /snapshot.txt
 
+# Local agent/development working files (never part of the app)
+.hermes/
+.omo/
+/blob-report/
+/playwright/.cache/
+
+# Local beta-gate evidence journals
+/dogfood/
+qwen3-tts-vps-baseline.json
+
 # Server-side activity store (SQLite)
 .kana/
