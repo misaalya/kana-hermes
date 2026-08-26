@@ -112,6 +112,45 @@ function recentFirst(conversations: Conversation[]): Conversation[] {
   return [...conversations].sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
+// The user's CURRENT conversation is an explicit choice (/new, sidebar pick,
+// resume), not something a recency heuristic may re-decide. A refresh starts
+// with an EMPTY in-memory store, so "current" must be remembered by the one
+// identity that survives refreshes: the linked Hermes session key. A brand-new
+// /new conversation has no Hermes session yet, so it is remembered as a
+// fresh-blank intent instead and materializes on the next boot.
+const ACTIVE_SESSION_KEY = "kana.active-session.v1";
+
+type RememberedActiveSession = { key?: string; fresh?: boolean };
+
+function readRememberedActiveSession(): RememberedActiveSession | null {
+  try {
+    const raw = localStorage.getItem(ACTIVE_SESSION_KEY);
+    if (!raw) return null;
+    const value = JSON.parse(raw) as RememberedActiveSession;
+    if (typeof value !== "object" || value === null) return null;
+    return {
+      key: typeof value.key === "string" && value.key ? value.key : undefined,
+      fresh: value.fresh === true,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeRememberedActiveSession(value: RememberedActiveSession | null): void {
+  try {
+    if (value && (value.key || value.fresh)) localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(value));
+    else localStorage.removeItem(ACTIVE_SESSION_KEY);
+  } catch {
+    // Non-fatal: worst case a refresh falls back to recency order.
+  }
+}
+
+function rememberActiveConversation(conversation: Conversation | null): void {
+  const key = conversation?.agent?.persistentSessionId;
+  if (key) writeRememberedActiveSession({ key });
+}
+
 function createUserMessage(text: string): KanaMessage {
   return {
     id: createId("message"),
@@ -187,6 +226,18 @@ export function useKanaController(appVersion: string) {
   const [ready, setReady] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+
+  // Every selection path (/new, sidebar pick, /resume, adoption after
+  // connect, deletion fallback) ends with this conversation as active —
+  // remembering its Hermes session key keeps "current" stable across
+  // refreshes even though the local store starts empty.
+  useEffect(() => {
+    if (!activeConversationId) return;
+    const conversation = conversationsRef.current.find(
+      (item) => item.id === activeConversationId,
+    );
+    if (conversation) rememberActiveConversation(conversation);
+  }, [activeConversationId, conversations]);
   const [preferences, setPreferences] = useState<KanaPreferences>(DEFAULT_PREFERENCES);
   const [connectionState, setConnectionState] = useState<AgentConnectionState>("disconnected");
   const [busy, setBusy] = useState(false);
@@ -544,6 +595,9 @@ export function useKanaController(appVersion: string) {
       if (event.type === "session.opened") {
         openingConversationRef.current = null;
         openedConversationRef.current = conversationId;
+        writeRememberedActiveSession({
+          key: event.persistentSessionId,
+        });
         await saveConversation({
           ...conversation,
           agent: {
@@ -1146,6 +1200,9 @@ export function useKanaController(appVersion: string) {
         activeConversationIdRef.current = next.id;
         setActiveConversationId(next.id);
         openedConversationRef.current = null;
+        // No Hermes session exists for it yet; remember the INTENT so a
+        // refresh right after /new does not adopt some older session.
+        writeRememberedActiveSession({ fresh: true });
         setActivities([]);
         setStatus("New conversation ready");
         setCommandSuggestions([]);
@@ -1164,6 +1221,7 @@ export function useKanaController(appVersion: string) {
           if (target) {
             activeConversationIdRef.current = target.id;
             setActiveConversationId(target.id);
+            rememberActiveConversation(target);
             openedConversationRef.current = null;
             setActivities([]);
             setStatus(`Resumed ${target.title}`);
@@ -1267,6 +1325,7 @@ export function useKanaController(appVersion: string) {
             });
             activeConversationIdRef.current = savedBranch.id;
             setActiveConversationId(savedBranch.id);
+            rememberActiveConversation(savedBranch);
             openedConversationRef.current = savedBranch.id;
             turnConversationRef.current = null;
             setBusy(false);
@@ -1525,6 +1584,9 @@ export function useKanaController(appVersion: string) {
       if (busy || id === activeConversationId) return;
       activeConversationIdRef.current = id;
       setActiveConversationId(id);
+      rememberActiveConversation(
+        conversationsRef.current.find((item) => item.id === id) ?? null,
+      );
       openedConversationRef.current = null;
       setActivities([]);
       turnActivitiesRef.current = [];
@@ -1579,6 +1641,9 @@ export function useKanaController(appVersion: string) {
         const nextConversationId = remaining[0]?.id ?? null;
         activeConversationIdRef.current = nextConversationId;
         setActiveConversationId(nextConversationId);
+        rememberActiveConversation(
+          remaining.find((item) => item.id === nextConversationId) ?? null,
+        );
         openedConversationRef.current = null;
       }
     },
@@ -1653,7 +1718,17 @@ export function useKanaController(appVersion: string) {
       }
       // Wire contract: session.list rows arrive in true last-activity order
       // and expose no recency timestamp — started_at is creation time.
-      const { best, restOldestFirst } = planHydration(remote);
+      // The remembered current session wins over recency: a refresh must
+      // reopen whatever the user was actually viewing (/new blank included),
+      // not whichever session exchanged messages last. planHydration's
+      // Hermes-order remains only the fallback for first runs.
+      const remembered = readRememberedActiveSession();
+      const rememberedEntry =
+        remembered?.key
+          ? remote.find((entry) => entry.hermesSessionKey === remembered.key) ?? null
+          : null;
+      const { best: recencyBest, restOldestFirst } = planHydration(remote);
+      const best = rememberedEntry ?? recencyBest;
 
       let conversation = activeConversationId
         ? conversationsRef.current.find(
@@ -1685,6 +1760,15 @@ export function useKanaController(appVersion: string) {
         });
       }
 
+      if (!conversation && remembered?.fresh && !rememberedEntry) {
+        // /new intent survives refresh: materialize a blank local
+        // conversation. Its Hermes session opens lazily on the first prompt,
+        // and session.opened upgrades the remembered key at that point.
+        conversation = await conversationStore.create({
+          subtitleLanguage: preferencesRef.current.subtitleLanguage,
+        });
+        commitConversations([...conversationsRef.current, conversation]);
+      }
       if (!conversation) {
         if (best) {
           const existing = conversationsRef.current.find(
@@ -1717,6 +1801,7 @@ export function useKanaController(appVersion: string) {
         // Saved last => freshest updatedAt => pinned on top of the sidebar.
         activeConversationIdRef.current = conversation.id;
         setActiveConversationId(conversation.id);
+        rememberActiveConversation(conversation);
         openedConversationRef.current = null;
       }
 
