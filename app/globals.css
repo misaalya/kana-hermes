@@ -1,14 +1,10 @@
 @import "tailwindcss";
 
-/*
- * Design tokens — dual-tone flat palette (dark default, light via
- * [data-theme="light"]). Utilities are generated through @theme inline so
- * runtime theme switching works without reloading styles.
- */
 @theme inline {
   --color-bg: var(--bg);
   --color-raised: var(--raised);
   --color-surface: var(--surface);
+  --color-surface-strong: var(--surface-strong);
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
   --color-ink: var(--ink);
@@ -24,56 +20,117 @@
   --font-sans: var(--font-kana-sans), ui-rounded, system-ui, sans-serif;
   --font-jp: var(--font-kana-jp), var(--font-kana-sans), ui-rounded, sans-serif;
 
-  --animate-kana-pulse: kana-pulse 1.2s ease-in-out infinite;
-  --animate-kana-mark: kana-mark 1.8s ease-in-out infinite;
-  --animate-kana-glow: kana-glow 3s ease-in-out infinite;
+  --animate-kana-pulse: kana-pulse 1.6s ease-in-out infinite;
+  --animate-kana-float: kana-float 6s ease-in-out infinite;
+  --animate-kana-breathe: kana-breathe 4s ease-in-out infinite;
+  --animate-kana-in: kana-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
 :root {
-  --bg: #161616;
-  --raised: rgba(30, 30, 30, 0.88);
-  --surface: #232223;
-  --line: #303030;
-  --line-strong: #404040;
-  --ink: #ececec;
-  --ink-dim: #b4b0b2;
-  --muted: #8b8789;
-  --faint: #686466;
-  --accent: #fdc5ed;
-  --accent-hover: #ffe0f4;
-  --accent-strong: #fdc5ed;
-  --on-accent: #1c1118;
-  --danger: #e84a5f;
+  color-scheme: dark;
+  --bg: #1c1c1c;
+  --raised: #1c1c1c;
+  --surface: #242424;
+  --surface-strong: #2b2b2b;
+  --line: rgba(255, 255, 255, 0.09);
+  --line-strong: rgba(255, 255, 255, 0.16);
+  --ink: #f4f4f4;
+  --ink-dim: #c8c8c8;
+  --muted: #969696;
+  --faint: #6f6f6f;
+  --accent: #599dc6;
+  --accent-hover: #70aed2;
+  --accent-strong: #83c1e5;
+  --on-accent: #07131a;
+  --danger: #e36a76;
+  --backdrop: rgba(0, 0, 0, 0.72);
 }
 
 [data-theme="light"] {
-  --bg: #f7f2f5;
-  --raised: rgba(255, 255, 255, 0.9);
+  color-scheme: light;
+  --bg: #f4f4f2;
+  --raised: #ffffff;
   --surface: #ffffff;
-  --line: #e6dde3;
-  --line-strong: #d3c6cf;
-  --ink: #251d23;
-  --ink-dim: #5d535b;
-  --muted: #8b8088;
-  --faint: #b4aab1;
-  --accent: #f2a9d7;
-  --accent-hover: #f7c4e5;
-  --accent-strong: #a83d7f;
-  --on-accent: #33101f;
-  --danger: #d13a4f;
+  --surface-strong: #ebebe8;
+  --line: rgba(20, 20, 20, 0.1);
+  --line-strong: rgba(20, 20, 20, 0.18);
+  --ink: #1c1c1c;
+  --ink-dim: #4d4d4d;
+  --muted: #727272;
+  --faint: #9a9a9a;
+  --accent: #599dc6;
+  --accent-hover: #4b8caf;
+  --accent-strong: #356f91;
+  --on-accent: #ffffff;
+  --danger: #c84f5d;
+  --backdrop: rgba(28, 28, 28, 0.38);
+}
+
+* { border-color: var(--line); }
+
+html,
+body {
+  min-height: 100%;
+  overflow: hidden;
+}
+
+body { background: var(--bg); }
+
+button,
+input,
+select,
+textarea { font: inherit; }
+
+button,
+[role="button"] { -webkit-tap-highlight-color: transparent; }
+
+::selection { background: color-mix(in srgb, var(--accent) 35%, transparent); }
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track { background: transparent; }
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted) 45%, transparent);
+  background-clip: padding-box;
+}
+
+.kana-stage-pattern {
+  background: var(--bg);
+}
+
+.kana-panel {
+  border: 1px solid var(--line);
+  background: var(--raised);
+}
+
+.kana-focus:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 75%, transparent);
+  outline-offset: 2px;
 }
 
 @keyframes kana-pulse {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
+  50% { opacity: 0.38; }
 }
 
-@keyframes kana-mark {
-  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 18%, transparent); }
-  50% { box-shadow: 0 0 26px 6px color-mix(in srgb, var(--accent) 18%, transparent); }
+@keyframes kana-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-@keyframes kana-glow {
-  0%, 100% { box-shadow: 0 0 30px 4px color-mix(in srgb, var(--accent) 10%, transparent); }
-  50% { box-shadow: 0 0 52px 12px color-mix(in srgb, var(--accent) 16%, transparent); }
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

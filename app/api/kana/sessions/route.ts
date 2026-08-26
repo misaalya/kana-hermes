@@ -13,6 +13,7 @@ type HermesSessionRow = {
   title?: string;
   preview?: string;
   started_at?: number;
+  last_active?: number;
   message_count?: number;
   source?: string;
 };
@@ -43,6 +44,7 @@ export async function GET(request: Request): Promise<Response> {
           preview: row.preview || "",
           messageCount: row.message_count ?? 0,
           startedAt: row.started_at ?? 0,
+          lastActive: row.last_active ?? row.started_at ?? 0,
         }));
       return Response.json({ sessions }, { headers: NO_STORE });
     } catch (error) {

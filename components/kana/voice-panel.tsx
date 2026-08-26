@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   deleteKanaVoice,
   listKanaVoices,
@@ -8,7 +8,7 @@ import {
   type LibraryVoice,
 } from "@/lib/runtime/voice-library-client";
 import { convertToWav } from "@/lib/voice/audio-to-wav";
-import { btnGhost, btnPrimary, inputBase } from "./ui";
+import { btnGhost, btnPrimary, btnSecondary, inputBase } from "./ui";
 
 type VoicePanelProps = {
   selectedVoiceId: string;
@@ -17,27 +17,17 @@ type VoicePanelProps = {
 
 type EngineState = "ready" | "loading" | "error" | "stopped";
 
-// Per-voice accent dot colors. The default "Kana" voice is white; new clones
-// cycle through the remaining palette so every radio is visually distinct.
-const VOICE_DOTS = ["bg-white", "bg-rose-400", "bg-amber-400", "bg-emerald-400", "bg-sky-400", "bg-violet-400"];
-
-function voiceDotColor(voice: LibraryVoice, index: number): string {
-  if (voice.isDefault) return VOICE_DOTS[0];
-  return VOICE_DOTS[1 + (index % (VOICE_DOTS.length - 1))];
-}
-
 const ENGINE_LINES: Record<EngineState, string> = {
   ready: "",
-  loading: "Mesin suara sedang menyiapkan model — suara terdaftar otomatis begitu siap.",
-  error: "Mesin suara gagal dimuat (kemungkinan cache model hilang/rusak). Perbaiki lewat panel mesin suara di bawah.",
-  stopped: "Mesin suara belum menyala. Suara terdaftar otomatis saat pertama dibutuhkan.",
+  loading: "The voice engine is getting ready. Your voices will appear automatically when it finishes.",
+  error: "The voice engine could not start. Open Connection to check it.",
+  stopped: "The voice engine is asleep. Kana will start it when voice is needed.",
 };
 
-const ENGINE_HINT_PENDING = "menunggu mesin suara siap…";
+const ENGINE_HINT_PENDING = "Waiting for the voice engine…";
 
-function VoiceRadio({
+function VoiceChoice({
   active,
-  dotColor,
   label,
   hint,
   selectable,
@@ -46,7 +36,6 @@ function VoiceRadio({
   onDelete,
 }: {
   active: boolean;
-  dotColor: string;
   label: string;
   hint: string | null;
   selectable: boolean;
@@ -59,47 +48,35 @@ function VoiceRadio({
       role="radio"
       aria-checked={active}
       aria-disabled={!selectable}
-      tabIndex={selectable ? 0 : -1}
-      onKeyDown={(event) => {
-        if ((event.key === "Enter" || event.key === " ") && selectable) {
-          event.preventDefault();
-          onSelect();
-        }
-      }}
-      onClick={() => {
-        if (selectable) onSelect();
-      }}
-      className={`flex items-center justify-between gap-3 rounded-xl border px-3.5 py-3 transition-all duration-150 ${
+      className={`flex min-h-20 items-stretch overflow-hidden rounded-xl border transition-colors ${
         active
-          ? "border-accent/70 bg-white/8 shadow-[0_0_0_1px_rgba(255,255,255,0.15)]"
-          : "border-line bg-surface hover:border-line-strong hover:bg-white/5"
-      } ${selectable ? "cursor-pointer" : "cursor-not-allowed opacity-60"}`}
+          ? "border-accent bg-surface-strong"
+          : "border-line bg-surface-strong"
+      } ${selectable ? "" : "opacity-60"}`}
     >
-      <span className="flex min-w-0 items-center gap-3">
-        <span
-          className={`grid size-[22px] shrink-0 place-items-center rounded-full border-2 transition-all duration-150 ${
-            active ? "scale-110 border-white/80" : "border-line-strong"
-          }`}
-        >
-          <span className={`size-3 rounded-full transition-all duration-150 ${active ? "scale-100" : "scale-0"} ${dotColor}`} />
-        </span>
+      <button
+        type="button"
+        disabled={!selectable}
+        onClick={onSelect}
+        className="kana-focus flex min-w-0 flex-1 items-center justify-between gap-3 px-4 py-3 text-left disabled:cursor-not-allowed"
+      >
         <span className="min-w-0">
-          <span className={`block truncate text-sm font-medium transition-colors ${active ? "text-ink" : "text-ink-dim"}`}>
+          <span className={`block truncate text-sm font-semibold ${active ? "text-ink" : "text-ink-dim"}`}>
             {label}
           </span>
           {hint ? <span className="block truncate text-[10px] text-faint">{hint}</span> : null}
         </span>
-      </span>
+        <span className={`shrink-0 text-[10px] font-bold ${active ? "text-accent" : "text-faint"}`}>
+          {active ? "Selected" : selectable ? "Choose" : "Pending"}
+        </span>
+      </button>
       {deletable ? (
         <button
           type="button"
-          className="shrink-0 text-[11px] font-medium text-faint transition-colors hover:text-danger"
-          onClick={(event) => {
-            event.stopPropagation();
-            onDelete();
-          }}
+          className="kana-focus shrink-0 border-l border-line px-3 text-[10px] font-semibold text-faint transition-colors hover:bg-danger/10 hover:text-danger"
+          onClick={onDelete}
         >
-          Hapus
+          Remove
         </button>
       ) : null}
     </div>
@@ -123,6 +100,8 @@ export function VoicePanel({
   const [cloneName, setCloneName] = useState("");
   const [cloneAudio, setCloneAudio] = useState<File | null>(null);
   const [cloneConsent, setCloneConsent] = useState(false);
+  const [addingVoice, setAddingVoice] = useState(false);
+  const audioInputRef = useRef<HTMLInputElement | null>(null);
 
   const refresh = useCallback(async () => {
     setLoadingVoices(true);
@@ -168,7 +147,7 @@ export function VoicePanel({
 
   const upload = async () => {
     if (!cloneAudio || !cloneName.trim() || !cloneConsent) {
-      setNotice("Isi nama, pilih audio referensi, dan centang persetujuan dulu.");
+      setNotice("Add a name, choose a voice sample, and confirm you have permission to use it.");
       return;
     }
     setBusy(true);
@@ -179,13 +158,15 @@ export function VoicePanel({
       if (result.voice.registered && result.voice.serviceVoiceId) {
         onVoiceSelect(result.voice.serviceVoiceId);
       }
-      setNotice(result.warning ?? `Suara "${result.voice.name}" tersimpan.`);
+      setNotice(result.warning ?? `Voice "${result.voice.name}" is ready.`);
       setCloneName("");
       setCloneAudio(null);
       setCloneConsent(false);
+      setAddingVoice(false);
+      if (audioInputRef.current) audioInputRef.current.value = "";
       await refresh();
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Voice clone gagal.");
+      setNotice(error instanceof Error ? error.message : "The voice could not be added.");
     } finally {
       setBusy(false);
     }
@@ -197,7 +178,7 @@ export function VoicePanel({
       await deleteKanaVoice(id);
       await refresh();
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Hapus suara gagal.");
+      setNotice(error instanceof Error ? error.message : "The voice could not be removed.");
     } finally {
       setBusy(false);
     }
@@ -212,28 +193,29 @@ export function VoicePanel({
       : (voices.find((voice) => voice.registered)?.serviceVoiceId ?? "");
 
   return (
-    <div className="flex flex-col gap-3">
-      <fieldset className="flex flex-col gap-1.5" role="radiogroup" aria-label="Pilih suara Kana">
-        <div className="mb-1 flex items-center justify-between">
-          <legend className="text-[11px] font-bold tracking-wider text-ink-dim uppercase">Voice</legend>
-          <button type="button" className={btnGhost} onClick={() => void refresh()}>
-            Refresh
-          </button>
-        </div>
+    <div>
+      <div className="mb-3">
+        <h4 className="text-xs font-bold text-ink">Voice library</h4>
+        <p className="mt-1 text-[10px] leading-relaxed text-muted">
+          Choose a ready voice. Kana uses it for every new Japanese reply.
+        </p>
+      </div>
+
+      <fieldset className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Choose Kana's voice">
+        <legend className="sr-only">Available voices</legend>
         {loadingVoices && voices.length === 0 ? (
-          <p className="rounded-xl border border-line bg-surface px-3.5 py-2.5 text-[11px] text-muted">Memuat suara…</p>
+          <p className="rounded-xl border border-line bg-surface-strong px-4 py-5 text-[11px] text-muted sm:col-span-2">Loading voices…</p>
         ) : voices.length === 0 ? (
-          <p className="rounded-xl border border-line bg-surface px-3.5 py-2.5 text-[11px] text-muted">
-            Belum ada suara. Clone suaramu lewat formulir di bawah.
+          <p className="rounded-xl border border-line bg-surface-strong px-4 py-5 text-[11px] text-muted sm:col-span-2">
+            No voices yet. Add a voice sample below.
           </p>
         ) : (
-          voices.map((voice, index) => (
-            <VoiceRadio
+          voices.map((voice) => (
+            <VoiceChoice
               key={voice.id}
               active={Boolean(voice.registered && voice.serviceVoiceId === effectiveSelected)}
-              dotColor={voiceDotColor(voice, index)}
-              label={voice.name + (voice.isDefault ? " (bawaan)" : "")}
-              hint={voice.registered ? null : ENGINE_HINT_PENDING}
+              label={voice.name}
+              hint={voice.registered ? (voice.isDefault ? "Included with Kana" : "Your voice") : ENGINE_HINT_PENDING}
               selectable={voice.registered}
               deletable={!voice.isDefault}
               onSelect={() => {
@@ -246,42 +228,73 @@ export function VoicePanel({
       </fieldset>
 
       {engineState !== "ready" ? (
-        <p className={`text-[10px] leading-relaxed ${engineState === "error" ? "text-danger" : "text-faint"}`}>
+        <p className={`mt-3 text-[10px] leading-relaxed ${engineState === "error" ? "text-danger" : "text-faint"}`}>
           {ENGINE_LINES[engineState]}
         </p>
       ) : null}
 
-      <details className="rounded-xl border border-line px-3 py-2.5">
-        <summary className="cursor-pointer text-[11px] font-bold text-ink-dim marker:content-none [&::-webkit-details-marker]:hidden">
-          Clone suara baru
-        </summary>
-        <div className="mt-2.5 flex flex-col gap-2">
-          <input
-            type="text"
-            className={inputBase}
-            placeholder="Nama suara (mis. misa-voice)"
-            value={cloneName}
-            onChange={(event) => setCloneName(event.target.value)}
-          />
-          <input
-            type="file"
-            accept="audio/*"
-            className="block w-full text-[11px] text-muted file:mr-2 file:rounded-lg file:border file:border-line file:bg-bg file:px-2 file:py-1 file:text-[11px]"
-            onChange={(event) => setCloneAudio(event.target.files?.[0] ?? null)}
-          />
-          <label className="flex items-center gap-2 text-[10px] text-faint">
+      {!addingVoice ? (
+        <button
+          type="button"
+          className="kana-focus mt-4 flex w-full items-center justify-between rounded-xl border border-line bg-surface-strong px-4 py-3 text-left transition-colors hover:border-accent/45"
+          onClick={() => setAddingVoice(true)}
+        >
+          <span>
+            <span className="block text-xs font-bold text-ink">Add your own voice</span>
+            <span className="mt-0.5 block text-[10px] text-muted">Use one clear audio sample that you have permission to use.</span>
+          </span>
+          <span className="text-[10px] font-bold text-accent">Add sample</span>
+        </button>
+      ) : (
+        <section className="mt-4 rounded-xl border border-accent/35 bg-surface-strong p-4" aria-label="Add a voice sample">
+          <div className="mb-4 flex items-start justify-between gap-4">
+            <div>
+              <h4 className="text-xs font-bold text-ink">Add your voice</h4>
+              <p className="mt-1 text-[10px] leading-relaxed text-muted">A clean sample with one speaker gives the best result.</p>
+            </div>
+            <button type="button" className={btnGhost} onClick={() => setAddingVoice(false)}>Cancel</button>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="grid gap-1.5">
+              <span className="text-[10px] font-bold text-muted">Voice name</span>
+              <input
+                type="text"
+                className={inputBase}
+                placeholder="For example: My voice"
+                value={cloneName}
+                onChange={(event) => setCloneName(event.target.value)}
+              />
+            </label>
+            <div className="grid gap-1.5">
+              <span className="text-[10px] font-bold text-muted">Audio sample</span>
+              <input
+                ref={audioInputRef}
+                type="file"
+                accept="audio/*"
+                className="sr-only"
+                onChange={(event) => setCloneAudio(event.target.files?.[0] ?? null)}
+              />
+              <button type="button" className={`${btnSecondary} justify-start overflow-hidden`} onClick={() => audioInputRef.current?.click()}>
+                <span className="truncate">{cloneAudio?.name ?? "Choose audio file"}</span>
+              </button>
+            </div>
+          </div>
+          <label className="mt-3 flex items-start gap-2 text-[10px] leading-relaxed text-muted">
             <input
               type="checkbox"
+              className="mt-0.5 accent-[var(--accent)]"
               checked={cloneConsent}
               onChange={(event) => setCloneConsent(event.target.checked)}
             />
-            Audio ini adalah suaraku / aku punya izin untuk menggunakannya.
+            This is my voice, or I have permission to use it.
           </label>
-          <button type="button" className={btnPrimary} disabled={busy} onClick={() => void upload()}>
-            {busy ? "Menyimpan…" : "Clone"}
-          </button>
-        </div>
-      </details>
+          <div className="mt-4 flex justify-end">
+            <button type="button" className={btnPrimary} disabled={busy || !cloneAudio || !cloneName.trim() || !cloneConsent} onClick={() => void upload()}>
+              {busy ? "Preparing voice…" : "Add to library"}
+            </button>
+          </div>
+        </section>
+      )}
       <p className="min-h-4 text-[11px] text-muted">{notice ?? ""}</p>
     </div>
   );

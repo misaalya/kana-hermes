@@ -24,6 +24,17 @@ import {
 } from "@/lib/backup/kana-backup";
 import { MemoryConversationStore } from "@/lib/conversation/memory-conversation-store";
 import {
+  clearActiveConversationPointer,
+  conversationFromHermesEntry,
+  freshConversationFromPointer,
+  pointerFromConversation,
+  readActiveConversationPointer,
+  rememberedHermesEntry,
+  writeActiveConversationPointer,
+  type ActiveConversationPointer,
+  type HermesConversationDirectoryEntry,
+} from "@/lib/conversation/active-conversation";
+import {
   createId,
   type Conversation,
   type KanaMessage,
@@ -346,7 +357,7 @@ export function useKanaController(appVersion: string) {
   >([]);
   const fetchDebugIdRef = useRef(0);
   const [hermesSessions, setHermesSessions] = useState<
-    Array<{ hermesSessionKey: string; title: string; messageCount: number; startedAt: number }>
+    HermesConversationDirectoryEntry[]
   >([]);
   const [commandSuggestions, setCommandSuggestions] = useState<AgentCommandSuggestion[]>([]);
   const [commandSuggestionsLoading, setCommandSuggestionsLoading] = useState(false);
@@ -359,6 +370,7 @@ export function useKanaController(appVersion: string) {
   // ---- Refs ----
   const conversationsRef = useRef<Conversation[]>([]);
   const activeConversationIdRef = useRef<string | null>(null);
+  const activeConversationPointerRef = useRef<ActiveConversationPointer | null>(null);
   const preferencesRef = useRef<KanaPreferences>(DEFAULT_PREFERENCES);
   const agentRef = useRef<AgentClient | null>(null);
   const agentKeyRef = useRef("");
@@ -369,6 +381,7 @@ export function useKanaController(appVersion: string) {
   const initializationRef = useRef<Promise<{
     storedConversations: Conversation[];
     storageWarning: string | null;
+    storedPointer: ActiveConversationPointer | null;
   }> | null>(null);
   const completionRequestRef = useRef(0);
   const lastErrorMessageRef = useRef<string | null>(null);
@@ -479,9 +492,11 @@ export function useKanaController(appVersion: string) {
     [],
   );
 
-  const saveConversation = useCallback(
-    async (conversation: Conversation) => {
-      const updated = { ...conversation, updatedAt: Date.now() };
+  const persistConversation = useCallback(
+    async (conversation: Conversation, touchRecency: boolean) => {
+      const updated = touchRecency
+        ? { ...conversation, updatedAt: Date.now() }
+        : conversation;
       const next = conversationsRef.current.some(
         (item) => item.id === updated.id,
       )
@@ -501,6 +516,43 @@ export function useKanaController(appVersion: string) {
     },
     [commitConversations, conversationStore],
   );
+
+  const saveConversation = useCallback(
+    async (conversation: Conversation) => {
+      const saved = await persistConversation(conversation, true);
+      if (activeConversationIdRef.current === saved.id) {
+        activeConversationPointerRef.current = {
+          version: 1,
+          conversationId: saved.id,
+          title: saved.title,
+          subtitleLanguageAtCreation: saved.subtitleLanguageAtCreation,
+          createdAt: saved.createdAt,
+          ...(saved.agent?.persistentSessionId
+            ? { persistentSessionId: saved.agent.persistentSessionId }
+            : {}),
+        };
+        writeActiveConversationPointer(saved);
+      }
+      return saved;
+    },
+    [persistConversation],
+  );
+
+  const rememberConversation = useCallback((conversation: Conversation) => {
+    activeConversationPointerRef.current = {
+      version: 1,
+      conversationId: conversation.id,
+      title: conversation.title,
+      subtitleLanguageAtCreation: conversation.subtitleLanguageAtCreation,
+      createdAt: conversation.createdAt,
+      ...(conversation.agent?.persistentSessionId
+        ? { persistentSessionId: conversation.agent.persistentSessionId }
+        : {}),
+    };
+    activeConversationIdRef.current = conversation.id;
+    setActiveConversationId(conversation.id);
+    writeActiveConversationPointer(conversation);
+  }, []);
 
   // Hold-UX plumbing: a reply stays invisible while its voice synthesizes.
   // heldMessageRef is the single pending reply (abort/disconnect flush it);
@@ -637,10 +689,10 @@ export function useKanaController(appVersion: string) {
           return;
         }
 
-        await saveConversation({
+        await persistConversation({
           ...target,
           messages: mergeRestoredMessages(messages, target.messages),
-        });
+        }, false);
         for (const turn of turns) {
           void fetch("/api/kana/activities", {
             method: "PUT",
@@ -659,7 +711,7 @@ export function useKanaController(appVersion: string) {
         setFetchingFromServer(false);
       }
     },
-    [recordFetchDebug, reportError, saveConversation],
+    [persistConversation, recordFetchDebug, reportError],
   );
 
   // ---- Agent event handling ----
@@ -679,7 +731,7 @@ export function useKanaController(appVersion: string) {
       if (event.type === "session.opened") {
         openingConversationRef.current = null;
         openedConversationRef.current = conversationId;
-        await saveConversation({
+        const linked = await persistConversation({
           ...conversation,
           agent: {
             provider: "hermes",
@@ -693,12 +745,21 @@ export function useKanaController(appVersion: string) {
                 }
               : {}),
           },
-        });
+        }, false);
+        if (activeConversationIdRef.current === linked.id) {
+          rememberConversation(linked);
+        }
         return;
       }
 
       if (event.type === "session.updated" && event.title) {
-        await saveConversation({ ...conversation, title: event.title });
+        const titled = await persistConversation(
+          { ...conversation, title: event.title },
+          false,
+        );
+        if (activeConversationIdRef.current === titled.id) {
+          rememberConversation(titled);
+        }
         return;
       }
 
@@ -754,6 +815,15 @@ export function useKanaController(appVersion: string) {
             heldMessageRef.current = null;
             await commitAssistantMessage(conversation.id, assistantMessage);
           };
+          // Voice may have been switched off while a previous spoken reply
+          // was still finishing. In text-only mode never instantiate or call
+          // the TTS provider; release this response immediately instead.
+          if (!preferencesRef.current.voiceEnabled) {
+            avatarController.presentEmotion(assistantMessage.emotion);
+            await commitOnce();
+            setStatus("Ready when you are");
+            return;
+          }
           return getVoice()
             .speak({
               text: event.response.speech_ja,
@@ -786,7 +856,14 @@ export function useKanaController(appVersion: string) {
         });
       }
     },
-    [avatarController, commitAssistantMessage, flushHeldMessage, getVoice, reportError],
+    [
+      avatarController,
+      commitAssistantMessage,
+      getVoice,
+      persistConversation,
+      rememberConversation,
+      reportError,
+    ],
   );
 
   const handleAgentEvent = useCallback(
@@ -1069,10 +1146,13 @@ export function useKanaController(appVersion: string) {
             (item) => item.id === conversationId,
           );
           if (conversation?.agent) {
-            void saveConversation({
-              ...conversation,
-              agent: { ...conversation.agent, status: "missing" },
-            });
+            void persistConversation(
+              {
+                ...conversation,
+                agent: { ...conversation.agent, status: "missing" },
+              },
+              false,
+            );
           }
           openingConversationRef.current = null;
           openedConversationRef.current = null;
@@ -1084,9 +1164,10 @@ export function useKanaController(appVersion: string) {
     [
       addActivity,
       avatarController,
+      flushHeldMessage,
+      persistConversation,
       reportError,
       restoreConversationTranscript,
-      saveConversation,
       updateConversationFromEvent,
     ],
   );
@@ -1131,17 +1212,53 @@ export function useKanaController(appVersion: string) {
     const storedPreferences = preferencesStore.load();
 
     initializationRef.current ??= (async () => {
-      // Conversations live in Hermes; the in-memory store starts empty and is
-      // hydrated from /api/kana/sessions once the agent connects
-      // (see connectAgent). No "First meeting" stub — that was IndexedDB-era.
-      const storedConversations: Conversation[] = [];
+      // Hermes remains transcript authority. The browser stores only which
+      // conversation was selected so refresh can return to that exact session;
+      // a fresh, not-yet-linked conversation is reconstructed as an empty
+      // local placeholder until Hermes opens it.
+      let storedPointer = readActiveConversationPointer();
+      const storedFreshConversation = freshConversationFromPointer(storedPointer);
+      let storedConversations: Conversation[];
+      if (storedFreshConversation) {
+        storedConversations = [storedFreshConversation];
+      } else if (storedPointer?.persistentSessionId) {
+        // Restore the selected linked conversation as a lightweight local
+        // handle immediately. Its authoritative transcript is still loaded
+        // from Hermes after the automatic connection succeeds, but the local
+        // composer must remain editable while that connection is starting.
+        storedConversations = [{
+          id: storedPointer.conversationId,
+          title: storedPointer.title,
+          messages: [],
+          subtitleLanguageAtCreation:
+            storedPointer.subtitleLanguageAtCreation,
+          agent: {
+            provider: "hermes",
+            persistentSessionId: storedPointer.persistentSessionId,
+            status: "linked",
+            relationship: "primary",
+          },
+          createdAt: storedPointer.createdAt,
+          updatedAt: storedPointer.createdAt,
+        }];
+      } else {
+        // A brand-new browser still needs a local conversation before Hermes
+        // is available. Previously activeConversationId stayed null here,
+        // making the controlled message box discard every typed character.
+        const conversation = await conversationStore.create({
+          subtitleLanguage: storedPreferences.subtitleLanguage,
+        });
+        storedPointer = pointerFromConversation(conversation);
+        writeActiveConversationPointer(conversation);
+        storedConversations = [conversation];
+      }
       const storageWarning = [
         preferencesStore.consumeWarning(),
         conversationStore.consumeWarning(),
       ]
         .filter(Boolean)
         .join(" ") || null;
-      return { storedConversations, storageWarning };
+      return { storedConversations, storageWarning, storedPointer };
     })();
 
     const timeout = globalThis.setTimeout(() => {
@@ -1155,11 +1272,12 @@ export function useKanaController(appVersion: string) {
     }, 30_000);
 
     void initializationRef.current!.then(
-      ({ storedConversations, storageWarning }) => {
+      ({ storedConversations, storageWarning, storedPointer }) => {
         if (!mounted || fellBack) return;
         globalThis.clearTimeout(timeout);
         const initialConversationId = storedConversations[0]?.id ?? null;
         preferencesRef.current = storedPreferences;
+        activeConversationPointerRef.current = storedPointer;
         activeConversationIdRef.current = initialConversationId;
         setPreferences(storedPreferences);
         commitConversations(storedConversations);
@@ -1265,8 +1383,7 @@ export function useKanaController(appVersion: string) {
             ),
           ],
         });
-        activeConversationIdRef.current = next.id;
-        setActiveConversationId(next.id);
+        rememberConversation(next);
         openedConversationRef.current = null;
         setActivities([]);
         setStatus("New conversation ready");
@@ -1284,8 +1401,7 @@ export function useKanaController(appVersion: string) {
               item.title.toLowerCase().includes(needle),
           );
           if (target) {
-            activeConversationIdRef.current = target.id;
-            setActiveConversationId(target.id);
+            rememberConversation(target);
             openedConversationRef.current = null;
             setActivities([]);
             setStatus(`Resumed ${target.title}`);
@@ -1387,8 +1503,7 @@ export function useKanaController(appVersion: string) {
                 parentConversationId: nextConversation.id,
               },
             });
-            activeConversationIdRef.current = savedBranch.id;
-            setActiveConversationId(savedBranch.id);
+            rememberConversation(savedBranch);
             openedConversationRef.current = savedBranch.id;
             turnConversationRef.current = null;
             setBusy(false);
@@ -1453,6 +1568,7 @@ export function useKanaController(appVersion: string) {
       conversationStore,
       ensureAgent,
       pendingInput,
+      rememberConversation,
       reportError,
       saveConversation,
     ],
@@ -1558,10 +1674,13 @@ export function useKanaController(appVersion: string) {
             (item) => item.id === conversationId,
           );
           if (current?.agent && current.agent.status !== "missing") {
-            void saveConversation({
-              ...current,
-              agent: { ...current.agent, status: "missing" },
-            });
+            void persistConversation(
+              {
+                ...current,
+                agent: { ...current.agent, status: "missing" },
+              },
+              false,
+            );
           }
         }
       } finally {
@@ -1570,7 +1689,7 @@ export function useKanaController(appVersion: string) {
         }
       }
     },
-    [ensureAgent, saveConversation],
+    [ensureAgent, persistConversation],
   );
 
   const clearCommandSuggestions = useCallback(() => {
@@ -1596,64 +1715,58 @@ export function useKanaController(appVersion: string) {
       subtitleLanguage: preferencesRef.current.subtitleLanguage,
     });
     commitConversations([...conversationsRef.current, conversation]);
-    activeConversationIdRef.current = conversation.id;
-    setActiveConversationId(conversation.id);
+    rememberConversation(conversation);
     openedConversationRef.current = null;
     setActivities([]);
     setError(null);
-  }, [busy, commitConversations, conversationStore]);
+  }, [busy, commitConversations, conversationStore, rememberConversation]);
 
   // ---- Cross-browser Hermes sessions ----
   // Sessions created on other surfaces/browsers have no local IndexedDB
   // record. They are listed from Hermes (source=kana) and "adopted" into a
   // lightweight local record on first open, linked via persistentSessionId.
   const adoptHermesSession = useCallback(
-    async (hermesSessionKey: string, title: string) => {
+    async (entry: HermesConversationDirectoryEntry) => {
       if (busy) return;
       const existing = conversationsRef.current.find(
-        (item) => item.agent?.persistentSessionId === hermesSessionKey,
+        (item) => item.agent?.persistentSessionId === entry.hermesSessionKey,
       );
       turnActivitiesRef.current = [];
       setActivities([]);
       if (existing) {
-        activeConversationIdRef.current = existing.id;
-        setActiveConversationId(existing.id);
+        rememberConversation(existing);
         openedConversationRef.current = null;
+        await ensureAgent(existing);
         return;
       }
-      const created = await conversationStore.create({
-        title: title || "Imported session",
-        subtitleLanguage: preferencesRef.current.subtitleLanguage,
-      });
-      const saved = await saveConversation({
-        ...created,
-        agent: {
-          provider: "hermes",
-          persistentSessionId: hermesSessionKey,
-          status: "linked",
-          relationship: "primary",
-        },
-      });
-      activeConversationIdRef.current = saved.id;
-      setActiveConversationId(saved.id);
+      const saved = await persistConversation(
+        conversationFromHermesEntry(
+          entry,
+          preferencesRef.current.subtitleLanguage,
+          createId("conversation"),
+        ),
+        false,
+      );
+      rememberConversation(saved);
       openedConversationRef.current = null;
       setActivities([]);
+      await ensureAgent(saved);
     },
-    [busy, conversationStore, saveConversation],
+    [busy, ensureAgent, persistConversation, rememberConversation],
   );
 
   const selectConversation = useCallback(
     (id: string) => {
       if (busy || id === activeConversationId) return;
-      activeConversationIdRef.current = id;
-      setActiveConversationId(id);
+      const target = conversationsRef.current.find((item) => item.id === id);
+      if (!target) return;
+      rememberConversation(target);
       openedConversationRef.current = null;
       setActivities([]);
       turnActivitiesRef.current = [];
       setError(null);
       cleanupVoice();
       avatarController.presentEmotion("neutral");
-      const target = conversationsRef.current.find((item) => item.id === id);
       if (!target?.agent?.persistentSessionId) return;
       // Opening the linked session is what makes openSession emit
       // history.restored — without it selection shows tool activity but no
@@ -1666,20 +1779,29 @@ export function useKanaController(appVersion: string) {
         }
       })();
     },
-    [activeConversationId, avatarController, busy, cleanupVoice, ensureAgent],
+    [
+      activeConversationId,
+      avatarController,
+      busy,
+      cleanupVoice,
+      ensureAgent,
+      rememberConversation,
+    ],
   );
 
   const renameConversation = useCallback(
     async (id: string, title: string) => {
-      const renamed = await conversationStore.rename(id, title);
-      if (!renamed) return;
-      commitConversations(
-        conversationsRef.current.map((item) =>
-          item.id === id ? renamed : item,
-        ),
+      const existing = conversationsRef.current.find((item) => item.id === id);
+      if (!existing) return;
+      const renamed = await persistConversation(
+        { ...existing, title },
+        false,
       );
+      if (activeConversationIdRef.current === id) {
+        rememberConversation(renamed);
+      }
     },
-    [commitConversations, conversationStore],
+    [persistConversation, rememberConversation],
   );
 
   const deleteConversation = useCallback(
@@ -1698,26 +1820,56 @@ export function useKanaController(appVersion: string) {
       }
       commitConversations(remaining);
       if (activeConversationId === id) {
-        const nextConversationId = remaining[0]?.id ?? null;
-        activeConversationIdRef.current = nextConversationId;
-        setActiveConversationId(nextConversationId);
+        const nextConversation = remaining[0] ?? null;
+        if (nextConversation) {
+          rememberConversation(nextConversation);
+        } else {
+          activeConversationIdRef.current = null;
+          activeConversationPointerRef.current = null;
+          setActiveConversationId(null);
+          clearActiveConversationPointer();
+        }
         openedConversationRef.current = null;
       }
     },
-    [activeConversationId, busy, commitConversations, conversationStore],
+    [
+      activeConversationId,
+      busy,
+      commitConversations,
+      conversationStore,
+      rememberConversation,
+    ],
   );
 
   // ---- Preferences management ----
   const savePreferences = useCallback(
     async (next: KanaPreferences) => {
       next = normalizeKanaPreferences(next);
+      const previous = preferencesRef.current;
       preferencesRef.current = next;
       setPreferences(next);
       preferencesStore.save(next);
-      cleanupVoice();
-      await configureAvatar(next, undefined, true);
+
+      const voiceChanged =
+        previous.voiceEnabled !== next.voiceEnabled ||
+        previous.qwen3Tts.baseUrl !== next.qwen3Tts.baseUrl ||
+        previous.qwen3Tts.voiceId !== next.qwen3Tts.voiceId ||
+        previous.qwen3Tts.deliveryMode !== next.qwen3Tts.deliveryMode;
+      if (voiceChanged) cleanupVoice();
+      if (previous.voiceEnabled && !next.voiceEnabled) {
+        // Turning voice off is an immediate text-only transition: stop any
+        // active synthesis/playback and reveal a response that was waiting
+        // for audio instead of leaving the chat behind the TTS pipeline.
+        flushHeldMessage();
+        setStatus("Ready when you are");
+      }
+
+      const avatarChanged =
+        previous.avatarMode !== next.avatarMode ||
+        JSON.stringify(previous.live2d) !== JSON.stringify(next.live2d);
+      if (avatarChanged) await configureAvatar(next, undefined, true);
     },
-    [cleanupVoice, configureAvatar, preferencesStore],
+    [cleanupVoice, configureAvatar, flushHeldMessage, preferencesStore],
   );
 
   // ---- Backup ----
@@ -1758,75 +1910,94 @@ export function useKanaController(appVersion: string) {
   const connectAgent = useCallback(async () => {
     setError(null);
     try {
-      // Hydrate the session directory BEFORE choosing a conversation: after
-      // a refresh (or in a fresh browser) memory is empty, and continuing the
-      // most recent non-empty Hermes conversation beats minting a throwaway
-      // blank session on every visit.
-      let remote: Array<{
-        hermesSessionKey: string;
-        title: string;
-        messageCount: number;
-        startedAt: number;
-      }> = [];
+      // Selection and recency are separate concerns. The stored pointer says
+      // which conversation the user was viewing; Hermes last_active controls
+      // the history ordering. Merely opening/restoring a session never makes
+      // it the most recently interacted conversation.
+      let remote: HermesConversationDirectoryEntry[] = [];
+      let directoryLoaded = false;
       try {
         const directory = (await fetch("/api/kana/sessions", {
           credentials: "same-origin",
         }).then((response) => (response.ok ? response.json() : null))) as {
-          sessions?: Array<{
-            hermesSessionKey: string;
-            title: string;
-            messageCount: number;
-            startedAt: number;
-          }>;
+          sessions?: HermesConversationDirectoryEntry[];
         } | null;
-        remote = directory?.sessions ?? [];
+        remote = [...(directory?.sessions ?? [])].sort(
+          (a, b) => b.lastActive - a.lastActive,
+        );
+        directoryLoaded = directory !== null;
+        setHermesSessions(remote);
       } catch {
         /* directory hydration is best-effort */
       }
 
-      let conversation = activeConversationId
+      let conversation = activeConversationIdRef.current
         ? conversationsRef.current.find(
-            (item) => item.id === activeConversationId,
+            (item) => item.id === activeConversationIdRef.current,
           ) ?? null
         : null;
 
       if (!conversation) {
-        const candidates = remote
-          .filter((entry) => entry.messageCount > 0)
-          .sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0));
-        const best = candidates[0];
-        if (best) {
+        const pointer = activeConversationPointerRef.current;
+        const selectedEntry = rememberedHermesEntry(pointer, remote);
+        const fallbackEntry = remote.find((entry) => entry.messageCount > 0);
+        const entry = selectedEntry ?? fallbackEntry;
+
+        if (entry) {
           const existing = conversationsRef.current.find(
             (item) =>
-              item.agent?.persistentSessionId === best.hermesSessionKey,
+              item.agent?.persistentSessionId === entry.hermesSessionKey,
           );
           if (existing) {
             conversation = existing;
           } else {
-            const created = await conversationStore.create({
-              title: best.title || "Untitled",
-              subtitleLanguage: preferencesRef.current.subtitleLanguage,
-            });
-            conversation = await saveConversation({
-              ...created,
+            conversation = await persistConversation(
+              conversationFromHermesEntry(
+                entry,
+                preferencesRef.current.subtitleLanguage,
+                pointer?.persistentSessionId === entry.hermesSessionKey
+                  ? pointer.conversationId
+                  : createId("conversation"),
+              ),
+              false,
+            );
+          }
+          rememberConversation(conversation);
+          openedConversationRef.current = null;
+        } else {
+          if (pointer?.persistentSessionId && !directoryLoaded) {
+            conversation = {
+              id: pointer.conversationId,
+              title: pointer.title,
+              messages: [],
+              subtitleLanguageAtCreation:
+                pointer.subtitleLanguageAtCreation,
               agent: {
                 provider: "hermes",
-                persistentSessionId: best.hermesSessionKey,
+                persistentSessionId: pointer.persistentSessionId,
                 status: "linked",
                 relationship: "primary",
               },
-            });
+              createdAt: pointer.createdAt,
+              updatedAt: pointer.createdAt,
+            };
+            await persistConversation(conversation, false);
+          } else if (pointer?.persistentSessionId) {
+            activeConversationPointerRef.current = null;
+            clearActiveConversationPointer();
           }
-          activeConversationIdRef.current = conversation.id;
-          setActiveConversationId(conversation.id);
-          openedConversationRef.current = null;
-        } else {
-          conversation = await conversationStore.create({
-            subtitleLanguage: preferencesRef.current.subtitleLanguage,
-          });
-          commitConversations([...conversationsRef.current, conversation]);
-          activeConversationIdRef.current = conversation.id;
-          setActiveConversationId(conversation.id);
+          if (!conversation) {
+            const fresh = freshConversationFromPointer(pointer);
+            if (fresh) {
+              conversation = fresh;
+              await persistConversation(conversation, false);
+            } else {
+              conversation = await conversationStore.create({
+                subtitleLanguage: preferencesRef.current.subtitleLanguage,
+              });
+            }
+          }
+          rememberConversation(conversation);
           openedConversationRef.current = null;
         }
       }
@@ -1840,19 +2011,14 @@ export function useKanaController(appVersion: string) {
       );
       for (const entry of remote) {
         if (known.has(entry.hermesSessionKey)) continue;
-        const created = await conversationStore.create({
-          title: entry.title || "Untitled",
-          subtitleLanguage: preferencesRef.current.subtitleLanguage,
-        });
-        await saveConversation({
-          ...created,
-          agent: {
-            provider: "hermes",
-            persistentSessionId: entry.hermesSessionKey,
-            status: "linked",
-            relationship: "primary",
-          },
-        });
+        await persistConversation(
+          conversationFromHermesEntry(
+            entry,
+            preferencesRef.current.subtitleLanguage,
+            createId("conversation"),
+          ),
+          false,
+        );
       }
       setStatus("Connected to Hermes");
     } catch (connectError) {
@@ -1863,7 +2029,13 @@ export function useKanaController(appVersion: string) {
           : "Could not connect to the agent.",
       );
     }
-  }, [activeConversationId, commitConversations, conversationStore, ensureAgent, reportError, saveConversation]);
+  }, [
+    conversationStore,
+    ensureAgent,
+    persistConversation,
+    rememberConversation,
+    reportError,
+  ]);
 
   const disconnectAgent = useCallback(async () => {
     unsubscribeAgentRef.current?.();
@@ -2032,6 +2204,7 @@ export function useKanaController(appVersion: string) {
               title: string;
               messageCount: number;
               startedAt: number;
+              lastActive: number;
             }>;
           } | null;
           if (typed?.sessions) setHermesSessions(typed.sessions);
@@ -2053,7 +2226,7 @@ export function useKanaController(appVersion: string) {
       cancelled = true;
       setFetchingFromServer(false);
     };
-  }, [serverSessionKey]);
+  }, [recordFetchDebug, serverSessionKey]);
 
   // Transcript restore is event-driven: openSession emits history.restored
   // (carrying the session.resume transcript) only after the agent session for

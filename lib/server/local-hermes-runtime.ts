@@ -3,6 +3,7 @@ import { spawn, execSync, type ChildProcess } from "node:child_process";
 import { access, readFile, stat } from "node:fs/promises";
 import { constants } from "node:fs";
 import path from "node:path";
+import { readKanaUserConfig } from "./user-config";
 
 // Server-side custody of the Hermes dashboard session token.
 //
@@ -32,6 +33,10 @@ type ManagedRuntime = {
 
 const DEFAULT_HERMES_PORT = 9119;
 
+function configuredHermesPort(): number {
+  return readKanaUserConfig().hermes?.port ?? DEFAULT_HERMES_PORT;
+}
+
 const runtimeKey = Symbol.for("kana.localHermesRuntime");
 type RuntimeGlobal = typeof globalThis & { [runtimeKey]?: ManagedRuntime };
 
@@ -40,7 +45,7 @@ function runtime(): ManagedRuntime {
   shared[runtimeKey] ??= {
     child: null,
     state: "stopped",
-    port: DEFAULT_HERMES_PORT,
+    port: configuredHermesPort(),
     token: null,
     lastMessage: "Hermes is not running under Kana.",
   };
@@ -71,7 +76,7 @@ export function localRuntimeControlEnabled(): boolean {
 }
 
 async function resolveHermesExecutable(): Promise<string | null> {
-  const explicit = process.env.KANA_HERMES_BIN?.trim();
+  const explicit = process.env.KANA_HERMES_BIN?.trim() || readKanaUserConfig().hermes?.executable;
   const windowsLocalAppData = process.env.LOCALAPPDATA?.trim();
   const windowsUserProfile = process.env.USERPROFILE?.trim();
   const unixHome = process.env.HOME?.trim();
@@ -186,6 +191,8 @@ export async function inspectLocalHermesRuntime(
   preferredPort?: number,
 ): Promise<LocalHermesRuntimeStatus> {
   const current = runtime();
+  const configuredPort = configuredHermesPort();
+  if (!current.child && current.state === "stopped") current.port = configuredPort;
   current.executable ??= (await resolveHermesExecutable()) ?? undefined;
 
   // A managed child owns its port exclusively.
@@ -229,7 +236,7 @@ export async function inspectLocalHermesRuntime(
 
   // Fallback: probe candidate ports.
   const candidates: number[] = [];
-  for (const port of [preferredPort, DEFAULT_HERMES_PORT, current.port]) {
+  for (const port of [preferredPort, configuredPort, current.port, DEFAULT_HERMES_PORT]) {
     if (
       typeof port === "number" &&
       Number.isInteger(port) &&
@@ -282,17 +289,19 @@ export async function startLocalHermesRuntime(options: {
   port: number;
   cwd?: string;
 }): Promise<LocalHermesRuntimeStatus> {
-  if (!Number.isInteger(options.port) || options.port < 1024 || options.port > 65_535) {
+  const configuredPort = configuredHermesPort();
+  const port = options.port === DEFAULT_HERMES_PORT ? configuredPort : options.port;
+  if (!Number.isInteger(port) || port < 1024 || port > 65_535) {
     throw new Error("Hermes port must be an integer between 1024 and 65535.");
   }
   const current = runtime();
   if (current.child && current.child.exitCode === null) {
     throw new Error("Kana already manages a running Hermes process.");
   }
-  if (await probe(options.port)) {
-    current.port = options.port;
+  if (await probe(port)) {
+    current.port = port;
     current.state = "running";
-    current.token = await discoverProcessTokenByPort(options.port);
+    current.token = await discoverProcessTokenByPort(port);
     current.lastMessage = current.token
       ? "This port already has a Hermes server. Kana will connect without taking ownership."
       : "This port already has a Hermes server, but its session token could not be read. Restart it from Kana to connect.";
@@ -301,8 +310,10 @@ export async function startLocalHermesRuntime(options: {
   const executable = await resolveHermesExecutable();
   if (!executable) throw new Error("Hermes executable was not found on this machine.");
   let workingDirectory: string | undefined;
-  if (options.cwd?.trim()) {
-    workingDirectory = path.resolve(options.cwd.trim());
+  const configuredWorkingDirectory = readKanaUserConfig().hermes?.workingDirectory;
+  const requestedWorkingDirectory = options.cwd?.trim() || configuredWorkingDirectory;
+  if (requestedWorkingDirectory) {
+    workingDirectory = path.resolve(requestedWorkingDirectory);
     const details = await stat(workingDirectory);
     if (!details.isDirectory()) throw new Error("Hermes working folder is not a directory.");
   }
@@ -312,13 +323,13 @@ export async function startLocalHermesRuntime(options: {
   // the server-side relay (/api/hermes/*).
   const token = mintSessionToken();
   current.state = "starting";
-  current.port = options.port;
+  current.port = port;
   current.executable = executable;
   current.token = token;
   current.lastMessage = "Starting the official Hermes UI gateway…";
   const child = spawn(
     executable,
-    ["serve", "--host", "127.0.0.1", "--port", String(options.port)],
+    ["serve", "--host", "127.0.0.1", "--port", String(port)],
     {
       cwd: workingDirectory,
       env: {
