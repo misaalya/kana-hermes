@@ -25,10 +25,14 @@ spike shows a meaningful improvement over both complete WAV and sentence
 chunks while retaining deterministic ordering, idempotent Stop, replay, and
 one Hermes response.
 
-The bounded source spike found no honest stream in the pinned stack: service
-v1 waits for `generate_custom_voice` to return a complete waveform, writes the
-whole waveform to an in-memory WAV, and returns a normal FastAPI `Response`.
-Replacing that with a streaming HTTP wrapper would still buffer until model
-generation finished and would not improve time-to-first-audio. A future stream
-therefore requires a reviewed incremental model/runtime API and a versioned
-service contract, not just a frontend change.
+Historical note: the bounded source spike below ran against the retired
+Python/FastAPI service v1, which is no longer the pinned stack — the current
+service is the zero-dependency Node adapter over the pure-C engine. The
+finding still stands: that stack also had no honest stream. The v1 spike found
+no honest stream in its stack: service v1 waits for `generate_custom_voice` to
+return a complete waveform, writes the whole waveform to an in-memory WAV, and
+returns a normal FastAPI `Response`. Replacing that with a streaming HTTP
+wrapper would still buffer until model generation finished and would not
+improve time-to-first-audio. A future stream therefore requires a reviewed
+incremental model/runtime API and a versioned service contract, not just a
+frontend change.

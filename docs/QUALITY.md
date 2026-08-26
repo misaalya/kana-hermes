@@ -1,12 +1,15 @@
 # Kana quality and user-journey matrix
 
-This is the repeatable acceptance matrix for Kana. Automated checks use mock
-providers unless a row explicitly names a real local service; tests must never
-send an LLM prompt merely to verify connectivity.
+This is the repeatable acceptance matrix for Kana. Automated checks use test
+doubles at service boundaries unless a row explicitly names a real local
+service; tests must never send an LLM prompt merely to verify connectivity.
+The product has no mock agent, voice, or conversation providers — modes are
+fixed to Hermes, Qwen3-TTS, and Live2D, and unavailable integrations degrade
+to honest placeholder states.
 
 | Journey | Automated evidence | Manual acceptance |
 | --- | --- | --- |
-| First run | Preference migration tests | New browser profile shows four setup steps; offline defaults enter mock mode |
+| First run | Preference migration tests | New browser profile shows four setup steps; offline defaults land on honest placeholder states |
 | Mock conversation | Playwright desktop/mobile | User message, tool activity, Japanese speech contract, and stored subtitle appear |
 | Subtitle change | Playwright desktop/mobile | Existing subtitle stays byte-for-byte unchanged after change and reload |
 | Conversation lifecycle | Playwright draft/search test | Create, reopen, rename, search, delete with confirmation; draft remains per conversation |
@@ -19,7 +22,7 @@ send an LLM prompt merely to verify connectivity.
 | Avatar | Package/URL unit tests; forced-fallback Playwright; `npm run test:live2d:official` | Invalid package preserves previous avatar; Haru/Mao switch with different bindings; imported size/delete are correct |
 | Backup/restore | Backup unit test; Playwright export/restore | JSON excludes token/avatar files, restore merges without deleting unmatched history or changing stored subtitles |
 | Diagnostics | Redaction unit tests; Playwright preview test | No token, prompt, tool output, sudo value, secret value, or subtitle appears |
-| Responsive access | Playwright at 360/390/768/1440 | No horizontal overflow; composer remains visible; mobile history is a modal drawer |
+| Responsive access | Playwright at 320/360/390/768/1440 plus mobile landscape | No horizontal overflow; composer remains visible; mobile history is a modal drawer |
 | Install/offline shell | Production persistent-profile PWA test | Manifest has no installability errors; controlled mobile reload restores the shell offline without caching provider APIs |
 
 ## Standard gates
@@ -33,7 +36,7 @@ npm run quality
 This executes lint, TypeScript, unit/integration tests, Playwright desktop and
 mobile journeys, production build, local standalone package assembly, and a
 production-profile PWA installability/offline-shell audit.
-Qwen's Python service tests are opt-in on machines with its isolated runtime:
+The Qwen3-TTS adapter's Node contract smoke tests are opt-in inside the gate:
 
 ```bash
 KANA_RUN_TTS_SERVICE_TESTS=1 npm run quality
