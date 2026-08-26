@@ -139,9 +139,9 @@ RPC  POST /api/hermes/rpc    ->  allow-listed JSON-RPC forward
   auth config surfaces `insecureNoAuth` (header + auth status) and logs
   loudly unless `KANA_ALLOW_NO_AUTH=1`. Local process-control routes trust a
   shared-secret header (`KANA_TRUSTED_PROXY_SECRET`), not a spoofable flag.
-- The Qwen3-TTS Python service is spawned/probed by the Node runtime and
-  reached by the browser only through `/api/voice/tts/*` relay routes,
-  including request cancellation.
+- The Qwen3-TTS adapter is spawned/probed by the Node runtime and reached by
+  the browser only through `/api/voice/tts/*` relay routes, including request
+  cancellation.
 
 For VPS deployment requirements see the checklist in `PLAN.md` §10 and
 `docs/SUPPORTED_ENVIRONMENT.md`.
@@ -297,10 +297,14 @@ ornamental dashboard. This is a product direction, not a temporary theme.
   and a shared-secret trusted-proxy model — see the custody section above.
 - Browser audio decoding/playback and amplitude-based lip sync through the Web
   Audio API, with autoplay-policy timeouts and per-playback graph cleanup.
-- A versioned local Qwen3-TTS API service backed by the official
-  `qwen-tts==0.1.1` package and pinned official 0.6B CustomVoice model. It
-  exposes health, voice discovery, Japanese WAV synthesis, request
-  cancellation, local-only CORS, and a CPU-safe default.
+- A versioned local Qwen3-TTS API service (v2) implemented as a zero-dependency
+  Node adapter (`services/qwen3-tts/server.mjs`) driving the pure-C inference
+  engine from `gabriele-mastrapasqua/qwen3-tts` (MIT, pinned commit) — no
+  Python or PyTorch. One engine CLI invocation per speech request keeps voice
+  selection per-request and makes cancellation a direct child kill. The
+  adapter ships a built-in "Kana" voice (`assets/kana.wav`) that is cloned
+  into a regular profile automatically on first use of an empty voices
+  directory.
 - `Qwen3TTSProvider` reaches the service only through the Kana relay
   (`/api/voice/tts/*`), checks API compatibility, discovers live voices,
   sends `speech_ja` as Japanese, cancels server work when stopped (dedicated
@@ -308,7 +312,8 @@ ornamental dashboard. This is a product direction, not a temporary theme.
   Live2D lip sync. Complete WAV is the default. An opt-in
   experimental sentence mode preserves the exact text/order, prefetches the
   next part, cancels safely, and replays all cached parts without another
-  Hermes request.
+  Hermes request. Request ids never rely on `crypto.randomUUID`, which is
+  unavailable in insecure contexts such as plain-HTTP LAN/VPS deployments.
 - A concrete Pixi/WebGL Live2D renderer, centered responsive canvas, emotion
   expressions, motions, talking state, and mouth-parameter updates.
 - AIRI-style cursor focus: the avatar watches the pointer and drifts its gaze
@@ -379,13 +384,17 @@ ornamental dashboard. This is a product direction, not a temporary theme.
 
 ### Implemented foundation but not complete end-to-end
 
-- The Qwen3-TTS service is real and verified, but its Python environment and
-  2.3 GB model cache are intentionally separate from the Next.js install. The
-  target machine defaults to CPU because its 2 GB MX330 cannot hold the model;
-  generation is functional but slower than realtime. Streaming audio is not
-  implemented; sentence delivery is experimental until a VPS baseline exists.
-- The local package is a self-contained web runtime, not a signed native
-  desktop application. It does not start or supervise Hermes/Qwen processes.
+- The Qwen3-TTS engine and its ~2.3 GB Base model are intentionally separate
+  from the Next.js install (`~/.cache/kana/qwen3-tts-engine` by default,
+  prepared by `services/qwen3-tts/setup-engine.sh`). Inference is the pure-C
+  engine, not PyTorch; measured on the 4-vCPU EPYC reference host with
+  `-j2 --int8` it runs sub-realtime (RTF ≈ 0.9–1.0) where the previous
+  PyTorch service was RTF ≈ 2.4. Streaming audio is still not implemented;
+  sentence delivery remains experimental.
+- The local package is a self-contained web runtime plus the TTS adapter and
+  its setup script; it is not a signed native desktop application and does not
+  start or supervise Hermes processes (the Qwen adapter is supervised by the
+  launcher).
 
 ### Fixed modes and fallbacks
 
@@ -442,11 +451,12 @@ lib/avatar/binding-backup.ts               Asset-free binding import/export
 lib/voice/qwen3-tts-contract.ts            Versioned browser/service protocol
 lib/voice/qwen3-tts-provider.ts            TTS client via /api/voice/tts relay
 lib/server/tts-relay.ts                    Relay helpers (session + port guard)
-lib/server/local-qwen3-tts-runtime.ts      Python service spawn/probe control
+lib/server/local-qwen3-tts-runtime.ts      TTS adapter spawn/probe control
 lib/voice/audio-lip-sync.ts                Web Audio lip-sync mechanism
 lib/preferences/local-preferences-store.ts Local settings persistence
 lib/diagnostics/safe-diagnostics.ts        Redacted local diagnostics
-services/qwen3-tts/                         Official-model local Python service
+services/qwen3-tts/                         Pure-C engine adapter: server.mjs,
+                                            setup-engine.sh, assets/kana.wav
 scripts/package-standalone.mjs              Local production package assembly
 scripts/hermes-restart-acceptance.ts         Isolated real-server restart audit
 scripts/qwen3-tts-acceptance.mjs             Target-host latency/cancel evidence
@@ -573,6 +583,21 @@ The Live2D command requires internet access to Live2D and GitHub's pinned
 official assets. The Qwen benchmark needs target hardware, and dogfood
 intentionally fails until seven real days and every required matrix case have
 evidence.
+
+### Keeping the production install docs honest
+
+README's "Install from npm" flow and the install notes above describe what an
+END USER runs — treat them as a release artifact, not a diary:
+
+- Update them only when a change **lands on main** that alters that story:
+  dependencies, ports, model source or size, setup steps, process supervision,
+  or bundled assets.
+- Experiments, spikes, and small fixes must NOT churn these docs. Note them in
+  commit messages or a branch instead.
+- When such a substantial change does land, updating README + this file is
+  part of finishing the change, and the agent must explicitly tell the user
+  that the production install docs were updated (or remind them it is still
+  pending).
 
 For Hermes changes, also test against a temporary `hermes serve` instance on a
 non-default port. Use a unique `source: "kana"` test session, close it, and

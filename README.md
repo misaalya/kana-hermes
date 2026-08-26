@@ -13,8 +13,9 @@ Kana adds:
 - replaceable agent, voice, avatar, and conversation-store providers;
 - a responsive Live2D canvas with two official free sample avatars and
   replaceable, locally persistent URL/folder model sources;
-- local Qwen3-TTS speech with voice cloning: create personal voice profiles
-  from consented reference audio and speak every response with them;
+- local Qwen3-TTS speech through a pure-C inference engine (no Python, no
+  PyTorch): a built-in "Kana" voice ships out of the box, and personal voice
+  profiles are cloned locally from consented reference audio;
 - an npm global launcher (`npm install -g kana && kana`) that starts the web
   app, offers first-run Qwen setup, and can supervise `hermes serve`;
 - a mobile-safe workspace plus an installable offline app shell and a
@@ -29,17 +30,19 @@ npm install -g kana
 kana
 ```
 
-The package is a thin launcher plus the built web runtime. The multi-gigabyte
-Qwen3-TTS model, its Python environment, cloned voice profiles, and all Kana
-data live in user directories (`~/.local/share/kana`, `~/.cache/kana`,
-`~/.config/kana`), never inside the npm package. On first run, the launcher
-offers an explicit Qwen setup; declining it still starts Kana normally.
+The package is a thin launcher plus the built web runtime and the Qwen3-TTS
+adapter. The engine checkout, the multi-gigabyte Base model, cloned voice
+profiles, and all Kana data live in user directories (`~/.local/share/kana`,
+`~/.cache/kana`, `~/.config/kana`), never inside the npm package. On first
+run, the launcher offers an explicit Qwen setup; declining it still starts
+Kana normally, and a built-in "Kana" voice is provisioned automatically so
+speech works before any cloning.
 
 Other commands:
 
 ```bash
 kana setup        # configure or reconfigure optional Qwen3-TTS voice cloning
-kana doctor       # check Hermes/uv availability and data locations
+kana doctor       # check Hermes/engine availability and data locations
 kana --port 4000  # choose the local web port
 ```
 
@@ -113,36 +116,41 @@ Commands returned as `send` or `skill` directives are submitted to the same Herm
 
 ## Run real Qwen3-TTS
 
-Kana includes a separate Python service under `services/qwen3-tts`. It uses the
-official [`qwen-tts`](https://github.com/QwenLM/Qwen3-TTS) package and the
-official `Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice` model. Inference never runs in
-the Next.js process.
+Kana speaks through a pure-C inference engine (no Python, no PyTorch) driven
+by a zero-dependency adapter under `services/qwen3-tts`. Inference never runs
+in the Next.js process: one engine CLI invocation per speech request, and
+cancellation kills that process directly.
 
-The model and CPU-only Python environment need roughly 4 GB. On this machine,
-choose storage outside the nearly full home partition:
+One-time setup:
 
 ```bash
-export KANA_TTS_RUNTIME_DIR=/path/with/free/space/kana-qwen3-tts-runtime
-export KANA_TTS_CACHE_DIR=/path/with/free/space/kana-qwen3-tts-cache
-UV_PROJECT_ENVIRONMENT="$KANA_TTS_RUNTIME_DIR" npm run tts:dev
+npm run tts:setup   # clones the pinned engine (MIT), builds it with OpenBLAS,
+                    # and prepares the official 0.6B-Base model directory
+npm run tts:dev     # starts the adapter on http://127.0.0.1:7860
 ```
 
-The first start downloads about 2.3 GB. When `/v1/health` reports `ready`, open
-**Settings → Japanese voice**, select **Qwen3-TTS**, keep the service URL at
-`http://127.0.0.1:7860`, and click **Check service**. Kana discovers the live
-speaker catalog; `ono_anna` is the default Japanese voice.
+The setup script installs build packages via apt when missing, picks the best
+SIMD path for the CPU (AVX-512-BF16/VNNI on modern AMD/Intel), and reuses an
+existing Hugging Face snapshot when present — otherwise it downloads the
+official `Qwen/Qwen3-TTS-12Hz-0.6B-Base` checkpoint (~2.3 GB) into the engine
+directory. Measured on a 4-vCPU EPYC reference host with `-j2 --int8`,
+synthesis runs sub-realtime: RTF ≈ 0.9–1.0 for long replies, ≈2.4× faster
+than the previous PyTorch service.
+
+A built-in **Kana** voice ships with the app: on a fresh install the adapter
+clones `assets/kana.wav` once into a regular profile, so Kana can speak
+before any personal cloning.
 
 ### Voice cloning
 
-The 0.6B CustomVoice model supports zero-shot speaker cloning. In
-**Settings → Japanese voice → Voice clone**, record or upload consented
-reference audio (up to 20 MB), name the profile, and optionally provide the
-reference transcript for higher fidelity. Kana sends the audio to the local
-service's clone endpoint, which embeds the speaker and stores the profile under
-the service's data directory; cloned voices then appear alongside preset
-speakers and can be selected like any other voice. Profiles are deletable, and
-only user-created `clone-*` profiles can ever be deleted. Cloning happens
-entirely on your machine: audio never leaves the local Qwen3-TTS service.
+In **Settings → Japanese voice → Voice clone**, record or upload consented
+reference audio (up to 20 MB; non-24 kHz WAV is transcoded automatically),
+name the profile, and optionally provide the reference transcript. Profiles
+are stored as portable `.qvoice` grafts beside a small JSON descriptor and
+behave like any other clone afterwards: selectable, deletable, and entirely
+local — audio never leaves your machine. The 0.6B Base path does not expose
+instruction-based emotion control (`supports_instruction: false`); the avatar
+still keeps the response emotion visually.
 
 The versioned API exposes:
 
@@ -150,7 +158,7 @@ The versioned API exposes:
 - `GET /v1/setup`
 - `GET /v1/voices`
 - `POST /v1/voices/clone`
-- `DELETE /v1/voices/{voice_id}` (cloned profiles only)
+- `DELETE /v1/voices?id=<voice_id>` (cloned profiles only)
 - `POST /v1/speech`
 - `POST /v1/requests/{request_id}/cancel`
 
@@ -160,17 +168,13 @@ Kana sends:
 {
   "text": "speech_ja",
   "language": "ja",
-  "voice_id": "optional voice ID",
-  "emotion": "happy"
+  "voice_id": "optional voice ID"
 }
 ```
 
-The service returns PCM WAV audio. Kana decodes it in the browser, derives
-mouth openness through the Web Audio API, and cancels active generation when
-voice playback is stopped. The default 0.6B model reports that it does not
-support instruction-based emotion control; it still speaks Japanese and the
-avatar keeps the response emotion visually. A 1.7B CustomVoice deployment can
-use the same API with emotion instructions on stronger hardware.
+The service returns 24 kHz PCM WAV audio. Kana decodes it in the browser,
+derives mouth openness through the Web Audio API, and cancels active
+generation when voice playback is stopped.
 
 Complete-response playback is the default. Settings also exposes experimental
 sentence delivery for slow hosts: Kana splits the same `speech_ja`
@@ -178,11 +182,10 @@ deterministically, prefetches the next ordered part, and replays/cancels the
 parts as one voice turn. This never sends another Hermes or translation
 request. Keep the default until target-host measurements show a real benefit.
 
-This maturity pass does not rerun multi-gigabyte model inference on the
-low-resource development machine. Use the repeatable
-[VPS acceptance procedure](docs/QWEN3_TTS_VPS_ACCEPTANCE.md) to verify real WAV,
-cancellation, and latency on the target host. See
-[the service guide](services/qwen3-tts/README.md) for configuration.
+Use the repeatable [VPS acceptance procedure](docs/QWEN3_TTS_VPS_ACCEPTANCE.md)
+to verify real WAV, cancellation, and latency on any target host. See
+[the service guide](services/qwen3-tts/README.md) for configuration and
+environment variables.
 
 The target-host benchmark is automated:
 
@@ -246,7 +249,9 @@ Hermes events are translated into Kana's stable internal event model. The curren
 
 ## Current integration limitations
 
-- CPU Qwen3-TTS is slower than realtime on the target MX330 laptop, and direct WAV playback is used instead of streaming audio.
+- Qwen3-TTS inference runs on CPU through the pure-C engine; measured RTF is
+  ≈0.9–1.0 on the reference EPYC host (sub-realtime), and direct WAV playback
+  is used instead of streaming audio.
 - Kana history and imported avatars are browser-local; there is no cloud sync
   or cross-browser model library. Hermes keeps its own independently managed
   session history.
@@ -265,13 +270,14 @@ cd .next/standalone
 HOSTNAME=127.0.0.1 PORT=3000 node server.js
 ```
 
-The package contains the traced Next.js runtime, static assets, README, and the
-versioned Qwen3-TTS service source/lockfile. It intentionally excludes the
-multi-gigabyte Python runtime and model cache, and it never bundles or modifies
-Hermes. The manifest and production service worker let a supporting browser
-install Kana and reopen its UI shell offline. Agent and voice calls are never
-faked offline: the worker ignores cross-origin traffic and `/api`, while the
-CSS avatar remains the honest fallback.
+The package contains the traced Next.js runtime, static assets, README, the
+versioned TTS adapter (`server.mjs`), its setup script, and the bundled
+default voice asset. It intentionally excludes the engine checkout and the
+multi-gigabyte model cache, and it never bundles or modifies Hermes. The
+manifest and production service worker let a supporting browser install Kana
+and reopen its UI shell offline. Agent and voice calls are never faked
+offline: the worker ignores cross-origin traffic and `/api`, while the CSS
+avatar remains the honest fallback.
 
 The standalone directory also includes dependency-free release tools. Run
 `node tools/qwen3-tts-acceptance.mjs` on the target Qwen host and
@@ -287,11 +293,10 @@ npm run quality
 The gate includes lint, TypeScript, unit/integration tests, desktop/mobile
 browser journeys, lightweight acceptance-harness self-tests, production build,
 standalone package assembly, and a production installability/offline-shell
-audit. Enable
-Python service tests only where the isolated Qwen runtime is available:
+audit. The TTS adapter has its own contract smoke test:
 
 ```bash
-KANA_RUN_TTS_SERVICE_TESTS=1 npm run quality
+npm run tts:test
 ```
 
 The real official-model switch journey is separate because it downloads the
