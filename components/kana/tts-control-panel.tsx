@@ -92,14 +92,14 @@ export function TtsControlPanel({ locale, onInspect, onStart, onStop }: TtsContr
   );
 
   return (
-    <section className="rounded-2xl border border-line bg-bg p-3.5" aria-label="Qwen3-TTS process control">
+    <section aria-label="Qwen3-TTS process control">
       <div className="mb-3 flex items-center justify-between gap-2">
         <div>
           <p className="text-xs font-bold text-ink">{copy.ttsTitle}</p>
           <p className="text-[10px] text-faint">{copy.ttsSubtitle}</p>
         </div>
         <span
-          className={`rounded-full border px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase ${STATE_STYLE[status?.state ?? ""] ?? "border-line-strong text-muted"}`}
+          className={`border px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase ${STATE_STYLE[status?.state ?? ""] ?? "border-line-strong text-muted"}`}
         >
           {stateLabel}
         </span>

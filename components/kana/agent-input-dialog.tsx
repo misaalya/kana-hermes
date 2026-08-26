@@ -87,9 +87,6 @@ export function AgentInputDialog({
     void cancel();
   });
 
-  const headingIcon =
-    "grid size-9 shrink-0 place-items-center rounded-xl border border-accent/50 bg-accent/15 text-sm font-bold text-accent-strong";
-
   return (
     <div
       className="fixed inset-0 z-50 grid place-items-center bg-bg/85 p-3"
@@ -99,7 +96,7 @@ export function AgentInputDialog({
       }}
     >
       <section
-        className="w-[min(480px,100%)] rounded-3xl border border-line bg-bg p-3"
+        className="w-[min(480px,100%)] rounded-2xl border border-line bg-bg p-3"
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
@@ -110,8 +107,7 @@ export function AgentInputDialog({
       >
         {request.kind === "approval" ? (
           <>
-            <div className={`mb-2 flex items-start gap-3 ${bentoCard}`}>
-              <span aria-hidden="true" className={headingIcon}>!</span>
+            <div className={`mb-2 ${bentoCard}`}>
               <div className="min-w-0">
                 <h2 id="agent-input-title" className="text-sm font-bold text-ink">Hermes needs approval</h2>
                 <p className="mt-0.5 text-xs leading-relaxed break-words text-ink-dim">{request.description}</p>
@@ -152,8 +148,7 @@ export function AgentInputDialog({
               });
             }}
           >
-            <div className={`mb-2 flex items-start gap-3 ${bentoCard}`}>
-              <span aria-hidden="true" className={headingIcon}>?</span>
+            <div className={`mb-2 ${bentoCard}`}>
               <div className="min-w-0">
                 <h2 id="agent-input-title" className="text-sm font-bold text-ink">Hermes has a question</h2>
                 <p className="mt-0.5 text-xs leading-relaxed break-words text-ink-dim">{request.question}</p>
@@ -163,7 +158,7 @@ export function AgentInputDialog({
               <div className="mb-2 flex flex-wrap gap-1.5 rounded-2xl border border-line bg-surface p-3">
                 {request.choices.map((choice) => (
                   <button
-                    className="rounded-full border border-line-strong px-3 py-1.5 text-xs font-semibold text-ink-dim transition-colors hover:border-accent hover:text-accent-strong"
+                    className="rounded-md border border-line-strong px-3 py-1.5 text-xs font-semibold text-ink-dim transition-colors hover:border-accent hover:text-accent-strong"
                     disabled={submitting}
                     key={choice}
                     onClick={() =>
@@ -210,8 +205,7 @@ export function AgentInputDialog({
               void submitSecureValue();
             }}
           >
-            <div className={`mb-2 flex items-start gap-3 ${bentoCard}`}>
-              <span aria-hidden="true" className={headingIcon}>⌁</span>
+            <div className={`mb-2 ${bentoCard}`}>
               <div className="min-w-0">
                 <h2 id="agent-input-title" className="text-sm font-bold break-words text-ink">
                   {request.kind === "sudo"

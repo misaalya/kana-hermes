@@ -1,13 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AgentInputDialog } from "./agent-input-dialog";
 import { AvatarStage } from "./avatar-stage";
 import { ConversationSidebar } from "./conversation-sidebar";
-import { DialogueHistory } from "./dialogue-history";
 import { LiveChatFeed } from "./live-chat-feed";
-import { FetchIndicator } from "./fetch-indicator";
-import { FetchDebugOverlay } from "./fetch-debug-overlay";
 import { SettingsDialog } from "./settings-dialog";
 import { SlashCommandMenu } from "./slash-command-menu";
 import { OnboardingWizard, type DependencyFindings } from "./onboarding-dialog";
@@ -21,7 +18,7 @@ import {
 } from "@/lib/runtime/setup-client";
 import { getCopy } from "@/lib/ui/copy";
 import type { KanaPreferences } from "@/lib/preferences/types";
-import { btnPrimary, btnSecondary } from "./ui";
+import { btnPrimary } from "./ui";
 
 function destructiveCommandPrompt(input: string): string | null {
   const normalized = input.trim().toLowerCase().replace(/^\/+/, "");
@@ -37,19 +34,15 @@ const NO_MESSAGES: KanaMessage[] = [];
 
 type KanaAppProps = { appVersion: string };
 
-const gateInputClass =
-  "min-h-9 w-full rounded-xl border border-line-strong bg-transparent px-3 text-[13px] text-ink placeholder:text-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15";
-
 export function KanaApp({ appVersion }: KanaAppProps) {
   const kana = useKanaController(appVersion);
   const { theme, toggleTheme } = useTheme();
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [settingsOpen, setSettingsOpen] = useState(false);
-  // Independent modals: chat transcript vs. Hermes session list. Opening one
-  // must never drag the other along (the old shared `historyOpen` flag stacked
-  // a bottom sheet and a right drawer on top of each other).
-  const [messagesOpen, setMessagesOpen] = useState(false);
   const [sessionsOpen, setSessionsOpen] = useState(false);
+  const [connectionGateOpen, setConnectionGateOpen] = useState(false);
+  const [connectionGateDismissed, setConnectionGateDismissed] = useState(false);
+  const [automaticConnectFinished, setAutomaticConnectFinished] = useState(false);
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
   const [hermesRuntime, setHermesRuntime] = useState<HermesRuntimeStatus | null>(null);
   const [hermesRuntimeNotice, setHermesRuntimeNotice] = useState<string | null>(null);
@@ -61,6 +54,7 @@ export function KanaApp({ appVersion }: KanaAppProps) {
   const [wizardMode, setWizardMode] = useState<null | "full" | "repair">(null);
   const selectedCommandIndexRef = useRef(0);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const automaticConnectStartedRef = useRef(false);
   const { clearCommandSuggestions } = kana;
   // Latest-ref mirror: the typing effect below must fire only when the message
   // changes, not whenever controller identities churn between renders.
@@ -85,8 +79,16 @@ export function KanaApp({ appVersion }: KanaAppProps) {
   );
   const connectionInTransition = kana.connectionState === "connecting" || kana.connectionState === "reconnecting";
   const activeCommandIndex = Math.min(selectedCommandIndex, Math.max(0, kana.commandSuggestions.length - 1));
-  const showGate = kana.ready && kana.connectionState !== "connected";
-  const gateConnectAttemptsRef = useRef(0);
+  const connectionFailed =
+    kana.connectionState === "error" ||
+    kana.connectionState === "authentication_failed" ||
+    kana.connectionState === "incompatible";
+  const showGate =
+    kana.ready &&
+    !wizardMode &&
+    (connectionGateOpen ||
+      (!connectionGateDismissed && automaticConnectFinished && connectionFailed)) &&
+    kana.connectionState !== "connected";
   const detectedExternalGateway = Boolean(
     hermesRuntime?.state === "running" && !hermesRuntime.managed,
   );
@@ -96,6 +98,10 @@ export function KanaApp({ appVersion }: KanaAppProps) {
   useEffect(() => {
     connectionStateRef.current = kana.connectionState;
   });
+  const isHermesConnected = useCallback(
+    () => connectionStateRef.current === "connected",
+    [],
+  );
 
   const [connectPhase, setConnectPhase] = useState<"idle" | "connecting" | "auto_starting">("idle");
 
@@ -105,7 +111,6 @@ export function KanaApp({ appVersion }: KanaAppProps) {
     try {
       const status = await kana.startHermesControl({
         port: hermesRuntime?.port ?? 9119,
-        cwd: kana.preferences.hermes.cwd || undefined,
       });
       setHermesRuntime(status);
       setHermesRuntimeNotice(status.message);
@@ -120,12 +125,13 @@ export function KanaApp({ appVersion }: KanaAppProps) {
     } finally {
       setHermesRuntimeBusy(false);
     }
-  }, [kana, hermesRuntime?.port]);
+  }, [kana, hermesRuntime]);
 
   const handleConnectHermes = useCallback(async () => {
     if (connectionInTransition) return;
-    gateConnectAttemptsRef.current = 100;
+    setConnectionGateDismissed(false);
     setConnectPhase("connecting");
+    setHermesRuntimeNotice(null);
 
     // Step 1: try the relay first — the server may already run Hermes.
     await kana.connectAgent();
@@ -134,66 +140,50 @@ export function KanaApp({ appVersion }: KanaAppProps) {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     // Step 3: if already connected we are done
-    if (connectionStateRef.current === "connected") {
+    if (isHermesConnected()) {
+      setAutomaticConnectFinished(true);
+      setConnectionGateOpen(false);
       setConnectPhase("idle");
       return;
     }
 
     // Step 4: smart flow — auto-start the managed gateway when installed
-    if (hermesRuntime?.executable && hermesRuntime.state !== "running") {
+    let runtime = hermesRuntime;
+    if (!runtime) {
+      try {
+        runtime = await kana.inspectHermesControl();
+        setHermesRuntime(runtime);
+      } catch {
+        runtime = null;
+      }
+    }
+    if (runtime?.executable && runtime.state !== "running") {
       setConnectPhase("auto_starting");
       try {
         await startHermesGateway();
         await new Promise((resolve) => setTimeout(resolve, 100));
         await kana.connectAgent();
       } catch { /* fall through */ }
-      setConnectPhase("idle");
-      return;
     }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    if (!isHermesConnected()) {
+      setConnectionGateOpen(true);
+    } else {
+      setConnectionGateOpen(false);
+    }
+    setAutomaticConnectFinished(true);
     setConnectPhase("idle");
-  }, [kana, connectionInTransition, hermesRuntime, startHermesGateway]);
+  }, [kana, connectionInTransition, hermesRuntime, isHermesConnected, startHermesGateway]);
 
-  // A reachable Hermes relay is normally auto-connected right away. When the
-  // gateway is down, retrying on every gate appearance remounts the whole shell
-  // (and the WebGL canvas) in a tight loop and starves the UI thread, so bound
-  // the automatic attempts and leave further retries to the manual button.
+  // Each page load performs one automatic connection attempt. Successful
+  // reconnects stay invisible; the recovery modal appears only after that
+  // attempt genuinely fails. The agent client handles later stream drops with
+  // its bounded reconnect policy.
   useEffect(() => {
-    gateConnectAttemptsRef.current = 0;
-  }, []);
-
-  // Latest-ref mirror: the timer below must always call the connectAgent of
-  // the current render. Capturing the closure once per showGate flip invoked
-  // a stale copy whose activeConversationId snapshot was outdated — the retry
-  // then created a duplicate empty conversation instead of connecting the
-  // one already on screen.
-  const connectAgentRef = useRef(kana.connectAgent);
-  useEffect(() => {
-    connectAgentRef.current = kana.connectAgent;
-  });
-
-  const handleConnectHermesRef = useRef(handleConnectHermes);
-  useEffect(() => {
-    handleConnectHermesRef.current = handleConnectHermes;
-  });
-
-  useEffect(() => {
-    if (!showGate) return;
-    const delays = [300, 4_000, 15_000];
-    const timers = delays.map((delay, index) =>
-      setTimeout(() => {
-        // The manual smart flow claims the ref with a sentinel so late
-        // timers never race its own start-then-connect sequence.
-        if (gateConnectAttemptsRef.current >= 100) return;
-        gateConnectAttemptsRef.current += 1;
-        if (index === delays.length - 1) {
-          void handleConnectHermesRef.current();
-          return;
-        }
-        void connectAgentRef.current();
-      }, delay),
-    );
-    return () => timers.forEach(clearTimeout);
-  }, [showGate]);
+    if (!kana.ready || automaticConnectStartedRef.current) return;
+    automaticConnectStartedRef.current = true;
+    void handleConnectHermes();
+  }, [handleConnectHermes, kana.ready]);
 
   // Local gateway control: the gate checks whether the server-side Hermes
   // runtime is already listening; if not, Kana can start one itself and the
@@ -294,7 +284,6 @@ export function KanaApp({ appVersion }: KanaAppProps) {
     clearCommandSuggestions();
   }, [clearCommandSuggestions, setMessage]);
 
-  const closeMessages = useCallback(() => setMessagesOpen(false), []);
   const closeSessions = useCallback(() => setSessionsOpen(false), []);
   const createConversation = kana.createConversation;
   const selectConversation = kana.selectConversation;
@@ -325,28 +314,10 @@ export function KanaApp({ appVersion }: KanaAppProps) {
     if (prefill) setMessage(prefill);
   }, [kana, message, setMessage]);
 
-  const topActionIcon =
-    "grid size-8 place-items-center rounded-lg border border-line bg-raised text-ink-dim transition-colors hover:border-accent hover:text-accent-strong";
-
-  const themeToggle = (
-    <button type="button" className={topActionIcon} onClick={toggleTheme} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}>
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3">
-        {theme === "dark" ? (
-          <>
-            <circle cx="8" cy="8" r="3" />
-            <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M13 3l-1.4 1.4M4.4 11.6L3 13" strokeLinecap="round" />
-          </>
-        ) : (
-          <path d="M13.5 9.5A6 6 0 116.5 2.5a5 5 0 007 7z" strokeLinejoin="round" />
-        )}
-      </svg>
-    </button>
-  );
-
   if (!kana.ready) {
     return (
       <main className="grid min-h-dvh place-items-center bg-bg">
-        <p className="animate-kana-pulse text-xs font-semibold tracking-widest text-muted uppercase">Preparing Kana…</p>
+        <p className="text-[10px] font-bold tracking-[0.18em] text-muted uppercase animate-kana-pulse">Preparing Kana</p>
       </main>
     );
   }
@@ -367,37 +338,49 @@ export function KanaApp({ appVersion }: KanaAppProps) {
     <main className="relative h-dvh w-full overflow-hidden bg-bg">
       <AvatarStage
         avatar={kana.avatar}
-        busy={kana.busy}
         onCanvasReady={kana.attachAvatarCanvas}
       />
 
-      {/* Top-right icon row — the only chrome over the avatar */}
-      <div className="absolute right-3 top-3 z-20 flex gap-1.5">
-        {themeToggle}
-        <button type="button" className={topActionIcon} onClick={() => { setMessagesOpen(true); }} aria-label="Open message history">
-          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3"><path d="M14.5 8A6.5 6.5 0 1 1 8 1.5c3.2 0 6.5 2.4 6.5 6.5Z"/><path d="M5 7h6M5 9.5h4" strokeLinecap="round"/></svg>
-        </button>
-        <button type="button" className={topActionIcon} onClick={() => { setSessionsOpen(true); }} aria-label="Open session history">
-          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3"><rect x="1.5" y="3" width="13" height="11" rx="2"/><line x1="1.5" y1="6.5" x2="14.5" y2="6.5"/><line x1="5" y1="3" x2="5" y2="1.5"/><line x1="11" y1="3" x2="11" y2="1.5"/></svg>
-        </button>
-        <button type="button" className={topActionIcon} onClick={() => setSettingsOpen(true)} aria-label="Open settings">
-          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4" strokeLinecap="round"/></svg>
-        </button>
-      </div>
+      <header className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-4 p-4 max-sm:p-3">
+        <div className="pointer-events-auto min-w-0 max-sm:hidden">
+          <div className="min-w-0">
+            <p className="text-base font-bold tracking-wide text-ink">Kana</p>
+            <p className="max-w-[34vw] truncate text-[10px] text-muted max-sm:max-w-[38vw]">
+              {kana.activeConversation?.title ?? "A new moment"}
+            </p>
+          </div>
+        </div>
 
-      {/* Live-chat feed (vtuber style): a height-capped, scrollable column
-          anchored to the LEFT edge. Holds the chronological stream — user
-          messages, tool activity lines, Kana's reply — so long responses
-          scroll inside the column and never cover the avatar stage. The
-          bottom padding keeps the feed above the composer instead of
-          sliding underneath it. */}
-      <FetchIndicator active={kana.fetchingFromServer} />
-      <FetchDebugOverlay
-        records={kana.fetchDebugRecords}
-        onClear={kana.clearFetchDebugRecords}
-      />
-      <div className="pointer-events-none absolute inset-y-0 left-0 z-10 flex w-[min(88%,480px)] flex-col justify-end p-3 pb-24 max-md:inset-x-0 max-md:w-full max-md:pb-20">
-        <div className="pointer-events-auto min-h-0">
+        <nav className="pointer-events-auto ml-auto flex items-center gap-1 border border-line bg-raised p-1" aria-label="Workspace actions">
+          <button
+            type="button"
+            className="kana-focus min-h-8 px-2.5 text-[10px] font-semibold text-muted hover:bg-surface-strong hover:text-ink"
+            onClick={toggleTheme}
+            aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
+          >
+            {theme === "dark" ? "Light" : "Dark"}
+          </button>
+          <button
+            type="button"
+            className="kana-focus min-h-8 px-2.5 text-[10px] font-semibold text-muted hover:bg-surface-strong hover:text-ink"
+            onClick={() => setSessionsOpen(true)}
+            aria-label="Open conversation history"
+          >
+            History
+          </button>
+          <button
+            type="button"
+            className="kana-focus min-h-8 px-2.5 text-[10px] font-semibold text-muted hover:bg-surface-strong hover:text-ink"
+            onClick={() => setSettingsOpen(true)}
+            aria-label="Open settings"
+          >
+            Settings
+          </button>
+        </nav>
+      </header>
+
+      <section className="kana-panel absolute bottom-4 right-4 top-[76px] z-10 flex w-[min(34vw,480px)] min-w-[390px] flex-col overflow-hidden rounded-2xl max-lg:inset-x-0 max-lg:bottom-0 max-lg:top-auto max-lg:h-[46dvh] max-lg:w-full max-lg:min-w-0 max-lg:rounded-none max-sm:inset-0 max-sm:h-full max-sm:border-0 max-sm:bg-transparent">
+        <div className="flex min-h-0 flex-1">
           <LiveChatFeed
             messages={kana.activeConversation?.messages ?? NO_MESSAGES}
             activities={kana.activities}
@@ -406,115 +389,95 @@ export function KanaApp({ appVersion }: KanaAppProps) {
             status={kana.status}
           />
         </div>
-      </div>
-
-      {/* Composer */}
-      <section className="absolute inset-x-0 bottom-0 z-20 px-4 pb-4">
-        <div className="relative mx-auto w-full max-w-3xl">
-          <SlashCommandMenu
-            suggestions={kana.commandSuggestions}
-            loading={kana.commandSuggestionsLoading}
-            selectedIndex={activeCommandIndex}
-            onHighlight={highlightCommand}
-            onSelect={selectCommand}
-          />
-          <div className="flex items-end gap-2 rounded-3xl border border-line bg-raised/85 p-2 backdrop-blur-md">
-          <textarea
-            ref={inputRef}
-            value={message}
-            rows={1}
-            placeholder="Tulis pesan…"
-            aria-label="Message Kana"
-            className="max-h-36 min-h-11 flex-1 resize-none bg-transparent px-2 py-2.5 text-[15px] leading-snug text-ink placeholder:text-faint focus:outline-none"
-            onChange={(event) => setMessage(event.target.value)}
-            onKeyDown={(event) => {
-              if (kana.commandSuggestions.length > 0) {
-                if (event.key === "ArrowDown") {
-                  event.preventDefault();
-                  highlightCommand((activeCommandIndex + 1) % kana.commandSuggestions.length);
-                  return;
-                }
-                if (event.key === "ArrowUp") {
-                  event.preventDefault();
-                  highlightCommand(
-                    (activeCommandIndex - 1 + kana.commandSuggestions.length) % kana.commandSuggestions.length,
-                  );
-                  return;
-                }
-                if (event.key === "Tab") {
-                  event.preventDefault();
-                  setMessage(kana.commandSuggestions[activeCommandIndex]?.text ?? message);
-                  return;
-                }
-                if (event.key === "Escape") {
-                  event.preventDefault();
-                  clearCommandSuggestions();
-                  return;
-                }
-              }
-              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-                event.preventDefault();
-                void submitMessage();
-              }
-            }}
-          />
-          {kana.busy ? (
-            <button
-              type="button"
-              aria-label="Stop"
-              className="grid size-10 shrink-0 place-items-center rounded-lg border border-line-strong text-muted transition-colors hover:border-danger hover:text-danger"
-              onClick={() => void kana.abort()}
-            >
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="3" width="10" height="10" rx="2" /></svg>
-            </button>
-          ) : (
-            <button
-              type="button"
-              aria-label="Send"
-              disabled={!message.trim() || (kana.busy && !canSubmitWhileBusy)}
-              className="grid size-10 shrink-0 place-items-center rounded-lg bg-accent text-on-accent transition-opacity disabled:opacity-40"
-              onClick={() => void submitMessage()}
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M2.5 8L13.5 2.5 10.5 8l3 5.5L2.5 8z"/></svg>
-            </button>
-          )}
+        <div className="shrink-0 border-t border-line bg-raised p-3 max-sm:px-3 max-sm:pb-[max(12px,env(safe-area-inset-bottom))] max-sm:pt-2">
+          <div className="relative">
+            <SlashCommandMenu
+              suggestions={kana.commandSuggestions}
+              loading={kana.commandSuggestionsLoading}
+              selectedIndex={activeCommandIndex}
+              onHighlight={highlightCommand}
+              onSelect={selectCommand}
+            />
+            <div className="flex items-end gap-2 border border-line-strong bg-surface-strong p-2 transition-colors focus-within:border-accent/45">
+              <textarea
+                id="kana-message"
+                ref={inputRef}
+                value={message}
+                rows={1}
+                placeholder="Say something to Kana…"
+                aria-label="Message Kana"
+                className="max-h-28 min-h-10 flex-1 resize-none bg-transparent px-2 py-2.5 text-[13px] leading-snug text-ink placeholder:text-faint focus:outline-none"
+                onChange={(event) => setMessage(event.target.value)}
+                onKeyDown={(event) => {
+                  if (kana.commandSuggestions.length > 0) {
+                    if (event.key === "ArrowDown") {
+                      event.preventDefault();
+                      highlightCommand((activeCommandIndex + 1) % kana.commandSuggestions.length);
+                      return;
+                    }
+                    if (event.key === "ArrowUp") {
+                      event.preventDefault();
+                      highlightCommand(
+                        (activeCommandIndex - 1 + kana.commandSuggestions.length) % kana.commandSuggestions.length,
+                      );
+                      return;
+                    }
+                    if (event.key === "Tab") {
+                      event.preventDefault();
+                      setMessage(kana.commandSuggestions[activeCommandIndex]?.text ?? message);
+                      return;
+                    }
+                    if (event.key === "Escape") {
+                      event.preventDefault();
+                      clearCommandSuggestions();
+                      return;
+                    }
+                  }
+                  if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                    event.preventDefault();
+                    void submitMessage();
+                  }
+                }}
+              />
+              {kana.busy ? (
+                <button
+                  type="button"
+                  aria-label="Stop"
+                  className="kana-focus min-h-10 shrink-0 border border-danger/40 px-3 text-[11px] font-bold text-danger transition-colors hover:bg-danger/10"
+                  onClick={() => void kana.abort()}
+                >
+                  Stop
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  aria-label="Send"
+                  disabled={!message.trim() || (kana.busy && !canSubmitWhileBusy)}
+                  className="kana-focus min-h-10 shrink-0 bg-accent px-3 text-[11px] font-bold text-on-accent transition-[background-color,opacity] hover:bg-accent-hover disabled:opacity-35"
+                  onClick={() => void submitMessage()}
+                >
+                  Send
+                </button>
+              )}
+            </div>
           </div>
+          <p className="mt-2 px-1 text-[9px] text-faint max-sm:hidden">
+            Enter to send · Shift + Enter for a new line · Type / for Hermes actions
+          </p>
         </div>
       </section>
-
-      {/* Message history modal */}
-      {messagesOpen ? (
-        <div
-          className="fixed inset-0 z-30 grid place-items-center bg-black/40 p-4 backdrop-blur-sm"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Message history"
-          onClick={closeMessages}
-        >
-          <section
-            className="flex h-[min(70dvh,560px)] w-full max-w-lg flex-col rounded-3xl border border-line bg-raised p-4 shadow-xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <header className="mb-2 flex items-center justify-between">
-              <span className="text-[11px] font-bold tracking-wider text-ink-dim uppercase">Messages</span>
-              <button type="button" className={topActionIcon} aria-label="Close message history" onClick={closeMessages}>×</button>
-            </header>
-            <DialogueHistory messages={kana.activeConversation?.messages ?? NO_MESSAGES} />
-          </section>
-        </div>
-      ) : null}
 
       {/* Session history modal */}
       {sessionsOpen ? (
         <div
-          className="fixed inset-0 z-30 grid place-items-center bg-black/40 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-30 flex justify-end bg-[var(--backdrop)] p-3 max-sm:p-0"
           role="dialog"
           aria-modal="true"
-          aria-label="Session history"
+          aria-label="Conversation history"
           onClick={closeSessions}
         >
           <section
-            className="flex h-[min(70dvh,560px)] w-full max-w-md flex-col overflow-hidden rounded-3xl border border-line bg-raised p-4 shadow-xl"
+            className="kana-panel flex h-full w-[min(420px,100%)] flex-col overflow-hidden rounded-2xl animate-kana-in max-sm:rounded-none"
             onClick={(event) => event.stopPropagation()}
           >
             <ConversationSidebar
@@ -522,7 +485,7 @@ export function KanaApp({ appVersion }: KanaAppProps) {
               activeId={kana.activeConversation?.id}
               disabled={kana.busy}
               hermesSessions={kana.hermesSessions}
-              onAdopt={(key, title) => void kana.adoptHermesSession(key, title)}
+              onAdopt={(session) => void kana.adoptHermesSession(session)}
               onCreate={createConversationFromModal}
               onSelect={selectConversationFromModal}
               onRename={renameConversationFromModal}
@@ -533,21 +496,23 @@ export function KanaApp({ appVersion }: KanaAppProps) {
         </div>
       ) : null}
 
-      {/* Gate modal — overlay when Hermes is not connected */}
       {showGate ? (
-        <div className="fixed inset-0 z-30 flex items-center justify-center bg-bg/70 backdrop-blur-md p-4" role="dialog" aria-modal="true" aria-label="Hermes gateway">
-          <div className="flex w-full max-w-sm flex-col items-center gap-4 rounded-3xl border border-line bg-bg p-5 text-center">
-            {/* Status indicator */}
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-[var(--backdrop)] p-4" role="dialog" aria-modal="true" aria-label="Hermes gateway">
+          <div className="kana-panel flex w-full max-w-sm flex-col items-center rounded-2xl p-6 text-center animate-kana-in">
+            <p className="text-[10px] font-bold tracking-[0.16em] text-muted uppercase">Kana needs Hermes</p>
+            <h2 className="mt-1 text-lg font-bold text-ink">Connect the mind behind Kana</h2>
+            <p className="mt-2 max-w-[290px] text-[11px] leading-relaxed text-muted">
+              Kana will find or start your existing Hermes installation automatically.
+            </p>
             <div
-              className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-semibold ${
+              className={`mt-5 border px-3 py-1.5 text-[10px] font-semibold ${
                 connectionInTransition
-                  ? "border-accent/50 text-accent-strong"
+                  ? "border-accent/35 bg-accent/8 text-accent-strong"
                   : gateFailed
-                    ? "border-danger/50 text-danger"
+                    ? "border-danger/35 bg-danger/8 text-danger"
                     : "border-line-strong text-muted"
               }`}
             >
-              <span className={`size-1.5 rounded-full ${connectionInTransition ? "bg-accent animate-kana-pulse" : gateFailed ? "bg-danger" : "bg-faint"}`} />
               {kana.connectionState === "connecting"
                 ? gateCopy.connecting
                 : kana.connectionState === "reconnecting"
@@ -561,18 +526,28 @@ export function KanaApp({ appVersion }: KanaAppProps) {
                         : gateCopy.idle}
             </div>
 
-            {/* Primary action */}
             <button
-              className={`${btnPrimary} h-10 w-full text-sm`}
+              className={`${btnPrimary} mt-5 w-full text-sm`}
               onClick={handleConnectHermes}
               disabled={connectionInTransition || connectPhase === "auto_starting"}
             >
               {connectButtonLabel}
             </button>
 
-            {/* Runtime detection feedback */}
+            <button
+              type="button"
+              className="kana-focus mt-2 min-h-9 w-full text-xs font-semibold text-muted hover:bg-surface-strong hover:text-ink"
+              onClick={() => {
+                setConnectionGateOpen(false);
+                setConnectionGateDismissed(true);
+              }}
+              disabled={connectionInTransition || connectPhase === "auto_starting"}
+            >
+              Not now
+            </button>
+
             {hermesRuntime?.controlAvailable ? (
-              <div className="flex w-full flex-col items-center gap-1.5 text-[10px] leading-relaxed">
+              <div className="mt-3 flex w-full flex-col items-center gap-1 text-[9px] leading-relaxed">
                 {detectedExternalGateway ? (
                   <p className="text-faint">{gateCopy.detectedExternal(hermesRuntime.port)}</p>
                 ) : hermesRuntime.state === "running" && hermesRuntime.managed ? (
@@ -585,7 +560,7 @@ export function KanaApp({ appVersion }: KanaAppProps) {
                 {hermesRuntimeNotice ? (
                   <p role="status" className="max-w-full break-words text-faint">{hermesRuntimeNotice}</p>
                 ) : null}
-                <p className="text-faint">{gateCopy.relayNote}</p>
+                <p className="mt-1 text-faint">{gateCopy.relayNote}</p>
               </div>
             ) : null}
           </div>
@@ -601,9 +576,6 @@ export function KanaApp({ appVersion }: KanaAppProps) {
           onSelectAvatarModel={kana.selectAvatarModel}
           onRenameAvatarModel={kana.renameAvatarModel}
           onDeleteAvatarModel={kana.deleteAvatarModel}
-          onPreviewAvatarEmotion={kana.previewAvatarEmotion}
-          onPreviewAvatarMotion={kana.previewAvatarMotion}
-          onPreviewAvatarTalking={kana.previewAvatarTalking}
           onInspectHermesControl={kana.inspectHermesControl}
           onStartHermesControl={kana.startHermesControl}
           onStopHermesControl={kana.stopHermesControl}
@@ -654,12 +626,11 @@ function DegradedBanner({
 }) {
   const copy = getCopy(locale);
   return (
-    <div className="absolute right-3 top-14 z-30 flex items-center gap-2 rounded-full border border-danger/40 bg-bg/90 px-3 py-1.5 backdrop-blur-sm">
-      <span aria-hidden="true" className="size-1.5 rounded-full bg-danger" />
-      <p className="text-[11px] font-semibold text-ink-dim">{copy.banner.degraded}</p>
+    <div className="kana-panel absolute bottom-5 left-5 z-20 flex max-w-[360px] items-center gap-3 rounded-md px-3.5 py-2.5 max-lg:bottom-[calc(46dvh+12px)] max-sm:bottom-auto max-sm:left-3 max-sm:top-16">
+      <p className="text-[10px] font-semibold text-ink-dim">{copy.banner.degraded}</p>
       <button
         type="button"
-        className="text-[11px] font-bold text-accent-strong underline-offset-2 hover:underline"
+        className="kana-focus rounded-lg px-2 py-1 text-[10px] font-bold text-accent-strong hover:bg-accent/10"
         onClick={onCheck}
       >
         {copy.banner.action}

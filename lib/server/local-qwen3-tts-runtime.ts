@@ -7,6 +7,7 @@ import {
   QWEN3_TTS_API_VERSION,
   QWEN3_TTS_SERVICE_NAME,
 } from "@/lib/voice/qwen3-tts-contract";
+import { readKanaUserConfig } from "./user-config";
 
 // Server-side custody of the local Qwen3-TTS service process.
 //
@@ -36,7 +37,11 @@ type ManagedRuntime = {
   stderrTail: string[];
 };
 
-const DEFAULT_TTS_PORT = Number(process.env.KANA_TTS_PORT ?? "7860");
+const configuredPort = Number(process.env.KANA_TTS_PORT);
+const DEFAULT_TTS_PORT =
+  Number.isInteger(configuredPort) && configuredPort >= 1024 && configuredPort <= 65_535
+    ? configuredPort
+    : (readKanaUserConfig().tts?.port ?? 7860);
 const PROJECT_DIR_ENV = "KANA_QWEN3_TTS_PROJECT_DIR";
 
 function moduleDirectory(): string | null {
@@ -58,9 +63,11 @@ function moduleDirectory(): string | null {
 // different WorkingDirectory still resolves the service source.
 async function resolveProjectDir(): Promise<string> {
   const fromEnv = process.env[PROJECT_DIR_ENV]?.trim();
+  const fromConfig = readKanaUserConfig().tts?.projectDirectory;
   const moduleDir = moduleDirectory();
   const candidates = [
     ...(fromEnv ? [path.resolve(fromEnv)] : []),
+    ...(!fromEnv && fromConfig ? [fromConfig] : []),
     ...(moduleDir
       ? [path.resolve(moduleDir, "..", "..", "services", "qwen3-tts")]
       : []),
@@ -102,20 +109,23 @@ export const __setTestTtsPort = (port: number | null): void => {
 };
 
 function publicStatus(current: ManagedRuntime): LocalQwen3TtsRuntimeStatus {
+  const config = readKanaUserConfig().tts;
   return {
     state: current.state,
     managed: current.child !== null && current.child.exitCode === null,
     pid: current.child?.pid,
     port: current.port,
     executable: current.executable,
-    model: process.env.KANA_TTS_MODEL,
-    device: process.env.KANA_TTS_DEVICE ?? "cpu",
+    model: process.env.KANA_TTS_MODEL ?? config?.model,
+    device: process.env.KANA_TTS_DEVICE ?? config?.device ?? "cpu",
     message: current.lastMessage,
   };
 }
 
 function resolveUv(): string | null {
   if (process.env.KANA_TTS_UV_BIN) return process.env.KANA_TTS_UV_BIN;
+  const configured = readKanaUserConfig().tts?.uvExecutable;
+  if (configured) return configured;
   for (const dir of (process.env.PATH ?? "").split(path.delimiter)) {
     if (!dir) continue;
     const candidate = path.join(dir, "uv");
@@ -335,6 +345,7 @@ export async function startLocalQwen3TtsRuntime(options: {
     throw new Error(current.lastMessage);
   }
   const projectDir = await resolveProjectDir();
+  const userConfig = readKanaUserConfig().tts;
   try {
     await access(projectDir, constants.R_OK);
   } catch {
@@ -353,6 +364,8 @@ export async function startLocalQwen3TtsRuntime(options: {
       ...process.env,
       KANA_TTS_HOST: "127.0.0.1",
       KANA_TTS_PORT: String(port),
+      ...(process.env.KANA_TTS_MODEL || !userConfig?.model ? {} : { KANA_TTS_MODEL: userConfig.model }),
+      ...(process.env.KANA_TTS_DEVICE || !userConfig?.device ? {} : { KANA_TTS_DEVICE: userConfig.device }),
     },
     stdio: ["ignore", "ignore", "pipe"],
   });
