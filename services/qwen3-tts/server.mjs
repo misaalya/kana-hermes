@@ -32,6 +32,7 @@ import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const API_VERSION = "2";
 const SERVICE = "kana-qwen3-tts";
@@ -53,6 +54,9 @@ const DATA_DIR =
   process.env.KANA_TTS_DATA_DIR?.trim() ||
   path.join(HOME, ".local/share/kana/qwen3-tts");
 const VOICES_DIR = path.join(DATA_DIR, "voices");
+const SERVICE_DIR = path.dirname(fileURLToPath(import.meta.url));
+const BUILTIN_VOICE_ASSET = path.join(SERVICE_DIR, "assets", "kana.wav");
+const BUILTIN_VOICE_ID = "builtin-kana";
 const ENGINE_JOBS = Math.max(1, Number(process.env.KANA_TTS_ENGINE_JOBS || 2));
 // Measured on the 4-vCPU EPYC reference host: -j2 --int8 lands at RTF ~0.92
 // (sub-realtime) versus ~1.24 bf16. Empty string disables quantization.
@@ -196,6 +200,70 @@ function listVoiceMetas() {
 
 function defaultVoiceId(metas) {
   return metas.length ? metas[metas.length - 1].id : "";
+}
+
+// Fresh installs ship with a built-in "Kana" voice (assets/kana.wav). The
+// first time the voices directory is empty and the engine is available, the
+// reference clip is cloned once into a regular profile so it behaves exactly
+// like a user-created clone afterwards (deletable, replaceable).
+let builtinProvisioned = false;
+async function ensureBuiltinVoice() {
+  if (builtinProvisioned) return;
+  if (!fs.existsSync(BUILTIN_VOICE_ASSET) || !engineReady()) return;
+  if (listVoiceMetas().length > 0) {
+    builtinProvisioned = true;
+    return;
+  }
+  ensureDirs();
+  const id = BUILTIN_VOICE_ID;
+  const profileFile = `${id}.qvoice`;
+  const profilePath = path.join(VOICES_DIR, profileFile);
+  const discardDir = fs.mkdtempSync(path.join(os.tmpdir(), "kana-builtin-"));
+  log("provisioning built-in voice 'Kana' from assets/kana.wav…");
+  const result = await run(
+    ENGINE_BIN,
+    [
+      "-d", MODEL_DIR,
+      "--ref-audio", BUILTIN_VOICE_ASSET,
+      "-l", "Japanese",
+      "--voice-name", "Kana",
+      "--xvector-only",
+      "--save-voice", profilePath,
+      "--silent",
+      "--text", "こんにちは。",
+      "-o", path.join(discardDir, "discard.wav"),
+    ],
+    { timeoutMs: 600_000 },
+  );
+  try { fs.rmSync(discardDir, { recursive: true, force: true }); } catch {}
+  if (result.code !== 0 || !fs.existsSync(profilePath)) {
+    cleanup(profilePath);
+    log(`built-in voice provisioning failed: ${lastLine(result.stderr)}`);
+    return; // retried on the next speech request / restart
+  }
+  const duration = (await ffprobeSeconds(BUILTIN_VOICE_ASSET)) ?? 0;
+  fs.writeFileSync(
+    path.join(VOICES_DIR, `${id}.json`),
+    JSON.stringify(
+      {
+        id,
+        name: "Kana",
+        audio_path: null,
+        reference_text: null,
+        x_vector_only: true,
+        duration_seconds: Math.round(duration * 100) / 100,
+        created_at: new Date().toISOString(),
+        language: "ja",
+        profile_file: profileFile,
+        builtin: true,
+        load_flags: JSON.stringify(["--xvector-only"]),
+      },
+      null,
+      2,
+    ),
+  );
+  builtinProvisioned = true;
+  log(`built-in voice ready: ${profileFile}`);
 }
 
 function healthPayload() {
@@ -362,6 +430,10 @@ async function handleSpeech(req, res, requestId) {
   if (!text) return sendJson(res, 422, { detail: "text is required" });
 
   const metas = listVoiceMetas();
+  if (metas.length === 0) {
+    await ensureBuiltinVoice();
+    metas.push(...listVoiceMetas());
+  }
   const requestedId = body.voice_id ? String(body.voice_id) : defaultVoiceId(metas);
   const meta = metas.find((candidate) => candidate.id === requestedId);
   if (!meta) {
@@ -605,7 +677,9 @@ server.listen(PORT, HOST, () => {
   log(`${SERVICE} v${API_VERSION} listening on http://${HOST}:${PORT}`);
   log(`engine=${ENGINE_BIN} model=${MODEL_DIR} voices=${VOICES_DIR}`);
   if (!engineReady()) {
-    log("WARNING: engine/model files missing; run scripts/setup-qwen3-tts-engine.sh");
+    log("WARNING: engine/model files missing; run services/qwen3-tts/setup-engine.sh");
+  } else {
+    void ensureBuiltinVoice();
   }
 });
 
