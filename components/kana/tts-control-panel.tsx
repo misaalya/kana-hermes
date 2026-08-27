@@ -51,7 +51,7 @@ export function TtsControlPanel({ locale, onInspect, onStart, onStop }: TtsContr
         if (active) setStatus(next);
       })
       .catch((error) => {
-        if (active) setNotice(error instanceof Error ? error.message : "TTS check failed.");
+        if (active) setNotice(error instanceof Error ? error.message : copy.checkFailed);
       });
     return () => {
       active = false;
@@ -83,16 +83,16 @@ export function TtsControlPanel({ locale, onInspect, onStart, onStop }: TtsContr
         setStatus(next);
         setNotice(next.message);
       } catch (error) {
-        setNotice(error instanceof Error ? error.message : "TTS control failed.");
+        setNotice(error instanceof Error ? error.message : copy.controlFailed);
       } finally {
         setBusy(false);
       }
     },
-    [onStart, onStop],
+    [copy.controlFailed, onStart, onStop],
   );
 
   return (
-    <section aria-label="Qwen3-TTS process control">
+    <section aria-label={copy.ttsAria}>
       <div className="mb-3 flex items-center justify-between gap-2">
         <div>
           <p className="text-xs font-bold text-ink">{copy.ttsTitle}</p>

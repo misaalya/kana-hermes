@@ -32,8 +32,8 @@
   --raised: #1c1c1c;
   --surface: #242424;
   --surface-strong: #2b2b2b;
-  --line: rgba(255, 255, 255, 0.09);
-  --line-strong: rgba(255, 255, 255, 0.16);
+  --line: rgba(255, 255, 255, 0.14);
+  --line-strong: rgba(255, 255, 255, 0.25);
   --ink: #f4f4f4;
   --ink-dim: #c8c8c8;
   --muted: #969696;
@@ -44,6 +44,12 @@
   --on-accent: #07131a;
   --danger: #e36a76;
   --backdrop: rgba(0, 0, 0, 0.72);
+  --chat-frame: #599dc6;
+  --chat-depth: #1c1c1c;
+  --chat-bubble: #263943;
+  --chat-bubble-user: #2e2e2e;
+  --chat-text: #f4f4f4;
+  --chat-composer: #2b2b2b;
 }
 
 [data-theme="light"] {
@@ -52,8 +58,8 @@
   --raised: #ffffff;
   --surface: #ffffff;
   --surface-strong: #ebebe8;
-  --line: rgba(20, 20, 20, 0.1);
-  --line-strong: rgba(20, 20, 20, 0.18);
+  --line: rgba(20, 20, 20, 0.13);
+  --line-strong: rgba(20, 20, 20, 0.22);
   --ink: #1c1c1c;
   --ink-dim: #4d4d4d;
   --muted: #727272;
@@ -64,6 +70,12 @@
   --on-accent: #ffffff;
   --danger: #c84f5d;
   --backdrop: rgba(28, 28, 28, 0.38);
+  --chat-frame: #599dc6;
+  --chat-depth: #f4f4f2;
+  --chat-bubble: #d9edf7;
+  --chat-bubble-user: #ebebe8;
+  --chat-text: #1c1c1c;
+  --chat-composer: #ffffff;
 }
 
 * { border-color: var(--line); }
@@ -104,14 +116,246 @@ button,
   background: var(--bg);
 }
 
+.kana-stage-backdrop {
+  background: var(--bg);
+}
+
+.kana-stage-pattern[data-background="room"] .kana-stage-backdrop {
+  background-image: url("/backgrounds/kana-room.png");
+  background-position: center;
+  background-size: cover;
+  opacity: 0.92;
+}
+
+.kana-stage-pattern[data-background="custom"] .kana-stage-backdrop {
+  background-color: var(--bg);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+.kana-stage-pattern[data-background^="pattern-"] .kana-stage-backdrop {
+  background-color: var(--bg);
+  background-position: 0 0;
+  background-repeat: repeat;
+}
+
+.kana-stage-pattern[data-background="pattern-sparkles"] .kana-stage-backdrop {
+  background-image: url("/backgrounds/kana-pattern-sparkles.svg");
+  background-size: 72px 72px;
+}
+
+.kana-stage-pattern[data-background="pattern-twinkle"] .kana-stage-backdrop {
+  background-image: url("/backgrounds/kana-pattern-twinkle.svg");
+  background-size: 96px 96px;
+}
+
+.kana-stage-pattern[data-background="pattern-gingham"] .kana-stage-backdrop {
+  background-image: url("/backgrounds/kana-pattern-gingham.svg");
+  background-size: 80px 80px;
+}
+
+.kana-stage-pattern[data-background="pattern-stars"] .kana-stage-backdrop {
+  background-image: url("/backgrounds/kana-pattern-stars.svg");
+  background-size: 104px 104px;
+}
+
+.kana-stage-pattern[data-background="pattern-swirls"] .kana-stage-backdrop {
+  background-image: url("/backgrounds/kana-pattern-swirls.svg");
+  background-size: 144px 144px;
+}
+
+.kana-avatar-content {
+  transition: transform 300ms ease-out;
+}
+
+.kana-avatar-viewport[data-chat-open="true"] .kana-avatar-content {
+  transform: translateX(max(-17.5vw, -255px));
+}
+
+[data-theme="light"] .kana-stage-pattern[data-background="room"] .kana-stage-backdrop {
+  opacity: 0.92;
+}
+
 .kana-panel {
-  border: 1px solid var(--line);
+  border: 2px solid var(--line);
   background: var(--raised);
+}
+
+.kana-session-title {
+  border: 2px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--raised);
+}
+
+.kana-workspace-action {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 2px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--raised);
+  padding-inline: 12px;
+  color: var(--ink-dim);
+  font-size: 11px;
+  font-weight: 700;
+  transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.kana-workspace-action:hover {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+  transform: translateY(-1px);
+}
+
+.kana-chat-panel {
+  border: 4px solid var(--chat-frame);
+  background: var(--chat-depth);
+}
+
+.kana-chat-dock.is-closed {
+  transform: translateX(calc(100% - 2px));
+}
+
+.kana-chat-toggle:focus-visible {
+  outline: none;
+}
+
+.kana-chat-toggle:focus-visible path {
+  stroke: var(--ink);
+  stroke-width: 2px;
+  vector-effect: non-scaling-stroke;
+}
+
+.kana-chat-feed {
+  background: var(--chat-depth);
+}
+
+.kana-composer-shell {
+  border-color: var(--chat-frame);
+  background: var(--chat-frame);
+}
+
+.kana-composer {
+  background: transparent;
+  color: #ffffff;
+}
+
+.kana-composer textarea {
+  font-family: var(--font-kana-sans), ui-rounded, system-ui, sans-serif;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.kana-composer textarea::placeholder {
+  color: rgb(255 255 255 / 62%);
+}
+
+.kana-composer button {
+  font-family: var(--font-kana-sans), ui-rounded, system-ui, sans-serif;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.kana-composer button:disabled {
+  color: rgb(255 255 255 / 45%);
+}
+
+.kana-message-assistant {
+  border-color: transparent;
+  background: var(--chat-bubble);
+  color: var(--chat-text);
+}
+
+.kana-message-user {
+  border-color: transparent;
+  background: var(--chat-bubble-user);
+  color: var(--chat-text);
+}
+
+.kana-background-preview-plain {
+  background: var(--bg);
+}
+
+.kana-background-preview-room {
+  background-image: url("/backgrounds/kana-room.png");
+  background-position: center;
+  background-size: cover;
+}
+
+.kana-background-preview-pattern-sparkles,
+.kana-background-preview-pattern-twinkle,
+.kana-background-preview-pattern-gingham,
+.kana-background-preview-pattern-stars,
+.kana-background-preview-pattern-swirls {
+  background-color: var(--bg);
+  background-position: 0 0;
+  background-repeat: repeat;
+}
+
+.kana-background-preview-pattern-sparkles {
+  background-image: url("/backgrounds/kana-pattern-sparkles.svg");
+  background-size: 54px 54px;
+}
+
+.kana-background-preview-pattern-twinkle {
+  background-image: url("/backgrounds/kana-pattern-twinkle.svg");
+  background-size: 68px 68px;
+}
+
+.kana-background-preview-pattern-gingham {
+  background-image: url("/backgrounds/kana-pattern-gingham.svg");
+  background-size: 58px 58px;
+}
+
+.kana-background-preview-pattern-stars {
+  background-image: url("/backgrounds/kana-pattern-stars.svg");
+  background-size: 76px 76px;
+}
+
+.kana-background-preview-pattern-swirls {
+  background-image: url("/backgrounds/kana-pattern-swirls.svg");
+  background-size: 96px 96px;
+}
+
+.kana-background-carousel {
+  overscroll-behavior-inline: contain;
+  scrollbar-width: none;
+}
+
+.kana-background-carousel::-webkit-scrollbar {
+  display: none;
+}
+
+.kana-settings-nav-item {
+  border-left: 3px solid transparent;
+  color: var(--muted);
+}
+
+.kana-settings-nav-item:hover {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.kana-settings-nav-item.is-active {
+  border-left-color: var(--accent);
+  color: var(--accent-strong);
 }
 
 .kana-focus:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent) 75%, transparent);
   outline-offset: 2px;
+}
+
+.kana-settings-nav-item:focus-visible {
+  outline: none;
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
 }
 
 @keyframes kana-pulse {
@@ -132,5 +376,66 @@ button,
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+@media (max-width: 639px) {
+  .kana-workspace-action {
+    width: 42px;
+    min-height: 42px;
+    padding-inline: 0;
+  }
+}
+
+@media (max-width: 1023px) {
+  .kana-chat-panel {
+    border: 0;
+    background: transparent;
+  }
+
+  .kana-chat-feed {
+    background: transparent;
+  }
+
+  .kana-chat-scroll {
+    padding: 3.75rem 0.75rem 0.625rem;
+    scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      rgb(0 0 0 / 0.16) 7%,
+      rgb(0 0 0 / 0.78) 18%,
+      #000 30%
+    );
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      rgb(0 0 0 / 0.16) 7%,
+      rgb(0 0 0 / 0.78) 18%,
+      #000 30%
+    );
+  }
+
+  .kana-chat-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  .kana-composer-shell {
+    background: var(--chat-frame);
+  }
+
+  .kana-avatar-viewport[data-chat-open="true"] .kana-avatar-content {
+    transform: none;
+  }
+}
+
+@media (max-width: 767px) {
+  .kana-settings-nav-item {
+    border-bottom: 3px solid transparent;
+    border-left: 0;
+  }
+
+  .kana-settings-nav-item.is-active {
+    border-bottom-color: var(--accent);
   }
 }

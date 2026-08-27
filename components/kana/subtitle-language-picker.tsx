@@ -2,22 +2,25 @@
 
 import { SUPPORTED_SUBTITLE_LANGUAGES } from "@/lib/presentation/languages";
 import { chipBase, fieldLabel } from "./ui";
+import { getCopy, type UiLocale } from "@/lib/ui/copy";
 
 type SubtitleLanguagePickerProps = {
   value: string;
   onChange(value: string): void;
+  locale: UiLocale;
 };
 
 /**
  * Fixed preset chips plus a free-form custom field — Hermes translates
  * subtitles into any language name the user types.
  */
-export function SubtitleLanguagePicker({ value, onChange }: SubtitleLanguagePickerProps) {
+export function SubtitleLanguagePicker({ value, onChange, locale }: SubtitleLanguagePickerProps) {
+  const copy = getCopy(locale).subtitlePicker;
   const presetActive = SUPPORTED_SUBTITLE_LANGUAGES.some((lang) => lang.code === value);
 
   return (
     <div className="flex flex-col gap-2.5">
-      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Common subtitle languages">
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label={copy.commonLanguages}>
         {SUPPORTED_SUBTITLE_LANGUAGES.map((lang) => {
           const active = value === lang.code;
           return (
@@ -34,18 +37,18 @@ export function SubtitleLanguagePicker({ value, onChange }: SubtitleLanguagePick
         })}
       </div>
       <label className="flex flex-col gap-1">
-        <span className={fieldLabel}>Custom language</span>
+        <span className={fieldLabel}>{copy.customLanguage}</span>
         <input
           type="text"
           className="min-h-9 w-full rounded-xl border border-line-strong bg-transparent px-3 text-[13px] text-ink placeholder:text-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15"
           value={presetActive ? "" : value}
-          placeholder="Or type any language…"
-          aria-label="Custom subtitle language"
+          placeholder={copy.customPlaceholder}
+          aria-label={copy.customAria}
           onChange={(event) => onChange(event.target.value.trim())}
         />
       </label>
       <p className="text-[11px] leading-relaxed text-faint">
-        Hermes writes subtitles in this language. Speech stays Japanese; history is never retranslated.
+        {copy.hint}
       </p>
     </div>
   );

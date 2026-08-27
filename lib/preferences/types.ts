@@ -5,6 +5,22 @@ import type { VoiceDeliveryMode } from "@/lib/voice/speech-chunks";
 export type AgentMode = "hermes";
 export type VoiceMode = "qwen3";
 export type AvatarMode = "live2d";
+export const STAGE_BACKGROUNDS = [
+  "plain",
+  "room",
+  "pattern-sparkles",
+  "pattern-twinkle",
+  "pattern-gingham",
+  "pattern-stars",
+  "pattern-swirls",
+  "custom",
+] as const;
+export type StageBackground = (typeof STAGE_BACKGROUNDS)[number];
+
+export function isStageBackground(value: unknown): value is StageBackground {
+  return typeof value === "string"
+    && (STAGE_BACKGROUNDS as readonly string[]).includes(value);
+}
 export type HostedAvatarModel = {
   id: string;
   name: string;
@@ -21,6 +37,8 @@ export type KanaPreferences = {
   voiceEnabled: boolean;
   voiceMode: VoiceMode;
   avatarMode: AvatarMode;
+  stageBackground: StageBackground;
+  customBackgroundId?: string;
   hermes: {
     /** Working folder for the managed Hermes process (server-side concern). */
     cwd: string;

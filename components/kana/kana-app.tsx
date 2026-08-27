@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentInputDialog } from "./agent-input-dialog";
 import { AvatarStage } from "./avatar-stage";
 import { ConversationSidebar } from "./conversation-sidebar";
@@ -16,17 +16,27 @@ import {
   fetchSetupState,
   markOnboardingComplete,
 } from "@/lib/runtime/setup-client";
-import { getCopy } from "@/lib/ui/copy";
+import { getCopy, type Copy } from "@/lib/ui/copy";
 import type { KanaPreferences } from "@/lib/preferences/types";
+import { IndexedDbStageBackgroundStore } from "@/lib/background/indexed-db-stage-background-store";
 import { btnPrimary } from "./ui";
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  HistoryIcon,
+  MoonIcon,
+  SendIcon,
+  SettingsIcon,
+  SunIcon,
+} from "./icons";
 
-function destructiveCommandPrompt(input: string): string | null {
+function destructiveCommandPrompt(input: string, copy: Copy["workspace"]): string | null {
   const normalized = input.trim().toLowerCase().replace(/^\/+/, "");
-  if (normalized === "new" || normalized.startsWith("new ")) return "Start a fresh Kana and Hermes conversation?";
-  if (normalized === "undo" || normalized.startsWith("undo ")) return "Undo the latest Hermes turn and remove it from this Kana history?";
-  if (normalized === "restart" || normalized.startsWith("restart ")) return "Restart the Hermes gateway? Kana will disconnect temporarily.";
-  if (normalized === "update" || normalized.startsWith("update ")) return "Allow Hermes to update its own installation?";
-  if (/^rollback\s+(restore|rewind)\b/.test(normalized)) return "Restore a Hermes filesystem checkpoint? This can overwrite current files.";
+  if (normalized === "new" || normalized.startsWith("new ")) return copy.confirmNew;
+  if (normalized === "undo" || normalized.startsWith("undo ")) return copy.confirmUndo;
+  if (normalized === "restart" || normalized.startsWith("restart ")) return copy.confirmRestart;
+  if (normalized === "update" || normalized.startsWith("update ")) return copy.confirmUpdate;
+  if (/^rollback\s+(restore|rewind)\b/.test(normalized)) return copy.confirmRollback;
   return null;
 }
 
@@ -37,9 +47,17 @@ type KanaAppProps = { appVersion: string };
 export function KanaApp({ appVersion }: KanaAppProps) {
   const kana = useKanaController(appVersion);
   const { theme, toggleTheme } = useTheme();
+  const copy = getCopy(kana.preferences.uiLocale);
+  const workspaceCopy = copy.workspace;
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sessionsOpen, setSessionsOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(true);
+  const [usesMobileChat, setUsesMobileChat] = useState(false);
+  const [customBackground, setCustomBackground] = useState<{
+    id: string;
+    url: string;
+  }>();
   const [connectionGateOpen, setConnectionGateOpen] = useState(false);
   const [connectionGateDismissed, setConnectionGateDismissed] = useState(false);
   const [automaticConnectFinished, setAutomaticConnectFinished] = useState(false);
@@ -55,7 +73,62 @@ export function KanaApp({ appVersion }: KanaAppProps) {
   const selectedCommandIndexRef = useRef(0);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const automaticConnectStartedRef = useRef(false);
+  const stageBackgroundStore = useMemo(
+    () => new IndexedDbStageBackgroundStore(),
+    [],
+  );
   const { clearCommandSuggestions } = kana;
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 1023px)");
+    const syncMobileChat = () => setUsesMobileChat(media.matches);
+    syncMobileChat();
+    media.addEventListener("change", syncMobileChat);
+    return () => media.removeEventListener("change", syncMobileChat);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    let objectUrl: string | undefined;
+    if (
+      kana.preferences.stageBackground !== "custom"
+      || !kana.preferences.customBackgroundId
+    ) {
+      return () => { active = false; };
+    }
+    void stageBackgroundStore.load(kana.preferences.customBackgroundId)
+      .then((asset) => {
+        if (!active || !asset) return;
+        objectUrl = URL.createObjectURL(asset.content);
+        setCustomBackground({ id: asset.id, url: objectUrl });
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [
+    kana.preferences.customBackgroundId,
+    kana.preferences.stageBackground,
+    stageBackgroundStore,
+  ]);
+
+  const importStageBackground = useCallback(
+    (file: File) => stageBackgroundStore.import(file),
+    [stageBackgroundStore],
+  );
+  const listStageBackgrounds = useCallback(
+    () => stageBackgroundStore.list(),
+    [stageBackgroundStore],
+  );
+  const loadStageBackground = useCallback(
+    (id: string) => stageBackgroundStore.load(id),
+    [stageBackgroundStore],
+  );
+  const deleteStageBackground = useCallback(
+    (id: string) => stageBackgroundStore.delete(id),
+    [stageBackgroundStore],
+  );
   // Latest-ref mirror: the typing effect below must fire only when the message
   // changes, not whenever controller identities churn between renders.
   const completeCommandsRef = useRef(kana.completeCommands);
@@ -258,15 +331,12 @@ export function KanaApp({ appVersion }: KanaAppProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kana.ready]);
 
-  const completeWizard = useCallback(
-    async (next: KanaPreferences) => {
-      // Server flag first: it is the source other browsers read.
-      await markOnboardingComplete();
-      await kana.savePreferences({ ...next, onboardingCompleted: true });
-      setWizardMode(null);
-    },
-    [kana],
-  );
+  const completeWizard = async (next: KanaPreferences) => {
+    // Server flag first: it is the source other browsers read.
+    await markOnboardingComplete();
+    await kana.savePreferences({ ...next, onboardingCompleted: true });
+    setWizardMode(null);
+  };
 
   useEffect(() => {
     if (!message.startsWith("/")) { clearCommandSuggestions(); return; }
@@ -304,25 +374,25 @@ export function KanaApp({ appVersion }: KanaAppProps) {
     void deleteConversation(id);
   }, [deleteConversation]);
 
-  const submitMessage = useCallback(async () => {
+  const submitMessage = async () => {
     const text = message.trim();
     if (!text) return;
-    const confirmation = destructiveCommandPrompt(text);
+    const confirmation = destructiveCommandPrompt(text, workspaceCopy);
     if (confirmation && !window.confirm(confirmation)) return;
     setMessage("");
     const prefill = await kana.sendMessage(text);
     if (prefill) setMessage(prefill);
-  }, [kana, message, setMessage]);
+  };
 
   if (!kana.ready) {
     return (
       <main className="grid min-h-dvh place-items-center bg-bg">
-        <p className="text-[10px] font-bold tracking-[0.18em] text-muted uppercase animate-kana-pulse">Preparing Kana</p>
+        <p className="text-[10px] font-bold tracking-[0.18em] text-muted uppercase animate-kana-pulse">{workspaceCopy.preparing}</p>
       </main>
     );
   }
 
-  const gateCopy = getCopy(kana.preferences.uiLocale).gate;
+  const gateCopy = copy.gate;
   const connectButtonLabel = connectionInTransition
     ? gateCopy.connecting
     : connectPhase === "auto_starting"
@@ -334,52 +404,93 @@ export function KanaApp({ appVersion }: KanaAppProps) {
     kana.connectionState === "authentication_failed" ||
     kana.connectionState === "incompatible";
 
+  const chatVisible = usesMobileChat || chatOpen;
+
   return (
     <main className="relative h-dvh w-full overflow-hidden bg-bg">
       <AvatarStage
         avatar={kana.avatar}
+        background={kana.preferences.stageBackground}
+        customBackgroundUrl={
+          customBackground
+          && customBackground.id === kana.preferences.customBackgroundId
+            ? customBackground.url
+            : undefined
+        }
+        chatOpen={chatVisible}
+        locale={kana.preferences.uiLocale}
         onCanvasReady={kana.attachAvatarCanvas}
       />
 
       <header className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-4 p-4 max-sm:p-3">
         <div className="pointer-events-auto min-w-0 max-sm:hidden">
-          <div className="min-w-0">
-            <p className="text-base font-bold tracking-wide text-ink">Kana</p>
-            <p className="max-w-[34vw] truncate text-[10px] text-muted max-sm:max-w-[38vw]">
-              {kana.activeConversation?.title ?? "A new moment"}
-            </p>
-          </div>
+          <p className="kana-session-title max-w-[34vw] truncate px-3 py-2 text-xs font-bold text-ink">
+            {kana.activeConversation?.title ?? workspaceCopy.newMoment}
+          </p>
         </div>
 
-        <nav className="pointer-events-auto ml-auto flex items-center gap-1 border border-line bg-raised p-1" aria-label="Workspace actions">
+        <nav className="pointer-events-auto ml-auto flex items-center gap-2" aria-label={workspaceCopy.actions}>
           <button
             type="button"
-            className="kana-focus min-h-8 px-2.5 text-[10px] font-semibold text-muted hover:bg-surface-strong hover:text-ink"
+            className="kana-workspace-action kana-focus"
             onClick={toggleTheme}
-            aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
+            aria-label={workspaceCopy.switchTheme(theme === "dark" ? "light" : "dark")}
           >
-            {theme === "dark" ? "Light" : "Dark"}
+            {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+            <span className="max-sm:sr-only">{theme === "dark" ? workspaceCopy.light : workspaceCopy.dark}</span>
           </button>
           <button
             type="button"
-            className="kana-focus min-h-8 px-2.5 text-[10px] font-semibold text-muted hover:bg-surface-strong hover:text-ink"
+            className="kana-workspace-action kana-focus"
             onClick={() => setSessionsOpen(true)}
-            aria-label="Open conversation history"
+            aria-label={workspaceCopy.openHistory}
           >
-            History
+            <HistoryIcon />
+            <span className="max-sm:sr-only">{workspaceCopy.history}</span>
           </button>
           <button
             type="button"
-            className="kana-focus min-h-8 px-2.5 text-[10px] font-semibold text-muted hover:bg-surface-strong hover:text-ink"
+            className="kana-workspace-action kana-focus"
             onClick={() => setSettingsOpen(true)}
-            aria-label="Open settings"
+            aria-label={workspaceCopy.openSettings}
           >
-            Settings
+            <SettingsIcon />
+            <span className="max-sm:sr-only">{workspaceCopy.settings}</span>
           </button>
         </nav>
       </header>
 
-      <section className="kana-panel absolute bottom-4 right-4 top-[76px] z-10 flex w-[min(34vw,480px)] min-w-[390px] flex-col overflow-hidden rounded-2xl max-lg:inset-x-0 max-lg:bottom-0 max-lg:top-auto max-lg:h-[46dvh] max-lg:w-full max-lg:min-w-0 max-lg:rounded-none max-sm:inset-0 max-sm:h-full max-sm:border-0 max-sm:bg-transparent">
+      <div className={`kana-chat-dock absolute bottom-4 right-4 top-[76px] z-10 w-[min(34vw,480px)] min-w-[390px] transition-transform duration-300 ease-out max-lg:inset-x-0 max-lg:bottom-0 max-lg:top-auto max-lg:h-[46dvh] max-lg:w-full max-lg:min-w-0 ${chatVisible ? "" : "is-closed"}`}>
+        <button
+          type="button"
+          className="kana-chat-toggle absolute -left-12 top-1/2 z-20 h-28 w-12 -translate-y-1/2 text-accent hover:text-accent-hover max-lg:hidden"
+          aria-controls="kana-chat-panel"
+          aria-expanded={chatVisible}
+          aria-label={chatVisible ? workspaceCopy.hideChat : workspaceCopy.showChat}
+          onClick={() => setChatOpen((current) => !current)}
+        >
+          <svg
+            className="absolute inset-0 h-full w-full"
+            viewBox="0 0 48 112"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M48 0H27C22 0 19 2 16 6L5 20C2 24 1 28 1 33V79C1 84 2 88 5 92L16 106C19 110 22 112 27 112H48Z"
+              fill="currentColor"
+            />
+          </svg>
+          <span className="relative z-10 grid h-full place-items-center text-on-accent">
+            {chatVisible ? <ChevronRightIcon className="size-5" /> : <ChevronLeftIcon className="size-5" />}
+          </span>
+        </button>
+
+      <section
+        id="kana-chat-panel"
+        inert={chatVisible ? undefined : true}
+        aria-hidden={!chatVisible}
+        className="kana-chat-panel flex h-full w-full flex-col overflow-hidden rounded-[22px] max-lg:rounded-none"
+      >
         <div className="flex min-h-0 flex-1">
           <LiveChatFeed
             messages={kana.activeConversation?.messages ?? NO_MESSAGES}
@@ -387,9 +498,10 @@ export function KanaApp({ appVersion }: KanaAppProps) {
             serverActivityTurns={kana.serverActivityTurns}
             busy={kana.busy}
             status={kana.status}
+            locale={kana.preferences.uiLocale}
           />
         </div>
-        <div className="shrink-0 border-t border-line bg-raised p-3 max-sm:px-3 max-sm:pb-[max(12px,env(safe-area-inset-bottom))] max-sm:pt-2">
+        <div className="kana-composer-shell shrink-0 border-t px-4 pb-3 pt-2.5 max-sm:px-3 max-sm:pb-[max(12px,env(safe-area-inset-bottom))]">
           <div className="relative">
             <SlashCommandMenu
               suggestions={kana.commandSuggestions}
@@ -397,16 +509,17 @@ export function KanaApp({ appVersion }: KanaAppProps) {
               selectedIndex={activeCommandIndex}
               onHighlight={highlightCommand}
               onSelect={selectCommand}
+              locale={kana.preferences.uiLocale}
             />
-            <div className="flex items-end gap-2 border border-line-strong bg-surface-strong p-2 transition-colors focus-within:border-accent/45">
+            <div className="kana-composer flex items-end gap-2">
               <textarea
                 id="kana-message"
                 ref={inputRef}
                 value={message}
                 rows={1}
-                placeholder="Say something to Kana…"
-                aria-label="Message Kana"
-                className="max-h-28 min-h-10 flex-1 resize-none bg-transparent px-2 py-2.5 text-[13px] leading-snug text-ink placeholder:text-faint focus:outline-none"
+                placeholder={workspaceCopy.messagePlaceholder}
+                aria-label={workspaceCopy.messageAria}
+                className="max-h-28 min-h-11 flex-1 resize-none bg-transparent px-0 py-3 text-[13px] leading-snug focus:outline-none"
                 onChange={(event) => setMessage(event.target.value)}
                 onKeyDown={(event) => {
                   if (kana.commandSuggestions.length > 0) {
@@ -442,38 +555,37 @@ export function KanaApp({ appVersion }: KanaAppProps) {
               {kana.busy ? (
                 <button
                   type="button"
-                  aria-label="Stop"
-                  className="kana-focus min-h-10 shrink-0 border border-danger/40 px-3 text-[11px] font-bold text-danger transition-colors hover:bg-danger/10"
+                  aria-label={workspaceCopy.stop}
+                  className="kana-focus mb-1 inline-flex min-h-9 shrink-0 items-center rounded-lg px-3 text-[11px] transition-colors hover:bg-white/12"
                   onClick={() => void kana.abort()}
                 >
-                  Stop
+                  {workspaceCopy.stop}
                 </button>
               ) : (
                 <button
                   type="button"
-                  aria-label="Send"
+                  aria-label={workspaceCopy.send}
                   disabled={!message.trim() || (kana.busy && !canSubmitWhileBusy)}
-                  className="kana-focus min-h-10 shrink-0 bg-accent px-3 text-[11px] font-bold text-on-accent transition-[background-color,opacity] hover:bg-accent-hover disabled:opacity-35"
+                  className="kana-focus mb-1 inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[11px] transition-colors hover:bg-white/12 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                   onClick={() => void submitMessage()}
                 >
-                  Send
+                  <span>{workspaceCopy.send}</span>
+                  <SendIcon className="size-3.5" />
                 </button>
               )}
             </div>
           </div>
-          <p className="mt-2 px-1 text-[9px] text-faint max-sm:hidden">
-            Enter to send · Shift + Enter for a new line · Type / for Hermes actions
-          </p>
         </div>
       </section>
+      </div>
 
       {/* Session history modal */}
       {sessionsOpen ? (
         <div
-          className="fixed inset-0 z-30 flex justify-end bg-[var(--backdrop)] p-3 max-sm:p-0"
+          className="fixed inset-0 z-30 flex justify-end bg-[var(--backdrop)] p-3 backdrop-blur-md max-sm:p-0"
           role="dialog"
           aria-modal="true"
-          aria-label="Conversation history"
+          aria-label={workspaceCopy.conversationHistory}
           onClick={closeSessions}
         >
           <section
@@ -491,18 +603,19 @@ export function KanaApp({ appVersion }: KanaAppProps) {
               onRename={renameConversationFromModal}
               onDelete={deleteConversationFromModal}
               onClose={closeSessions}
+              locale={kana.preferences.uiLocale}
             />
           </section>
         </div>
       ) : null}
 
       {showGate ? (
-        <div className="fixed inset-0 z-30 flex items-center justify-center bg-[var(--backdrop)] p-4" role="dialog" aria-modal="true" aria-label="Hermes gateway">
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-[var(--backdrop)] p-4" role="dialog" aria-modal="true" aria-label={workspaceCopy.gatewayAria}>
           <div className="kana-panel flex w-full max-w-sm flex-col items-center rounded-2xl p-6 text-center animate-kana-in">
-            <p className="text-[10px] font-bold tracking-[0.16em] text-muted uppercase">Kana needs Hermes</p>
-            <h2 className="mt-1 text-lg font-bold text-ink">Connect the mind behind Kana</h2>
+            <p className="text-[10px] font-bold tracking-[0.16em] text-muted uppercase">{workspaceCopy.gatewayEyebrow}</p>
+            <h2 className="mt-1 text-lg font-bold text-ink">{workspaceCopy.gatewayTitle}</h2>
             <p className="mt-2 max-w-[290px] text-[11px] leading-relaxed text-muted">
-              Kana will find or start your existing Hermes installation automatically.
+              {workspaceCopy.gatewayBody}
             </p>
             <div
               className={`mt-5 border px-3 py-1.5 text-[10px] font-semibold ${
@@ -543,7 +656,7 @@ export function KanaApp({ appVersion }: KanaAppProps) {
               }}
               disabled={connectionInTransition || connectPhase === "auto_starting"}
             >
-              Not now
+              {workspaceCopy.notNow}
             </button>
 
             {hermesRuntime?.controlAvailable ? (
@@ -576,6 +689,10 @@ export function KanaApp({ appVersion }: KanaAppProps) {
           onSelectAvatarModel={kana.selectAvatarModel}
           onRenameAvatarModel={kana.renameAvatarModel}
           onDeleteAvatarModel={kana.deleteAvatarModel}
+          onImportStageBackground={importStageBackground}
+          onListStageBackgrounds={listStageBackgrounds}
+          onLoadStageBackground={loadStageBackground}
+          onDeleteStageBackground={deleteStageBackground}
           onInspectHermesControl={kana.inspectHermesControl}
           onStartHermesControl={kana.startHermesControl}
           onStopHermesControl={kana.stopHermesControl}
@@ -589,6 +706,7 @@ export function KanaApp({ appVersion }: KanaAppProps) {
           request={kana.pendingInput}
           submitting={kana.respondingToInput}
           onRespond={kana.respondToInput}
+          locale={kana.preferences.uiLocale}
         />
       ) : null}
 

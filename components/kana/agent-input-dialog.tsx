@@ -7,18 +7,20 @@ import type {
 } from "@/lib/agent/types";
 import { useDialogFocus } from "@/lib/accessibility/use-dialog-focus";
 import { btnPrimary, btnSecondary, bentoCard, inputBase } from "./ui";
+import { getCopy, type UiLocale } from "@/lib/ui/copy";
 
 type AgentInputDialogProps = {
   request: AgentInputRequest;
   submitting: boolean;
   onRespond(response: AgentInputResponse): Promise<void>;
+  locale: UiLocale;
 };
 
-function approvalLabel(choice: string): string {
-  if (choice === "once") return "Run once";
-  if (choice === "session") return "Allow for session";
-  if (choice === "always") return "Always allow";
-  if (choice === "deny") return "Deny";
+function approvalLabel(choice: string, copy: ReturnType<typeof getCopy>["agentInput"]): string {
+  if (choice === "once") return copy.runOnce;
+  if (choice === "session") return copy.allowSession;
+  if (choice === "always") return copy.alwaysAllow;
+  if (choice === "deny") return copy.deny;
   return choice.replaceAll("_", " ");
 }
 
@@ -26,7 +28,9 @@ export function AgentInputDialog({
   request,
   submitting,
   onRespond,
+  locale,
 }: AgentInputDialogProps) {
+  const copy = getCopy(locale).agentInput;
   const secureInputRef = useRef<HTMLInputElement | null>(null);
   const [answer, setAnswer] = useState("");
 
@@ -109,7 +113,7 @@ export function AgentInputDialog({
           <>
             <div className={`mb-2 ${bentoCard}`}>
               <div className="min-w-0">
-                <h2 id="agent-input-title" className="text-sm font-bold text-ink">Hermes needs approval</h2>
+                <h2 id="agent-input-title" className="text-sm font-bold text-ink">{copy.approvalTitle}</h2>
                 <p className="mt-0.5 text-xs leading-relaxed break-words text-ink-dim">{request.description}</p>
               </div>
             </div>
@@ -118,7 +122,7 @@ export function AgentInputDialog({
             ) : null}
             {request.smartDenied ? (
               <p className="mb-2 rounded-2xl border border-danger/40 px-3.5 py-2.5 text-xs font-semibold text-danger">
-                Hermes safety checks recommended denying this action.
+                {copy.smartDenied}
               </p>
             ) : null}
             <div className={`flex flex-wrap gap-2 ${bentoCard}`}>
@@ -130,7 +134,7 @@ export function AgentInputDialog({
                   onClick={() => void onRespond({ kind: "approval", choice })}
                   type="button"
                 >
-                  {approvalLabel(choice)}
+                  {approvalLabel(choice, copy)}
                 </button>
               ))}
             </div>
@@ -150,7 +154,7 @@ export function AgentInputDialog({
           >
             <div className={`mb-2 ${bentoCard}`}>
               <div className="min-w-0">
-                <h2 id="agent-input-title" className="text-sm font-bold text-ink">Hermes has a question</h2>
+                <h2 id="agent-input-title" className="text-sm font-bold text-ink">{copy.questionTitle}</h2>
                 <p className="mt-0.5 text-xs leading-relaxed break-words text-ink-dim">{request.question}</p>
               </div>
             </div>
@@ -176,12 +180,12 @@ export function AgentInputDialog({
               </div>
             ) : null}
             <label className={`mb-2 flex flex-col gap-1.5 ${bentoCard}`}>
-              <span className="text-[11px] font-semibold text-muted">Your answer</span>
+              <span className="text-[11px] font-semibold text-muted">{copy.answerLabel}</span>
               <textarea
                 autoFocus
                 disabled={submitting}
                 onChange={(event) => setAnswer(event.target.value)}
-                placeholder="Type a response for Hermes…"
+                placeholder={copy.answerPlaceholder}
                 rows={3}
                 value={answer}
                 className={`${inputBase} resize-y`}
@@ -189,10 +193,10 @@ export function AgentInputDialog({
             </label>
             <div className={`flex justify-end gap-2 ${bentoCard}`}>
               <button type="button" className={btnSecondary} disabled={submitting} onClick={() => void cancel()}>
-                Skip
+                {copy.skip}
               </button>
               <button type="submit" className={btnPrimary} disabled={submitting || !answer.trim()}>
-                Send answer
+                {copy.sendAnswer}
               </button>
             </div>
           </form>
@@ -209,19 +213,19 @@ export function AgentInputDialog({
               <div className="min-w-0">
                 <h2 id="agent-input-title" className="text-sm font-bold break-words text-ink">
                   {request.kind === "sudo"
-                    ? "Sudo password required"
-                    : request.envVar || "Secret required"}
+                    ? copy.sudoTitle
+                    : request.envVar || copy.secretTitle}
                 </h2>
                 <p className="mt-0.5 text-xs leading-relaxed text-ink-dim">
                   {request.kind === "sudo"
-                    ? "Hermes needs a password for the current protected command."
-                    : request.prompt || "Hermes needs a secret for the current tool."}
+                    ? copy.sudoBody
+                    : request.prompt || copy.secretBody}
                 </p>
               </div>
             </div>
             <label className={`mb-2 flex flex-col gap-1.5 ${bentoCard}`}>
               <span className="text-[11px] font-semibold text-muted">
-                {request.kind === "sudo" ? "Password" : "Secret value"}
+                {request.kind === "sudo" ? copy.password : copy.secretValue}
               </span>
               <input
                 autoComplete="off"
@@ -235,15 +239,15 @@ export function AgentInputDialog({
                 className={inputBase}
               />
               <span className="text-[10px] leading-relaxed text-faint">
-                Sent directly to Hermes; never added to Kana history or local preferences.
+                {copy.secureHint}
               </span>
             </label>
             <div className={`flex justify-end gap-2 ${bentoCard}`}>
               <button type="button" className={btnSecondary} disabled={submitting} onClick={() => void cancel()}>
-                Cancel
+                {copy.cancel}
               </button>
               <button type="submit" className={btnPrimary} disabled={submitting}>
-                {submitting ? "Sending…" : "Send securely"}
+                {submitting ? copy.sending : copy.sendSecurely}
               </button>
             </div>
           </form>
