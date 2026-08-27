@@ -7,7 +7,7 @@ import type { KanaPreferences } from "@/lib/preferences/types";
 import type { SubtitleLanguage } from "@/lib/presentation/types";
 import type { UiLocale } from "@/lib/ui/copy";
 import { SubtitleLanguagePicker } from "./subtitle-language-picker";
-import { btnGhost, btnPrimary, btnSecondary, sectionEyebrow } from "./ui";
+import { btnGhost, btnPrimary, btnSecondary, sectionEyebrow, Toggle } from "./ui";
 
 export type DependencyFindings = {
   hermes: "running" | "installed" | "missing";
@@ -24,30 +24,13 @@ type OnboardingDialogProps = {
   onOpenSettings(): void;
 };
 
-function Toggle({ checked, onChange }: { checked: boolean; onChange(): void }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label="Kana voice"
-      onClick={onChange}
-      className={`kana-focus relative h-7 w-12 rounded-sm border transition-colors ${
-        checked ? "border-accent bg-accent" : "border-line-strong bg-surface-strong"
-      }`}
-    >
-      <span className={`absolute top-1 size-[18px] rounded-[2px] bg-on-accent transition-transform ${checked ? "translate-x-[25px]" : "translate-x-1"}`} />
-    </button>
-  );
-}
-
 function StatusRow({ title, body, healthy }: {
   title: string;
   body: string;
   healthy: boolean;
 }) {
   return (
-    <div className={`border bg-surface-strong p-4 ${healthy ? "border-accent/35" : "border-danger/40"}`}>
+    <div className={`rounded-xl border bg-surface-strong p-4 ${healthy ? "border-accent/35" : "border-danger/40"}`}>
       <div className="min-w-0">
         <p className="text-xs font-bold text-ink">{title}</p>
         <p className="mt-1 text-[11px] leading-relaxed text-muted">{body}</p>
@@ -111,23 +94,17 @@ export function OnboardingWizard({
   };
 
   return (
-    <div className="fixed inset-0 z-40 grid place-items-center overflow-y-auto bg-bg p-3 sm:p-6">
+    <div className="fixed inset-0 z-40 grid place-items-center overflow-y-auto bg-[var(--backdrop)] p-3 backdrop-blur-md sm:p-6">
       <section
-        className="relative grid max-h-[min(760px,94dvh)] w-[min(880px,100%)] grid-cols-[minmax(0,1.1fr)_minmax(280px,.9fr)] overflow-hidden rounded-2xl border border-line bg-raised max-md:grid-cols-1 max-md:rounded-none"
+        className="relative grid h-[min(600px,94dvh)] w-[min(880px,100%)] grid-cols-[minmax(0,1.1fr)_minmax(280px,.9fr)] overflow-hidden rounded-2xl border border-line bg-raised max-md:grid-cols-1 max-md:rounded-none"
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="onboarding-title"
         onKeyDown={onDialogKeyDown}
       >
-        <div className="kana-stage-pattern relative min-h-[280px] overflow-hidden border-r border-line bg-surface max-md:hidden">
-          <div className="absolute inset-x-8 bottom-10 border border-line bg-raised p-6">
-            <p className={sectionEyebrow}>Kana</p>
-            <p className="mt-1 text-xl font-bold text-ink">{isId ? "Waifu agent yang terasa milikmu." : "An agent companion that feels like yours."}</p>
-            <p className="mt-2 text-[11px] leading-relaxed text-muted">
-              {isId ? "Hermes tetap menjadi otaknya. Kana membuat percakapan, avatar, dan suara terasa natural." : "Hermes stays the brain. Kana makes the conversation, avatar, and voice feel natural."}
-            </p>
-          </div>
+        <div className="relative min-h-[280px] overflow-hidden border-r border-line bg-raised max-md:hidden">
+          <span className="absolute bottom-5 left-6 text-3xl font-bold text-ink">Kana</span>
         </div>
 
         <div className="flex min-h-0 flex-col bg-raised">
@@ -144,14 +121,14 @@ export function OnboardingWizard({
 
           <main className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-7">
             {step === 0 ? (
-              <div className="flex min-h-full flex-col justify-center">
+              <div>
                 <p className={sectionEyebrow}>{isId ? "Selamat datang" : "Welcome"}</p>
                 <h1 id="onboarding-title" className="mt-2 text-2xl font-bold tracking-tight text-ink">{isId ? "Kenalan dulu dengan Kana" : "Meet Kana"}</h1>
                 <p className="mt-3 text-xs leading-6 text-muted">
                   {isId ? "Atur hal yang terasa personal saja. Detail teknis bisa Kana tangani sendiri dan selalu bisa diubah nanti." : "Choose only what feels personal. Kana handles the technical details, and everything can be changed later."}
                 </p>
                 <div className="mt-6 rounded-2xl border border-accent/15 bg-accent/8 p-4">
-                  <p className="text-[11px] font-bold text-ink">Hermes → Kana → You</p>
+                    <p className="text-[11px] font-bold text-ink">Hermes → Kana → {isId ? "Kamu" : "You"}</p>
                   <p className="mt-1 text-[10px] leading-relaxed text-muted">{isId ? "Satu agent yang sama, dengan pengalaman yang lebih hangat." : "The same agent, with a warmer experience."}</p>
                 </div>
               </div>
@@ -164,7 +141,7 @@ export function OnboardingWizard({
                 <p className="mt-2 text-[11px] leading-relaxed text-muted">{isId ? "Kana selalu berbicara dalam bahasa Jepang. Kamu memilih bahasa tulisan untuk balasan baru." : "Kana always speaks Japanese. You choose the written language for new replies."}</p>
                 <div className="mt-6 space-y-5">
                   <div>
-                    <p className="mb-2 text-[10px] font-bold tracking-wide text-muted uppercase">Interface</p>
+                    <p className="mb-2 text-[10px] font-bold tracking-wide text-muted uppercase">{isId ? "Antarmuka" : "Interface"}</p>
                     <div className="grid grid-cols-2 gap-2">
                       {([['id', 'Bahasa Indonesia'], ['en', 'English']] as const).map(([value, label]) => (
                         <button key={value} type="button" className={`kana-focus rounded-xl border px-3 py-3 text-left text-xs font-bold ${draft.uiLocale === value ? "border-accent/45 bg-accent/12 text-accent-strong" : "border-line bg-surface-strong text-ink-dim"}`} onClick={() => setDraft((current) => ({ ...current, uiLocale: value }))}>
@@ -174,8 +151,8 @@ export function OnboardingWizard({
                     </div>
                   </div>
                   <div>
-                    <p className="mb-2 text-[10px] font-bold tracking-wide text-muted uppercase">Subtitle</p>
-                    <SubtitleLanguagePicker value={draft.subtitleLanguage} onChange={(subtitleLanguage: SubtitleLanguage) => setDraft((current) => ({ ...current, subtitleLanguage }))} />
+                    <p className="mb-2 text-[10px] font-bold tracking-wide text-muted uppercase">{isId ? "Subtitle" : "Subtitle"}</p>
+                    <SubtitleLanguagePicker locale={draft.uiLocale} value={draft.subtitleLanguage} onChange={(subtitleLanguage: SubtitleLanguage) => setDraft((current) => ({ ...current, subtitleLanguage }))} />
                   </div>
                 </div>
               </div>
@@ -185,12 +162,12 @@ export function OnboardingWizard({
               <div>
                 <p className={sectionEyebrow}>{isId ? "Karakter" : "Character"}</p>
                 <h1 id="onboarding-title" className="mt-2 text-xl font-bold text-ink">{isId ? "Pilih tampilan dan suara" : "Choose a look and voice"}</h1>
-                <p className="mt-2 text-[11px] leading-relaxed text-muted">{isId ? "Mulai dengan pilihan bawaan. Avatar Live2D dan sampel suaramu sendiri bisa ditambahkan dari Settings." : "Start with a default. Your own Live2D avatar and voice sample can be added from Settings."}</p>
+                <p className="mt-2 text-[11px] leading-relaxed text-muted">{isId ? "Mulai dengan pilihan bawaan. Avatar Live2D dan sampel suaramu sendiri bisa ditambahkan dari Pengaturan." : "Start with a default. Your own Live2D avatar and voice sample can be added from Settings."}</p>
                 <div className="mt-5 grid gap-2 sm:grid-cols-2">
                   {OFFICIAL_LIVE2D_SAMPLES.map((sample, index) => {
                     const active = !draft.live2d.modelId && draft.live2d.modelUrl === sample.modelUrl;
                     return (
-                      <button type="button" key={sample.id} onClick={() => selectAvatar(index)} className={`kana-focus flex items-center gap-3 border p-3 text-left ${active ? "border-accent/45 bg-accent/12" : "border-line bg-surface-strong"}`}>
+                      <button type="button" key={sample.id} onClick={() => selectAvatar(index)} className={`kana-focus flex items-center gap-3 rounded-xl border p-3 text-left ${active ? "border-accent/45 bg-accent/12" : "border-line bg-surface-strong"}`}>
                         <span>
                           <span className="block text-xs font-bold text-ink">{sample.name}</span>
                           <span className="mt-0.5 block text-[9px] text-muted">{active ? (isId ? "Dipilih" : "Selected") : "Live2D"}</span>
@@ -199,14 +176,14 @@ export function OnboardingWizard({
                     );
                   })}
                 </div>
-                <div className="mt-4 flex items-center justify-between gap-4 border border-line bg-surface-strong p-4">
+                <div className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-line bg-surface-strong p-4">
                   <div className="flex min-w-0 items-center gap-3">
                     <div>
                       <p className="text-xs font-bold text-ink">{isId ? "Suara Kana" : "Kana's voice"}</p>
                       <p className="mt-0.5 text-[10px] text-muted">{draft.voiceEnabled ? (isId ? "Aktif" : "On") : (isId ? "Nonaktif" : "Off")}</p>
                     </div>
                   </div>
-                  <Toggle checked={draft.voiceEnabled} onChange={() => setDraft((current) => ({ ...current, voiceEnabled: !current.voiceEnabled }))} />
+                  <Toggle checked={draft.voiceEnabled} label={isId ? "Suara Kana" : "Kana's voice"} onChange={() => setDraft((current) => ({ ...current, voiceEnabled: !current.voiceEnabled }))} />
                 </div>
               </div>
             ) : null}
@@ -218,7 +195,7 @@ export function OnboardingWizard({
                 <p className="mt-2 text-[11px] leading-relaxed text-muted">{isId ? "Kami memeriksa dua layanan lokal yang membuat Kana bekerja." : "We checked the two local services that make Kana work."}</p>
                 <div className="mt-5 space-y-2">
                   <StatusRow title="Hermes" healthy={hermesHealthy} body={deps.hermes === "running" ? (isId ? "Terhubung dan siap." : "Connected and ready.") : deps.hermes === "installed" ? (isId ? "Terpasang; Kana akan menyalakannya saat dibutuhkan." : "Installed; Kana will start it when needed.") : (isId ? "Hermes belum ditemukan di perangkat ini." : "Hermes was not found on this device.")} />
-                  <StatusRow title={isId ? "Mesin suara" : "Voice engine"} healthy={voiceHealthy} body={!draft.voiceEnabled ? (isId ? "Tidak diperlukan karena suara dimatikan." : "Not needed while voice is off.") : deps.voice === "ok" ? (isId ? "Siap berbicara." : "Ready to speak.") : deps.voice === "error" ? (isId ? "Perlu diperiksa dari Settings." : "Needs attention in Settings.") : (isId ? "Akan disiapkan saat pertama digunakan." : "Will be prepared on first use.")} />
+                  <StatusRow title={isId ? "Mesin suara" : "Voice engine"} healthy={voiceHealthy} body={!draft.voiceEnabled ? (isId ? "Tidak diperlukan karena suara dimatikan." : "Not needed while voice is off.") : deps.voice === "ok" ? (isId ? "Siap berbicara." : "Ready to speak.") : deps.voice === "error" ? (isId ? "Perlu diperiksa dari Pengaturan." : "Needs attention in Settings.") : (isId ? "Akan disiapkan saat pertama digunakan." : "Will be prepared on first use.")} />
                 </div>
                 {!hermesHealthy || !voiceHealthy ? <button type="button" className={`${btnSecondary} mt-4`} onClick={onOpenSettings}>{isId ? "Buka pengaturan koneksi" : "Open connection settings"}</button> : null}
               </div>

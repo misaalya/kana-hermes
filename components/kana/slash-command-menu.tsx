@@ -1,5 +1,6 @@
 import { memo } from "react";
 import type { AgentCommandSuggestion } from "@/lib/agent/types";
+import { getCopy, type UiLocale } from "@/lib/ui/copy";
 
 type SlashCommandMenuProps = {
   suggestions: AgentCommandSuggestion[];
@@ -7,6 +8,7 @@ type SlashCommandMenuProps = {
   selectedIndex: number;
   onHighlight(index: number): void;
   onSelect(command: string): void;
+  locale: UiLocale;
 };
 
 /**
@@ -18,13 +20,15 @@ export const SlashCommandMenu = memo(function SlashCommandMenu({
   selectedIndex,
   onHighlight,
   onSelect,
+  locale,
 }: SlashCommandMenuProps) {
+  const copy = getCopy(locale);
   if (!loading && !suggestions.length) return null;
 
   const groups = suggestions.reduce<
     Array<{ name: string; items: AgentCommandSuggestion[] }>
   >((current, suggestion) => {
-    const name = suggestion.group || "Hermes commands";
+    const name = suggestion.group || copy.slash.commands;
     const group = current.find((item) => item.name === name);
     if (group) group.items.push(suggestion);
     else current.push({ name, items: [suggestion] });
@@ -36,11 +40,11 @@ export const SlashCommandMenu = memo(function SlashCommandMenu({
       className="kana-panel absolute bottom-full left-0 right-0 z-30 mb-2 max-h-[44dvh] overflow-hidden rounded-2xl animate-kana-in"
       id="kana-command-menu"
       role="listbox"
-      aria-label="Hermes commands"
+      aria-label={copy.slash.commands}
     >
       <div className="flex items-center justify-between border-b border-line px-4 py-3">
-        <span className="text-[10px] font-bold tracking-[0.14em] text-ink-dim uppercase">Ask Hermes to…</span>
-        <small className="text-[9px] text-faint">{loading ? "Finding actions…" : "↑↓ navigate · Tab select"}</small>
+        <span className="text-[10px] font-bold tracking-[0.14em] text-ink-dim uppercase">{copy.slash.ask}</span>
+        <small className="text-[9px] text-faint">{loading ? copy.slash.finding : copy.slash.navigate}</small>
       </div>
       <div className="max-h-[38dvh] overflow-y-auto p-2">
         {groups.map((group) => (
@@ -68,11 +72,11 @@ export const SlashCommandMenu = memo(function SlashCommandMenu({
                   <span className="truncate text-[11px] text-muted">
                     {suggestion.description ||
                       (suggestion.kind === "skill"
-                        ? "Hermes skill"
-                        : "Hermes command")}
+                        ? copy.slash.skill
+                        : copy.slash.command)}
                   </span>
                   <span className="rounded-lg border border-line px-2 py-1 text-[8px] font-bold tracking-wider text-faint uppercase max-md:hidden">
-                    {unavailable ? "surface" : suggestion.kind}
+                    {unavailable ? copy.slash.unavailable : suggestion.kind === "skill" ? copy.slash.skill : copy.slash.command}
                   </span>
                 </button>
               );

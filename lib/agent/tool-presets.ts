@@ -1,4 +1,5 @@
 import type { AgentToolKind } from "@/lib/agent/types";
+import type { UiLocale } from "@/lib/ui/copy";
 
 /**
  * Per-tool-family presentation variants for the live-chat feed.
@@ -104,9 +105,29 @@ const NEUTRAL_VARIANT: ToolVariant = {
 export function toolVariant(
   tool: string,
   kind: AgentToolKind | "status" | "input",
+  locale: UiLocale = "en",
 ): ToolVariant {
-  if (kind === "status" || kind === "input") return NEUTRAL_VARIANT;
+  const localize = (variant: ToolVariant): ToolVariant => {
+    if (locale !== "id") return variant;
+    const labels: Record<string, [string, string]> = {
+      "searched the web with": ["menelusuri web dengan", "Menelusuri web ·"],
+      "ran a command in": ["menjalankan perintah di", "Menjalankan perintah ·"],
+      "edited files via": ["mengedit berkas melalui", "Mengedit berkas ·"],
+      "generated media with": ["menghasilkan media dengan", "Menghasilkan media ·"],
+      "controlled the browser with": ["mengendalikan browser dengan", "Mengendalikan browser ·"],
+      "delegated work to": ["mendelegasikan pekerjaan kepada", "Mendelegasikan pekerjaan ·"],
+      "used the skill": ["menggunakan keahlian", "Menggunakan keahlian ·"],
+      called: ["memanggil", "Memanggil ·"],
+      used: ["menggunakan", "Menggunakan ·"],
+      event: ["peristiwa", "Menunggu input ·"],
+    };
+    const translated = labels[variant.label];
+    return translated
+      ? { ...variant, label: translated[0], runningLabel: translated[1] }
+      : variant;
+  };
+  if (kind === "status" || kind === "input") return localize(NEUTRAL_VARIANT);
   const rule = FAMILY_RULES.find((entry) => entry.match.test(tool));
-  if (rule) return rule.variant;
-  return { ...KIND_FALLBACK[kind], chipClass: GENERIC_CHIP };
+  if (rule) return localize(rule.variant);
+  return localize({ ...KIND_FALLBACK[kind], chipClass: GENERIC_CHIP });
 }

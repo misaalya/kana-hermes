@@ -2,6 +2,8 @@
 
 import { memo, useMemo, useState } from "react";
 import type { Conversation } from "@/lib/conversation/types";
+import { CloseIcon } from "./icons";
+import { getCopy, type UiLocale } from "@/lib/ui/copy";
 
 export type HermesSessionEntry = {
   hermesSessionKey: string;
@@ -22,10 +24,11 @@ type ConversationSidebarProps = {
   onClose?: () => void;
   hermesSessions?: HermesSessionEntry[];
   onAdopt?(session: HermesSessionEntry): void;
+  locale: UiLocale;
 };
 
-function formatDate(timestamp: number): string {
-  return new Intl.DateTimeFormat(undefined, {
+function formatDate(timestamp: number, locale: UiLocale): string {
+  return new Intl.DateTimeFormat(locale === "id" ? "id-ID" : "en-US", {
     month: "short",
     day: "numeric",
   }).format(timestamp);
@@ -42,7 +45,9 @@ export const ConversationSidebar = memo(function ConversationSidebar({
   onClose,
   hermesSessions = [],
   onAdopt,
+  locale,
 }: ConversationSidebarProps) {
+  const copy = getCopy(locale).history;
   const localKeys = useMemo(
     () =>
       new Set(
@@ -72,61 +77,61 @@ export const ConversationSidebar = memo(function ConversationSidebar({
 
   const rename = (conversation: Conversation) => {
     setMenuId(null);
-    const title = window.prompt("Rename conversation", conversation.title);
+    const title = window.prompt(copy.renamePrompt, conversation.title);
     if (title?.trim()) onRename(conversation.id, title);
   };
 
   const remove = (conversation: Conversation) => {
     setMenuId(null);
-    if (window.confirm(`Delete “${conversation.title}” from Kana history?`)) {
+    if (window.confirm(copy.deleteConfirm(conversation.title))) {
       onDelete(conversation.id);
     }
   };
 
   return (
-    <aside className="flex h-full min-h-0 flex-col" aria-label="Conversation history">
-      <header className="flex items-center justify-between border-b border-line px-5 py-4">
+    <aside className="flex h-full min-h-0 flex-col" aria-label={copy.aria}>
+      <header className="flex items-center justify-between border-b-2 border-line px-5 py-4">
         <div>
-          <p className="text-[10px] font-bold tracking-[0.16em] text-muted uppercase">Your time with Kana</p>
-          <h1 className="mt-0.5 text-lg font-bold text-ink">Conversations</h1>
+          <p className="text-[10px] font-bold tracking-[0.16em] text-muted uppercase">{copy.eyebrow}</p>
+          <h1 className="mt-0.5 text-lg font-bold text-ink">{copy.title}</h1>
         </div>
         {onClose ? (
           <button
             type="button"
-            className="kana-focus min-h-9 px-2 text-[11px] font-semibold text-muted transition-colors hover:bg-surface-strong hover:text-ink"
+            className="kana-focus grid size-10 place-items-center rounded-xl border-2 border-line-strong bg-surface text-muted transition-colors hover:border-accent hover:text-ink"
             onClick={onClose}
-            aria-label="Close conversation history"
+            aria-label={copy.close}
           >
-            Close
+            <CloseIcon className="size-4" />
           </button>
         ) : null}
       </header>
 
       <div className="flex items-center gap-2 px-4 py-3">
         <label className="min-w-0 flex-1">
-          <span className="sr-only">Search conversations</span>
+          <span className="sr-only">{copy.search}</span>
           <input
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search conversations"
-            className="kana-focus min-h-10 w-full border border-line bg-surface-strong px-3 text-xs text-ink placeholder:text-faint focus:border-accent/50 focus:outline-none"
+            placeholder={copy.search}
+            className="kana-focus min-h-10 w-full rounded-xl border-2 border-line bg-surface-strong px-3 text-xs text-ink placeholder:text-faint focus:border-accent focus:outline-none"
           />
         </label>
         <button
           type="button"
-          className="kana-focus min-h-10 shrink-0 bg-accent px-3 text-[11px] font-bold text-on-accent transition-colors hover:bg-accent-hover disabled:opacity-40"
+          className="kana-focus min-h-10 shrink-0 rounded-xl border-2 border-accent bg-accent px-3 text-[11px] font-bold text-on-accent transition-colors hover:border-accent-hover hover:bg-accent-hover disabled:cursor-not-allowed"
           onClick={onCreate}
           disabled={disabled}
-          aria-label="New conversation"
+          aria-label={copy.newConversation}
         >
-          New
+          {copy.newLabel}
         </button>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
         <p className="px-2 pb-2 pt-1 text-[9px] font-bold tracking-[0.16em] text-faint uppercase">
-          {query ? `${visibleConversations.length} found` : "Recent"}
+          {query ? copy.found(visibleConversations.length) : copy.recent}
         </p>
         <div className="space-y-1">
           {visibleConversations.map((conversation) => {
@@ -140,8 +145,8 @@ export const ConversationSidebar = memo(function ConversationSidebar({
                   type="button"
                   onClick={() => onSelect(conversation.id)}
                   disabled={disabled}
-                  className={`kana-focus grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2.5 text-left transition-colors disabled:opacity-50 ${
-                    active ? "bg-accent/12" : "hover:bg-surface-strong"
+                  className={`kana-focus grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-xl border-2 px-3 py-2.5 text-left transition-colors disabled:opacity-50 ${
+                    active ? "border-accent bg-accent/12" : "border-transparent hover:border-line hover:bg-surface-strong"
                   }`}
                   aria-label={conversation.title}
                 >
@@ -149,11 +154,11 @@ export const ConversationSidebar = memo(function ConversationSidebar({
                     <span className="block truncate text-xs font-bold text-ink">{conversation.title}</span>
                     <span className="mt-0.5 block truncate text-[10px] text-muted">
                       {conversation.agent?.status === "missing"
-                        ? "Hermes session unavailable"
-                        : preview || "Start a new moment"}
+                        ? copy.sessionUnavailable
+                        : preview || copy.startMoment}
                     </span>
                   </span>
-                  <span className="self-start pt-1 text-[9px] text-faint">{formatDate(conversation.updatedAt)}</span>
+                  <span className="self-start pt-1 text-[9px] text-faint">{formatDate(conversation.updatedAt, locale)}</span>
                 </button>
 
                 <button
@@ -163,17 +168,17 @@ export const ConversationSidebar = memo(function ConversationSidebar({
                     event.stopPropagation();
                     setMenuId(menuId === conversation.id ? null : conversation.id);
                   }}
-                  aria-label={`More options for ${conversation.title}`}
+                  aria-label={copy.moreOptions(conversation.title)}
                 >
-                  More
+                  {copy.more}
                 </button>
                 {menuId === conversation.id ? (
                   <div className="kana-panel absolute bottom-9 right-2 z-10 min-w-28 rounded-xl p-1 animate-kana-in">
                     <button type="button" className="w-full rounded-lg px-3 py-2 text-left text-[11px] font-semibold text-ink-dim hover:bg-surface-strong" onClick={() => rename(conversation)}>
-                      Rename
+                      {copy.rename}
                     </button>
                     <button type="button" className="w-full rounded-lg px-3 py-2 text-left text-[11px] font-semibold text-danger hover:bg-danger/10" onClick={() => remove(conversation)}>
-                      Delete
+                      {copy.delete}
                     </button>
                   </div>
                 ) : null}
@@ -183,8 +188,8 @@ export const ConversationSidebar = memo(function ConversationSidebar({
 
           {!visibleConversations.length ? (
             <div className="rounded-2xl border border-dashed border-line px-4 py-10 text-center">
-              <p className="text-xs font-semibold text-muted">No matching conversations.</p>
-              <p className="mt-1 text-[10px] text-faint">Try a different word or start something new.</p>
+              <p className="text-xs font-semibold text-muted">{copy.noMatches}</p>
+              <p className="mt-1 text-[10px] text-faint">{copy.noMatchesHint}</p>
             </div>
           ) : null}
         </div>
@@ -192,7 +197,7 @@ export const ConversationSidebar = memo(function ConversationSidebar({
         {remoteOnly.length > 0 && onAdopt ? (
           <div className="mt-5 border-t border-line pt-4">
             <p className="px-2 pb-2 text-[9px] font-bold tracking-[0.16em] text-faint uppercase">
-              Available from Hermes
+              {copy.availableFromHermes}
             </p>
             <div className="space-y-1">
               {remoteOnly.map((session) => (
@@ -201,11 +206,11 @@ export const ConversationSidebar = memo(function ConversationSidebar({
                   type="button"
                   disabled={disabled}
                   onClick={() => onAdopt(session)}
-                  className="kana-focus w-full px-3 py-2.5 text-left transition-colors hover:bg-surface-strong disabled:opacity-50"
+                  className="kana-focus w-full rounded-xl border-2 border-transparent px-3 py-2.5 text-left transition-colors hover:border-line hover:bg-surface-strong disabled:opacity-50"
                 >
                   <span className="block truncate text-xs font-bold text-ink">{session.title}</span>
                   <span className="mt-0.5 block text-[10px] text-muted">
-                    {session.messageCount} messages · {formatDate(session.lastActive * 1000)}
+                    {copy.messages(session.messageCount)} · {formatDate(session.lastActive * 1000, locale)}
                   </span>
                 </button>
               ))}
