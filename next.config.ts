@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const isDevelopment = process.env.NODE_ENV === "development";
+const distDir = process.env.KANA_NEXT_DIST_DIR?.trim() || ".next";
 const contentSecurityPolicy = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline' https://cubism.live2d.com${isDevelopment ? " 'unsafe-eval'" : ""}`,
@@ -19,6 +20,7 @@ const contentSecurityPolicy = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
+  distDir,
   output: "standalone",
   allowedDevOrigins: ["127.0.0.1", "localhost", "95.111.198.170"],
   // Hide the Next.js dev route indicator so it never covers UI text or
@@ -27,17 +29,29 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: process.cwd(),
   },
-  // Exclude non-application directories from the compilation scope so the
-  // module graph stays smaller and file-watcher memory is lower.
-serverExternalPackages: ["pixi.js"],
+  serverExternalPackages: ["pixi.js"],
   experimental: {
     serverSourceMaps: false,
   },
-  outputFileTracingExcludes: isDevelopment
-    ? {
-        "/": ["./services/**", "./acceptance/**", "./scripts/**/*.mjs"],
-      }
-    : undefined,
+  // Runtime assets from services/ and assets/ are copied deliberately by the
+  // packaging scripts. Keep test/reference/tooling data and local symlinks out
+  // of every server trace so a release never follows developer-machine state.
+  outputFileTracingExcludes: {
+    "/*": [
+      "./.codegraph",
+      "./.codegraph/**/*",
+      "./.omo/**/*",
+      "./.playwright-mcp/**/*",
+      "./acceptance/**/*",
+      "./auth-reference/**/*",
+      "./data/**/*",
+      "./reference/**/*",
+      "./scripts/**/*",
+      "./services/**/*",
+      "./test-results/**/*",
+      "./tests/**/*",
+    ],
+  },
   async headers() {
     return [
       {

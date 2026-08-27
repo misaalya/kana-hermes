@@ -8,8 +8,9 @@ treated as automatically trusted.
 - Hermes and Qwen are separate, user-controlled local services.
 - Hermes is the only agent and executes every tool. Kana does not execute shell
   commands, filesystem actions, MCP calls, or model requests itself.
-- The browser stores conversations, non-secret preferences, and imported
-  avatar packages. The Hermes token is tab-scoped session storage only.
+- The browser stores non-secret preferences and imported avatar packages.
+  Hermes owns conversation transcripts, while Kana's server keeps the Hermes
+  session token only in process memory.
 - Remote Live2D model URLs are untrusted data. Cubism Core is executable and is
   therefore restricted to Live2D's official HTTPS SDK path.
 
@@ -18,7 +19,7 @@ treated as automatically trusted.
 | Surface | Control |
 | --- | --- |
 | WebSocket origin | Hermes validates browser origin; Kana documents that hostname forms must match |
-| Hermes credential | Removed from persistent preferences and diagnostics; legacy URL/query tokens migrate to tab storage |
+| Hermes credential | Minted/discovered and held by Kana's server process; never returned to the browser, preferences, diagnostics, URLs, or backups |
 | Protected input | Password/secret fields are uncontrolled, ephemeral, and submitted directly to Hermes |
 | Qwen CORS | Service defaults to `127.0.0.1`/`localhost`, no credentials, and a small method/header allow-list |
 | Rendered text | React text nodes render transcript/tool status; Kana does not inject response HTML or Markdown |
@@ -68,9 +69,16 @@ automatically; if your proxy cannot forward it, set `AUTH_COOKIE_SECURE=true`.
 
 ## Production without authentication
 
-Production boots with authentication disabled (no `auth.json`, no
-`KANA_ACCESS_PASSWORD`) only when `KANA_ALLOW_NO_AUTH=1` acknowledges it; the
-server logs a loud warning either way and surfaces the state as
+The global `kana` launcher deliberately binds to `127.0.0.1` and acknowledges
+passwordless local-only use with `KANA_ALLOW_NO_AUTH=1`. In this mode the auth
+guard also rejects API requests whose Host/Origin is not loopback, protecting
+the local browser flow from cross-origin requests. This is defense in depth;
+the loopback network bind is what prevents remote clients from reaching it.
+
+Do not use passwordless mode for a VPS, shared machine, container port publish,
+or reverse proxy. Those deployments must configure `KANA_ACCESS_PASSWORD` (or
+an existing `auth.json`), a stable JWT secret, and the trusted-proxy secret.
+Production without authentication logs a warning and surfaces the state as
 `insecureNoAuth: true` in `/api/auth/status` plus an
 `x-kana-insecure-no-auth: 1` response header from the auth guard. UI layers may
 use that flag to warn the operator; the flag stays `true` even while the opt-out

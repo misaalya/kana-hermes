@@ -68,6 +68,29 @@ export type HermesCommandsCatalogResponse = {
   warning?: string;
 };
 
+export type HermesModelOptionsResponse = {
+  provider?: string;
+  model?: string;
+  providers?: Array<{
+    slug?: string;
+    name?: string;
+    models?: unknown[];
+    is_current?: boolean;
+    authenticated?: boolean;
+    warning?: string;
+  }>;
+};
+
+export type HermesModelSwitchResponse = {
+  key?: string;
+  value?: string;
+  warning?: string;
+  confirm_required?: boolean;
+  confirm_message?: string;
+  deferred?: boolean;
+  scope?: string;
+};
+
 export type HermesCommandDispatch =
   | { type: "exec" | "plugin"; output?: string }
   | { type: "alias"; target?: string }

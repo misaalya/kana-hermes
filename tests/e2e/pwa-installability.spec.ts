@@ -31,17 +31,24 @@ test("is installable on mobile and restores the local shell while offline", asyn
   try {
     const page = context.pages()[0] ?? (await context.newPage());
     await page.goto("/");
+    const composer = page.getByRole("textbox", {
+      name: /^(?:Message Kana|Pesan untuk Kana)$/,
+    });
     // The onboarding wizard has no offline shortcut; walk it like a real
-    // first-run user instead.
+    // first-run user instead. A previously initialized isolated data root may
+    // already be on the workspace, so never wait for a wizard that is absent.
     for (let step = 0; step < 8; step += 1) {
-      const enter = page.getByRole("button", { name: "Enter Kana" });
+      if (await composer.isVisible().catch(() => false)) break;
+      const enter = page.getByRole("button", { name: /^(?:Enter Kana|Mulai)$/ });
       if (await enter.isVisible().catch(() => false)) {
         await enter.click();
         break;
       }
-      await page.getByRole("button", { name: "Continue" }).click();
+      await page
+        .getByRole("button", { name: /^(?:Continue|Lanjut)$/ })
+        .click();
     }
-    await expect(page.getByRole("textbox", { name: "Message Kana" })).toBeVisible();
+    await expect(composer).toBeVisible();
 
     await page.evaluate(async () => {
       const registration = await navigator.serviceWorker.ready;
@@ -69,8 +76,12 @@ test("is installable on mobile and restores the local shell while offline", asyn
 
     await context.setOffline(true);
     await page.reload({ waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("textbox", { name: "Message Kana" })).toBeVisible();
-    await expect(page.locator(".avatar-figure:not(.hidden)")).toBeVisible();
+    await expect(composer).toBeVisible();
+    await expect(
+      page.getByRole("region", {
+        name: /^(?:Kana avatar stage|Panggung avatar Kana)$/,
+      }),
+    ).toBeVisible();
     const layout = await page.evaluate(() => ({
       viewport: innerWidth,
       document: document.documentElement.scrollWidth,

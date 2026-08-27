@@ -1,103 +1,314 @@
 import { expect, test, type Page } from "@playwright/test";
 
-/**
- * Deterministic in-browser stand-in for `hermes serve /api/ws`. It answers the
- * JSON-RPC surface Kana relies on so the critical journeys exercise real UI
- * wiring without an external Hermes installation.
- */
+/** Deterministic stand-in for Kana's current HTTP-RPC + SSE Hermes relay. */
 async function installFakeHermes(page: Page): Promise<void> {
-  // The client appends the session token as a query string.
-  await page.routeWebSocket(/\/api\/ws(\?|$)/, (ws) => {
-    const sessionId = "e2e-hermes-session";
-    const send = (frame: unknown) => ws.send(JSON.stringify(frame));
-    const reply = (id: unknown, result: unknown) =>
-      send({ jsonrpc: "2.0", id, result });
+  type FakeSession = {
+    runtimeId: string;
+    persistentId: string;
+    title: string;
+    startedAt: number;
+    lastActive: number;
+    history: Array<{ role: "user" | "assistant"; text: string }>;
+  };
+  const sessions = new Map<string, FakeSession>();
+  const runtimeToPersistent = new Map<string, string>();
+  let nextSession = 1;
+  let activeRuntimeId = "e2e-hermes-runtime-0";
+  let activeProvider = "fireworks_ai";
+  let activeModel = "accounts/fireworks/models/deepseek-v4-flash-0731";
+  const firstSession: FakeSession = {
+    runtimeId: activeRuntimeId,
+    persistentId: "e2e-hermes-stored-0",
+    title: "First meeting",
+    startedAt: 1,
+    lastActive: 2,
+    history: [{ role: "user", text: "Existing test conversation" }],
+  };
+  sessions.set(firstSession.persistentId, firstSession);
+  runtimeToPersistent.set(firstSession.runtimeId, firstSession.persistentId);
 
-    send({
-      jsonrpc: "2.0",
-      method: "event",
-      params: { type: "gateway.ready" },
-    });
+  await page.addInitScript(() => {
+    type E2EWindow = Window & {
+      __kanaE2eEventSources?: EventTarget[];
+      __kanaE2eEmit?: (event: string, data: unknown) => void;
+    };
+    const target = window as E2EWindow;
+    target.__kanaE2eEventSources = [];
 
-    ws.onMessage((raw) => {
-      let frame: {
-        id?: number | string | null;
-        method?: string;
-        params?: { text?: string };
-      };
-      try {
-        frame = JSON.parse(String(raw));
-      } catch {
-        return;
+    class FakeEventSource extends EventTarget {
+      static readonly CONNECTING = 0;
+      static readonly OPEN = 1;
+      static readonly CLOSED = 2;
+      readonly CONNECTING = 0;
+      readonly OPEN = 1;
+      readonly CLOSED = 2;
+      readonly url: string;
+      readonly withCredentials = true;
+      readyState = FakeEventSource.CONNECTING;
+
+      constructor(url: string | URL) {
+        super();
+        this.url = String(url);
+        target.__kanaE2eEventSources?.push(this);
+        queueMicrotask(() => {
+          this.readyState = FakeEventSource.OPEN;
+          this.dispatchEvent(new Event("open"));
+          this.dispatchEvent(
+            new MessageEvent("gateway", {
+              data: JSON.stringify({ connected: true }),
+            }),
+          );
+        });
       }
-      const id = frame.id ?? null;
 
-      switch (frame.method) {
-        case "session.create":
-        case "session.resume":
-          reply(id, { session_id: sessionId, status: "complete" });
-          return;
-        case "commands.catalog":
-          reply(id, {
-            categories: [
-              {
-                name: "Session",
-                pairs: [
-                  ["status", "Show the current Hermes session status"],
-                  ["new", "Start a new conversation"],
-                ],
-              },
-            ],
-          });
-          return;
-        case "complete.slash":
-          reply(id, { items: [{ text: "/status" }] });
-          return;
-        case "session.status":
-          reply(id, { output: "fake hermes session status ok" });
-          return;
-        case "slash.exec":
-        case "command.dispatch":
-          reply(id, { output: "fake command output" });
-          return;
-        case "prompt.submit": {
-          reply(id, {});
-          const submitted = frame.params?.text ?? "";
-          const language =
-            /"subtitle_language"\s*:\s*"([a-z]+)"/i.exec(submitted)?.[1] ??
-            "en";
-          const subtitles: Record<string, string> = {
-            en: "Hello! I am here.",
-            id: "Halo! Aku di sini.",
-            ja: "こんにちは、ここにいます。",
-          };
-          setTimeout(() => {
-            send({
-              jsonrpc: "2.0",
-              method: "event",
-              params: {
-                type: "message.complete",
-                session_id: sessionId,
-                payload: {
-                  status: "complete",
-                  text: JSON.stringify({
-                    speech_ja: "こんにちは、ここにいます。",
-                    subtitle: {
-                      text: subtitles[language] ?? subtitles.en,
-                      language,
-                    },
-                    emotion: "neutral",
-                  }),
-                },
-              },
-            });
-          }, 30);
-          return;
+      close(): void {
+        this.readyState = FakeEventSource.CLOSED;
+      }
+    }
+
+    target.__kanaE2eEmit = (event, data) => {
+      for (const source of target.__kanaE2eEventSources ?? []) {
+        source.dispatchEvent(
+          new MessageEvent(event, { data: JSON.stringify(data) }),
+        );
+      }
+    };
+    Object.defineProperty(window, "EventSource", {
+      configurable: true,
+      value: FakeEventSource,
+    });
+  });
+
+  const emitHermesEvent = async (
+    type: string,
+    payload: Record<string, unknown>,
+    runtimeId: string,
+  ) => {
+    await page.evaluate(
+      ({ eventType, eventPayload, runtimeId }) => {
+        const target = window as Window & {
+          __kanaE2eEmit?: (event: string, data: unknown) => void;
+        };
+        target.__kanaE2eEmit?.("hermes", {
+          jsonrpc: "2.0",
+          method: "event",
+          params: {
+            type: eventType,
+            session_id: runtimeId,
+            payload: eventPayload,
+          },
+        });
+      },
+      { eventType: type, eventPayload: payload, runtimeId },
+    );
+  };
+
+  await page.route("**/api/kana/sessions", (route) => {
+    const directory = [...sessions.values()]
+      .sort((a, b) => b.lastActive - a.lastActive)
+      .map((session) => ({
+        hermesSessionKey: session.persistentId,
+        title: session.title,
+        preview: session.history.at(-1)?.text ?? "",
+        messageCount: session.history.length,
+        startedAt: session.startedAt,
+        lastActive: session.lastActive,
+      }));
+    return route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ sessions: directory }),
+    });
+  });
+  await page.route("**/api/local-runtime/hermes**", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        controlAvailable: true,
+        state: "running",
+        managed: false,
+        executable: "/usr/bin/hermes",
+        port: 9119,
+        websocketUrl: "ws://127.0.0.1:9119/api/ws",
+        message: "Hermes test relay is ready.",
+      }),
+    }),
+  );
+  await page.route("**/api/voice/tts/status**", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ state: "stopped", message: "Voice is optional." }),
+    }),
+  );
+  await page.route("**/api/hermes/rpc", async (route) => {
+    const body = route.request().postDataJSON() as {
+      method?: string;
+      params?: Record<string, unknown>;
+    };
+    let result: unknown = {};
+    let completedResponse: string | null = null;
+    let completedRuntimeId = activeRuntimeId;
+
+    switch (body.method) {
+      case "session.create": {
+        const index = nextSession++;
+        const session: FakeSession = {
+          runtimeId: `e2e-hermes-runtime-${index}`,
+          persistentId: `e2e-hermes-stored-${index}`,
+          title: String(body.params?.title ?? "New conversation"),
+          startedAt: index + 2,
+          lastActive: index + 2,
+          history: [],
+        };
+        sessions.set(session.persistentId, session);
+        runtimeToPersistent.set(session.runtimeId, session.persistentId);
+        activeRuntimeId = session.runtimeId;
+        result = {
+          session_id: session.runtimeId,
+          stored_session_id: session.persistentId,
+        };
+        break;
+      }
+      case "session.resume": {
+        const persistentId = String(body.params?.session_id ?? "");
+        const session = sessions.get(persistentId) ?? firstSession;
+        activeRuntimeId = session.runtimeId;
+        result = {
+          session_id: session.runtimeId,
+          session_key: session.persistentId,
+          resumed: session.persistentId,
+          running: false,
+          messages: session.history,
+        };
+        break;
+      }
+      case "session.title": {
+        const runtimeId = String(body.params?.session_id ?? activeRuntimeId);
+        const persistentId = runtimeToPersistent.get(runtimeId);
+        result = {
+          title: persistentId
+            ? sessions.get(persistentId)?.title ?? "Untitled"
+            : "Untitled",
+        };
+        break;
+      }
+      case "commands.catalog":
+        result = {
+          categories: [
+            {
+              name: "Session",
+              pairs: [
+                ["/status", "Show the current Hermes session status"],
+                ["/new", "Start a new conversation"],
+              ],
+            },
+          ],
+        };
+        break;
+      case "complete.slash":
+        result = {
+          replace_from: 0,
+          items: [{ text: "/status", display: "/status" }],
+        };
+        break;
+      case "session.status":
+        result = { output: "fake hermes session status ok" };
+        break;
+      case "model.options":
+        result = {
+          provider: activeProvider,
+          model: activeModel,
+          providers: [
+            {
+              slug: "fireworks_ai",
+              name: "Fireworks AI",
+              models: ["accounts/fireworks/models/deepseek-v4-flash-0731"],
+              is_current: activeProvider === "fireworks_ai",
+              authenticated: true,
+            },
+            {
+              slug: "openrouter",
+              name: "OpenRouter",
+              models: ["deepseek/deepseek-v4"],
+              is_current: activeProvider === "openrouter",
+              authenticated: true,
+            },
+          ],
+        };
+        break;
+      case "config.set": {
+        const value = String(body.params?.value ?? "");
+        if (body.params?.key === "model" && value.includes("--provider 'openrouter'")) {
+          activeProvider = "openrouter";
+          activeModel = "deepseek/deepseek-v4";
+          result = { key: "model", value: activeModel, scope: "session" };
         }
-        default:
-          if (id !== null) reply(id, {});
+        break;
       }
+      case "slash.exec": {
+        const command = String(body.params?.command ?? "");
+        if (command.startsWith("model ") && command.includes("--provider 'openrouter'")) {
+          activeProvider = "openrouter";
+          activeModel = "deepseek/deepseek-v4";
+          result = { output: "Model switched" };
+        } else {
+          result = { type: "exec", output: "fake command output" };
+        }
+        break;
+      }
+      case "command.dispatch":
+        result = { type: "exec", output: "fake command output" };
+        break;
+      case "approval.respond":
+        result = { resolved: true };
+        break;
+      case "prompt.submit": {
+        const runtimeId = String(body.params?.session_id ?? activeRuntimeId);
+        const persistentId = runtimeToPersistent.get(runtimeId);
+        const session = persistentId ? sessions.get(persistentId) : undefined;
+        const submitted = String(body.params?.text ?? "");
+        const language =
+          /"subtitle_language"\s*:\s*"([a-z]+)"/i.exec(submitted)?.[1] ?? "en";
+        const subtitles: Record<string, string> = {
+          en: "Hello! I am here.",
+          id: "Halo! Aku di sini.",
+          ja: "こんにちは、ここにいます。",
+        };
+        completedResponse = JSON.stringify({
+          speech_ja: "こんにちは、ここにいます。",
+          subtitle: {
+            text: subtitles[language] ?? subtitles.en,
+            language,
+          },
+          emotion: "neutral",
+        });
+        session?.history.push(
+          { role: "user", text: submitted },
+          { role: "assistant", text: completedResponse },
+        );
+        if (session) session.lastActive = Date.now() / 1000;
+        completedRuntimeId = runtimeId;
+        result = { accepted: true };
+        break;
+      }
+    }
+
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ result }),
     });
+    if (completedResponse) {
+      const responseText = completedResponse;
+      setTimeout(() => {
+        void emitHermesEvent(
+          "message.complete",
+          {
+            status: "complete",
+            text: responseText,
+          },
+          completedRuntimeId,
+        ).catch(() => undefined);
+      }, 30);
+    }
   });
 }
 
@@ -159,7 +370,12 @@ test("preserves displayed subtitles after the preference changes and reloads", a
   await expect(overlay.first()).toBeVisible();
 
   await page.getByRole("button", { name: "Open settings" }).click();
-  await page.getByRole("button", { name: "Bahasa Indonesia", exact: true }).click();
+  await page
+    .getByRole("heading", { name: "Subtitle language" })
+    .locator("..")
+    .locator("..")
+    .getByRole("button", { name: "Bahasa Indonesia", exact: true })
+    .click();
   await page.getByRole("button", { name: "Close settings" }).click();
 
   await composer.fill("Halo Kana");
@@ -205,6 +421,46 @@ test("persists the selected stage background across refreshes", async ({ page })
     "data-background",
     "pattern-stars",
   );
+});
+
+test("changes the active Hermes model with an explicit provider", async ({ page }) => {
+  await page.getByRole("button", { name: "Open settings" }).click();
+  await page.getByRole("button", { name: /^AI model/ }).click();
+  await expect(page.getByRole("paragraph").filter({ hasText: "accounts/fireworks/models/deepseek-v4-flash-0731" })).toBeVisible();
+
+  await page.getByLabel("Provider").selectOption("openrouter");
+  await page.getByLabel("Model").selectOption("deepseek/deepseek-v4");
+  await page.getByRole("button", { name: "Use this model" }).click();
+
+  await expect(page.getByText("The model for this conversation has been changed.")).toBeVisible();
+  await expect(page.getByRole("paragraph").filter({ hasText: "deepseek/deepseek-v4" })).toBeVisible();
+});
+
+test("shows Hermes approval choices and resolves a session approval", async ({ page }) => {
+  await page.evaluate(() => {
+    const target = window as Window & { __kanaE2eEmit?: (event: string, data: unknown) => void };
+    target.__kanaE2eEmit?.("hermes", {
+      jsonrpc: "2.0",
+      method: "event",
+      params: {
+        type: "approval.request",
+        payload: {
+          command: "find /home/user -name .env",
+          description: "Search protected files",
+          choices: ["once", "session", "deny"],
+          allow_permanent: false,
+        },
+      },
+    });
+  });
+
+  await expect(page.getByRole("heading", { name: "Hermes needs approval" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Run once" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Allow for session" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Deny" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Always allow" })).toBeHidden();
+  await page.getByRole("button", { name: "Allow for session" }).click();
+  await expect(page.getByRole("heading", { name: "Hermes needs approval" })).toBeHidden();
 });
 
 test("updates workspace, history, chat, and settings copy with the interface language", async ({
@@ -407,7 +663,7 @@ test("supports keyboard slash commands end to end", async ({ page }) => {
     .waitFor();
   await expect(composer).toBeFocused();
   await composer.press("Tab");
-  await expect(composer).toHaveValue("/status ");
+  await expect(composer).toHaveValue("/status");
   await composer.press("Enter");
   await openHistory(page);
   await expect(
@@ -448,30 +704,29 @@ test("guides a new browser profile through onboarding onto the workspace", async
   await page.reload();
 
   await expect(
-    page.getByRole("heading", { name: "Welcome to Kana" }),
+    page.getByRole("heading", { name: "Kenalan dulu dengan Kana" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: "Lanjut" }).click();
 
   await expect(
-    page.getByRole("heading", { name: "Choose the agent connection" }),
+    page.getByRole("heading", { name: "Buat percakapan terasa nyaman" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: "Lanjut" }).click();
 
   await expect(
-    page.getByRole("heading", { name: "Choose how Kana is presented" }),
+    page.getByRole("heading", { name: "Pilih tampilan dan suara" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: "Lanjut" }).click();
 
   await expect(
-    page.getByRole("heading", { name: "Kana is ready" }),
+    page.getByRole("heading", { name: "Kana siap menemanimu" }),
   ).toBeVisible();
-  await expect(page.getByText("hermes", { exact: true })).toBeVisible();
-  await expect(page.getByText("qwen3", { exact: true })).toBeVisible();
-  await expect(page.getByText("live2d", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Enter Kana" }).click();
+  await expect(page.getByText("Hermes", { exact: true })).toBeVisible();
+  await expect(page.getByText("Mesin suara", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Mulai" }).click();
 
   await expect(
-    page.getByRole("textbox", { name: "Message Kana" }),
+    page.getByRole("textbox", { name: "Pesan untuk Kana" }),
   ).toBeVisible();
 });
 
@@ -496,7 +751,7 @@ test("falls back to the placeholder avatar when Live2D cannot load", async ({
   await expect(page.getByTestId("live2d-canvas")).toHaveClass(/opacity-0/);
 });
 
-test("migrates legacy local history without changing its displayed subtitle", async ({
+test("restores Hermes history instead of trusting obsolete browser transcripts", async ({
   page,
 }) => {
   await page.evaluate(() => {
@@ -527,15 +782,17 @@ test("migrates legacy local history without changing its displayed subtitle", as
   });
   await page.reload();
   await openHistory(page);
-  await page.getByRole("button", { name: /Legacy subtitle/ }).click();
+  await expect(page.getByRole("button", { name: /^First meeting/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Legacy subtitle/ })).toHaveCount(0);
+  await page.getByRole("button", { name: /^First meeting/ }).click();
   await expect(
-    page.getByText("Halo Nobu!", { exact: true }).first(),
+    page.getByText("Existing test conversation", { exact: true }).first(),
   ).toBeVisible();
   await page.reload();
   await openHistory(page);
-  await page.getByRole("button", { name: /Legacy subtitle/ }).click();
+  await page.getByRole("button", { name: /^First meeting/ }).click();
   await expect(
-    page.getByText("Halo Nobu!", { exact: true }).first(),
+    page.getByText("Existing test conversation", { exact: true }).first(),
   ).toBeVisible();
 });
 
@@ -543,15 +800,20 @@ test("keeps a separate draft per conversation and searches stored history", asyn
   page,
 }) => {
   const composer = page.getByRole("textbox", { name: "Message Kana" });
+  await composer.fill("Make the first conversation non-empty");
+  await composer.press("Enter");
+  await expect(page.getByText("Hello! I am here.", { exact: true }).first()).toBeVisible();
   await composer.fill("draft for the first conversation");
 
   await openHistory(page);
-  await page.getByRole("button", { name: /New conversation/ }).click();
+  await page.getByText("New", { exact: true }).click();
   await expect(composer).toHaveValue("");
   await composer.fill("draft for the second conversation");
 
   await openHistory(page);
-  await page.getByRole("button", { name: /^First meeting/ }).click();
+  await page
+    .getByRole("button", { name: /^Make the first conversation non-empty/ })
+    .click();
   await expect(composer).toHaveValue("draft for the first conversation");
 
   await openHistory(page);

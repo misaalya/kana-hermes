@@ -17,6 +17,7 @@
 
 # next.js
 /.next/
+/.next-e2e/
 /out/
 /.npm-package/
 
@@ -55,6 +56,10 @@ reference/
 # Local reference checkouts (read-only study material)
 /auth-reference/
 /data/
+
+# Adjacent standalone projects maintained in their own repositories
+/web/
+/showcase/
 
 # Local audit/debug artifacts
 .playwright-mcp/

@@ -271,6 +271,25 @@ export type Copy = {
     includedAvatarAbout: string;
     hermesTitle: string;
     hermesDescription: string;
+    modelTitle: string;
+    modelDescription: string;
+    modelLoading: string;
+    modelLoadFailed: string;
+    modelEmpty: string;
+    modelRefresh: string;
+    modelCurrent: string;
+    modelProvider: string;
+    modelName: string;
+    modelConfirmNeeded: string;
+    modelNextTurn: string;
+    modelChanged: string;
+    modelChangeFailed: string;
+    modelSwitching: string;
+    modelConfirmSwitch: string;
+    modelInUse: string;
+    modelUse: string;
+    modelRefreshList: string;
+    modelScope: string;
     voiceEngineTitle: string;
     voiceEngineDescription: string;
     accessTitle: string;
@@ -570,6 +589,7 @@ const id: Copy = {
       experience: { label: "Pengalaman", hint: "Bahasa dan subtitle" },
       voice: { label: "Suara", hint: "Cara Kana berbicara" },
       avatar: { label: "Avatar", hint: "Avatar dan panggung" },
+      model: { label: "Model AI", hint: "Provider dan model percakapan" },
       system: { label: "Koneksi", hint: "Hermes dan mesin suara" },
       privacy: { label: "Privasi", hint: "Akses dan keamanan" },
     },
@@ -627,6 +647,25 @@ const id: Copy = {
     includedAvatarAbout: "Tentang avatar bawaan",
     hermesTitle: "Hermes",
     hermesDescription: "Otak agen di balik Kana. Kana menemukan dan menghubungkannya secara otomatis.",
+    modelTitle: "Model AI",
+    modelDescription: "Pilih provider dan model Hermes untuk percakapan yang sedang dibuka.",
+    modelLoading: "Memuat model dari Hermes…",
+    modelLoadFailed: "Model tidak dapat dimuat.",
+    modelEmpty: "Hermes belum melaporkan provider dengan model yang siap digunakan.",
+    modelRefresh: "Muat ulang model",
+    modelCurrent: "Model percakapan saat ini",
+    modelProvider: "Provider",
+    modelName: "Model",
+    modelConfirmNeeded: "Hermes meminta konfirmasi biaya sebelum mengganti model.",
+    modelNextTurn: "Model akan digunakan mulai giliran berikutnya.",
+    modelChanged: "Model untuk percakapan ini sudah diganti.",
+    modelChangeFailed: "Model tidak dapat diganti.",
+    modelSwitching: "Mengganti…",
+    modelConfirmSwitch: "Konfirmasi dan ganti",
+    modelInUse: "Sedang digunakan",
+    modelUse: "Gunakan model ini",
+    modelRefreshList: "Segarkan daftar",
+    modelScope: "Pilihan berlaku untuk percakapan Hermes ini. Provider dan model selalu dikirim sebagai dua nilai terpisah.",
     voiceEngineTitle: "Mesin suara",
     voiceEngineDescription: "Layanan lokal yang mengubah teks Jepang Kana menjadi suara.",
     accessTitle: "Perlindungan akses",
@@ -953,6 +992,7 @@ const en: Copy = {
       experience: { label: "Experience", hint: "Language and subtitles" },
       voice: { label: "Voice", hint: "How Kana sounds" },
       avatar: { label: "Avatar", hint: "Avatar and stage" },
+      model: { label: "AI model", hint: "Conversation provider and model" },
       system: { label: "Connection", hint: "Hermes and voice engine" },
       privacy: { label: "Privacy", hint: "Access and security" },
     },
@@ -1010,6 +1050,25 @@ const en: Copy = {
     includedAvatarAbout: "About included avatars",
     hermesTitle: "Hermes",
     hermesDescription: "The agent brain behind Kana. Kana finds and connects it automatically.",
+    modelTitle: "AI model",
+    modelDescription: "Choose the Hermes provider and model for the open conversation.",
+    modelLoading: "Loading models from Hermes…",
+    modelLoadFailed: "Could not load models.",
+    modelEmpty: "Hermes did not report any configured provider with usable models.",
+    modelRefresh: "Refresh models",
+    modelCurrent: "Current conversation model",
+    modelProvider: "Provider",
+    modelName: "Model",
+    modelConfirmNeeded: "Hermes requires a cost confirmation before changing models.",
+    modelNextTurn: "The model will be used from the next turn.",
+    modelChanged: "The model for this conversation has been changed.",
+    modelChangeFailed: "Could not change the model.",
+    modelSwitching: "Switching…",
+    modelConfirmSwitch: "Confirm and switch",
+    modelInUse: "In use",
+    modelUse: "Use this model",
+    modelRefreshList: "Refresh list",
+    modelScope: "The choice applies to this Hermes conversation. Provider and model are always sent as separate values.",
     voiceEngineTitle: "Voice engine",
     voiceEngineDescription: "The local service that turns Kana's Japanese text into speech.",
     accessTitle: "Access protection",

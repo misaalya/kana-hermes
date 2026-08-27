@@ -743,4 +743,86 @@ describe("HermesAgentClient (relay transport)", () => {
     assert.match(topic.output, /messaging identity/);
     assert.equal(FakeRelay.requests.filter((request) => request.method === "slash.exec").length, 0);
   });
+
+  it("lists provider-scoped models and switches the open session with an explicit provider", async () => {
+    const client = await connectedClient((request) => {
+      if (request.method === "session.create") {
+        return { session_id: "runtime-1", stored_session_id: "stored-1" };
+      }
+      if (request.method === "model.options") {
+        return {
+          provider: "fireworks_ai",
+          model: "accounts/fireworks/models/deepseek-v4-flash-0731",
+          providers: [
+            {
+              slug: "fireworks_ai",
+              name: "Fireworks AI",
+              models: ["accounts/fireworks/models/deepseek-v4-flash-0731"],
+              is_current: true,
+              authenticated: true,
+            },
+            {
+              slug: "openrouter",
+              name: "OpenRouter",
+              models: ["deepseek/deepseek-v4"],
+              authenticated: true,
+            },
+          ],
+        };
+      }
+      if (request.method === "config.set") {
+        return { key: "model", value: "deepseek/deepseek-v4", scope: "session" };
+      }
+      return {};
+    });
+    await openSession(client);
+
+    const catalog = await client.listModels();
+    assert.equal(catalog.provider, "fireworks_ai");
+    assert.equal(catalog.providers[1]?.models[0], "deepseek/deepseek-v4");
+
+    const suggestions = await client.completeCommands("/model deepseek-v4");
+    assert.equal(suggestions.length, 2);
+    assert.match(suggestions[0]?.text ?? "", /--provider 'fireworks_ai' --session$/);
+
+    await client.selectModel({ provider: "openrouter", model: "deepseek/deepseek-v4" });
+    assert.deepEqual(
+      FakeRelay.requests.findLast((request) => request.method === "config.set")?.params,
+      {
+        session_id: "runtime-1",
+        key: "model",
+        value: "'deepseek/deepseek-v4' --provider 'openrouter' --session",
+        confirm_expensive_model: false,
+      },
+    );
+  });
+
+  it("preserves Hermes approval choices and sends the selected session decision", async () => {
+    const events: AgentEvent[] = [];
+    const client = await connectedClient((request) => {
+      if (request.method === "session.create") {
+        return { session_id: "runtime-1", stored_session_id: "stored-1" };
+      }
+      if (request.method === "approval.respond") return { resolved: true };
+      return {};
+    });
+    await openSession(client);
+    client.subscribe((event) => events.push(event));
+
+    latestStream().emitEvent("approval.request", {
+      command: "find /home/user -name .env",
+      description: "Search protected files",
+      choices: ["once", "session", "deny"],
+      allow_permanent: false,
+    });
+    const requested = events.find((event) => event.type === "input.requested");
+    assert.ok(requested?.type === "input.requested" && requested.request.kind === "approval");
+    assert.deepEqual(requested.request.choices, ["once", "session", "deny"]);
+
+    await client.respondToInput({ kind: "approval", choice: "session" });
+    assert.deepEqual(
+      FakeRelay.requests.findLast((request) => request.method === "approval.respond")?.params,
+      { session_id: "runtime-1", choice: "session", all: false },
+    );
+  });
 });

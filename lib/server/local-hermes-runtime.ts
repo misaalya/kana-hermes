@@ -328,7 +328,7 @@ export async function startLocalHermesRuntime(options: {
   current.token = token;
   current.lastMessage = "Starting the official Hermes UI gateway…";
   const child = spawn(
-    executable,
+    /* turbopackIgnore: true */ executable,
     ["serve", "--host", "127.0.0.1", "--port", String(port)],
     {
       cwd: workingDirectory,

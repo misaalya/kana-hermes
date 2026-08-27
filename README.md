@@ -15,40 +15,57 @@ Kana adds:
   replaceable, locally persistent URL/folder model sources;
 - local Qwen3-TTS speech with voice cloning: create personal voice profiles
   from consented reference audio and speak every response with them;
-- an npm global launcher (`npm install -g kana && kana`) that starts the web
-  app, offers first-run Qwen setup, and can supervise `hermes serve`;
+- an npm global launcher that starts the packaged web app and can discover or
+  supervise the user's unmodified `hermes serve` process;
 - a mobile-safe workspace plus an installable offline app shell and a
   standalone production package;
 - first-run setup, safe local diagnostics, per-conversation drafts/search, and
   credential-free conversation backup/restore.
 
-## Install from npm
+## Install from npm (target flow)
+
+> **Registry status:** `kana-ui` currently resolves to an unrelated package on
+> npm. Do not run the command below until this project owns that package name
+> and publishes a verified release. The repository's release guard refuses to
+> publish over the occupied name without explicit ownership confirmation.
 
 ```bash
-npm install -g kana
+npm install -g kana-ui
 kana
 ```
 
-The package is a thin launcher plus the built web runtime. The multi-gigabyte
-Qwen3-TTS model, its Python environment, cloned voice profiles, and all Kana
-data live in user directories (`~/.local/share/kana`, `~/.cache/kana`,
-`~/.config/kana`), never inside the npm package. On first run, the launcher
-offers an explicit Qwen setup; declining it still starts Kana normally.
+`kana-ui` is also installed as a command alias for users who prefer the package
+name (`kana-ui` and `kana` start the same launcher).
+
+The intended package contains a thin launcher plus the traced standalone web
+runtime, so it does not compile Kana on the user's machine. Running `kana`
+binds the app to `127.0.0.1`, opens the browser, preserves Kana's in-app
+personalization wizard, and automatically tries to connect to or start the
+installed Hermes service. It never asks for a Hermes token in the browser and
+does not block first start with a terminal setup prompt.
+
+The current prebuilt target is Linux x64 with glibc and Node.js 22.13 or newer.
+The package declares those limits so npm rejects unsupported systems instead
+of installing a runtime built for a different platform. Windows, macOS, ARM64,
+and musl/Alpine packages require separate build artifacts and testing.
+
+The multi-gigabyte Qwen3-TTS model, its isolated Python environment, cloned
+voice profiles, and all Kana data live in user directories
+(`~/.local/share/kana`, `~/.cache/kana`, `~/.config/kana`), never inside the npm
+package. Voice setup remains optional and explicit:
 
 Other commands:
 
 ```bash
-kana setup        # configure or reconfigure optional Qwen3-TTS voice cloning
+kana setup        # configure or reconfigure optional Qwen3-TTS voice
 kana doctor       # check Hermes/uv availability and data locations
 kana --port 4000  # choose the local web port
 ```
 
-When Kana runs through this launcher it sets `KANA_LOCAL_RUNTIME_CONTROL=1`,
-which enables **Settings → Hermes control panel**: start, restart, and stop the
-official `hermes serve` gateway, enter its session token, and see live process
-status. Kana only ever spawns the unmodified Hermes binary and never edits the
-Hermes installation. Running `next dev` directly keeps process control off
-unless `.env.development` enables it.
+Kana's server may start, restart, and stop the official `hermes serve` gateway
+on loopback. It mints and keeps the Hermes session token in server memory; the
+token never reaches browser preferences, storage, URLs, or forms. Kana only
+spawns the unmodified Hermes executable and never edits its installation.
 
 ## Run in development
 
@@ -61,26 +78,33 @@ Open [http://127.0.0.1:3000](http://127.0.0.1:3000). Kana always connects to a r
 
 ## Connect to Hermes
 
-Kana uses Hermes's official headless JSON-RPC/WebSocket gateway. Start Hermes separately with a session token of your choice:
+For the normal global-install flow, install Hermes and run `kana`. Kana first
+tries an existing compatible local service; if none is usable, it starts
+`hermes serve` automatically and connects without showing a manual connection
+form. A recovery dialog appears only when that automatic flow fails.
+
+Advanced users may start Hermes separately with a session token of their
+choice:
 
 ```bash
 HERMES_DASHBOARD_SESSION_TOKEN="replace-with-a-long-local-token" \
   /home/kenobu/.local/bin/hermes serve --host 127.0.0.1 --port 9119
 ```
 
-In Kana, open **Settings → Agent connection**, choose **Hermes**, and enter:
-
-- WebSocket URL: `ws://127.0.0.1:9119/api/ws`
-- Session token: the same value used to start `hermes serve`
-- Working folder: optional; new Hermes sessions use it as their workspace
-
-Use the same hostname for Kana and Hermes (`127.0.0.1` in the example). Hermes intentionally rejects browser WebSocket origins whose hostname does not match its bound host.
-
-The WebSocket URL and working folder persist locally. The session token does
-not: Kana keeps it in tab-scoped session storage and removes legacy copies from
-persistent preferences. Re-enter it after closing the browser tab.
+The explicit environment token lets Kana safely discover and adopt that
+process from the server side. A plain manually started `hermes serve` generates
+an internal random token that a separate Kana process cannot recover. In that
+case, stop it and let Kana start Hermes, or restart it with the environment
+variable above. The working folder remains an optional Kana preference for new
+Hermes sessions.
 
 Kana does not update, patch, or write to the Hermes installation. New Kana conversations seed a per-session Hermes system message containing the Kana persona and response contract; the user's global Hermes configuration is not changed.
+
+Before publishing or installing a release candidate, run
+`npm run test:package:npm`. It packs the exact npm artifact, installs it into an
+isolated global prefix, exercises `kana --help` and `kana doctor`, starts the
+installed server, checks the first-run API state, and verifies that a foreign
+web origin cannot drive the passwordless loopback API.
 
 ## Hermes slash commands
 

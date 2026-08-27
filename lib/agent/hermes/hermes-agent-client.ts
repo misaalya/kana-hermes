@@ -10,6 +10,9 @@ import type {
   AgentInputRequest,
   AgentInputResponse,
   AgentMessageInput,
+  AgentModelCatalog,
+  AgentModelSelection,
+  AgentModelSwitchResult,
   AgentSession,
   AgentSessionOptions,
 } from "@/lib/agent/types";
@@ -29,6 +32,8 @@ import type {
   HermesCommandsCatalogResponse,
   HermesGatewayEvent,
   HermesJsonRpcFrame,
+  HermesModelOptionsResponse,
+  HermesModelSwitchResponse,
   HermesSessionResponse,
   HermesSlashExecResponse,
   HermesToolPayload,
@@ -52,6 +57,10 @@ type HermesRelayOptions = {
 };
 
 const DEFAULT_RECONNECT_DELAYS_MS = [500, 1_000, 2_000, 5_000, 10_000] as const;
+
+function quoteSlashArgument(value: string): string {
+  return `'${value.replaceAll("'", `'"'"'`)}'`;
+}
 
 function inputRequest(
   type: string,
@@ -446,6 +455,27 @@ export class HermesAgentClient implements AgentClient {
   async completeCommands(input: string): Promise<AgentCommandSuggestion[]> {
     if (this.state !== "connected" || !input.startsWith("/")) return [];
 
+    if (/^\/model\s+/i.test(input)) {
+      const query = input.replace(/^\/model\s+/i, "").trim().toLowerCase();
+      const catalog = await this.listModels();
+      return catalog.providers
+        .flatMap((provider) =>
+          provider.models.map((model) => ({ provider, model })),
+        )
+        .filter(({ provider, model }) =>
+          !query || `${provider.slug} ${provider.name} ${model}`.toLowerCase().includes(query),
+        )
+        .slice(0, 60)
+        .map(({ provider, model }) => ({
+          text: `/model ${quoteSlashArgument(model)} --provider ${quoteSlashArgument(provider.slug)} --session`,
+          display: model,
+          description: provider.name,
+          group: `Models · ${provider.name}`,
+          kind: "command" as const,
+          availability: "available" as const,
+        }));
+    }
+
     if (input === "/") {
       const catalog = await this.request<HermesCommandsCatalogResponse>(
         "commands.catalog",
@@ -499,6 +529,72 @@ export class HermesAgentClient implements AgentClient {
             : undefined,
       };
     });
+  }
+
+  async listModels(options: { refresh?: boolean } = {}): Promise<AgentModelCatalog> {
+    if (this.state !== "connected") {
+      throw new Error("Connect to Hermes before listing models.");
+    }
+    const response = await this.request<HermesModelOptionsResponse>(
+      "model.options",
+      {
+        ...(this.session ? { session_id: this.session.sessionId } : {}),
+        explicit_only: true,
+        refresh: options.refresh === true,
+      },
+      120_000,
+    );
+    return {
+      provider: typeof response.provider === "string" ? response.provider : "",
+      model: typeof response.model === "string" ? response.model : "",
+      providers: (response.providers ?? [])
+        .map((provider) => ({
+          slug: typeof provider.slug === "string" ? provider.slug : "",
+          name:
+            typeof provider.name === "string" && provider.name.trim()
+              ? provider.name
+              : typeof provider.slug === "string"
+                ? provider.slug
+                : "Provider",
+          models: Array.isArray(provider.models)
+            ? provider.models.filter(
+                (model): model is string => typeof model === "string" && Boolean(model.trim()),
+              )
+            : [],
+          current: provider.is_current === true,
+          authenticated: provider.authenticated !== false,
+          warning: typeof provider.warning === "string" ? provider.warning : undefined,
+        }))
+        .filter((provider) => provider.slug && provider.models.length),
+    };
+  }
+
+  async selectModel(
+    selection: AgentModelSelection,
+    options: { confirm?: boolean } = {},
+  ): Promise<AgentModelSwitchResult> {
+    if (!this.session) {
+      throw new Error("Open a Hermes session before changing models.");
+    }
+    const provider = selection.provider.trim();
+    const model = selection.model.trim();
+    if (!provider || !model) throw new Error("Choose both a provider and a model.");
+    const response = await this.request<HermesModelSwitchResponse>("config.set", {
+      session_id: this.session.sessionId,
+      key: "model",
+      value: `${quoteSlashArgument(model)} --provider ${quoteSlashArgument(provider)} --session`,
+      confirm_expensive_model: options.confirm === true,
+    }, 120_000);
+    return {
+      provider,
+      model: typeof response.value === "string" && response.value ? response.value : model,
+      confirmationRequired: response.confirm_required === true,
+      deferred: response.deferred === true,
+      message:
+        (typeof response.confirm_message === "string" && response.confirm_message) ||
+        (typeof response.warning === "string" && response.warning) ||
+        undefined,
+    };
   }
 
   async respondToInput(response: AgentInputResponse): Promise<void> {

@@ -11,6 +11,7 @@ import type {
   StageBackgroundSummary,
 } from "@/lib/background/indexed-db-stage-background-store";
 import type { HermesRuntimeStatus } from "@/lib/runtime/hermes-control-client";
+import type { AgentModelCatalog, AgentModelSwitchResult } from "@/lib/agent/types";
 import {
   LIVE2D_SAMPLE_COPYRIGHT_NOTICE,
   OFFICIAL_LIVE2D_SAMPLES,
@@ -26,6 +27,7 @@ import { getCopy, type Copy, type UiLocale } from "@/lib/ui/copy";
 import { HermesControlPanel } from "./hermes-control-panel";
 import { TtsControlPanel } from "./tts-control-panel";
 import { VoicePanel } from "./voice-panel";
+import { ModelControlPanel } from "./model-control-panel";
 import {
   inspectTtsRuntime,
   controlTtsRuntime,
@@ -61,12 +63,14 @@ type SettingsDialogProps = {
   onInspectHermesControl(preferredPort?: number): Promise<HermesRuntimeStatus>;
   onStartHermesControl(options: { port: number; cwd?: string; restart?: boolean }): Promise<HermesRuntimeStatus>;
   onStopHermesControl(): Promise<HermesRuntimeStatus>;
+  onListAgentModels(refresh?: boolean): Promise<AgentModelCatalog>;
+  onSelectAgentModel(provider: string, model: string, confirm?: boolean): Promise<AgentModelSwitchResult>;
   onClose(): void;
 };
 
-type SettingsSection = "experience" | "voice" | "avatar" | "system" | "privacy";
+type SettingsSection = "experience" | "voice" | "avatar" | "model" | "system" | "privacy";
 
-const NAV_IDS: SettingsSection[] = ["experience", "voice", "avatar", "system", "privacy"];
+const NAV_IDS: SettingsSection[] = ["experience", "voice", "avatar", "model", "system", "privacy"];
 
 const STAGE_BACKGROUND_OPTIONS: Array<{
   value: StageBackground;
@@ -353,6 +357,8 @@ export function SettingsDialog({
   onInspectHermesControl,
   onStartHermesControl,
   onStopHermesControl,
+  onListAgentModels,
+  onSelectAgentModel,
 }: SettingsDialogProps) {
   const { dialogRef, onDialogKeyDown } = useDialogFocus(onClose);
   const [draft, setDraft] = useState(() => structuredClone(preferences));
@@ -600,7 +606,7 @@ export function SettingsDialog({
               const active = item.id === section;
               return (
                 <div key={item.id}>
-                  {item.id === "system" ? (
+                  {item.id === "model" ? (
                     <p className="mb-2 mt-6 px-3 text-[9px] font-bold tracking-[0.16em] text-faint uppercase max-md:hidden">{settingsCopy.system}</p>
                   ) : null}
                   <button
@@ -933,6 +939,16 @@ export function SettingsDialog({
                 </SettingCard>
                 <AdvancedConfigCard locale={draft.uiLocale} />
               </>
+            ) : null}
+
+            {section === "model" ? (
+              <SettingCard title={settingsCopy.modelTitle} description={settingsCopy.modelDescription}>
+                <ModelControlPanel
+                  locale={draft.uiLocale}
+                  onList={onListAgentModels}
+                  onSelect={onSelectAgentModel}
+                />
+              </SettingCard>
             ) : null}
 
             {section === "privacy" ? (

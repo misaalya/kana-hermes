@@ -9,6 +9,9 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    // Playwright uses an isolated Next.js dist directory so it never locks or
+    // reuses a developer's running application build.
+    ".next-e2e/**",
     "out/**",
     "build/**",
     "next-env.d.ts",

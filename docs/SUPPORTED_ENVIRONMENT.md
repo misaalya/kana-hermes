@@ -1,10 +1,11 @@
 # Supported environment and compatibility
 
-Kana 0.1.x is an alpha local web application.
+Kana 0.2.x is an alpha local web application.
 
 ## Tested baseline
 
-- Linux x86_64 host with Node.js 22.22.2.
+- Linux x86_64 glibc host with Node.js 22.22.2. The npm package requires
+  Node.js 22.13 or newer because Kana uses the built-in `node:sqlite` module.
 - Next.js 16.3.1 standalone server bound to loopback.
 - Current Chromium/Google Chrome desktop and 390 × 844 mobile emulation;
   automated reflow checks cover 320, 360, 390, 768, and 1440 CSS pixels plus
@@ -40,7 +41,10 @@ available when WebGL, audio, internet, Hermes, or Qwen is unavailable.
 
 ## Known limitations
 
-- Kana does not start or supervise Hermes/Qwen and is not a signed desktop app.
+- The global launcher can supervise local Hermes and an explicitly configured
+  Qwen service, but Kana remains a web package rather than a signed desktop
+  application. Starting `server.js` directly does not add native OS lifecycle
+  integration.
 - Qwen streaming is deferred. Complete WAV is the default; experimental
   sentence delivery plays ordered complete WAV parts and remains opt-in until
   target-host latency evidence supports changing the default.
