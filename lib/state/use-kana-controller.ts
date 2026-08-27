@@ -963,6 +963,7 @@ export function useKanaController(appVersion: string) {
         turnStartedAtRef.current = monotonicNow();
         // Fresh activity log for this turn.
         turnActivitiesRef.current = [];
+        setActivities([]);
         setBusy(true);
         setError(null);
         setStatus(statusCopy(preferencesRef.current.uiLocale).thinking);
@@ -2105,6 +2106,24 @@ export function useKanaController(appVersion: string) {
     [addActivity, reportError],
   );
 
+  const listAgentModels = useCallback(async (refresh = false) => {
+    const agent = agentRef.current;
+    if (!agent) throw new Error("Hermes is not connected.");
+    return agent.listModels({ refresh });
+  }, []);
+
+  const selectAgentModel = useCallback(
+    async (provider: string, model: string, confirm = false) => {
+      const agent = agentRef.current;
+      if (!agent) throw new Error("Hermes is not connected.");
+      if (busy) {
+        throw new Error("Wait for the current Hermes turn to finish before changing models.");
+      }
+      return agent.selectModel({ provider, model }, { confirm });
+    },
+    [busy],
+  );
+
   const testAgentConnection = useCallback(
     async () => {
       const client = new HermesAgentClient({
@@ -2321,6 +2340,8 @@ export function useKanaController(appVersion: string) {
     testAgentConnection,
     disconnectAgent,
     respondToInput,
+    listAgentModels,
+    selectAgentModel,
     attachAvatarCanvas,
     importAvatarFiles,
     listAvatarModels,

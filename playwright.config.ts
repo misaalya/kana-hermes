@@ -1,5 +1,6 @@
 import { defineConfig, devices, chromium } from "@playwright/test";
 import { existsSync } from "node:fs";
+import path from "node:path";
 
 const baseURL = "http://127.0.0.1:3100";
 const systemChromePath =
@@ -29,7 +30,13 @@ export default defineConfig({
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
-    env: { NEXT_TELEMETRY_DISABLED: "1" },
+    env: {
+      NEXT_TELEMETRY_DISABLED: "1",
+      // Keep acceptance isolated from a developer's already-running server in
+      // the same checkout; Next uses one lock per dist directory.
+      KANA_NEXT_DIST_DIR: ".next-e2e",
+      KANA_DATA_DIR: path.join(process.cwd(), "test-results", "kana-e2e-data"),
+    },
   },
   projects: [
     {

@@ -696,6 +696,8 @@ export function KanaApp({ appVersion }: KanaAppProps) {
           onInspectHermesControl={kana.inspectHermesControl}
           onStartHermesControl={kana.startHermesControl}
           onStopHermesControl={kana.stopHermesControl}
+          onListAgentModels={kana.listAgentModels}
+          onSelectAgentModel={kana.selectAgentModel}
           onClose={() => setSettingsOpen(false)}
         />
       ) : null}

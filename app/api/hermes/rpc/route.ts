@@ -30,6 +30,8 @@ const ALLOWED_METHODS = new Set([
   "prompt.submit",
   "commands.catalog",
   "complete.slash",
+  "model.options",
+  "config.set",
   "slash.exec",
   "command.dispatch",
   "approval.respond",
@@ -39,7 +41,7 @@ const ALLOWED_METHODS = new Set([
   "handoff.request",
 ]);
 
-const LONG_RUNNING_METHODS = new Set(["session.compress"]);
+const LONG_RUNNING_METHODS = new Set(["session.compress", "model.options"]);
 
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 
@@ -65,10 +67,33 @@ export async function POST(request: Request): Promise<Response> {
   if (typeof method !== "string" || !ALLOWED_METHODS.has(method)) {
     return Response.json({ error: "Unsupported Hermes method." }, { status: 400, headers: NO_STORE });
   }
-  const params =
+  let params =
     body.params && typeof body.params === "object" && !Array.isArray(body.params)
       ? (body.params as Record<string, unknown>)
       : {};
+  if (method === "config.set") {
+    if (
+      params.key !== "model" ||
+      typeof params.session_id !== "string" ||
+      typeof params.value !== "string" ||
+      !params.value.trim() ||
+      params.value.length > 2_000 ||
+      !/(^|\s)--provider(\s|$)/.test(params.value) ||
+      !/(^|\s)--session(\s|$)/.test(params.value) ||
+      /(^|\s)--(?:global|once)(\s|$)/.test(params.value)
+    ) {
+      return Response.json(
+        { error: "Only a session-scoped Hermes model selection is supported." },
+        { status: 400, headers: NO_STORE },
+      );
+    }
+    params = {
+      session_id: params.session_id,
+      key: "model",
+      value: params.value,
+      confirm_expensive_model: params.confirm_expensive_model === true,
+    };
+  }
   const timeoutMs = LONG_RUNNING_METHODS.has(method) ? 180_000 : undefined;
   try {
     const result = await hermesRpc(method, params, timeoutMs);

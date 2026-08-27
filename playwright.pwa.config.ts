@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import path from "node:path";
 
 const baseURL = "http://127.0.0.1:3101";
 
@@ -27,6 +28,14 @@ export default defineConfig({
     url: baseURL,
     reuseExistingServer: false,
     timeout: 30_000,
-    env: { NEXT_TELEMETRY_DISABLED: "1" },
+    env: {
+      NEXT_TELEMETRY_DISABLED: "1",
+      KANA_ALLOW_NO_AUTH: "1",
+      KANA_DATA_DIR: path.join(
+        process.cwd(),
+        "test-results",
+        "kana-pwa-data",
+      ),
+    },
   },
 });

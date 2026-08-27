@@ -56,7 +56,6 @@ Options:
   --port <number>            Kana web port (default 3000)
   --no-open                  Do not open a browser automatically
   --dev-mocks                Expose development mock providers (source builds only)
-  --skip-setup               Skip the first-run terminal setup
 \n`);
   process.exit(0);
 }
@@ -65,10 +64,13 @@ await mkdir(configRoot, { recursive: true });
 await mkdir(dataRoot, { recursive: true });
 await mkdir(cacheRoot, { recursive: true });
 
+// Keep every server-side file under the same user-owned data root. Resolve it
+// before subcommands so `kana doctor` works on a completely fresh install.
+const resolvedDataRoot = process.env.KANA_DATA_DIR?.trim() || dataRoot;
 let launcherConfig = await readConfig();
-if (command === "setup" || (!launcherConfig.setupCompleted && !has("--skip-setup"))) {
+if (command === "setup") {
   launcherConfig = await runSetup(launcherConfig);
-  if (command === "setup") process.exit(0);
+  process.exit(0);
 }
 
 if (command === "doctor") {
@@ -85,22 +87,29 @@ if (!Number.isInteger(port) || port < 1024 || port > 65535) {
   throw new Error("Kana port must be an integer between 1024 and 65535.");
 }
 
-// The web server resolves its data directory the same way this launcher does:
-// explicit KANA_DATA_DIR wins, otherwise the XDG user data root. HOME is
-// forwarded explicitly so the child never depends on the invoking shell.
-const resolvedDataRoot = process.env.KANA_DATA_DIR?.trim() || dataRoot;
-
 const children = [];
 if (launcherConfig.qwenEnabled) {
   const qwen = await startQwen();
   if (qwen) children.push(qwen);
 }
 
+const packagedServer = path.join(runtimeRoot, "server.js");
+const packaged = await exists(packagedServer);
 const require = createRequire(import.meta.url);
-const nextCli = require.resolve("next/dist/bin/next");
+const appCommand = process.execPath;
+const appArgs = packaged
+  ? [packagedServer]
+  : [
+      require.resolve("next/dist/bin/next"),
+      "start",
+      "--hostname",
+      "127.0.0.1",
+      "--port",
+      String(port),
+    ];
 const app = spawn(
-  process.execPath,
-  [nextCli, "start", "--hostname", "127.0.0.1", "--port", String(port)],
+  appCommand,
+  appArgs,
   {
     cwd: runtimeRoot,
     env: {
@@ -109,6 +118,10 @@ const app = spawn(
       PORT: String(port),
       HOME: process.env.HOME || userHome,
       KANA_DATA_DIR: resolvedDataRoot,
+      // The npm launcher is deliberately loopback-only. Acknowledge local
+      // no-auth operation; remote/VPS deployments still require explicit
+      // authentication. The in-app personal wizard remains intact.
+      KANA_ALLOW_NO_AUTH: process.env.KANA_ALLOW_NO_AUTH || "1",
     },
     stdio: "inherit",
   },
@@ -117,11 +130,15 @@ children.push(app);
 
 const url = `http://127.0.0.1:${port}`;
 try {
-  await waitForHttp(url, 30_000);
+  await waitForKana(url, app, 30_000);
   process.stdout.write(`\nKana is ready at ${url}\n`);
   if (!has("--no-open")) openBrowser(url);
 } catch (error) {
   process.stderr.write(`Kana did not become ready: ${error.message}\n`);
+  for (const child of children) {
+    if (child.exitCode === null) child.kill("SIGTERM");
+  }
+  process.exit(1);
 }
 
 const shutdown = (signal) => {
@@ -138,7 +155,7 @@ app.once("exit", (code) => {
 });
 
 async function runSetup(current) {
-  process.stdout.write("\nKana first-run setup\n");
+  process.stdout.write("\nKana optional voice setup\n");
   const hermes = findExecutable("hermes");
   process.stdout.write(
     hermes
@@ -225,7 +242,17 @@ async function printDoctor(current) {
 
 function findExecutable(name) {
   const suffixes = platform() === "win32" ? [".exe", ".cmd", ".bat", ""] : [""];
-  for (const folder of (process.env.PATH || "").split(path.delimiter)) {
+  const knownFolders = platform() === "win32"
+    ? [
+        process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, name, "bin"),
+        process.env.USERPROFILE && path.join(process.env.USERPROFILE, ".local", "bin"),
+      ]
+    : [path.join(userHome, ".local", "bin"), "/usr/local/bin", "/usr/bin"];
+  const folders = [
+    ...(process.env.PATH || "").split(path.delimiter),
+    ...knownFolders.filter(Boolean),
+  ];
+  for (const folder of [...new Set(folders)]) {
     if (!folder) continue;
     for (const suffix of suffixes) {
       const candidate = path.join(folder, `${name}${suffix}`);
@@ -258,12 +285,26 @@ async function runChild(executable, childArgs, extraEnvironment) {
   });
 }
 
-async function waitForHttp(url, timeoutMs) {
+async function waitForKana(url, child, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
+    if (child.exitCode !== null) {
+      throw new Error(
+        `the web process exited with code ${child.exitCode}; port ${new URL(url).port} may already be in use`,
+      );
+    }
     try {
-      const response = await fetch(url);
-      if (response.ok) return;
+      const response = await fetch(`${url}/api/auth/status`, {
+        signal: AbortSignal.timeout(1_000),
+      });
+      const status = response.ok ? await response.json() : null;
+      if (
+        status &&
+        typeof status === "object" &&
+        typeof status.authEnabled === "boolean"
+      ) {
+        return;
+      }
     } catch {
       // The server is still starting.
     }
@@ -283,6 +324,7 @@ function openBrowser(url) {
     detached: true,
     stdio: "ignore",
   });
+  opener.once("error", () => {});
   opener.unref();
 }
 
