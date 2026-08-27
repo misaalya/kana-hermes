@@ -5,12 +5,10 @@ import type { ActivityItem } from "@/lib/state/use-kana-controller";
 import type { KanaMessage } from "@/lib/conversation/types";
 import { ActivityStack } from "./activity-stack";
 import { getCopy, type UiLocale } from "@/lib/ui/copy";
-
-type ServerActivityTurn = {
-  turnAnchorMs: number;
-  turnIndex: number | null;
-  activities: ActivityItem[];
-};
+import {
+  buildLiveFeedTimeline,
+  type ServerActivityTurn,
+} from "@/lib/conversation/live-feed-timeline";
 
 type LiveChatFeedProps = {
   messages: KanaMessage[];
@@ -20,10 +18,6 @@ type LiveChatFeedProps = {
   status: string;
   locale: UiLocale;
 };
-
-type FeedEntry =
-  | { kind: "message"; at: number; message: KanaMessage }
-  | { kind: "activity"; at: number; activities: ActivityItem[] };
 
 function formatTime(timestamp: number, locale: UiLocale): string {
   return new Intl.DateTimeFormat(locale === "id" ? "id-ID" : "en-US", {
@@ -44,38 +38,10 @@ export const LiveChatFeed = memo(function LiveChatFeed({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [pinnedToBottom, setPinnedToBottom] = useState(true);
 
-  const entries = useMemo<FeedEntry[]>(() => {
-    const timeline: FeedEntry[] = messages.map((message) => ({
-      kind: "message" as const,
-      at: message.timestamp,
-      message,
-    }));
-    const assistantTimestamps = messages
-      .filter((message) => message.role === "assistant")
-      .map((message) => message.timestamp);
-
-    for (const turn of serverActivityTurns) {
-      if (!turn.activities.length) continue;
-      const replyTimestamp = assistantTimestamps[turn.turnIndex ?? -1];
-      timeline.push({
-        kind: "activity",
-        at: typeof replyTimestamp === "number" ? replyTimestamp - 0.5 : turn.turnAnchorMs,
-        activities: turn.activities,
-      });
-    }
-
-    if (activities.length) {
-      const lastUser = [...timeline]
-        .reverse()
-        .find((entry) => entry.kind === "message" && entry.message.role === "user");
-      timeline.push({
-        kind: "activity",
-        at: (lastUser?.at ?? Date.now()) + 0.5,
-        activities,
-      });
-    }
-    return timeline.sort((a, b) => a.at - b.at);
-  }, [messages, activities, serverActivityTurns]);
+  const entries = useMemo(
+    () => buildLiveFeedTimeline(messages, activities, serverActivityTurns),
+    [messages, activities, serverActivityTurns],
+  );
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     const node = scrollRef.current;

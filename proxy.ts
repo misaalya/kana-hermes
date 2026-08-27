@@ -67,6 +67,12 @@ export async function proxy(request: NextRequest) {
   const authEnabled = isAuthEnabled();
 
   if (pathname.startsWith("/api/")) {
+    // The npm launcher intentionally runs without a password on loopback for
+    // a zero-setup local experience. In that mode, require loopback-shaped
+    // Host/Origin evidence as browser-CSRF and DNS-rebinding defense in depth.
+    // Binding the launcher to 127.0.0.1 remains the actual network boundary.
+    if (!authEnabled && !isLoopbackRequest(request)) return forbidden();
+
     if (PUBLIC_API_PATHS.some((path) => pathname === path)) {
       return surfaceInsecureNoAuth(NextResponse.next());
     }

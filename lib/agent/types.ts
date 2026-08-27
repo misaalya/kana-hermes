@@ -213,6 +213,34 @@ export type AgentCommandResult =
       output: string;
     };
 
+export type AgentModelProvider = {
+  slug: string;
+  name: string;
+  models: string[];
+  current: boolean;
+  authenticated: boolean;
+  warning?: string;
+};
+
+export type AgentModelCatalog = {
+  provider: string;
+  model: string;
+  providers: AgentModelProvider[];
+};
+
+export type AgentModelSelection = {
+  provider: string;
+  model: string;
+};
+
+export type AgentModelSwitchResult = {
+  provider: string;
+  model: string;
+  confirmationRequired: boolean;
+  deferred: boolean;
+  message?: string;
+};
+
 export type AgentSession = {
   sessionId: string;
   persistentSessionId: string;
@@ -242,6 +270,11 @@ export interface AgentClient {
   sendMessage(input: AgentMessageInput): Promise<void>;
   executeCommand(input: AgentCommandInput): Promise<AgentCommandResult>;
   completeCommands(input: string): Promise<AgentCommandSuggestion[]>;
+  listModels(options?: { refresh?: boolean }): Promise<AgentModelCatalog>;
+  selectModel(
+    selection: AgentModelSelection,
+    options?: { confirm?: boolean },
+  ): Promise<AgentModelSwitchResult>;
   respondToInput(response: AgentInputResponse): Promise<void>;
   abort(): Promise<void>;
   subscribe(callback: (event: AgentEvent) => void): () => void;

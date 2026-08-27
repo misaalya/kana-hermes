@@ -359,16 +359,24 @@ export async function startLocalQwen3TtsRuntime(options: {
   current.stderrTail = [];
   current.lastMessage = "Starting the Qwen3-TTS service…";
 
-  const child = spawn(uv, ["run", "--project", projectDir, "kana-qwen3-tts"], {
-    env: {
-      ...process.env,
-      KANA_TTS_HOST: "127.0.0.1",
-      KANA_TTS_PORT: String(port),
-      ...(process.env.KANA_TTS_MODEL || !userConfig?.model ? {} : { KANA_TTS_MODEL: userConfig.model }),
-      ...(process.env.KANA_TTS_DEVICE || !userConfig?.device ? {} : { KANA_TTS_DEVICE: userConfig.device }),
+  const child = spawn(
+    /* turbopackIgnore: true */ uv,
+    ["run", "--project", projectDir, "kana-qwen3-tts"],
+    {
+      env: {
+        ...process.env,
+        KANA_TTS_HOST: "127.0.0.1",
+        KANA_TTS_PORT: String(port),
+        ...(process.env.KANA_TTS_MODEL || !userConfig?.model
+          ? {}
+          : { KANA_TTS_MODEL: userConfig.model }),
+        ...(process.env.KANA_TTS_DEVICE || !userConfig?.device
+          ? {}
+          : { KANA_TTS_DEVICE: userConfig.device }),
+      },
+      stdio: ["ignore", "ignore", "pipe"],
     },
-    stdio: ["ignore", "ignore", "pipe"],
-  });
+  );
   current.child = child;
   child.stderr?.on("data", (chunk: Buffer) => {
     current.stderrTail.push(chunk.toString());

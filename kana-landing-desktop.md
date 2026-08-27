@@ -1,0 +1,153 @@
+- generic [active] [ref=f2e1] [box=0,0,886,4223]:
+  - banner [ref=f2e2] [box=0,0,886,80]:
+    - generic [ref=f2e3] [box=24,0,838,79]:
+      - link "Kana home" [ref=f2e4] [cursor=pointer] [box=24,23,147,34]:
+        - /url: "#top"
+        - generic [ref=f2e5] [box=68,25,47,30]: Kana
+        - generic [ref=f2e6] [box=127,30,44,20]: alpha
+      - navigation "Main navigation" [ref=f2e7] [box=329,31,229,18]:
+        - link "What is Kana?" [ref=f2e8] [cursor=pointer] [box=329,31,83,18]:
+          - /url: "#product"
+        - link "Features" [ref=f2e9] [cursor=pointer] [box=441,31,51,18]:
+          - /url: "#features"
+        - link "Install" [ref=f2e10] [cursor=pointer] [box=522,31,35,18]:
+          - /url: "#install"
+      - link "Source" [ref=f2e11] [cursor=pointer] [box=773,20,89,39]:
+        - /url: https://github.com/misaalya/kana-ui
+  - main [ref=f2e15] [box=0,0,886,1266]:
+    - generic [ref=f2e17] [box=24,154,838,1015]:
+      - generic [ref=f2e18] [box=24,154,720,401]:
+        - paragraph [ref=f2e19] [box=24,176,254,33]: Local visual layer for Hermes
+        - heading "Hermes, with a face and a voice." [level=1] [ref=f2e21] [box=24,235,600,94]
+        - paragraph [ref=f2e22] [box=24,351,550,84]: Kana turns your existing Hermes Agent into a local, expressive companion with a replaceable Live2D avatar, Japanese speech, and the full Hermes control surface.
+        - generic [ref=f2e23] [box=24,467,720,46]:
+          - link "Install the alpha" [ref=f2e24] [cursor=pointer] [box=24,467,160,46]:
+            - /url: "#install"
+          - link "Download source" [ref=f2e27] [cursor=pointer] [box=194,467,138,46]:
+            - /url: https://github.com/misaalya/kana-ui/archive/refs/heads/main.zip
+        - generic "Current platform support" [ref=f2e28] [box=24,541,720,14]:
+          - generic [ref=f2e29] [box=24,541,77,14]: Current build
+          - generic [ref=f2e30] [box=111,541,50,14]: Linux x64
+          - generic [ref=f2e32] [box=184,541,59,14]: Node 22.13+
+          - generic [ref=f2e34] [box=266,541,62,14]: Local-first
+      - generic [ref=f2e35] [box=63,611,760,558]:
+        - generic [ref=f2e36] [box=730,611,69,12]:
+          - generic [ref=f2e37] [box=730,611,10,12]: "01"
+          - text: The stage
+        - generic "Preview of the Kana avatar stage and conversation interface" [ref=f2e38] [box=86,642,737,500]:
+          - generic [ref=f2e39] [box=102,658,705,34]: A quiet evening
+          - generic [ref=f2e45] [box=88,644,403,496]: Your Live2D model
+          - generic [ref=f2e49] [box=456,706,352,421]
+          - generic [ref=f2e66] [box=104,1100,169,23]
+        - generic [ref=f2e70] [box=686,1157,113,12]:
+          - generic [ref=f2e71] [box=686,1157,11,12]: "02"
+          - text: The conversation
+  - generic [ref=f2e73] [box=24,1376,838,243]:
+    - generic [ref=f2e74] [box=24,1376,394,243]:
+      - paragraph [ref=f2e75] [box=24,1376,394,15]: 01 / What is Kana?
+      - heading "Not another agent. A warmer way to meet yours." [level=2] [ref=f2e76] [box=24,1409,394,117]: Not another agent.A warmer way to meet yours.
+    - generic [ref=f2e77] [box=468,1376,394,243]:
+      - paragraph [ref=f2e78] [box=468,1402,394,112]: "Hermes still owns the reasoning, tools, files, sessions, memory, and context. Kana is the local presentation layer around it: the part you see, hear, and talk to."
+      - generic "Kana architecture" [ref=f2e79] [box=468,1546,394,73]:
+        - generic [ref=f2e80] [box=468,1571,103,48]: You
+        - generic [ref=f2e81] [box=579,1583,14,24]: →
+        - generic [ref=f2e82] [box=601,1571,103,48]: Kana UI
+        - generic [ref=f2e83] [box=711,1583,14,24]: →
+        - generic [ref=f2e84] [box=734,1571,128,48]: Hermes Agent
+  - generic [ref=f2e86] [box=24,1850,838,1206]:
+    - generic [ref=f2e87] [box=24,1850,838,111]:
+      - generic [ref=f2e88] [box=24,1850,545,111]:
+        - paragraph [ref=f2e89] [box=24,1850,545,15]: 02 / Made present
+        - heading "A companion surface, built from real parts." [level=2] [ref=f2e90] [box=24,1883,545,78]: A companion surface,built from real parts.
+      - paragraph [ref=f2e91] [box=629,1890,233,66]: Each layer stays replaceable. Kana brings them together without becoming a second AI.
+    - generic [ref=f2e92] [box=24,2015,838,1041]:
+      - article [ref=f2e93] [box=24,2015,515,418]:
+        - generic [ref=f2e94] [box=51,2042,461,48]: Face / 01
+        - generic [ref=f2e101] [box=51,2265,461,89]:
+          - heading "Your character, not ours." [level=3] [ref=f2e102] [box=51,2265,461,35]
+          - paragraph [ref=f2e103] [box=51,2312,461,42]: Use the official sample models, a hosted model, or import a Live2D folder that stays in your browser. Expressions, gaze, motion, and lip sync are all connected.
+        - generic [ref=f2e104] [box=51,2378,461,28]:
+          - generic [ref=f2e105] [box=51,2378,49,28]: Natural
+          - generic [ref=f2e106] [box=107,2378,46,28]: Happy
+          - generic [ref=f2e107] [box=160,2378,53,28]: Thinking
+          - generic [ref=f2e108] [box=220,2378,57,28]: Surprised
+      - article [ref=f2e109] [box=553,2015,309,418]:
+        - generic [ref=f2e110] [box=580,2042,255,48]: Voice / 02
+        - generic [ref=f2e129] [box=580,2241,255,165]:
+          - heading "Japanese speech, generated locally." [level=3] [ref=f2e130] [box=580,2241,255,69]
+          - paragraph [ref=f2e131] [box=580,2322,255,84]: Qwen3-TTS speaks each response and drives the avatar's mouth. Voice setup is optional, explicit, and remains on your machine.
+      - article [ref=f2e132] [box=553,2447,309,320]:
+        - generic [ref=f2e133] [box=580,2474,255,48]: Local / 03
+        - generic [ref=f2e139] [box=580,2577,255,110]:
+          - heading "Your stage stays yours." [level=3] [ref=f2e140] [box=580,2577,255,35]
+          - paragraph [ref=f2e141] [box=580,2623,255,63]: Preferences, imported avatars, voice profiles, and UI data stay local. The browser never receives your Hermes session token.
+        - generic [ref=f2e142] [box=580,2708,255,32]: Loopback only · 127.0.0.1
+      - article [ref=f2e144] [box=24,2781,838,275]:
+        - generic [ref=f2e145] [box=51,2808,784,48]: Control / 04
+        - generic [ref=f2e151] [box=51,2856,784,173]:
+          - generic [ref=f2e152] [box=51,2919,357,110]
+          - generic [ref=f2e155] [box=478,2898,357,131]
+  - generic [ref=f2e167] [box=24,3297,838,558]:
+    - generic [ref=f2e168] [box=24,3297,296,558]:
+      - paragraph [ref=f2e169] [box=24,3297,296,15]: 03 / Install
+      - heading "Run Kana locally." [level=2] [ref=f2e170] [box=24,3330,296,39]
+      - paragraph [ref=f2e171] [box=24,3391,296,98]: Kana is in alpha. The honest install path today is from source, while packaged releases and additional platforms are still being prepared.
+      - list [ref=f2e172] [box=24,3523,296,252]:
+        - listitem [ref=f2e173] [box=24,3523,296,79]:
+          - generic [ref=f2e174] [box=24,3541,25,25]: "1"
+          - generic [ref=f2e175] [box=71,3541,249,44]
+        - listitem [ref=f2e177] [box=24,3601,296,79]:
+          - generic [ref=f2e178] [box=24,3619,25,25]: "2"
+          - generic [ref=f2e179] [box=71,3619,249,44]
+        - listitem [ref=f2e181] [box=24,3680,296,95]:
+          - generic [ref=f2e182] [box=24,3698,25,25]: "3"
+          - generic [ref=f2e183] [box=71,3698,249,59]
+      - generic [ref=f2e185] [box=24,3809,296,46]:
+        - link "Download source" [ref=f2e186] [cursor=pointer] [box=24,3809,138,46]:
+          - /url: https://github.com/misaalya/kana-ui/archive/refs/heads/main.zip
+        - link "Read the setup guide ↗" [ref=f2e187] [cursor=pointer] [box=172,3824,114,15]:
+          - /url: https://github.com/misaalya/kana-ui#readme
+    - generic [ref=f2e188] [box=370,3365,493,422]:
+      - generic [ref=f2e189] [box=372,3367,489,53]:
+        - generic [ref=f2e194] [box=590,3387,52,12]: kana — setup
+        - generic [ref=f2e195] [box=809,3387,35,12]: Linux x64
+      - generic [ref=f2e196] [box=372,3420,489,310]:
+        - button "Copy installation commands" [ref=f2e197] [cursor=pointer] [box=786,3434,60,30]: Copy
+        - code [ref=f2e202] [box=400,3469,367,96]: $ git clone https://github.com/misaalya/kana-ui.git $ cd kana-ui $ npm install $ npm run dev -- --hostname 127.0.0.1
+        - generic [ref=f2e203] [box=400,3605,433,38]:
+          - text: Kana is ready at
+          - generic [ref=f2e205] [box=515,3618,101,12]: http://127.0.0.1:3000
+      - generic [ref=f2e206] [box=372,3730,489,55]:
+        - generic [ref=f2e207] [box=372,3731,163,54]:
+          - text: Node.js
+          - generic [ref=f2e208] [box=458,3752,23,12]: 22.13+
+        - generic [ref=f2e209] [box=534,3731,163,54]:
+          - text: Platform
+          - generic [ref=f2e210] [box=617,3752,35,12]: Linux x64
+        - generic [ref=f2e211] [box=697,3731,163,54]:
+          - text: Stage
+          - generic [ref=f2e212] [box=781,3752,22,12]: Alpha
+  - contentinfo [ref=f2e213] [box=0,3976,886,247]:
+    - generic [ref=f2e214] [box=24,4050,838,47]:
+      - generic [ref=f2e216] [box=84,4052,135,42]:
+        - text: Kana
+        - paragraph [ref=f2e217] [box=84,4081,135,14]: Hermes, with a face and a voice.
+      - navigation "Footer navigation" [ref=f2e218] [box=608,4066,254,14]:
+        - link "About" [ref=f2e219] [cursor=pointer] [box=608,4066,26,14]:
+          - /url: "#product"
+        - link "Features" [ref=f2e220] [cursor=pointer] [box=656,4066,38,14]:
+          - /url: "#features"
+        - link "Install" [ref=f2e221] [cursor=pointer] [box=716,4066,26,14]:
+          - /url: "#install"
+        - link "GitHub ↗" [ref=f2e222] [cursor=pointer] [box=764,4066,40,14]:
+          - /url: https://github.com/misaalya/kana-ui
+        - link "Issues ↗" [ref=f2e223] [cursor=pointer] [box=826,4066,36,14]:
+          - /url: https://github.com/misaalya/kana-ui/issues
+    - generic [ref=f2e224] [box=24,4153,838,36]:
+      - paragraph [ref=f2e225] [box=24,4176,418,13]: Kana is a presentation layer. Hermes Agent remains the only AI agent and owns all reasoning, tools, and sessions.
+      - paragraph [ref=f2e226] [box=558,4176,304,13]: Official Live2D sample models are loaded under Live2D Inc.'s sample model terms.
+  - generic [ref=f2e229] [box=357,856,173,40]:
+    - button [ref=f2e230] [box=357,856,42,40]
+    - button [ref=f2e236] [box=399,856,44,40]
+    - button "Audit" [ref=f2e240] [box=443,856,44,40]
+    - button [ref=f2e248] [box=488,856,42,40]

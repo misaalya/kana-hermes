@@ -7,7 +7,6 @@ import { randomBytes } from "node:crypto";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { ensureHermesConnection, hermesRpc, subscribeHermesEvents } from "@/lib/server/hermes-bridge";
 import { managedRuntimeToken } from "@/lib/server/local-hermes-runtime";
-import type { AgentEvent } from "@/lib/agent/types";
 
 // Acceptance script for the server-side bridge: an isolated `hermes serve` is
 // started, the bridge connects with the server-held token, a session is

@@ -1,10 +1,26 @@
 {
-  "name": "kana",
+  "name": "kana-ui",
   "version": "0.2.0-alpha.1",
   "private": false,
   "description": "Local visual-novel interface and launcher for an existing Hermes Agent",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/misaalya/kana-ui.git"
+  },
+  "homepage": "https://github.com/misaalya/kana-ui#readme",
+  "bugs": {
+    "url": "https://github.com/misaalya/kana-ui/issues"
+  },
+  "keywords": [
+    "hermes-agent",
+    "live2d",
+    "local-first",
+    "vtuber"
+  ],
   "bin": {
-    "kana": "bin/kana.mjs"
+    "kana": "bin/kana.mjs",
+    "kana-ui": "bin/kana.mjs"
   },
   "files": [
     ".npm-package",
@@ -15,7 +31,20 @@
     "docs"
   ],
   "engines": {
-    "node": ">=20.9"
+    "node": ">=22.13"
+  },
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "libc": [
+    "glibc"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
   },
   "scripts": {
     "dev": "next dev",
@@ -23,11 +52,13 @@
     "package:local": "npm run build && node scripts/package-standalone.mjs",
     "package:npm": "npm run build && node scripts/prepare-npm-package.mjs && npm pack --dry-run --ignore-scripts",
     "prepack": "npm run build && node scripts/prepare-npm-package.mjs",
+    "prepublishOnly": "node scripts/assert-npm-release.mjs",
     "start": "next start",
     "start:standalone": "HOSTNAME=127.0.0.1 PORT=3000 node .next/standalone/server.js",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/**/*.test.ts",
+    "test:package:npm": "npm run package:npm && node scripts/npm-package-smoke.mjs",
     "test:e2e": "playwright test",
     "test:live2d:official": "playwright test --config playwright.live2d.config.ts",
     "test:pwa:built": "playwright test --config playwright.pwa.config.ts",
@@ -47,26 +78,28 @@
     "tts:acceptance": "node scripts/qwen3-tts-acceptance.mjs",
     "tts:test": "uv run --project services/qwen3-tts python -m unittest discover -s services/qwen3-tts/tests"
   },
-  "dependencies": {
-    "bcryptjs": "^3.0.3",
-    "jose": "^6.2.10",
-    "next": "16.3.1",
-    "pixi-live2d-display": "0.4.0",
-    "pixi.js": "6.5.10",
-    "react": "19.2.8",
-    "react-dom": "19.2.8",
-    "zustand": "^5.0.15"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^24.13.3",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "bcryptjs": "^3.0.3",
     "eslint": "^9",
     "eslint-config-next": "16.3.1",
+    "jose": "^6.2.10",
+    "next": "16.3.1",
+    "pixi-live2d-display": "0.4.0",
+    "pixi.js": "6.5.10",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
     "tailwindcss": "^4",
     "tsx": "^4.20.6",
-    "typescript": "^5"
+    "typescript": "^5",
+    "zustand": "^5.0.15"
+  },
+  "overrides": {
+    "gh-pages": "^6.3.0"
   }
 }
