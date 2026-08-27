@@ -7,7 +7,10 @@ import {
   DEFAULT_PREFERENCES,
   normalizeKanaPreferences,
 } from "@/lib/preferences/local-preferences-store";
-import type { KanaPreferences } from "@/lib/preferences/types";
+import {
+  isStageBackground,
+  type KanaPreferences,
+} from "@/lib/preferences/types";
 import { normalizeQwen3TTSBaseUrl } from "@/lib/voice/qwen3-tts-contract";
 
 export const KANA_BACKUP_VERSION = 1;
@@ -137,6 +140,11 @@ export function sanitizeBackupPreferences(
   return {
     ...preferences,
     onboardingCompleted: true,
+    stageBackground:
+      preferences.stageBackground === "custom"
+        ? "plain"
+        : preferences.stageBackground,
+    customBackgroundId: undefined,
     hermes: { cwd: preferences.hermes.cwd },
     live2d: {
       ...preferences.live2d,
@@ -172,6 +180,13 @@ function parsePreferences(value: unknown): KanaPreferences {
       typeof value.subtitleLanguage === "string"
         ? value.subtitleLanguage.slice(0, 32)
         : DEFAULT_PREFERENCES.subtitleLanguage,
+    stageBackground: isStageBackground(value.stageBackground)
+      ? value.stageBackground
+      : "plain",
+    customBackgroundId:
+      typeof value.customBackgroundId === "string"
+        ? value.customBackgroundId.slice(0, 500)
+        : undefined,
     voiceEnabled: value.voiceEnabled !== false,
     hermes: {
       cwd:

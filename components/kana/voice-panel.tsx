@@ -9,22 +9,15 @@ import {
 } from "@/lib/runtime/voice-library-client";
 import { convertToWav } from "@/lib/voice/audio-to-wav";
 import { btnGhost, btnPrimary, btnSecondary, inputBase } from "./ui";
+import { getCopy, type Copy, type UiLocale } from "@/lib/ui/copy";
 
 type VoicePanelProps = {
   selectedVoiceId: string;
   onVoiceSelect(serviceVoiceId: string): void;
+  locale: UiLocale;
 };
 
 type EngineState = "ready" | "loading" | "error" | "stopped";
-
-const ENGINE_LINES: Record<EngineState, string> = {
-  ready: "",
-  loading: "The voice engine is getting ready. Your voices will appear automatically when it finishes.",
-  error: "The voice engine could not start. Open Connection to check it.",
-  stopped: "The voice engine is asleep. Kana will start it when voice is needed.",
-};
-
-const ENGINE_HINT_PENDING = "Waiting for the voice engine…";
 
 function VoiceChoice({
   active,
@@ -34,6 +27,7 @@ function VoiceChoice({
   deletable,
   onSelect,
   onDelete,
+  copy,
 }: {
   active: boolean;
   label: string;
@@ -42,13 +36,14 @@ function VoiceChoice({
   deletable: boolean;
   onSelect(): void;
   onDelete(): void;
+  copy: Copy["voiceLibrary"];
 }) {
   return (
     <div
       role="radio"
       aria-checked={active}
       aria-disabled={!selectable}
-      className={`flex min-h-20 items-stretch overflow-hidden rounded-xl border transition-colors ${
+      className={`flex min-h-20 items-stretch overflow-hidden rounded-xl border-2 transition-colors ${
         active
           ? "border-accent bg-surface-strong"
           : "border-line bg-surface-strong"
@@ -67,16 +62,16 @@ function VoiceChoice({
           {hint ? <span className="block truncate text-[10px] text-faint">{hint}</span> : null}
         </span>
         <span className={`shrink-0 text-[10px] font-bold ${active ? "text-accent" : "text-faint"}`}>
-          {active ? "Selected" : selectable ? "Choose" : "Pending"}
+          {active ? copy.selected : selectable ? copy.choose : copy.pending}
         </span>
       </button>
       {deletable ? (
         <button
           type="button"
-          className="kana-focus shrink-0 border-l border-line px-3 text-[10px] font-semibold text-faint transition-colors hover:bg-danger/10 hover:text-danger"
+          className="kana-focus shrink-0 border-l-2 border-line px-3 text-[10px] font-semibold text-faint transition-colors hover:bg-danger/10 hover:text-danger"
           onClick={onDelete}
         >
-          Remove
+          {copy.remove}
         </button>
       ) : null}
     </div>
@@ -91,7 +86,15 @@ function VoiceChoice({
 export function VoicePanel({
   selectedVoiceId,
   onVoiceSelect,
+  locale,
 }: VoicePanelProps) {
+  const copy = getCopy(locale).voiceLibrary;
+  const engineLines: Record<EngineState, string> = {
+    ready: "",
+    loading: copy.engineLoading,
+    error: copy.engineError,
+    stopped: copy.engineStopped,
+  };
   const [voices, setVoices] = useState<LibraryVoice[]>([]);
   const [engineState, setEngineState] = useState<EngineState>("stopped");
   const [loadingVoices, setLoadingVoices] = useState(true);
@@ -110,11 +113,11 @@ export function VoicePanel({
       setVoices(value.voices);
       setEngineState((value.engine?.state as EngineState) ?? "stopped");
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Voice check failed.");
+      setNotice(error instanceof Error ? error.message : copy.checkFailed);
     } finally {
       setLoadingVoices(false);
     }
-  }, []);
+  }, [copy.checkFailed]);
 
   useEffect(() => {
     let active = true;
@@ -127,13 +130,13 @@ export function VoicePanel({
       })
       .catch((error) => {
         if (!active) return;
-        setNotice(error instanceof Error ? error.message : "Voice check failed.");
+        setNotice(error instanceof Error ? error.message : copy.checkFailed);
         setLoadingVoices(false);
       });
     return () => {
       active = false;
     };
-  }, []);
+  }, [copy.checkFailed]);
 
   // Retry registration while something is pending and the panel is open.
   const hasPending = voices.some((voice) => !voice.registered) && engineState !== "error";
@@ -147,7 +150,7 @@ export function VoicePanel({
 
   const upload = async () => {
     if (!cloneAudio || !cloneName.trim() || !cloneConsent) {
-      setNotice("Add a name, choose a voice sample, and confirm you have permission to use it.");
+      setNotice(copy.validation);
       return;
     }
     setBusy(true);
@@ -158,7 +161,7 @@ export function VoicePanel({
       if (result.voice.registered && result.voice.serviceVoiceId) {
         onVoiceSelect(result.voice.serviceVoiceId);
       }
-      setNotice(result.warning ?? `Voice "${result.voice.name}" is ready.`);
+      setNotice(result.warning ?? copy.added(result.voice.name));
       setCloneName("");
       setCloneAudio(null);
       setCloneConsent(false);
@@ -166,7 +169,7 @@ export function VoicePanel({
       if (audioInputRef.current) audioInputRef.current.value = "";
       await refresh();
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "The voice could not be added.");
+      setNotice(error instanceof Error ? error.message : copy.addFailed);
     } finally {
       setBusy(false);
     }
@@ -178,7 +181,7 @@ export function VoicePanel({
       await deleteKanaVoice(id);
       await refresh();
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "The voice could not be removed.");
+      setNotice(error instanceof Error ? error.message : copy.removeFailed);
     } finally {
       setBusy(false);
     }
@@ -195,19 +198,19 @@ export function VoicePanel({
   return (
     <div>
       <div className="mb-3">
-        <h4 className="text-xs font-bold text-ink">Voice library</h4>
+        <h4 className="text-xs font-bold text-ink">{copy.title}</h4>
         <p className="mt-1 text-[10px] leading-relaxed text-muted">
-          Choose a ready voice. Kana uses it for every new Japanese reply.
+          {copy.body}
         </p>
       </div>
 
-      <fieldset className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Choose Kana's voice">
-        <legend className="sr-only">Available voices</legend>
+      <fieldset className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label={copy.chooseAria}>
+        <legend className="sr-only">{copy.available}</legend>
         {loadingVoices && voices.length === 0 ? (
-          <p className="rounded-xl border border-line bg-surface-strong px-4 py-5 text-[11px] text-muted sm:col-span-2">Loading voices…</p>
+          <p className="rounded-xl border border-line bg-surface-strong px-4 py-5 text-[11px] text-muted sm:col-span-2">{copy.loading}</p>
         ) : voices.length === 0 ? (
           <p className="rounded-xl border border-line bg-surface-strong px-4 py-5 text-[11px] text-muted sm:col-span-2">
-            No voices yet. Add a voice sample below.
+            {copy.empty}
           </p>
         ) : (
           voices.map((voice) => (
@@ -215,13 +218,14 @@ export function VoicePanel({
               key={voice.id}
               active={Boolean(voice.registered && voice.serviceVoiceId === effectiveSelected)}
               label={voice.name}
-              hint={voice.registered ? (voice.isDefault ? "Included with Kana" : "Your voice") : ENGINE_HINT_PENDING}
+              hint={voice.registered ? (voice.isDefault ? copy.included : copy.yours) : copy.waiting}
               selectable={voice.registered}
               deletable={!voice.isDefault}
               onSelect={() => {
                 if (voice.registered && voice.serviceVoiceId) onVoiceSelect(voice.serviceVoiceId);
               }}
               onDelete={() => void remove(voice.id)}
+              copy={copy}
             />
           ))
         )}
@@ -229,7 +233,7 @@ export function VoicePanel({
 
       {engineState !== "ready" ? (
         <p className={`mt-3 text-[10px] leading-relaxed ${engineState === "error" ? "text-danger" : "text-faint"}`}>
-          {ENGINE_LINES[engineState]}
+          {engineLines[engineState]}
         </p>
       ) : null}
 
@@ -240,33 +244,33 @@ export function VoicePanel({
           onClick={() => setAddingVoice(true)}
         >
           <span>
-            <span className="block text-xs font-bold text-ink">Add your own voice</span>
-            <span className="mt-0.5 block text-[10px] text-muted">Use one clear audio sample that you have permission to use.</span>
+            <span className="block text-xs font-bold text-ink">{copy.addTitle}</span>
+            <span className="mt-0.5 block text-[10px] text-muted">{copy.addBody}</span>
           </span>
-          <span className="text-[10px] font-bold text-accent">Add sample</span>
+          <span className="text-[10px] font-bold text-accent">{copy.addSample}</span>
         </button>
       ) : (
-        <section className="mt-4 rounded-xl border border-accent/35 bg-surface-strong p-4" aria-label="Add a voice sample">
+        <section className="mt-4 rounded-xl border border-accent/35 bg-surface-strong p-4" aria-label={copy.formAria}>
           <div className="mb-4 flex items-start justify-between gap-4">
             <div>
-              <h4 className="text-xs font-bold text-ink">Add your voice</h4>
-              <p className="mt-1 text-[10px] leading-relaxed text-muted">A clean sample with one speaker gives the best result.</p>
+              <h4 className="text-xs font-bold text-ink">{copy.formTitle}</h4>
+              <p className="mt-1 text-[10px] leading-relaxed text-muted">{copy.formBody}</p>
             </div>
-            <button type="button" className={btnGhost} onClick={() => setAddingVoice(false)}>Cancel</button>
+            <button type="button" className={btnGhost} onClick={() => setAddingVoice(false)}>{copy.cancel}</button>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="grid gap-1.5">
-              <span className="text-[10px] font-bold text-muted">Voice name</span>
+              <span className="text-[10px] font-bold text-muted">{copy.name}</span>
               <input
                 type="text"
                 className={inputBase}
-                placeholder="For example: My voice"
+                placeholder={copy.namePlaceholder}
                 value={cloneName}
                 onChange={(event) => setCloneName(event.target.value)}
               />
             </label>
             <div className="grid gap-1.5">
-              <span className="text-[10px] font-bold text-muted">Audio sample</span>
+              <span className="text-[10px] font-bold text-muted">{copy.audio}</span>
               <input
                 ref={audioInputRef}
                 type="file"
@@ -275,7 +279,7 @@ export function VoicePanel({
                 onChange={(event) => setCloneAudio(event.target.files?.[0] ?? null)}
               />
               <button type="button" className={`${btnSecondary} justify-start overflow-hidden`} onClick={() => audioInputRef.current?.click()}>
-                <span className="truncate">{cloneAudio?.name ?? "Choose audio file"}</span>
+                <span className="truncate">{cloneAudio?.name ?? copy.chooseFile}</span>
               </button>
             </div>
           </div>
@@ -286,11 +290,11 @@ export function VoicePanel({
               checked={cloneConsent}
               onChange={(event) => setCloneConsent(event.target.checked)}
             />
-            This is my voice, or I have permission to use it.
+            {copy.consent}
           </label>
           <div className="mt-4 flex justify-end">
             <button type="button" className={btnPrimary} disabled={busy || !cloneAudio || !cloneName.trim() || !cloneConsent} onClick={() => void upload()}>
-              {busy ? "Preparing voice…" : "Add to library"}
+              {busy ? copy.preparing : copy.addLibrary}
             </button>
           </div>
         </section>

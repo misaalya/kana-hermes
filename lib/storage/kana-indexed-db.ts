@@ -1,9 +1,10 @@
 const DATABASE_NAME = "kana.local";
-const DATABASE_VERSION = 1;
+const DATABASE_VERSION = 2;
 
 export const KANA_DATABASE_STORES = {
   conversations: "conversations",
   avatarModels: "avatarModels",
+  stageBackgrounds: "stageBackgrounds",
 } as const;
 
 let databasePromise: Promise<IDBDatabase> | null = null;
@@ -28,6 +29,13 @@ export function openKanaDatabase(): Promise<IDBDatabase> {
       if (!database.objectStoreNames.contains(KANA_DATABASE_STORES.avatarModels)) {
         const store = database.createObjectStore(
           KANA_DATABASE_STORES.avatarModels,
+          { keyPath: "id" },
+        );
+        store.createIndex("importedAt", "importedAt");
+      }
+      if (!database.objectStoreNames.contains(KANA_DATABASE_STORES.stageBackgrounds)) {
+        const store = database.createObjectStore(
+          KANA_DATABASE_STORES.stageBackgrounds,
           { keyPath: "id" },
         );
         store.createIndex("importedAt", "importedAt");

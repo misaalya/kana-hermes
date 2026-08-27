@@ -55,6 +55,7 @@ import {
   normalizeKanaPreferences,
 } from "@/lib/preferences/local-preferences-store";
 import type { KanaPreferences } from "@/lib/preferences/types";
+import { getCopy } from "@/lib/ui/copy";
 import {
   controlHermesRuntime,
   inspectHermesRuntime,
@@ -67,50 +68,19 @@ import { useVoiceController } from "./use-voice-controller";
 export type { ActivityItem } from "@/lib/agent/types";
 import type { ActivityItem } from "@/lib/agent/types";
 
-const KANA_COMMAND_SUGGESTIONS: AgentCommandSuggestion[] = [
-  {
-    text: "/new",
-    display: "/new",
-    description: "Start a new Kana conversation and Hermes session",
-    group: "Kana & session",
-    kind: "command",
-  },
-  {
-    text: "/sessions",
-    display: "/sessions",
-    description: "List locally stored Kana conversations",
-    group: "Kana & session",
-    kind: "command",
-  },
-  {
-    text: "/resume",
-    display: "/resume",
-    description: "Resume a Kana conversation by title or ID",
-    group: "Kana & session",
-    kind: "command",
-  },
-  {
-    text: "/approve",
-    display: "/approve",
-    description: "Approve a pending Hermes request",
-    group: "Hermes controls",
-    kind: "command",
-  },
-  {
-    text: "/deny",
-    display: "/deny",
-    description: "Deny a pending Hermes request",
-    group: "Hermes controls",
-    kind: "command",
-  },
-  {
-    text: "/commands",
-    display: "/commands",
-    description: "Show commands and installed skills",
-    group: "Hermes controls",
-    kind: "command",
-  },
-];
+function kanaCommandSuggestions(
+  locale: KanaPreferences["uiLocale"],
+): AgentCommandSuggestion[] {
+  const copy = getCopy(locale).slash;
+  return [
+    { text: "/new", display: "/new", description: copy.newDescription, group: copy.kanaSessionGroup, kind: "command" },
+    { text: "/sessions", display: "/sessions", description: copy.sessionsDescription, group: copy.kanaSessionGroup, kind: "command" },
+    { text: "/resume", display: "/resume", description: copy.resumeDescription, group: copy.kanaSessionGroup, kind: "command" },
+    { text: "/approve", display: "/approve", description: copy.approveDescription, group: copy.hermesControlsGroup, kind: "command" },
+    { text: "/deny", display: "/deny", description: copy.denyDescription, group: copy.hermesControlsGroup, kind: "command" },
+    { text: "/commands", display: "/commands", description: copy.commandsDescription, group: copy.hermesControlsGroup, kind: "command" },
+  ];
+}
 
 function recentFirst(conversations: Conversation[]): Conversation[] {
   return [...conversations].sort((a, b) => b.updatedAt - a.updatedAt);
@@ -168,6 +138,10 @@ function toolTitle(kind: AgentToolKind, tool: string): string {
   if (kind === "command") return `Running ${tool}`;
   if (kind === "file") return `Updating files with ${tool}`;
   return `Using ${tool}`;
+}
+
+function statusCopy(locale: KanaPreferences["uiLocale"]) {
+  return getCopy(locale).status;
 }
 
 type RestoredTurn = {
@@ -336,7 +310,7 @@ export function useKanaController(appVersion: string) {
   const [preferences, setPreferences] = useState<KanaPreferences>(DEFAULT_PREFERENCES);
   const [connectionState, setConnectionState] = useState<AgentConnectionState>("disconnected");
   const [busy, setBusy] = useState(false);
-  const [status, setStatus] = useState("Ready when you are");
+  const [status, setStatus] = useState(() => statusCopy(DEFAULT_PREFERENCES.uiLocale).ready);
   const [error, setError] = useState<string | null>(null);
   const [lastError, setLastError] = useState<KanaErrorRecord | null>(null);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
@@ -390,10 +364,18 @@ export function useKanaController(appVersion: string) {
   // Activities captured during the current turn; snapshotted onto the assistant
   // message when the turn completes so tool history survives a page refresh.
   const turnActivitiesRef = useRef<ActivityItem[]>([]);
+  const activitySessionKeyRef = useRef<string | null>(null);
   // True while a transcript restore is being applied: live assistant events
   // arriving in that window must skip last-message dedup, or restored history
   // can be mistaken for a duplicate of the incoming reply.
   const transcriptRestoreRef = useRef(false);
+
+  const resetConversationActivities = useCallback(() => {
+    activitySessionKeyRef.current = null;
+    turnActivitiesRef.current = [];
+    setActivities([]);
+    setServerActivityTurns([]);
+  }, []);
 
   // ---- Error reporting (shared across hooks) ----
   const reportError = useCallback(
@@ -538,21 +520,27 @@ export function useKanaController(appVersion: string) {
     [persistConversation],
   );
 
-  const rememberConversation = useCallback((conversation: Conversation) => {
-    activeConversationPointerRef.current = {
-      version: 1,
-      conversationId: conversation.id,
-      title: conversation.title,
-      subtitleLanguageAtCreation: conversation.subtitleLanguageAtCreation,
-      createdAt: conversation.createdAt,
-      ...(conversation.agent?.persistentSessionId
-        ? { persistentSessionId: conversation.agent.persistentSessionId }
-        : {}),
-    };
-    activeConversationIdRef.current = conversation.id;
-    setActiveConversationId(conversation.id);
-    writeActiveConversationPointer(conversation);
-  }, []);
+  const rememberConversation = useCallback(
+    (conversation: Conversation) => {
+      if (activeConversationIdRef.current !== conversation.id) {
+        resetConversationActivities();
+      }
+      activeConversationPointerRef.current = {
+        version: 1,
+        conversationId: conversation.id,
+        title: conversation.title,
+        subtitleLanguageAtCreation: conversation.subtitleLanguageAtCreation,
+        createdAt: conversation.createdAt,
+        ...(conversation.agent?.persistentSessionId
+          ? { persistentSessionId: conversation.agent.persistentSessionId }
+          : {}),
+      };
+      activeConversationIdRef.current = conversation.id;
+      setActiveConversationId(conversation.id);
+      writeActiveConversationPointer(conversation);
+    },
+    [resetConversationActivities],
+  );
 
   // Hold-UX plumbing: a reply stays invisible while its voice synthesizes.
   // heldMessageRef is the single pending reply (abort/disconnect flush it);
@@ -805,7 +793,7 @@ export function useKanaController(appVersion: string) {
           conversationId: conversation.id,
           message: assistantMessage,
         };
-        setStatus("Kana menyiapkan suara…");
+        setStatus(statusCopy(preferencesRef.current.uiLocale).preparingVoice);
         const previousChain = ttsChainRef.current ?? Promise.resolve();
         ttsChainRef.current = previousChain.then(async () => {
           // Let React flush the held status before the long synth.
@@ -821,7 +809,7 @@ export function useKanaController(appVersion: string) {
           if (!preferencesRef.current.voiceEnabled) {
             avatarController.presentEmotion(assistantMessage.emotion);
             await commitOnce();
-            setStatus("Ready when you are");
+            setStatus(statusCopy(preferencesRef.current.uiLocale).ready);
             return;
           }
           return getVoice()
@@ -832,13 +820,13 @@ export function useKanaController(appVersion: string) {
               voiceId: preferencesRef.current.qwen3Tts.voiceId || undefined,
               onAudioStart: () => {
                 avatarController.presentEmotion(assistantMessage.emotion);
-                setStatus("Kana berbicara…");
+                setStatus(statusCopy(preferencesRef.current.uiLocale).speaking);
                 void commitOnce();
               },
             })
             .then(async () => {
               await commitOnce();
-              setStatus("Ready when you are");
+              setStatus(statusCopy(preferencesRef.current.uiLocale).ready);
             })
             .catch(async (voiceError) => {
               if (!isAbortError(voiceError)) {
@@ -851,7 +839,7 @@ export function useKanaController(appVersion: string) {
               }
               avatarController.presentEmotion(assistantMessage.emotion);
               await commitOnce();
-              setStatus("Ready when you are");
+              setStatus(statusCopy(preferencesRef.current.uiLocale).ready);
             });
         });
       }
@@ -890,7 +878,7 @@ export function useKanaController(appVersion: string) {
               lastConnectDurationMs: duration,
             }));
           }
-          setStatus("Connected to Hermes");
+          setStatus(statusCopy(preferencesRef.current.uiLocale).connected);
           return;
         }
         if (event.state === "reconnecting" || event.state === "error") {
@@ -900,7 +888,7 @@ export function useKanaController(appVersion: string) {
           openingConversationRef.current = null;
           flushHeldMessage();
           setBusy(false);
-          setStatus("Reconnecting\u2026");
+          setStatus(statusCopy(preferencesRef.current.uiLocale).reconnecting);
           if (event.message) {
             setLastError(
               classifyKanaError(event.message, "agent", "connection"),
@@ -977,19 +965,19 @@ export function useKanaController(appVersion: string) {
         turnActivitiesRef.current = [];
         setBusy(true);
         setError(null);
-        setStatus("Kana is thinking");
+        setStatus(statusCopy(preferencesRef.current.uiLocale).thinking);
         avatarController.presentEmotion("thinking");
         return;
       }
 
       if (event.type === "assistant.delta") {
-        setStatus("Kana is answering");
+        setStatus(statusCopy(preferencesRef.current.uiLocale).answering);
         return;
       }
 
       if (event.type === "assistant.message") {
         void updateConversationFromEvent(event);
-        setStatus("Response received");
+        setStatus(statusCopy(preferencesRef.current.uiLocale).responseReceived);
         return;
       }
 
@@ -1062,19 +1050,23 @@ export function useKanaController(appVersion: string) {
       }
 
       if (event.type === "input.requested") {
+        const isId = preferencesRef.current.uiLocale === "id";
+        const inputKind = isId
+          ? ({ approval: "persetujuan", clarification: "klarifikasi", sudo: "kata sandi sudo", secret: "nilai rahasia" } as const)[event.request.kind]
+          : event.request.kind;
         setPendingInput(event.request);
         setRespondingToInput(false);
-        setStatus(`Hermes needs ${event.request.kind}`);
+        setStatus(isId ? `Hermes memerlukan ${inputKind}` : `Hermes needs ${inputKind}`);
         addActivity({
           id: createId("input"),
           kind: "input",
-          title: `Hermes requested ${event.request.kind}`,
+          title: isId ? `Hermes meminta ${inputKind}` : `Hermes requested ${inputKind}`,
           detail:
             event.request.kind === "approval"
               ? event.request.description
               : event.request.kind === "clarification"
                 ? event.request.question
-                : "Secure input is waiting in Kana.",
+                : isId ? "Input aman sedang menunggu di Kana." : "Secure input is waiting in Kana.",
           state: "attention",
           timestamp: Date.now(),
         });
@@ -1082,6 +1074,7 @@ export function useKanaController(appVersion: string) {
       }
 
       if (event.type === "input.expired") {
+        const isId = preferencesRef.current.uiLocale === "id";
         setPendingInput((current) =>
           current?.kind === event.kind &&
           "requestId" in current &&
@@ -1090,7 +1083,7 @@ export function useKanaController(appVersion: string) {
             : current,
         );
         setRespondingToInput(false);
-        setStatus(`${event.kind} request expired`);
+        setStatus(isId ? `Permintaan ${event.kind} telah kedaluwarsa` : `${event.kind} request expired`);
         return;
       }
 
@@ -1112,7 +1105,7 @@ export function useKanaController(appVersion: string) {
         // the reply is being held for synthesis — it will resolve to "Ready
         // when you are" once speech finishes or fails.
         if (!heldMessageRef.current) {
-          setStatus("Ready when you are");
+          setStatus(statusCopy(preferencesRef.current.uiLocale).ready);
         }
         turnConversationRef.current = null;
         return;
@@ -1124,7 +1117,7 @@ export function useKanaController(appVersion: string) {
         setRespondingToInput(false);
         setBusy(false);
         flushHeldMessage();
-        setStatus("Turn stopped");
+        setStatus(statusCopy(preferencesRef.current.uiLocale).stopped);
         avatarController.presentEmotion("neutral");
         turnConversationRef.current = null;
         return;
@@ -1135,7 +1128,7 @@ export function useKanaController(appVersion: string) {
         setPendingInput(null);
         setRespondingToInput(false);
         setBusy(false);
-        setStatus("Something needs attention");
+        setStatus(statusCopy(preferencesRef.current.uiLocale).attention);
         reportError("agent", event.message);
         if (/session (?:not found|no longer exists)/i.test(event.message)) {
           const conversationId =
@@ -1354,7 +1347,7 @@ export function useKanaController(appVersion: string) {
             },
           ],
         });
-        setStatus("Message queued — Kana will answer after the current task");
+        setStatus(statusCopy(preferencesRef.current.uiLocale).queued);
         return;
       }
 
@@ -1365,7 +1358,8 @@ export function useKanaController(appVersion: string) {
           if (commandArg) {
             await saveConversation({ ...conversation, title: commandArg });
           }
-          setStatus("Already on a new conversation");
+          resetConversationActivities();
+          setStatus(statusCopy(preferencesRef.current.uiLocale).alreadyNew);
           setCommandSuggestions([]);
           return;
         }
@@ -1385,8 +1379,7 @@ export function useKanaController(appVersion: string) {
         });
         rememberConversation(next);
         openedConversationRef.current = null;
-        setActivities([]);
-        setStatus("New conversation ready");
+        setStatus(statusCopy(preferencesRef.current.uiLocale).newReady);
         setCommandSuggestions([]);
         return;
       }
@@ -1403,8 +1396,7 @@ export function useKanaController(appVersion: string) {
           if (target) {
             rememberConversation(target);
             openedConversationRef.current = null;
-            setActivities([]);
-            setStatus(`Resumed ${target.title}`);
+            setStatus(preferencesRef.current.uiLocale === "id" ? `Melanjutkan ${target.title}` : `Resumed ${target.title}`);
             setCommandSuggestions([]);
             return;
           }
@@ -1432,7 +1424,7 @@ export function useKanaController(appVersion: string) {
       }
 
       setBusy(true);
-      setStatus("Opening the conversation");
+      setStatus(statusCopy(preferencesRef.current.uiLocale).opening);
 
       const nextConversation = await saveConversation({
         ...conversation,
@@ -1479,10 +1471,10 @@ export function useKanaController(appVersion: string) {
             });
             if (!wasBusy) {
               setBusy(false);
-              setStatus("Command complete");
+              setStatus(statusCopy(preferencesRef.current.uiLocale).commandComplete);
               turnConversationRef.current = null;
             } else {
-              setStatus("Hermes is continuing");
+              setStatus(statusCopy(preferencesRef.current.uiLocale).continuing);
             }
           } else if (result.type === "session") {
             const branched = await conversationStore.create({
@@ -1507,8 +1499,7 @@ export function useKanaController(appVersion: string) {
             openedConversationRef.current = savedBranch.id;
             turnConversationRef.current = null;
             setBusy(false);
-            setStatus(`Branched to ${savedBranch.title}`);
-            setActivities([]);
+            setStatus(preferencesRef.current.uiLocale === "id" ? `Membuat cabang ke ${savedBranch.title}` : `Branched to ${savedBranch.title}`);
           } else if (result.type === "prefill") {
             if (result.notice) {
               const baseMessages =
@@ -1527,7 +1518,7 @@ export function useKanaController(appVersion: string) {
               });
             }
             if (!wasBusy) setBusy(false);
-            setStatus("Command prepared a draft");
+            setStatus(statusCopy(preferencesRef.current.uiLocale).draftReady);
             if (!wasBusy) turnConversationRef.current = null;
             return result.message;
           } else if (result.notice) {
@@ -1550,8 +1541,8 @@ export function useKanaController(appVersion: string) {
         if (!wasBusy) setBusy(false);
         setStatus(
           wasBusy
-            ? "Hermes is still working"
-            : "Could not send the message",
+            ? statusCopy(preferencesRef.current.uiLocale).stillWorking
+            : statusCopy(preferencesRef.current.uiLocale).sendFailed,
         );
         reportError(
           "agent",
@@ -1570,6 +1561,7 @@ export function useKanaController(appVersion: string) {
       pendingInput,
       rememberConversation,
       reportError,
+      resetConversationActivities,
       saveConversation,
     ],
   );
@@ -1595,7 +1587,7 @@ export function useKanaController(appVersion: string) {
 
       const localSuggestions = input.includes(" ")
         ? []
-        : KANA_COMMAND_SUGGESTIONS.filter((item) =>
+        : kanaCommandSuggestions(preferencesRef.current.uiLocale).filter((item) =>
             item.text.startsWith(input.toLowerCase()),
           );
 
@@ -1707,7 +1699,8 @@ export function useKanaController(appVersion: string) {
       (item) => item.id === activeConversationIdRef.current,
     );
     if (isFreshConversation(current)) {
-      setStatus("Already on a new conversation");
+      resetConversationActivities();
+      setStatus(statusCopy(preferencesRef.current.uiLocale).alreadyNew);
       setError(null);
       return;
     }
@@ -1717,9 +1710,8 @@ export function useKanaController(appVersion: string) {
     commitConversations([...conversationsRef.current, conversation]);
     rememberConversation(conversation);
     openedConversationRef.current = null;
-    setActivities([]);
     setError(null);
-  }, [busy, commitConversations, conversationStore, rememberConversation]);
+  }, [busy, commitConversations, conversationStore, rememberConversation, resetConversationActivities]);
 
   // ---- Cross-browser Hermes sessions ----
   // Sessions created on other surfaces/browsers have no local IndexedDB
@@ -1731,8 +1723,6 @@ export function useKanaController(appVersion: string) {
       const existing = conversationsRef.current.find(
         (item) => item.agent?.persistentSessionId === entry.hermesSessionKey,
       );
-      turnActivitiesRef.current = [];
-      setActivities([]);
       if (existing) {
         rememberConversation(existing);
         openedConversationRef.current = null;
@@ -1749,7 +1739,6 @@ export function useKanaController(appVersion: string) {
       );
       rememberConversation(saved);
       openedConversationRef.current = null;
-      setActivities([]);
       await ensureAgent(saved);
     },
     [busy, ensureAgent, persistConversation, rememberConversation],
@@ -1762,8 +1751,6 @@ export function useKanaController(appVersion: string) {
       if (!target) return;
       rememberConversation(target);
       openedConversationRef.current = null;
-      setActivities([]);
-      turnActivitiesRef.current = [];
       setError(null);
       cleanupVoice();
       avatarController.presentEmotion("neutral");
@@ -1775,7 +1762,7 @@ export function useKanaController(appVersion: string) {
         try {
           await ensureAgent(target);
         } catch {
-          setStatus("Could not reopen the Hermes session for this conversation.");
+          setStatus(preferencesRef.current.uiLocale === "id" ? "Sesi Hermes untuk percakapan ini tidak dapat dibuka kembali." : "Could not reopen the Hermes session for this conversation.");
         }
       })();
     },
@@ -1849,6 +1836,9 @@ export function useKanaController(appVersion: string) {
       preferencesRef.current = next;
       setPreferences(next);
       preferencesStore.save(next);
+      if (previous.uiLocale !== next.uiLocale && !busy) {
+        setStatus(statusCopy(next.uiLocale).ready);
+      }
 
       const voiceChanged =
         previous.voiceEnabled !== next.voiceEnabled ||
@@ -1861,7 +1851,7 @@ export function useKanaController(appVersion: string) {
         // active synthesis/playback and reveal a response that was waiting
         // for audio instead of leaving the chat behind the TTS pipeline.
         flushHeldMessage();
-        setStatus("Ready when you are");
+        setStatus(statusCopy(preferencesRef.current.uiLocale).ready);
       }
 
       const avatarChanged =
@@ -1869,7 +1859,7 @@ export function useKanaController(appVersion: string) {
         JSON.stringify(previous.live2d) !== JSON.stringify(next.live2d);
       if (avatarChanged) await configureAvatar(next, undefined, true);
     },
-    [cleanupVoice, configureAvatar, flushHeldMessage, preferencesStore],
+    [busy, cleanupVoice, configureAvatar, flushHeldMessage, preferencesStore],
   );
 
   // ---- Backup ----
@@ -2020,7 +2010,7 @@ export function useKanaController(appVersion: string) {
           false,
         );
       }
-      setStatus("Connected to Hermes");
+      setStatus(statusCopy(preferencesRef.current.uiLocale).connected);
     } catch (connectError) {
       reportError(
         "agent",
@@ -2051,7 +2041,7 @@ export function useKanaController(appVersion: string) {
     setRespondingToInput(false);
     setBusy(false);
     setConnectionState("disconnected");
-    setStatus("Agent disconnected");
+    setStatus(statusCopy(preferencesRef.current.uiLocale).disconnected);
   }, [flushHeldMessage]);
 
   // ---- Abort ----
@@ -2083,7 +2073,7 @@ export function useKanaController(appVersion: string) {
             ? null
             : current;
         });
-        setStatus("Input sent to Hermes");
+        setStatus(statusCopy(preferencesRef.current.uiLocale).inputSent);
       } catch (responseError) {
         const message =
           responseError instanceof Error
@@ -2107,7 +2097,7 @@ export function useKanaController(appVersion: string) {
           state: "attention",
           timestamp: Date.now(),
         });
-        setStatus("Input could not be sent");
+        setStatus(statusCopy(preferencesRef.current.uiLocale).inputFailed);
       } finally {
         setRespondingToInput(false);
       }
@@ -2140,6 +2130,7 @@ export function useKanaController(appVersion: string) {
   const serverSessionKey = activeConversation?.agent?.persistentSessionId ?? null;
   useEffect(() => {
     if (!serverSessionKey) return;
+    activitySessionKeyRef.current = serverSessionKey;
     let cancelled = false;
     queueMicrotask(() => setFetchingFromServer(true));
     void fetch(`/api/kana/activities?session=${encodeURIComponent(serverSessionKey)}`, {
@@ -2164,7 +2155,10 @@ export function useKanaController(appVersion: string) {
               activities: ActivityItem[];
             }>;
           } | null;
-          if (typed?.turns) {
+          if (
+            typed?.turns &&
+            activitySessionKeyRef.current === serverSessionKey
+          ) {
             // Merge by ordinal: at most one row per turn_index reaches the
             // feed, so a legacy anchor row and its indexed successor can
             // never render the same turn twice.

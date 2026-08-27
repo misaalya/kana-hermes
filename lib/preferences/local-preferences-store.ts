@@ -16,6 +16,7 @@ import type {
   KanaPreferences,
   PreferencesStore,
 } from "./types";
+import { isStageBackground } from "./types";
 
 type BrowserStorage = Pick<
   Storage,
@@ -53,6 +54,7 @@ export const DEFAULT_PREFERENCES: KanaPreferences = {
   voiceEnabled: true,
   voiceMode: "qwen3",
   avatarMode: "live2d",
+  stageBackground: "plain",
   hermes: {
     cwd: "",
   },
@@ -73,6 +75,14 @@ export const DEFAULT_PREFERENCES: KanaPreferences = {
 export function normalizeKanaPreferences(
   preferences: KanaPreferences,
 ): KanaPreferences {
+  const customBackgroundId = typeof preferences.customBackgroundId === "string"
+    && preferences.customBackgroundId.trim()
+    ? preferences.customBackgroundId.slice(0, 500)
+    : undefined;
+  const stageBackground = isStageBackground(preferences.stageBackground)
+    && (preferences.stageBackground !== "custom" || Boolean(customBackgroundId))
+    ? preferences.stageBackground
+    : "plain";
   return {
     ...preferences,
     // Runtime guard: stored or restored values can never re-enable another
@@ -80,6 +90,8 @@ export function normalizeKanaPreferences(
     agentMode: "hermes",
     voiceMode: "qwen3",
     avatarMode: "live2d",
+    stageBackground,
+    customBackgroundId,
     uiLocale: isUiLocale(preferences.uiLocale) ? preferences.uiLocale : "id",
     hermes: {
       cwd: preferences.hermes.cwd,

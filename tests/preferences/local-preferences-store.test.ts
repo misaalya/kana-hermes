@@ -82,6 +82,46 @@ describe("LocalPreferencesStore", () => {
     assert.equal(store.load().onboardingCompleted, true);
   });
 
+  it("persists the selected Kana stage background", () => {
+    const persistent = new MemoryStorage();
+    const store = new LocalPreferencesStore(persistent);
+
+    store.save({
+      ...DEFAULT_PREFERENCES,
+      stageBackground: "pattern-swirls",
+    });
+
+    assert.equal(store.load().stageBackground, "pattern-swirls");
+  });
+
+  it("falls back safely when a stored stage background is unknown", () => {
+    const persistent = new MemoryStorage();
+    persistent.setItem(
+      "kana.preferences.v5",
+      JSON.stringify({ stageBackground: "future-unknown-pattern" }),
+    );
+
+    const store = new LocalPreferencesStore(persistent);
+
+    assert.equal(store.load().stageBackground, "plain");
+  });
+
+  it("persists a local background id without embedding its image", () => {
+    const persistent = new MemoryStorage();
+    const store = new LocalPreferencesStore(persistent);
+
+    store.save({
+      ...DEFAULT_PREFERENCES,
+      stageBackground: "custom",
+      customBackgroundId: "background-local-1",
+    });
+
+    const loaded = store.load();
+    assert.equal(loaded.stageBackground, "custom");
+    assert.equal(loaded.customBackgroundId, "background-local-1");
+    assert.equal((persistent.getItem("kana.preferences.v5") ?? "").includes("data:image"), false);
+  });
+
   it("migrates v4 preferences to complete speech delivery without changing existing choices", () => {
     const persistent = new MemoryStorage();
     persistent.setItem(

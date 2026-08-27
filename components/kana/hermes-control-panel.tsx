@@ -53,7 +53,7 @@ export function HermesControlPanel({
         }
       })
       .catch((error) => {
-        if (active) setNotice(error instanceof Error ? error.message : "Control check failed.");
+        if (active) setNotice(error instanceof Error ? error.message : copy.checkFailed);
       });
     return () => {
       active = false;
@@ -75,14 +75,14 @@ export function HermesControlPanel({
       setStatus(next);
       setNotice(next.message);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Hermes control failed.");
+      setNotice(error instanceof Error ? error.message : copy.controlFailed);
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <section aria-label="Hermes process control">
+    <section aria-label={copy.hermesAria}>
       <div className="mb-3 flex items-center justify-between gap-2">
         <div>
           <p className="text-xs font-bold text-ink">{copy.hermesTitle}</p>

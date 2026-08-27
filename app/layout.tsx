@@ -42,8 +42,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html
       lang="en"
       className={`${kanaSans.variable} ${kanaJapanese.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
-      <body className={`${kanaSans.variable} ${kanaJapanese.variable} bg-bg font-sans text-ink antialiased`}>
+      <body className={`${kanaSans.variable} ${kanaJapanese.variable} bg-bg font-sans text-ink antialiased`} suppressHydrationWarning>
         <ServiceWorkerRegistration />
         {children}
       </body>

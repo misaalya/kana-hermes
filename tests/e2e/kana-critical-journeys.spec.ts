@@ -110,11 +110,16 @@ test.beforeEach(async ({ page }) => {
   await page.request.post("/api/auth/login", {
     data: { password: process.env.KANA_E2E_PASSWORD ?? "test" },
   });
+  // Most journeys exercise the established workspace. Keep the install-level
+  // wizard from racing those interactions; the dedicated onboarding journey
+  // overrides the GET response below.
+  await page.request.put("/api/kana/setup");
   await page.addInitScript(() => {
     if (localStorage.getItem("kana.e2e.skip-seed") === "1") return;
     localStorage.setItem(
       "kana.preferences.v3",
       JSON.stringify({
+        uiLocale: "en",
         subtitleLanguage: "en",
         agentMode: "hermes",
         voiceEnabled: false,
@@ -155,7 +160,7 @@ test("preserves displayed subtitles after the preference changes and reloads", a
 
   await page.getByRole("button", { name: "Open settings" }).click();
   await page.getByRole("button", { name: "Bahasa Indonesia", exact: true }).click();
-  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await page.getByRole("button", { name: "Close settings" }).click();
 
   await composer.fill("Halo Kana");
   await composer.press("Enter");
@@ -177,6 +182,219 @@ test("preserves displayed subtitles after the preference changes and reloads", a
   await expect(
     page.getByText("Halo! Aku di sini.", { exact: true }).first(),
   ).toBeVisible();
+});
+
+test("persists the selected stage background across refreshes", async ({ page }) => {
+  await page.getByRole("button", { name: "Open settings" }).click();
+  await page.getByRole("button", {
+    name: /^Avatar(?: Avatar and stage)?$/,
+  }).click();
+  await page.getByRole("radio", {
+    name: "Star parade. Playful stars with calm spacing",
+    exact: true,
+  }).click();
+  await page.getByRole("button", { name: "Close settings" }).click();
+
+  await expect(page.locator(".kana-stage-pattern")).toHaveAttribute(
+    "data-background",
+    "pattern-stars",
+  );
+
+  await page.reload();
+  await expect(page.locator(".kana-stage-pattern")).toHaveAttribute(
+    "data-background",
+    "pattern-stars",
+  );
+});
+
+test("updates workspace, history, chat, and settings copy with the interface language", async ({
+  page,
+}) => {
+  await page.getByRole("button", { name: "Open settings" }).click();
+  await page
+    .getByRole("heading", { name: "Interface language" })
+    .locator("..")
+    .locator("..")
+    .getByRole("button", { name: "Bahasa Indonesia", exact: true })
+    .click();
+
+  await expect(page.getByRole("heading", { name: "Pengaturan" }).first()).toBeVisible();
+  await expect(page.getByText("Preferensi pribadi", { exact: true })).toBeVisible();
+  await expect(page.getByText("Bahasa antarmuka", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Tutup pengaturan" }).click();
+
+  await expect(page.getByRole("textbox", { name: "Pesan untuk Kana" })).toHaveAttribute(
+    "placeholder",
+    "Katakan sesuatu kepada Kana…",
+  );
+  await page.getByRole("button", { name: "Buka riwayat percakapan" }).click();
+  await expect(page.getByRole("heading", { name: "Percakapan" })).toBeVisible();
+  await expect(page.getByPlaceholder("Cari percakapan")).toBeVisible();
+});
+
+test("shows complete background cards and keeps an uploaded image locally", async ({
+  page,
+}) => {
+  await page.getByRole("button", { name: "Open settings" }).click();
+  await page.getByRole("button", {
+    name: /^Avatar(?: Avatar and stage)?$/,
+  }).click();
+
+  const expectedVisibleCards = (page.viewportSize()?.width ?? 0) < 640 ? 1 : 3;
+  const layout = await page.locator(".kana-background-carousel").evaluate(
+    (carousel, visibleCards) => {
+      const viewport = carousel.getBoundingClientRect();
+      const cards = [...carousel.children]
+        .slice(0, visibleCards + 1)
+        .map((card) => {
+          const bounds = card.getBoundingClientRect();
+          return {
+            fullyVisible:
+              bounds.left >= viewport.left - 0.5
+              && bounds.right <= viewport.right + 0.5,
+            width: bounds.width,
+          };
+        });
+      return { cards, viewportWidth: viewport.width };
+    },
+    expectedVisibleCards,
+  );
+  expect(layout.cards.slice(0, expectedVisibleCards).every((card) => card.fullyVisible)).toBe(true);
+  expect(layout.cards[expectedVisibleCards]?.fullyVisible).toBe(false);
+  expect(layout.cards[0]?.width).toBeCloseTo(
+    (layout.viewportWidth - (expectedVisibleCards - 1) * 12) / expectedVisibleCards,
+    0,
+  );
+
+  await page.locator('input[type="file"][accept*=".png"]').setInputFiles({
+    name: "my-stage.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+      "base64",
+    ),
+  });
+  await expect(page.getByText("my-stage is now your stage background.")).toBeVisible();
+  await expect(page.getByRole("radio", { name: "my-stage. Your local background" })).toBeChecked();
+  await expect(page.locator(".kana-stage-pattern")).toHaveAttribute(
+    "data-background",
+    "custom",
+  );
+  await expect(page.locator(".kana-stage-backdrop")).toHaveCSS(
+    "background-image",
+    /blob:/,
+  );
+
+  await page.reload();
+  await expect(page.locator(".kana-stage-pattern")).toHaveAttribute(
+    "data-background",
+    "custom",
+  );
+  await expect(page.locator(".kana-stage-backdrop")).toHaveCSS(
+    "background-image",
+    /blob:/,
+  );
+});
+
+test("recenters the avatar over a full background without restyling chat", async ({ page }) => {
+  const stage = page.locator(".kana-stage-backdrop");
+  const avatarViewport = page.locator(".kana-avatar-viewport");
+  const avatarContent = page.locator(".kana-avatar-content");
+  const avatarCanvas = page.getByTestId("live2d-canvas");
+  const chatPanel = page.locator("#kana-chat-panel");
+  const viewportWidth = await page.evaluate(() => window.innerWidth);
+  const viewportHeight = await page.evaluate(() => window.innerHeight);
+  const mobileChat = viewportWidth < 640;
+  const contentWidthBefore = Math.round(
+    (await avatarContent.boundingBox())?.width ?? 0,
+  );
+  const canvasSizeBefore = await avatarCanvas.evaluate((canvas) => ({
+    height: (canvas as HTMLCanvasElement).height,
+    width: (canvas as HTMLCanvasElement).width,
+  }));
+  const chatStyle = await chatPanel.evaluate((element) => {
+    const style = getComputedStyle(element);
+    const bounds = element.getBoundingClientRect();
+    return {
+      background: style.backgroundColor,
+      border: style.border,
+      borderRadius: style.borderRadius,
+      height: bounds.height,
+      width: bounds.width,
+    };
+  });
+
+  await expect
+    .poll(async () => Math.round((await stage.boundingBox())?.width ?? 0))
+    .toBe(viewportWidth);
+
+  if (mobileChat) {
+    await expect(page.getByRole("button", { name: "Hide chat" })).toBeHidden();
+    await expect(chatPanel).toHaveAttribute("aria-hidden", "false");
+    await expect(avatarViewport).toHaveAttribute("data-chat-open", "true");
+    const mobileLayout = await page.locator(".kana-chat-dock").evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      const feedStyle = getComputedStyle(
+        element.querySelector(".kana-chat-scroll") as HTMLElement,
+      );
+      return {
+        dockTop: bounds.top,
+        fade: feedStyle.maskImage || feedStyle.webkitMaskImage,
+      };
+    });
+    expect(mobileLayout.dockTop).toBeGreaterThan(viewportHeight * 0.45);
+    expect(mobileLayout.fade).not.toBe("none");
+    return;
+  }
+
+  await page.getByRole("button", { name: "Hide chat" }).click();
+  await expect(avatarViewport).toHaveAttribute("data-chat-open", "false");
+  await expect
+    .poll(async () => Math.round((await avatarContent.boundingBox())?.width ?? 0))
+    .toBe(contentWidthBefore);
+  await expect
+    .poll(() =>
+      avatarCanvas.evaluate((canvas) => ({
+        height: (canvas as HTMLCanvasElement).height,
+        width: (canvas as HTMLCanvasElement).width,
+      })),
+    )
+    .toEqual(canvasSizeBefore);
+  await expect
+    .poll(() =>
+      avatarContent.evaluate((element) => getComputedStyle(element).transform),
+    )
+    .toBe("none");
+  await expect
+    .poll(async () => {
+      const bounds = await chatPanel.boundingBox();
+      return Math.round(viewportWidth - (bounds?.x ?? 0));
+    })
+    .toBeGreaterThan(0);
+  await expect
+    .poll(async () => {
+      const bounds = await chatPanel.boundingBox();
+      return Math.round(viewportWidth - (bounds?.x ?? 0));
+    })
+    .toBeLessThanOrEqual(20);
+
+  await page.getByRole("button", { name: "Show chat" }).click();
+  await expect(chatPanel).toHaveAttribute("aria-hidden", "false");
+  await expect
+    .poll(() =>
+      chatPanel.evaluate((element) => {
+        const style = getComputedStyle(element);
+        const bounds = element.getBoundingClientRect();
+        return {
+          background: style.backgroundColor,
+          border: style.border,
+          borderRadius: style.borderRadius,
+          height: bounds.height,
+          width: bounds.width,
+        };
+      }),
+    )
+    .toEqual(chatStyle);
 });
 
 test("supports keyboard slash commands end to end", async ({ page }) => {
@@ -206,6 +424,16 @@ test("supports keyboard slash commands end to end", async ({ page }) => {
 test("guides a new browser profile through onboarding onto the workspace", async ({
   page,
 }) => {
+  await page.route("**/api/kana/setup", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ onboardingCompleted: false, completedAt: null }),
+      });
+      return;
+    }
+    await route.continue();
+  });
   await page.evaluate(async () => {
     localStorage.clear();
     sessionStorage.clear();

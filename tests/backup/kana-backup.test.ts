@@ -21,6 +21,8 @@ describe("Kana local backup", () => {
     const backup = createKanaBackup(
       {
         ...DEFAULT_PREFERENCES,
+        stageBackground: "custom",
+        customBackgroundId: "local-background-asset",
         qwen3Tts: {
           ...DEFAULT_PREFERENCES.qwen3Tts,
           deliveryMode: "sentence_chunks",
@@ -41,11 +43,13 @@ describe("Kana local backup", () => {
     assert.equal(serialized.includes("websocketUrl"), false);
     assert.equal(serialized.includes("ws://"), false);
     assert.equal(serialized.includes("licensed-local-model"), false);
+    assert.equal(serialized.includes("local-background-asset"), false);
     assert.deepEqual(restored.conversations[0].messages[0].subtitle, {
       text: "Halo",
       language: "id",
     });
     assert.equal(restored.preferences.qwen3Tts.deliveryMode, "sentence_chunks");
+    assert.equal(restored.preferences.stageBackground, "plain");
   });
 
   it("rejects malformed or unsupported backup envelopes", () => {
