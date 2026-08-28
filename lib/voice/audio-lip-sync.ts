@@ -11,10 +11,22 @@ export class AudioLipSyncController {
 
   constructor(private readonly avatar: AvatarController) {}
 
+  /**
+   * Browser autoplay permission is tied to the user gesture, not to the TTS
+   * request that may finish many seconds later. Prime one reusable context
+   * while Send/Enter is still handling that gesture.
+   */
+  unlock(): void {
+    const context = this.ensureContext();
+    if (context.state === "suspended") {
+      void context.resume().catch(() => undefined);
+    }
+  }
+
   async play(audioData: ArrayBuffer, onStarted?: () => void): Promise<void> {
     this.stop();
     const epoch = this.epoch;
-    const context = (this.context ??= new AudioContext());
+    const context = this.ensureContext();
     await this.resumeContext(context);
     this.assertCurrent(epoch, context);
     const audioBuffer = await context.decodeAudioData(audioData.slice(0));
@@ -48,7 +60,7 @@ export class AudioLipSyncController {
       source.addEventListener(
         "ended",
         () => {
-          this.finishPlayback();
+          this.finishPlayback(source, analyser);
           resolve();
         },
         { once: true },
@@ -61,12 +73,35 @@ export class AudioLipSyncController {
 
   stop(): void {
     this.epoch += 1;
+    const source = this.source;
+    const analyser = this.analyser;
     try {
-      this.source?.stop();
+      source?.stop();
     } catch {
       // A source that already ended cannot be stopped again.
     }
-    this.finishPlayback();
+    this.finishPlayback(source, analyser);
+  }
+
+  dispose(): void {
+    this.stop();
+    const context = this.context;
+    this.context = null;
+    void context?.close().catch(() => undefined);
+  }
+
+  private ensureContext(): AudioContext {
+    if (this.context && this.context.state !== "closed") return this.context;
+    const AudioContextConstructor =
+      globalThis.AudioContext ??
+      (globalThis as typeof globalThis & {
+        webkitAudioContext?: typeof AudioContext;
+      }).webkitAudioContext;
+    if (!AudioContextConstructor) {
+      throw new Error("This browser does not support Web Audio playback.");
+    }
+    this.context = new AudioContextConstructor();
+    return this.context;
   }
 
   private assertCurrent(epoch: number, context: AudioContext): void {
@@ -99,18 +134,21 @@ export class AudioLipSyncController {
     }
   }
 
-  private finishPlayback(): void {
+  private finishPlayback(
+    source: AudioBufferSourceNode | null,
+    analyser: AnalyserNode | null,
+  ): void {
+    // A stopped source may dispatch `ended` after the next source has already
+    // started. Only the source that still owns the controller may clear the
+    // live mouth state and animation frame.
+    const ownsPlayback = this.source === source;
+    source?.disconnect();
+    analyser?.disconnect();
+    if (!ownsPlayback) return;
     if (this.animationFrame !== null) cancelAnimationFrame(this.animationFrame);
     this.animationFrame = null;
-    this.source?.disconnect();
-    this.analyser?.disconnect();
     this.source = null;
     this.analyser = null;
     this.avatar.setTalking(false);
-    // Release the hardware audio device between utterances; browsers cap the
-    // number of live AudioContexts per page. The next play() recreates it.
-    const context = this.context;
-    this.context = null;
-    void context?.close().catch(() => undefined);
   }
 }

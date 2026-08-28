@@ -18,6 +18,7 @@ function model(name: string, calls: string[]): Live2DModelInstance {
   return {
     destroy: () => calls.push(`${name}:destroy`),
     setExpression: (value) => calls.push(`${name}:expression:${value}`),
+    clearExpression: () => calls.push(`${name}:expression:clear`),
     startMotion: (group) => calls.push(`${name}:motion:${group}`),
     setParameter: (id, value) => calls.push(`${name}:parameter:${id}:${value}`),
   };
@@ -61,6 +62,33 @@ describe("Live2DAvatarProvider model replacement", () => {
       "stale:destroy",
       "new:expression:Smile",
       "new:parameter:ParamMouth:0.5",
+    ]);
+  });
+
+  it("clears stale expressions and plays a per-emotion motion when configured", async () => {
+    const calls: string[] = [];
+    const runtime: Live2DRuntimeAdapter = {
+      load: async () => model("avatar", calls),
+    };
+    const provider = new Live2DAvatarProvider(runtime, {
+      mouthOpenParameter: "ParamMouthOpenY",
+      emotionExpressions: { happy: "Smile" },
+      emotionMotions: { happy: { group: "Joy", index: 1 } },
+    });
+    await provider.load({
+      id: "avatar",
+      name: "Avatar",
+      canvas: {} as HTMLCanvasElement,
+      modelFiles: [new File(["model"], "avatar.model3.json")],
+    });
+
+    provider.setEmotion("happy");
+    provider.setEmotion("sad");
+
+    assert.deepEqual(calls, [
+      "avatar:expression:Smile",
+      "avatar:motion:Joy",
+      "avatar:expression:clear",
     ]);
   });
 });

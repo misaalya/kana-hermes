@@ -55,6 +55,31 @@ export function parseLive2DBindingBackup(text: string): Live2DBindingBackup {
       }
     }
   }
+  const emotionMotions: Live2DModelBindings["emotionMotions"] = {};
+  if (isRecord(value.bindings.emotionMotions)) {
+    for (const emotion of EMOTIONS) {
+      const candidate = value.bindings.emotionMotions[emotion];
+      if (
+        !isRecord(candidate) ||
+        typeof candidate.group !== "string" ||
+        !candidate.group.trim() ||
+        candidate.group.length > 500
+      ) {
+        continue;
+      }
+      const index = candidate.index;
+      if (
+        index !== undefined &&
+        (typeof index !== "number" || !Number.isInteger(index) || index < 0)
+      ) {
+        continue;
+      }
+      emotionMotions[emotion] = {
+        group: candidate.group,
+        ...(index === undefined ? {} : { index }),
+      };
+    }
+  }
   const motions: Live2DModelBindings["motions"] = {};
   if (isRecord(value.bindings.motions)) {
     for (const [name, candidate] of Object.entries(value.bindings.motions)) {
@@ -88,6 +113,7 @@ export function parseLive2DBindingBackup(text: string): Live2DBindingBackup {
     bindings: {
       mouthOpenParameter: mouth,
       emotionExpressions,
+      emotionMotions,
       motions,
     },
   };

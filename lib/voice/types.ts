@@ -70,10 +70,14 @@ export type VoiceRuntimeSnapshot = {
 
 export interface VoiceProvider {
   readonly id: string;
+  /** Prime browser audio synchronously from a user gesture before synthesis. */
+  unlock?(): void;
   inspect(): Promise<VoiceProviderStatus>;
   speak(options: VoiceSpeakOptions): Promise<void>;
   replay(): Promise<void>;
   stop(): void;
+  /** Release long-lived browser audio resources when replacing the provider. */
+  dispose?(): void;
   getSnapshot(): VoiceRuntimeSnapshot;
   subscribe(listener: (snapshot: VoiceRuntimeSnapshot) => void): () => void;
 }

@@ -3,6 +3,8 @@
 // locale is one entry. Migration of older surfaces into this module happens
 // incrementally; new components must not hardcode user-facing copy.
 
+import type { Emotion } from "@/lib/presentation/types";
+
 export type UiLocale = "id" | "en";
 export const UI_LOCALES: readonly UiLocale[] = ["id", "en"];
 
@@ -268,6 +270,25 @@ export type Copy = {
     preparingAvatar: string;
     importLive2d: string;
     importLive2dHint: string;
+    avatarBehaviorTitle: string;
+    avatarBehaviorDescription: string;
+    avatarBehaviorReady(mapped: number, total: number): string;
+    avatarBehaviorLoading: string;
+    avatarBehaviorFailed: string;
+    avatarBehaviorBuiltin: string;
+    avatarMouthParameter: string;
+    avatarMouthHint: string;
+    avatarNoCapabilities: string;
+    avatarUnregistered(expressions: number, motions: number): string;
+    avatarEmotionExpression: string;
+    avatarEmotionMotion: string;
+    avatarNoExpression: string;
+    avatarNoMotion: string;
+    avatarPreview: string;
+    avatarPreviewAria(emotion: string): string;
+    avatarMapped: string;
+    avatarNotMapped: string;
+    avatarEmotionNames: Record<Emotion, string>;
     includedAvatarAbout: string;
     hermesTitle: string;
     hermesDescription: string;
@@ -429,6 +450,7 @@ const id: Copy = {
     ttsTitle: "Mesin suara Jepang (Qwen3-TTS)",
     ttsSubtitle: "Menyala otomatis saat suara dibutuhkan.",
     states: {
+      checking: "memeriksa…",
       running: "menyala",
       external: "menyala",
       starting: "menyiapkan…",
@@ -644,6 +666,34 @@ const id: Copy = {
     preparingAvatar: "Menyiapkan avatar…",
     importLive2d: "Impor folder Live2D",
     importLive2dHint: "Pilih satu folder model lengkap. Kana menyimpannya di perangkat ini.",
+    avatarBehaviorTitle: "Ekspresi avatar",
+    avatarBehaviorDescription: "Hubungkan emosi Kana dengan ekspresi dan gerakan yang memang tersedia pada avatar ini.",
+    avatarBehaviorReady: (mapped, total) => `${mapped} dari ${total} emosi terhubung`,
+    avatarBehaviorLoading: "Membaca kemampuan avatar…",
+    avatarBehaviorFailed: "Kemampuan avatar tidak dapat dibaca.",
+    avatarBehaviorBuiltin: "Avatar bawaan sudah memiliki pemetaan ekspresi yang disiapkan oleh Kana.",
+    avatarMouthParameter: "Parameter mulut",
+    avatarMouthHint: "Digunakan untuk lip-sync. Kana memilih kandidat paling aman dari paket model.",
+    avatarNoCapabilities: "Model ini tidak mendaftarkan preset ekspresi atau gerakan. Percakapan tetap berfungsi, tetapi emosi tidak akan mengubah pose avatar.",
+    avatarUnregistered: (expressions, motions) => `${expressions} file ekspresi dan ${motions} file gerakan ada di folder, tetapi tidak terdaftar di model3.json sehingga tidak dijalankan secara otomatis.`,
+    avatarEmotionExpression: "Ekspresi wajah",
+    avatarEmotionMotion: "Gerakan opsional",
+    avatarNoExpression: "Tanpa ekspresi",
+    avatarNoMotion: "Tanpa gerakan",
+    avatarPreview: "Pratinjau",
+    avatarPreviewAria: (emotion) => `Pratinjau emosi ${emotion}`,
+    avatarMapped: "Terhubung",
+    avatarNotMapped: "Belum terhubung",
+    avatarEmotionNames: {
+      neutral: "Netral",
+      happy: "Senang",
+      sad: "Sedih",
+      angry: "Marah",
+      surprised: "Terkejut",
+      thinking: "Berpikir",
+      confused: "Bingung",
+      excited: "Antusias",
+    },
     includedAvatarAbout: "Tentang avatar bawaan",
     hermesTitle: "Hermes",
     hermesDescription: "Otak agen di balik Kana. Kana menemukan dan menghubungkannya secara otomatis.",
@@ -832,6 +882,7 @@ const en: Copy = {
     ttsTitle: "Japanese voice engine (Qwen3-TTS)",
     ttsSubtitle: "Starts automatically whenever voice is needed.",
     states: {
+      checking: "checking…",
       running: "running",
       external: "running",
       starting: "starting…",
@@ -1047,6 +1098,34 @@ const en: Copy = {
     preparingAvatar: "Preparing avatar…",
     importLive2d: "Import Live2D folder",
     importLive2dHint: "Select one complete model folder. Kana keeps it on this device.",
+    avatarBehaviorTitle: "Avatar expressions",
+    avatarBehaviorDescription: "Connect Kana's emotions to expressions and motions that are actually available in this avatar.",
+    avatarBehaviorReady: (mapped, total) => `${mapped} of ${total} emotions connected`,
+    avatarBehaviorLoading: "Reading avatar capabilities…",
+    avatarBehaviorFailed: "Could not read this avatar's capabilities.",
+    avatarBehaviorBuiltin: "Included avatars already have expression mappings prepared by Kana.",
+    avatarMouthParameter: "Mouth parameter",
+    avatarMouthHint: "Used for lip sync. Kana selects the safest candidate found in the model package.",
+    avatarNoCapabilities: "This model does not register any expression or motion presets. Chat still works, but emotions will not change the avatar's pose.",
+    avatarUnregistered: (expressions, motions) => `${expressions} expression files and ${motions} motion files exist in the folder but are not registered in model3.json, so they are not run automatically.`,
+    avatarEmotionExpression: "Facial expression",
+    avatarEmotionMotion: "Optional motion",
+    avatarNoExpression: "No expression",
+    avatarNoMotion: "No motion",
+    avatarPreview: "Preview",
+    avatarPreviewAria: (emotion) => `Preview ${emotion} emotion`,
+    avatarMapped: "Connected",
+    avatarNotMapped: "Not connected",
+    avatarEmotionNames: {
+      neutral: "Neutral",
+      happy: "Happy",
+      sad: "Sad",
+      angry: "Angry",
+      surprised: "Surprised",
+      thinking: "Thinking",
+      confused: "Confused",
+      excited: "Excited",
+    },
     includedAvatarAbout: "About included avatars",
     hermesTitle: "Hermes",
     hermesDescription: "The agent brain behind Kana. Kana finds and connects it automatically.",

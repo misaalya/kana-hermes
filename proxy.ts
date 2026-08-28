@@ -11,16 +11,13 @@ import { isLoopbackRequest } from "@/lib/server/auth/loopback";
 // Auth guard following 9Router's deny-by-default dashboard model:
 // - auth APIs needed to bootstrap a session stay public;
 // - every other /api/* route requires a valid session cookie once auth is
-//   enabled, and spawn-capable local control routes additionally require a
-//   loopback peer (with or without auth enabled);
+//   enabled. That authenticated posture also covers process controls on a
+//   single-user VPS, matching the Qwen runtime controls;
 // - the Hermes relay (/api/hermes/*) is authenticated with the session cookie
 //   only — it runs on the server, so the loopback restriction does not apply;
 // - pages redirect to /login when a password is configured.
 
 const PUBLIC_API_PATHS = ["/api/auth/login", "/api/auth/logout", "/api/auth/status"];
-
-// Routes that spawn child processes or read host state — loopback only.
-const LOCAL_ONLY_PREFIXES = ["/api/local-runtime/"];
 
 const INSECURE_NO_AUTH_HEADER = "x-kana-insecure-no-auth";
 
@@ -74,12 +71,6 @@ export async function proxy(request: NextRequest) {
     if (!authEnabled && !isLoopbackRequest(request)) return forbidden();
 
     if (PUBLIC_API_PATHS.some((path) => pathname === path)) {
-      return surfaceInsecureNoAuth(NextResponse.next());
-    }
-
-    if (LOCAL_ONLY_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
-      if (!isLoopbackRequest(request)) return forbidden();
-      if (authEnabled && !(await hasValidSession(request))) return unauthorized();
       return surfaceInsecureNoAuth(NextResponse.next());
     }
 

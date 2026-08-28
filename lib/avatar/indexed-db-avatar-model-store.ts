@@ -5,6 +5,10 @@ import {
   requestResult,
   transactionDone,
 } from "@/lib/storage/kana-indexed-db";
+import {
+  discoverLive2DModelCapabilities,
+  type Live2DModelCapabilities,
+} from "./live2d-model-capabilities";
 
 type StoredAvatarFile = {
   name: string;
@@ -20,17 +24,19 @@ type StoredAvatarModel = {
   importedAt: number;
   modelSettingsPath: string;
   files: StoredAvatarFile[];
+  capabilities?: Live2DModelCapabilities;
 };
 
 export type AvatarModelSummary = Pick<
   StoredAvatarModel,
   "id" | "name" | "importedAt" | "modelSettingsPath"
-> & { sizeBytes: number };
+> & { sizeBytes: number; capabilities?: Live2DModelCapabilities };
 
 export interface AvatarModelStore {
   import(files: File[]): Promise<AvatarModelSummary>;
   list(): Promise<AvatarModelSummary[]>;
   load(id: string): Promise<File[] | null>;
+  inspect(id: string): Promise<Live2DModelCapabilities | null>;
   rename(id: string, name: string): Promise<AvatarModelSummary | null>;
   delete(id: string): Promise<void>;
 }
@@ -166,6 +172,7 @@ function summary(record: StoredAvatarModel): AvatarModelSummary {
     name: record.name,
     importedAt: record.importedAt,
     modelSettingsPath: record.modelSettingsPath,
+    capabilities: record.capabilities,
     sizeBytes: record.files.reduce(
       (total, file) => total + file.content.size,
       0,
@@ -173,16 +180,32 @@ function summary(record: StoredAvatarModel): AvatarModelSummary {
   };
 }
 
+function storedFiles(record: StoredAvatarModel): File[] {
+  return record.files.map((stored) => {
+    const file = new File([stored.content], stored.name, {
+      type: stored.type,
+      lastModified: stored.lastModified,
+    });
+    Object.defineProperty(file, "webkitRelativePath", {
+      configurable: true,
+      value: stored.relativePath,
+    });
+    return file;
+  });
+}
+
 export class IndexedDbAvatarModelStore implements AvatarModelStore {
   async import(files: File[]): Promise<AvatarModelSummary> {
     const validation = await validateAvatarModelFiles(files);
     const { paths, modelSettingsPath } = validation;
+    const capabilities = await discoverLive2DModelCapabilities(files);
 
     const record: StoredAvatarModel = {
       id: createId("avatar"),
       name: modelName(modelSettingsPath),
       importedAt: Date.now(),
       modelSettingsPath,
+      capabilities,
       files: files.map((file, index) => ({
         name: file.name,
         relativePath: paths[index],
@@ -239,17 +262,21 @@ export class IndexedDbAvatarModelStore implements AvatarModelStore {
     await transactionDone(transaction);
     if (!result) return null;
 
-    return result.files.map((stored) => {
-      const file = new File([stored.content], stored.name, {
-        type: stored.type,
-        lastModified: stored.lastModified,
-      });
-      Object.defineProperty(file, "webkitRelativePath", {
-        configurable: true,
-        value: stored.relativePath,
-      });
-      return file;
-    });
+    return storedFiles(result);
+  }
+
+  async inspect(id: string): Promise<Live2DModelCapabilities | null> {
+    const database = await openKanaDatabase();
+    const transaction = database.transaction(
+      KANA_DATABASE_STORES.avatarModels,
+      "readonly",
+    );
+    const result = (await requestResult(
+      transaction.objectStore(KANA_DATABASE_STORES.avatarModels).get(id),
+    )) as StoredAvatarModel | undefined;
+    await transactionDone(transaction);
+    if (!result) return null;
+    return result.capabilities ?? discoverLive2DModelCapabilities(storedFiles(result));
   }
 
   async rename(id: string, name: string): Promise<AvatarModelSummary | null> {

@@ -5,31 +5,24 @@ import {
 } from "@/lib/server/local-hermes-runtime";
 import { isAuthEnabled } from "@/lib/server/auth/password-store";
 import { isSessionValid } from "@/lib/server/auth/session";
-import { isLoopbackRequest } from "@/lib/server/auth/loopback";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Local process control for the managed `hermes serve`. Defense in depth: the
-// auth proxy already enforces loopback + session for this prefix; these checks
-// keep the route honest even without the proxy.
+// Process control for the managed `hermes serve`. On a local no-auth install,
+// the proxy admits only loopback requests. On a VPS, a valid Kana session is
+// required, matching the Qwen process-control posture. This lets an
+// authenticated remote owner inspect/restart Hermes without opening the route
+// to unauthenticated internet traffic.
 //
 // The Hermes session token is NOT part of this API. Kana's server mints and
 // holds it; the browser connects through the server-side relay instead.
-
-function forbidden(): Response {
-  return Response.json(
-    { error: "Local runtime control accepts same-origin loopback requests only." },
-    { status: 403 },
-  );
-}
 
 async function requestAuthorized(request: Request): Promise<boolean> {
   return !isAuthEnabled() || (await isSessionValid(request));
 }
 
 export async function GET(request: Request): Promise<Response> {
-  if (!isLoopbackRequest(request)) return forbidden();
   if (!(await requestAuthorized(request))) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -40,7 +33,6 @@ export async function GET(request: Request): Promise<Response> {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  if (!isLoopbackRequest(request)) return forbidden();
   if (!(await requestAuthorized(request))) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }

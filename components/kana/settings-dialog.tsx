@@ -6,12 +6,22 @@ import type {
   StageBackground,
 } from "@/lib/preferences/types";
 import type { AvatarModelSummary } from "@/lib/avatar/indexed-db-avatar-model-store";
+import type { Live2DModelBindings } from "@/lib/avatar/live2d-avatar-provider";
+import {
+  suggestLive2DModelBindings,
+  type Live2DModelCapabilities,
+} from "@/lib/avatar/live2d-model-capabilities";
+import {
+  live2DModelBindings,
+  live2DSourceKey,
+} from "@/lib/avatar/model-bindings";
 import type {
   StageBackgroundAsset,
   StageBackgroundSummary,
 } from "@/lib/background/indexed-db-stage-background-store";
 import type { HermesRuntimeStatus } from "@/lib/runtime/hermes-control-client";
 import type { AgentModelCatalog, AgentModelSwitchResult } from "@/lib/agent/types";
+import type { Emotion } from "@/lib/presentation/types";
 import {
   LIVE2D_SAMPLE_COPYRIGHT_NOTICE,
   OFFICIAL_LIVE2D_SAMPLES,
@@ -27,6 +37,7 @@ import { getCopy, type Copy, type UiLocale } from "@/lib/ui/copy";
 import { HermesControlPanel } from "./hermes-control-panel";
 import { TtsControlPanel } from "./tts-control-panel";
 import { VoicePanel } from "./voice-panel";
+import { AvatarExpressionPanel } from "./avatar-expression-panel";
 import { ModelControlPanel } from "./model-control-panel";
 import {
   inspectTtsRuntime,
@@ -53,6 +64,7 @@ type SettingsDialogProps = {
   onSave(preferences: KanaPreferences): Promise<void>;
   onImportAvatar(files: File[]): Promise<AvatarModelSummary>;
   onListAvatarModels(): Promise<AvatarModelSummary[]>;
+  onInspectAvatarModel(id: string): Promise<Live2DModelCapabilities>;
   onSelectAvatarModel(id: string): Promise<AvatarModelSummary>;
   onRenameAvatarModel(id: string, name: string): Promise<AvatarModelSummary>;
   onDeleteAvatarModel(id: string): Promise<void>;
@@ -65,6 +77,7 @@ type SettingsDialogProps = {
   onStopHermesControl(): Promise<HermesRuntimeStatus>;
   onListAgentModels(refresh?: boolean): Promise<AgentModelCatalog>;
   onSelectAgentModel(provider: string, model: string, confirm?: boolean): Promise<AgentModelSwitchResult>;
+  onPreviewAvatarEmotion(preferences: KanaPreferences, emotion: Emotion): Promise<void>;
   onClose(): void;
 };
 
@@ -347,6 +360,7 @@ export function SettingsDialog({
   onClose,
   onImportAvatar,
   onListAvatarModels,
+  onInspectAvatarModel,
   onSelectAvatarModel,
   onRenameAvatarModel,
   onDeleteAvatarModel,
@@ -359,6 +373,7 @@ export function SettingsDialog({
   onStopHermesControl,
   onListAgentModels,
   onSelectAgentModel,
+  onPreviewAvatarEmotion,
 }: SettingsDialogProps) {
   const { dialogRef, onDialogKeyDown } = useDialogFocus(onClose);
   const [draft, setDraft] = useState(() => structuredClone(preferences));
@@ -373,6 +388,11 @@ export function SettingsDialog({
   const [avatarModels, setAvatarModels] = useState<AvatarModelSummary[]>([]);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [avatarNotice, setAvatarNotice] = useState<string | null>(null);
+  const [avatarCapabilityResult, setAvatarCapabilityResult] = useState<{
+    modelId: string;
+    capabilities: Live2DModelCapabilities | null;
+    error: boolean;
+  } | null>(null);
   const [stageBackgrounds, setStageBackgrounds] = useState<StageBackgroundSummary[]>([]);
   const [backgroundBusy, setBackgroundBusy] = useState(false);
   const [backgroundNotice, setBackgroundNotice] = useState<string | null>(null);
@@ -417,6 +437,38 @@ export function SettingsDialog({
       .catch((error) => { if (active) setAvatarNotice(error instanceof Error ? error.message : draft.uiLocale === "id" ? "Avatar tidak dapat dimuat." : "Could not load avatars."); });
     return () => { active = false; };
   }, [draft.uiLocale, onListAvatarModels, section]);
+
+  useEffect(() => {
+    if (section !== "avatar" || !draft.live2d.modelId) return;
+    const modelId = draft.live2d.modelId;
+    let active = true;
+    void onInspectAvatarModel(modelId).then(
+      (capabilities) => {
+        if (!active) return;
+        setAvatarCapabilityResult({ modelId, capabilities, error: false });
+        setDraft((current) => {
+          if (current.live2d.modelId !== modelId) return current;
+          const sourceKey = live2DSourceKey(current.live2d);
+          if (current.live2d.bindingProfiles?.[sourceKey]) return current;
+          return {
+            ...current,
+            live2d: {
+              ...current.live2d,
+              bindingProfiles: {
+                ...current.live2d.bindingProfiles,
+                [sourceKey]: suggestLive2DModelBindings(capabilities),
+              },
+            },
+          };
+        });
+      },
+      () => {
+        if (!active) return;
+        setAvatarCapabilityResult({ modelId, capabilities: null, error: true });
+      },
+    );
+    return () => { active = false; };
+  }, [draft.live2d.modelId, onInspectAvatarModel, section]);
 
   useEffect(() => {
     if (section !== "avatar") return;
@@ -518,14 +570,25 @@ export function SettingsDialog({
     setAvatarNotice(null);
     try {
       const imported = await onImportAvatar(files);
+      const capabilities = imported.capabilities ?? await onInspectAvatarModel(imported.id);
+      const sourceKey = `import:${imported.id}`;
       setDraft((current) => ({
         ...current,
         live2d: {
           ...current.live2d,
           modelId: imported.id,
           modelName: imported.name,
+          bindingProfiles: {
+            ...current.live2d.bindingProfiles,
+            [sourceKey]: suggestLive2DModelBindings(capabilities),
+          },
         },
       }));
+      setAvatarCapabilityResult({
+        modelId: imported.id,
+        capabilities,
+        error: false,
+      });
       setAvatarModels(await onListAvatarModels());
       setAvatarNotice(draft.uiLocale === "id" ? `${imported.name} siap digunakan.` : `${imported.name} is ready to use.`);
     } catch (error) {
@@ -585,6 +648,33 @@ export function SettingsDialog({
   );
   const activeAvatarName =
     draft.live2d.modelName || activeOfficialAvatar?.name || settingsCopy.selectedAvatar;
+  const activeCapabilityResult = avatarCapabilityResult;
+  const avatarCapabilities = activeCapabilityResult
+    && activeCapabilityResult.modelId === draft.live2d.modelId
+    ? activeCapabilityResult.capabilities
+    : null;
+  const avatarCapabilitiesError = activeCapabilityResult
+    && activeCapabilityResult.modelId === draft.live2d.modelId
+    ? activeCapabilityResult.error
+    : false;
+  const avatarCapabilitiesLoading = Boolean(draft.live2d.modelId)
+    && activeCapabilityResult?.modelId !== draft.live2d.modelId;
+  const activeAvatarBindings = live2DModelBindings(draft.live2d);
+  const updateActiveAvatarBindings = (bindings: Live2DModelBindings) => {
+    setDraft((current) => {
+      const sourceKey = live2DSourceKey(current.live2d);
+      return {
+        ...current,
+        live2d: {
+          ...current.live2d,
+          bindingProfiles: {
+            ...current.live2d.bindingProfiles,
+            [sourceKey]: bindings,
+          },
+        },
+      };
+    });
+  };
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-[var(--backdrop)] p-3 backdrop-blur-md sm:p-5" role="dialog" aria-modal="true" aria-label={settingsCopy.title}>
@@ -916,6 +1006,37 @@ export function SettingsDialog({
                   <p className="mt-2">{LIVE2D_SAMPLE_COPYRIGHT_NOTICE}</p>
                 </details>
               </section>
+
+              {draft.live2d.modelId ? (
+                avatarCapabilitiesLoading ? (
+                  <section className="rounded-2xl border-2 border-line bg-surface px-5 py-5">
+                    <p className="text-[11px] font-semibold text-muted" role="status">
+                      {settingsCopy.avatarBehaviorLoading}
+                    </p>
+                  </section>
+                ) : avatarCapabilitiesError || !avatarCapabilities ? (
+                  <section className="rounded-2xl border-2 border-line bg-surface px-5 py-5">
+                    <p className="text-[11px] font-semibold text-danger" role="status">
+                      {settingsCopy.avatarBehaviorFailed}
+                    </p>
+                  </section>
+                ) : (
+                  <AvatarExpressionPanel
+                    bindings={activeAvatarBindings}
+                    capabilities={avatarCapabilities}
+                    copy={settingsCopy}
+                    onChange={updateActiveAvatarBindings}
+                    onPreview={(emotion) => onPreviewAvatarEmotion(draft, emotion)}
+                  />
+                )
+              ) : (
+                <section className="rounded-2xl border-2 border-line bg-surface px-5 py-4">
+                  <h3 className="text-sm font-bold text-ink">{settingsCopy.avatarBehaviorTitle}</h3>
+                  <p className="mt-1 text-[11px] leading-relaxed text-muted">
+                    {settingsCopy.avatarBehaviorBuiltin}
+                  </p>
+                </section>
+              )}
               </>
             ) : null}
 
