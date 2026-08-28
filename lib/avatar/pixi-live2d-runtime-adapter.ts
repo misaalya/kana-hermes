@@ -25,6 +25,53 @@ import { fitLive2DModel } from "./live2d/fit-model";
 
 const loadedCoreScripts = new Map<string, Promise<void>>();
 
+/**
+ * pixi-live2d-display 0.4 looks for the first filename that ends in either
+ * `model.json` or `model3.json`. A companion file such as
+ * `items_pinned_to_model.json` also ends in `model.json`, so the library can
+ * parse that unrelated file and reject an otherwise valid Cubism 4 package.
+ * Kana's importer already guarantees exactly one `.model3.json`; place that
+ * validated settings file first without changing the persisted file order.
+ */
+export function prioritizeLive2DSettingsFile(files: File[]): File[] {
+  const settingsIndex = files.findIndex((file) => {
+    const path = (file.webkitRelativePath || file.name)
+      .replaceAll("\\", "/")
+      .toLowerCase();
+    return path.endsWith(".model3.json");
+  });
+  if (settingsIndex <= 0) return files;
+  return [
+    files[settingsIndex],
+    ...files.slice(0, settingsIndex),
+    ...files.slice(settingsIndex + 1),
+  ];
+}
+
+/**
+ * Give imported files root-relative virtual paths before handing them to
+ * pixi-live2d-display. Its browser `url.resolve` polyfill resolves a relative
+ * settings path such as `Kana/Kana.model3.json` to `/Kana/Kana.moc3`, while
+ * the directory picker reports `Kana/Kana.moc3`. Rooting both sides keeps the
+ * library's validation and object-URL lookup consistent in production builds.
+ */
+export function prepareLive2DPackageFiles(files: File[]): File[] {
+  return prioritizeLive2DSettingsFile(files).map((file) => {
+    const currentPath = (file.webkitRelativePath || file.name)
+      .replaceAll("\\", "/")
+      .replace(/^\/+/, "");
+    const prepared = new File([file], file.name, {
+      type: file.type,
+      lastModified: file.lastModified,
+    });
+    Object.defineProperty(prepared, "webkitRelativePath", {
+      configurable: true,
+      value: `/${currentPath}`,
+    });
+    return prepared;
+  });
+}
+
 /* Minimal structural views over the pixi.js / pixi-live2d-display objects we
    touch. Keeping them local stops either library's types from leaking into
    the rest of Kana and keeps the runtime adapter swappable. */
@@ -53,7 +100,9 @@ type PixiApplicationLike = {
 type KanaLive2DInternalModel = {
   coreModel: MotionUpdateCoreModel;
   focusController: { focus(x: number, y: number, instant?: boolean): void };
-  motionManager: MotionManagerLike;
+  motionManager: MotionManagerLike & {
+    expressionManager?: { resetExpression(): void };
+  };
   renderer?: { setClippingMaskBufferSize?(size: number): void };
 };
 
@@ -89,6 +138,7 @@ const canvasRuntimes = new WeakMap<
   Promise<CanvasRuntime>
 >();
 let live2dTickerRegistered = false;
+let pixiUnsafeEvalInstalled = false;
 
 /**
  * Render at (close to) the display's native pixel density so Live2D edges stay
@@ -163,10 +213,20 @@ async function ensureCanvasRuntime(
   if (existing) return existing;
 
   const creating = (async () => {
-    const [{ Application, Ticker }, display] = await Promise.all([
-      import("pixi.js"),
-      import("pixi-live2d-display/cubism4"),
-    ]);
+    // Pixi's default shader generator relies on `new Function`, which Kana's
+    // production CSP intentionally blocks. The official Pixi adapter replaces
+    // that generator and must be installed before a renderer is constructed.
+    // Keep the CSP strict: avatar rendering should adapt to it, not weaken it.
+    const [unsafeEval, { Application, ShaderSystem, Ticker }, display] =
+      await Promise.all([
+        import("@pixi/unsafe-eval"),
+        import("pixi.js"),
+        import("pixi-live2d-display/cubism4"),
+      ]);
+    if (!pixiUnsafeEvalInstalled) {
+      unsafeEval.install({ ShaderSystem });
+      pixiUnsafeEvalInstalled = true;
+    }
 
     if (!live2dTickerRegistered) {
       // https://guansss.github.io/pixi-live2d-display/#package-importing
@@ -260,7 +320,7 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
 
     let source: string | File[];
     if (modelFiles?.length) {
-      source = modelFiles;
+      source = prepareLive2DPackageFiles(modelFiles);
     } else {
       if (!modelUrl) {
         throw new Error("Live2D requires a model URL or imported files.");
@@ -454,6 +514,9 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
       setExpression(name) {
         void model.expression(name);
       },
+      clearExpression() {
+        model.internalModel.motionManager.expressionManager?.resetExpression();
+      },
       startMotion(group, index) {
         // FORCE guarantees emotion-triggered motions interrupt idle motions.
         void model.motion(group, index, 3);
@@ -473,4 +536,3 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
     };
   }
 }
-
