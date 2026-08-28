@@ -3,6 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AvatarController } from "@/lib/avatar/avatar-controller";
 import type { AvatarModelSummary } from "@/lib/avatar/indexed-db-avatar-model-store";
+import {
+  suggestLive2DModelBindings,
+  type Live2DModelCapabilities,
+} from "@/lib/avatar/live2d-model-capabilities";
 import { Live2DAvatarProvider } from "@/lib/avatar/live2d-avatar-provider";
 import { ManagedAvatarProvider } from "@/lib/avatar/managed-avatar-provider";
 import { live2DModelBindings } from "@/lib/avatar/model-bindings";
@@ -30,7 +34,14 @@ const EMPTY_AVATAR: AvatarSnapshot = {
 
 export function useAvatarController(
   avatarProvider: ManagedAvatarProvider,
-  avatarModelStore: { load: (id: string) => Promise<File[] | null>; list: () => Promise<AvatarModelSummary[]>; import: (files: File[]) => Promise<AvatarModelSummary>; delete: (id: string) => Promise<void>; rename: (id: string, name: string) => Promise<AvatarModelSummary | null> },
+  avatarModelStore: {
+    load: (id: string) => Promise<File[] | null>;
+    list: () => Promise<AvatarModelSummary[]>;
+    import: (files: File[]) => Promise<AvatarModelSummary>;
+    inspect: (id: string) => Promise<Live2DModelCapabilities | null>;
+    delete: (id: string) => Promise<void>;
+    rename: (id: string, name: string) => Promise<AvatarModelSummary | null>;
+  },
   avatarController: AvatarController,
   getPreferences: () => KanaPreferences,
   savePreferences: (prefs: KanaPreferences) => void,
@@ -40,6 +51,7 @@ export function useAvatarController(
   const [avatar, setAvatar] = useState<AvatarSnapshot>(EMPTY_AVATAR);
   const avatarCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const avatarKeyRef = useRef("");
+  const avatarLoadErrorRef = useRef<Error | null>(null);
   const avatarPreviewTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
 
   useEffect(() => {
@@ -101,12 +113,16 @@ export function useAvatarController(
             : next.live2d.modelUrl.trim(),
         });
         avatarKeyRef.current = key;
+        avatarLoadErrorRef.current = null;
         avatarController.presentEmotion("neutral");
         onMetrics({
           lastAvatarLoadDurationMs: Math.round(performance.now() - startedAt),
         });
         return true;
       } catch (avatarError) {
+        avatarLoadErrorRef.current = avatarError instanceof Error
+          ? avatarError
+          : new Error("Unknown Live2D runtime error.");
         avatarKeyRef.current = "mock-fallback";
         onError(
           "avatar",
@@ -134,22 +150,31 @@ export function useAvatarController(
       if (!files.length) throw new Error("Choose a Live2D model folder first.");
       const previous = getPreferences();
       const imported = await avatarModelStore.import(files);
+      const capabilities = imported.capabilities ?? await avatarModelStore.inspect(imported.id);
+      const sourceKey = `import:${imported.id}`;
       const next = {
         ...previous,
         live2d: {
           ...previous.live2d,
           modelId: imported.id,
           modelName: imported.name,
+          bindingProfiles: {
+            ...previous.live2d.bindingProfiles,
+            ...(capabilities
+              ? { [sourceKey]: suggestLive2DModelBindings(capabilities) }
+              : {}),
+          },
         },
       };
       avatarKeyRef.current = "";
       const loaded = await configureAvatar(next, files);
       if (!loaded) {
+        const detail = avatarLoadErrorRef.current?.message;
         await avatarModelStore.delete(imported.id);
         avatarKeyRef.current = "";
         await configureAvatar(previous);
         throw new Error(
-          "The selected folder could not be loaded. Include the model3.json file and every referenced asset.",
+          `The selected folder could not be loaded.${detail ? ` ${detail}` : ""}`,
         );
       }
       savePreferences(next);
@@ -160,6 +185,17 @@ export function useAvatarController(
 
   const listAvatarModels = useCallback(
     () => avatarModelStore.list(),
+    [avatarModelStore],
+  );
+
+  const inspectAvatarModel = useCallback(
+    async (id: string) => {
+      const capabilities = await avatarModelStore.inspect(id);
+      if (!capabilities) {
+        throw new Error("The selected Live2D model no longer exists.");
+      }
+      return capabilities;
+    },
     [avatarModelStore],
   );
 
@@ -183,10 +219,11 @@ export function useAvatarController(
       };
       avatarKeyRef.current = "";
       if (!(await configureAvatar(next, files))) {
+        const detail = avatarLoadErrorRef.current?.message;
         avatarKeyRef.current = "";
         await configureAvatar(previous);
         throw new Error(
-          "The saved Live2D package could not be loaded. Kana restored the previous avatar.",
+          `The saved Live2D package could not be loaded. Kana restored the previous avatar.${detail ? ` ${detail}` : ""}`,
         );
       }
       savePreferences(next);
@@ -225,8 +262,17 @@ export function useAvatarController(
         );
       }
       await avatarModelStore.delete(id);
+      const sourceKey = `import:${id}`;
+      if (prefs.live2d.bindingProfiles?.[sourceKey]) {
+        const bindingProfiles = { ...prefs.live2d.bindingProfiles };
+        delete bindingProfiles[sourceKey];
+        savePreferences({
+          ...prefs,
+          live2d: { ...prefs.live2d, bindingProfiles },
+        });
+      }
     },
-    [avatarModelStore, getPreferences],
+    [avatarModelStore, getPreferences, savePreferences],
   );
 
   const previewAvatarEmotion = useCallback(
@@ -275,6 +321,7 @@ export function useAvatarController(
     attachAvatarCanvas,
     importAvatarFiles,
     listAvatarModels,
+    inspectAvatarModel,
     selectAvatarModel,
     renameAvatarModel,
     deleteAvatarModel,

@@ -28,46 +28,127 @@ function isEmotion(value: unknown): value is Emotion {
   return typeof value === "string" && EMOTIONS.includes(value as Emotion);
 }
 
-export function parseKanaResponse(
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function looksLikeKanaEnvelope(value: unknown): boolean {
+  return isRecord(value) && ("speech_ja" in value || "subtitle" in value);
+}
+
+/** Find balanced JSON objects embedded after accidental prose or fences. */
+function jsonObjectCandidates(raw: string): string[] {
+  const candidates: string[] = [];
+  for (let start = 0; start < raw.length; start += 1) {
+    if (raw[start] !== "{") continue;
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let index = start; index < raw.length; index += 1) {
+      const character = raw[index];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (character === "\\") escaped = true;
+        else if (character === '"') inString = false;
+        continue;
+      }
+      if (character === '"') {
+        inString = true;
+        continue;
+      }
+      if (character === "{") depth += 1;
+      if (character !== "}") continue;
+      depth -= 1;
+      if (depth === 0) {
+        candidates.push(raw.slice(start, index + 1));
+        start = index;
+        break;
+      }
+    }
+  }
+  return candidates;
+}
+
+function parseEmbeddedEnvelope(raw: string): unknown {
+  const attempts = [unwrapJson(raw), ...jsonObjectCandidates(raw).reverse()];
+  for (const attempt of attempts) {
+    try {
+      const parsed = JSON.parse(attempt) as unknown;
+      if (looksLikeKanaEnvelope(parsed)) return parsed;
+    } catch {
+      // Try the next complete object; Hermes occasionally prefixes prose.
+    }
+  }
+  return undefined;
+}
+
+function decodeLooseJsonString(value: string): string {
+  try {
+    return JSON.parse(`"${value}"`) as string;
+  } catch {
+    let decoded = "";
+    for (let index = 0; index < value.length; index += 1) {
+      const character = value[index];
+      if (character !== "\\" || index + 1 >= value.length) {
+        decoded += character;
+        continue;
+      }
+      const escaped = value[++index];
+      if (escaped === "n") decoded += "\n";
+      else if (escaped === "r") decoded += "\r";
+      else if (escaped === "t") decoded += "\t";
+      else if (escaped === "b") decoded += "\b";
+      else if (escaped === "f") decoded += "\f";
+      else if (escaped === "u") {
+        const code = value.slice(index + 1, index + 5);
+        if (/^[0-9a-f]{4}$/i.test(code)) {
+          decoded += String.fromCharCode(Number.parseInt(code, 16));
+          index += 4;
+        } else decoded += "u";
+      } else decoded += escaped;
+    }
+    return decoded;
+  }
+}
+
+/**
+ * Narrow recovery for the common model failure where quotes inside subtitle
+ * text were left unescaped. Field boundaries remain explicit, so this never
+ * guesses a response from unrelated prose.
+ */
+function recoverLooseKanaEnvelope(raw: string): unknown {
+  const speech = /["']speech_ja["']\s*:\s*"([\s\S]*?)"\s*,\s*["']subtitle["']\s*:/i.exec(raw);
+  const subtitleStart = /["']subtitle["']\s*:\s*\{/i.exec(raw);
+  if (!speech || !subtitleStart) return undefined;
+  const subtitleSource = raw.slice(subtitleStart.index + subtitleStart[0].length);
+  const text = /["']text["']\s*:\s*"([\s\S]*?)"\s*,\s*["']language["']\s*:/i.exec(subtitleSource);
+  const language = /["']language["']\s*:\s*"([^"\r\n]+)"/i.exec(subtitleSource);
+  if (!text || !language) return undefined;
+  const emotion = /["']emotion["']\s*:\s*"([^"\r\n]+)"/i.exec(raw);
+  return {
+    speech_ja: decodeLooseJsonString(speech[1]),
+    subtitle: {
+      text: decodeLooseJsonString(text[1]),
+      language: decodeLooseJsonString(language[1]),
+    },
+    ...(emotion ? { emotion: decodeLooseJsonString(emotion[1]) } : {}),
+  };
+}
+
+function validateKanaEnvelope(
+  candidate: unknown,
   rawResponse: string,
   expectedSubtitleLanguage?: string,
 ): KanaResponse {
-  const trimmed = rawResponse.trim();
-
-  // Graceful degradation: when Hermes answers in plain text instead of the
-  // Kana JSON envelope (the persona contract is advisory to the model), wrap
-  // it so the user still sees the answer instead of a silent failure.
-  if (!trimmed.startsWith("{") && !trimmed.startsWith("```")) {
-    return {
-      speech_ja: trimmed,
-      subtitle: { text: trimmed, language: expectedSubtitleLanguage ?? "en" },
-      emotion: "neutral",
-    };
-  }
-
-  let candidate: unknown;
-
-  try {
-    candidate = JSON.parse(unwrapJson(rawResponse));
-  } catch {
-    // Unparseable even though it looked envelope-ish — degrade rather than
-    // drop the turn.
-    return {
-      speech_ja: trimmed,
-      subtitle: { text: trimmed, language: expectedSubtitleLanguage ?? "en" },
-      emotion: "neutral",
-    };
-  }
-
-  if (!candidate || typeof candidate !== "object") {
+  if (!isRecord(candidate)) {
     throw new KanaProtocolError(
       "Hermes returned an invalid Kana response object.",
       rawResponse,
     );
   }
 
-  const value = candidate as Record<string, unknown>;
-  const subtitle = value.subtitle as Record<string, unknown> | undefined;
+  const value = candidate;
+  const subtitle = isRecord(value.subtitle) ? value.subtitle : undefined;
 
   if (
     typeof value.speech_ja !== "string" ||
@@ -120,3 +201,41 @@ export function parseKanaResponse(
   };
 }
 
+export function parseKanaResponse(
+  rawResponse: string,
+  expectedSubtitleLanguage?: string,
+): KanaResponse {
+  const trimmed = rawResponse.trim();
+
+  const embedded = parseEmbeddedEnvelope(rawResponse);
+  if (embedded !== undefined) {
+    return validateKanaEnvelope(
+      embedded,
+      rawResponse,
+      expectedSubtitleLanguage,
+    );
+  }
+
+  const loose = recoverLooseKanaEnvelope(rawResponse);
+  if (loose !== undefined) {
+    return validateKanaEnvelope(loose, rawResponse, expectedSubtitleLanguage);
+  }
+
+  // Graceful degradation: when Hermes answers in plain text instead of the
+  // Kana JSON envelope (the persona contract is advisory to the model), wrap
+  // it so the user still sees the answer instead of a silent failure.
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("```")) {
+    return {
+      speech_ja: trimmed,
+      subtitle: { text: trimmed, language: expectedSubtitleLanguage ?? "en" },
+      emotion: "neutral",
+    };
+  }
+
+  // JSON-looking output that cannot be recovered must fail explicitly. Never
+  // display the protocol envelope itself as a chat bubble.
+  throw new KanaProtocolError(
+    "Hermes returned a malformed Kana response envelope.",
+    rawResponse,
+  );
+}

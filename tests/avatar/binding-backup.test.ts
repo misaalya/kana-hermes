@@ -10,12 +10,14 @@ describe("Live2D binding backup", () => {
     const backup = createLive2DBindingBackup("My local model", {
       mouthOpenParameter: "ParamMouthCustom",
       emotionExpressions: { happy: "Smile" },
+      emotionMotions: { happy: { group: "Joy", index: 1 } },
       motions: { affirm: { group: "Yes", index: 2 } },
     });
     const serialized = JSON.stringify(backup);
     const parsed = parseLive2DBindingBackup(serialized);
     assert.equal(parsed.bindings.mouthOpenParameter, "ParamMouthCustom");
     assert.equal(parsed.bindings.emotionExpressions?.happy, "Smile");
+    assert.deepEqual(parsed.bindings.emotionMotions?.happy, { group: "Joy", index: 1 });
     assert.deepEqual(parsed.bindings.motions?.affirm, { group: "Yes", index: 2 });
     assert.equal(serialized.includes("moc3"), false);
   });

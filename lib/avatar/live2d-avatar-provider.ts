@@ -4,12 +4,16 @@ import type { AvatarModelSource, AvatarProvider } from "./types";
 export type Live2DModelBindings = {
   mouthOpenParameter: string;
   emotionExpressions?: Partial<Record<Emotion, string>>;
+  emotionMotions?: Partial<
+    Record<Emotion, { group: string; index?: number }>
+  >;
   motions?: Record<string, { group: string; index?: number }>;
 };
 
 export interface Live2DModelInstance {
   destroy(): void;
   setExpression(name: string): void;
+  clearExpression(): void;
   startMotion(group: string, index?: number): void;
   setParameter(id: string, value: number): void;
   /** Optional speech boundary so runtimes can own the mouth via a plugin. */
@@ -72,6 +76,9 @@ export class Live2DAvatarProvider implements AvatarProvider {
   setEmotion(emotion: Emotion): void {
     const expression = this.bindings.emotionExpressions?.[emotion];
     if (expression) this.model?.setExpression(expression);
+    else this.model?.clearExpression();
+    const motion = this.bindings.emotionMotions?.[emotion];
+    if (motion) this.model?.startMotion(motion.group, motion.index);
   }
 
   playMotion(name: string): void {

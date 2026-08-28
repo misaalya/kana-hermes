@@ -80,6 +80,7 @@
   },
   "dependencies": {},
   "devDependencies": {
+    "@pixi/unsafe-eval": "6.5.10",
     "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^24.13.3",

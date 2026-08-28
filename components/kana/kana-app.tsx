@@ -377,6 +377,10 @@ export function KanaApp({ appVersion }: KanaAppProps) {
   const submitMessage = async () => {
     const text = message.trim();
     if (!text) return;
+    // Prime Web Audio while Send/Enter still owns a browser user gesture.
+    // The actual WAV arrives after Hermes + Qwen finish, too late to unlock
+    // autoplay on stricter mobile browsers.
+    if (kana.preferences.voiceEnabled) kana.unlockVoice();
     const confirmation = destructiveCommandPrompt(text, workspaceCopy);
     if (confirmation && !window.confirm(confirmation)) return;
     setMessage("");
@@ -686,6 +690,7 @@ export function KanaApp({ appVersion }: KanaAppProps) {
           onSave={kana.savePreferences}
           onImportAvatar={kana.importAvatarFiles}
           onListAvatarModels={kana.listAvatarModels}
+          onInspectAvatarModel={kana.inspectAvatarModel}
           onSelectAvatarModel={kana.selectAvatarModel}
           onRenameAvatarModel={kana.renameAvatarModel}
           onDeleteAvatarModel={kana.deleteAvatarModel}
@@ -698,6 +703,7 @@ export function KanaApp({ appVersion }: KanaAppProps) {
           onStopHermesControl={kana.stopHermesControl}
           onListAgentModels={kana.listAgentModels}
           onSelectAgentModel={kana.selectAgentModel}
+          onPreviewAvatarEmotion={kana.previewAvatarEmotion}
           onClose={() => setSettingsOpen(false)}
         />
       ) : null}

@@ -22,7 +22,8 @@ export type Qwen3TTSProviderOptions = {
   maximumChunkCharacters?: number;
 };
 
-type AudioPlayback = Pick<AudioLipSyncController, "play" | "stop">;
+type AudioPlayback = Pick<AudioLipSyncController, "play" | "stop"> &
+  Partial<Pick<AudioLipSyncController, "unlock" | "dispose">>;
 
 function aborted(): DOMException {
   return new DOMException("Voice playback was cancelled.", "AbortError");
@@ -43,6 +44,10 @@ export class Qwen3TTSProvider implements VoiceProvider {
     playback?: AudioPlayback,
   ) {
     this.lipSync = playback ?? new AudioLipSyncController(avatar);
+  }
+
+  unlock(): void {
+    this.lipSync.unlock?.();
   }
 
   async inspect(): Promise<VoiceProviderStatus> {
@@ -271,6 +276,11 @@ export class Qwen3TTSProvider implements VoiceProvider {
             : undefined,
       });
     }
+  }
+
+  dispose(): void {
+    this.stop();
+    this.lipSync.dispose?.();
   }
 
   getSnapshot(): VoiceRuntimeSnapshot {

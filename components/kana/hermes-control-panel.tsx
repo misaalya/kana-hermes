@@ -41,7 +41,26 @@ export function HermesControlPanel({
   const [notice, setNotice] = useState<string | null>(null);
   const [port, setPort] = useState(9119);
   const stateLabel =
-    copy.states[status?.state ?? ""] ?? status?.state ?? "";
+    status
+      ? copy.states[status.state] ?? status.state
+      : notice
+        ? copy.states.failed
+        : copy.states.checking;
+
+  const refresh = async () => {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const next = await onInspect();
+      setStatus(next);
+      setPort(next.port || 9119);
+    } catch (error) {
+      setStatus(null);
+      setNotice(error instanceof Error ? error.message : copy.checkFailed);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -105,7 +124,7 @@ export function HermesControlPanel({
                   {copy.stop}
                 </button>
               </>
-            ) : (
+            ) : status.state !== "running" ? (
               <button
                 type="button"
                 className={btnSecondary}
@@ -114,19 +133,20 @@ export function HermesControlPanel({
               >
                 {busy ? copy.starting : copy.start}
               </button>
-            )}
-            <button type="button" className={btnGhost} disabled={busy} onClick={() => void onInspect().then(setStatus)}>
+            ) : null}
+            <button type="button" className={btnGhost} disabled={busy} onClick={() => void refresh()}>
               {copy.refresh}
             </button>
           </div>
-
         </>
       ) : (
-        <p className="text-[11px] leading-relaxed text-faint">
-          {status?.message ?? ""}
-        </p>
+        <button type="button" className={btnGhost} disabled={busy} onClick={() => void refresh()}>
+          {copy.refresh}
+        </button>
       )}
-      <p className="mt-2 min-h-4 text-[11px] text-muted">{notice ?? ""}</p>
+      <p className="mt-2 min-h-4 text-[11px] text-muted">
+        {notice ?? status?.message ?? ""}
+      </p>
     </section>
   );
 }

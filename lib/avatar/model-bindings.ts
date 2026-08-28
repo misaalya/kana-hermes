@@ -19,6 +19,7 @@ export function live2DModelBindings(
       mouthOpenParameter:
         configured.mouthOpenParameter.trim() || "ParamMouthOpenY",
       emotionExpressions: { ...configured.emotionExpressions },
+      emotionMotions: { ...configured.emotionMotions },
       motions: { ...configured.motions },
     };
   }
@@ -30,6 +31,7 @@ export function live2DModelBindings(
     return {
       ...officialSample.bindings,
       emotionExpressions: { ...officialSample.bindings.emotionExpressions },
+      emotionMotions: { ...officialSample.bindings.emotionMotions },
       motions: { ...officialSample.bindings.motions },
     };
   }

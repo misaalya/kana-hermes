@@ -53,7 +53,7 @@ export function useVoiceController(
       return voiceRef.current;
     }
 
-    voiceRef.current?.stop();
+    voiceRef.current?.dispose?.();
     unsubscribeVoiceRef.current?.();
     const provider = new Qwen3TTSProvider(
       {
@@ -88,7 +88,7 @@ export function useVoiceController(
   }, [avatarController, getPreferences, onMetrics]);
 
   const recreateVoice = useCallback(() => {
-    voiceRef.current?.stop();
+    voiceRef.current?.dispose?.();
     setVoiceRuntimeState("idle");
     setVoiceCanReplay(false);
     unsubscribeVoiceRef.current?.();
@@ -153,6 +153,14 @@ export function useVoiceController(
     }
   }, [onError]);
 
+  const unlockVoice = useCallback(() => {
+    try {
+      getVoice().unlock?.();
+    } catch (error) {
+      onError("voice", error, "voice");
+    }
+  }, [getVoice, onError]);
+
   const stopVoice = useCallback(() => {
     voiceRef.current?.stop();
   }, []);
@@ -160,7 +168,7 @@ export function useVoiceController(
   const cleanupVoice = useCallback(() => {
     unsubscribeVoiceRef.current?.();
     unsubscribeVoiceRef.current = null;
-    voiceRef.current?.stop();
+    voiceRef.current?.dispose?.();
     voiceRef.current = null;
     voiceKeyRef.current = "";
     setVoiceRuntimeState("idle");
@@ -177,6 +185,7 @@ export function useVoiceController(
     cloneVoice,
     deleteClonedVoice,
     replayVoice,
+    unlockVoice,
     stopVoice,
     cleanupVoice,
   };
