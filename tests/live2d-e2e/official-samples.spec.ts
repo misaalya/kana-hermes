@@ -54,7 +54,7 @@ test("renders both official samples with model-specific bindings across reloads"
   await page.goto("/");
 
   // Haru loads through pixi-live2d-display and becomes the visible stage.
-  const canvas = page.locator(".live2d-avatar-canvas.visible");
+  const canvas = page.getByTestId("live2d-canvas");
   await expect(canvas).toBeVisible({ timeout: 90_000 });
   await expect(page.locator(".avatar-skeleton")).toHaveCount(0);
 
