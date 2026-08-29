@@ -81,6 +81,21 @@ export function prepareLive2DPackageFiles(files: File[]): File[] {
   });
 }
 
+/**
+ * Kana owns every audible character response through the configured TTS
+ * provider. Live2D packages may also attach arbitrary prerecorded audio to a
+ * motion (the official Haru sample does this), and pixi-live2d-display enables
+ * that audio globally by default. Letting both paths play makes a failed TTS
+ * request sound like a short, unrelated Japanese reply from the avatar.
+ *
+ * Keep expressions and motions enabled, but make their embedded Sound entries
+ * presentation-only. This applies uniformly to official, hosted, and imported
+ * models without rewriting the user's package.
+ */
+export function disableLive2DMotionAudio(config: { sound: boolean }): void {
+  config.sound = false;
+}
+
 /* Minimal structural views over the pixi.js / pixi-live2d-display objects we
    touch. Keeping them local stops either library's types from leaking into
    the rest of Kana and keeps the runtime adapter swappable. */
@@ -478,9 +493,10 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
   }): Promise<Live2DModelInstance> {
     await ensureCubismCore(this.coreScriptUrl);
 
-    const [{ Live2DModel }] = await Promise.all([
+    const [{ Live2DModel, config: live2dConfig }] = await Promise.all([
       import("pixi-live2d-display/cubism4"),
     ]);
+    disableLive2DMotionAudio(live2dConfig);
     const runtime = await ensureCanvasRuntime(canvas);
 
     retireCurrentModel(runtime);

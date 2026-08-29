@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { validateAvatarModelFiles } from "@/lib/avatar/indexed-db-avatar-model-store";
 import {
+  disableLive2DMotionAudio,
   prepareLive2DPackageFiles,
   prioritizeLive2DSettingsFile,
   selectLive2DMouthParameterId,
@@ -46,6 +47,14 @@ function settings(overrides: Record<string, unknown> = {}): string {
 }
 
 describe("Live2D package validation", () => {
+  it("keeps model motions visual-only so bundled clips cannot replace Kana TTS", () => {
+    const runtimeConfig = { sound: true };
+
+    disableLive2DMotionAudio(runtimeConfig);
+
+    assert.equal(runtimeConfig.sound, false);
+  });
+
   it("accepts a complete package and reports its local size", async () => {
     const files = [
       modelFile("Kana/Kana.model3.json", settings()),
