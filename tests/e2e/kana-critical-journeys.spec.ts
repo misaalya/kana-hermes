@@ -359,6 +359,34 @@ async function openHistory(page: Page): Promise<void> {
   await openHistory.click();
 }
 
+test("renders text replies without entering the TTS pipeline when voice is off", async ({
+  page,
+}) => {
+  let speechRequests = 0;
+  await page.route("**/api/voice/tts/speech**", async (route) => {
+    speechRequests += 1;
+    await route.fulfill({ status: 503, body: "TTS must not be called." });
+  });
+
+  await page.getByRole("button", { name: "Open settings" }).click();
+  await page.getByRole("button", { name: /^Voice/ }).click();
+  const voiceSwitch = page.getByRole("switch", { name: "Japanese voice" });
+  await expect(voiceSwitch).not.toBeChecked();
+  await voiceSwitch.click();
+  await expect(voiceSwitch).toBeChecked();
+  await voiceSwitch.click();
+  await expect(voiceSwitch).not.toBeChecked();
+  await page.getByRole("button", { name: "Close settings" }).click();
+
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
+  await composer.fill("Voice-off latency check");
+  await composer.press("Enter");
+
+  await expect(page.getByText("Hello! I am here.", { exact: true }).first())
+    .toBeVisible({ timeout: 2_000 });
+  expect(speechRequests).toBe(0);
+});
+
 test("preserves displayed subtitles after the preference changes and reloads", async ({
   page,
 }) => {

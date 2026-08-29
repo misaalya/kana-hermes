@@ -427,6 +427,7 @@ export function SettingsDialog({
   const backgroundInputRef = useRef<HTMLInputElement | null>(null);
   const backgroundCarouselRef = useRef<HTMLDivElement | null>(null);
   const initialDraftRef = useRef(true);
+  const lastDraftRef = useRef(draft);
   const saveRevisionRef = useRef(0);
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const onSaveRef = useRef(onSave);
@@ -440,11 +441,27 @@ export function SettingsDialog({
       initialDraftRef.current = false;
       return;
     }
+    const previousDraft = lastDraftRef.current;
+    lastDraftRef.current = draft;
     const revision = ++saveRevisionRef.current;
     setSaveState("saving");
-    const queuedSave = saveQueueRef.current
-      .catch(() => undefined)
-      .then(() => onSaveRef.current(draft));
+    const previousSave = saveQueueRef.current.catch(() => undefined);
+    const startSave = () => {
+      try {
+        return onSaveRef.current(draft);
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    };
+    const queuedSave = previousDraft.voiceEnabled !== draft.voiceEnabled
+      ? Promise.all([previousSave, startSave()]).then(() => undefined)
+      : previousSave.then(() => {
+          // Rapid controls (notably sliders and model bindings) only need the
+          // newest queued value. Skipping superseded drafts prevents a slow
+          // avatar load from building a long settings backlog.
+          if (saveRevisionRef.current !== revision) return;
+          return startSave();
+        });
     saveQueueRef.current = queuedSave;
     void queuedSave.then(
       () => {
