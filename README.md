@@ -22,7 +22,20 @@ Kana adds:
 - first-run setup, safe local diagnostics, per-conversation drafts/search, and
   credential-free conversation backup/restore.
 
-## Install from npm (target flow)
+## Installation
+
+Kana supports two production installation paths:
+
+1. install the published package globally from npm (the intended path for
+   normal users); or
+2. build the standalone production server from a source checkout (the path
+   for contributors, custom builds, and VPS operators).
+
+`npm run dev` is not an installation or deployment method. It is only the
+local development server and must not be kept behind Nginx as a production
+Kana instance.
+
+### Install globally from npm (recommended user flow)
 
 > **Registry status:** `kana-ui` currently resolves to an unrelated package on
 > npm. Do not run the command below until this project owns that package name
@@ -85,7 +98,64 @@ on loopback. It mints and keeps the Hermes session token in server memory; the
 token never reaches browser preferences, storage, URLs, or forms. Kana only
 spawns the unmodified Hermes executable and never edits its installation.
 
-## Run in development
+### Build and run from source
+
+Use this path when testing unreleased Kana code, maintaining a custom build,
+or deploying a source checkout to a VPS. It produces the same traced
+standalone Next.js runtime used by the npm package; it does not run the
+development server.
+
+For a local production build:
+
+```bash
+git clone https://github.com/misaalya/kana-ui.git
+cd kana-ui
+npm ci
+npm run package:local
+
+HOSTNAME=127.0.0.1 PORT=3000 node .next/standalone/server.js
+```
+
+For a VPS or reverse-proxy deployment, create an explicit persistent data
+directory owned by the account that will run Kana. Put its `config.json`
+there, select `deployment` mode, configure an access password outside Git,
+and run the standalone server on loopback:
+
+```bash
+git pull
+npm ci
+KANA_DATA_DIR=/var/lib/kana npm run config
+npm run package:local
+
+KANA_DATA_DIR=/var/lib/kana \
+KANA_DEPLOYMENT_MODE=deployment \
+KANA_ACCESS_PASSWORD='REPLACE_WITH_A_STRONG_PASSWORD' \
+HOSTNAME=127.0.0.1 \
+PORT=3000 \
+node .next/standalone/server.js
+```
+
+Run that command through a service manager such as systemd and terminate
+HTTPS at Nginx. The reverse proxy must preserve the Host and
+`X-Forwarded-Proto` headers, disable buffering for `/api/hermes/events`, and
+allow a long read timeout for Hermes SSE and speech generation. See the
+[VPS deploy checklist](docs/SUPPORTED_ENVIRONMENT.md#vps-deploy-checklist) and
+[reverse-proxy security guide](docs/SECURITY.md#reverse-proxy-vps) for the
+complete service and Nginx configuration.
+
+The source checkout does not receive the global launcher's first-run
+bootstrap merely from `npm ci`. `npm run config` creates or opens the same
+owner-only `$KANA_DATA_DIR/config.json`; Kana generates its persistent JWT
+secret under that data root on first use. Existing config and secrets are not
+overwritten.
+
+### Run locally for development only
+
+> **Do not deploy this command.** `next dev` enables Fast Refresh/HMR and
+> rebuilds assets while the process is running. Behind Nginx or on a VPS this
+> can interrupt the long-lived Hermes event stream, produce transient 502s,
+> and require development WebSocket proxying. Use the standalone source build
+> above for every persistent, remote, or reverse-proxied installation.
 
 ```bash
 npm install
@@ -307,13 +377,10 @@ Hermes events are translated into Kana's stable internal event model. The curren
 Stored preferences always resolve to the real agent, voice, and avatar modes;
 legacy values from older installs are normalized away on load.
 
-## Package for local production
+## Production package details
 
-```bash
-npm run package:local
-cd .next/standalone
-HOSTNAME=127.0.0.1 PORT=3000 node server.js
-```
+The source installation flow above runs `npm run package:local` and starts
+`.next/standalone/server.js` directly from the checkout root.
 
 The package contains the traced Next.js runtime, static assets, README, and the
 versioned Qwen3-TTS service source/lockfile. It intentionally excludes the
