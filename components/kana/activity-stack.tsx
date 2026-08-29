@@ -15,7 +15,7 @@ function formatDuration(durationMs?: number): string | null {
     : `${(durationMs / 1_000).toFixed(1)}s`;
 }
 
-export const ActivityRow = memo(function ActivityRow({
+const ActivityRow = memo(function ActivityRow({
   activity,
   locale,
 }: {

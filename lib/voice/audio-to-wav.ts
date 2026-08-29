@@ -3,7 +3,7 @@
 // record or download MP3/M4A. The browser decodes nearly everything, so we
 // convert any input to 16-bit PCM mono WAV before it leaves the page.
 
-export const MAX_REFERENCE_SECONDS = 30;
+const MAX_REFERENCE_SECONDS = 30;
 
 export async function convertToWav(file: File): Promise<File> {
   if (/\.wav$/i.test(file.name) && file.type !== "audio/mpeg") {

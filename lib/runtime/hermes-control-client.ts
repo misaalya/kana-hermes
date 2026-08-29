@@ -18,15 +18,6 @@ async function runtimeResponse(response: Response): Promise<HermesRuntimeStatus>
   return value;
 }
 
-export function hermesPortFromWebSocketUrl(url: string): number {
-  try {
-    const parsed = new URL(url);
-    return Number(parsed.port || (parsed.protocol === "wss:" ? 443 : 80));
-  } catch {
-    return 9119;
-  }
-}
-
 export async function inspectHermesRuntime(preferredPort?: number): Promise<HermesRuntimeStatus> {
   const query = preferredPort ? `?port=${preferredPort}` : "";
   return runtimeResponse(

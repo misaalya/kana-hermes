@@ -36,11 +36,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# Local environment files. Keep only the credential-free template in Git.
 .env*
 !.env.example
-!.env.development
-!.env.production
 
 # vercel
 .vercel
