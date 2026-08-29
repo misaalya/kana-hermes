@@ -422,7 +422,6 @@ lib/state/use-kana-controller.ts          Application orchestration (god hook;
 lib/agent/types.ts                        Stable agent contracts/events
 lib/agent/hermes/hermes-agent-client.ts   Hermes relay adapter (SSE + JSON-RPC)
 lib/agent/hermes/gateway-types.ts         Hermes wire response types
-lib/agent/hermes/gateway-url.ts           Relay URL normalization
 lib/agent/hermes/kana-command-surface.ts  Honest surface availability mapping
 lib/server/hermes-bridge.ts               Server-held gateway WS + token custody
 lib/server/local-hermes-runtime.ts        hermes serve spawn/discovery control

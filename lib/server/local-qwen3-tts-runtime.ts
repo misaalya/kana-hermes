@@ -484,13 +484,6 @@ export async function getQwen3TtsServiceReadiness(): Promise<Qwen3TtsServiceRead
   }
 }
 
-export type Qwen3TtsHealthKind = Qwen3TtsHealthProbe["kind"];
-
-/** Raw health classification for one candidate port (no adoption, no spawn). */
-export async function probeQwen3TtsHealthKind(port: number): Promise<Qwen3TtsHealthKind> {
-  return (await probeHealth(port)).kind;
-}
-
 export type EnsureQwen3TtsResult =
   | { ok: true; status: LocalQwen3TtsRuntimeStatus }
   | { ok: false; status: LocalQwen3TtsRuntimeStatus };

@@ -36,7 +36,7 @@ type TtsPreset = {
   maximumInputCharacters?: number;
 };
 
-export const OPENAI_TTS_PRESETS: Record<KanaOpenAiTtsPreset, TtsPreset> = {
+const OPENAI_TTS_PRESETS: Record<KanaOpenAiTtsPreset, TtsPreset> = {
   pollinations: {
     name: "Pollinations",
     baseUrl: "https://gen.pollinations.ai/v1",

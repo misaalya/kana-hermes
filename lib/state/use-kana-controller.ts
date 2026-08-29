@@ -324,12 +324,6 @@ export function useKanaController(appVersion: string) {
     }>
   >([]);
   // Kana sessions known to Hermes but not yet present in this browser.
-  // Debug visibility: true while any history/session/activity fetch runs.
-  const [fetchingFromServer, setFetchingFromServer] = useState(false);
-  const [fetchDebugRecords, setFetchDebugRecords] = useState<
-    Array<{ id: number; label: string; url: string; status: number | string; body: unknown }>
-  >([]);
-  const fetchDebugIdRef = useRef(0);
   const [hermesSessions, setHermesSessions] = useState<
     HermesConversationDirectoryEntry[]
   >([]);
@@ -439,13 +433,11 @@ export function useKanaController(appVersion: string) {
   // ---- Voice controller (extracted) ----
   const {
     voiceRuntimeState,
-    voiceCanReplay,
     voiceStatus,
     getVoice,
     inspectVoiceService,
     cloneVoice,
     deleteClonedVoice,
-    replayVoice,
     unlockVoice,
     stopVoice,
     cleanupVoice,
@@ -462,16 +454,6 @@ export function useKanaController(appVersion: string) {
       const sorted = recentFirst(next);
       conversationsRef.current = sorted;
       setConversations(sorted);
-    },
-    [],
-  );
-
-  const recordFetchDebug = useCallback(
-    (label: string, url: string, status: number | string, body: unknown) => {
-      setFetchDebugRecords((current) => [
-        ...current,
-        { id: ++fetchDebugIdRef.current, label, url, status, body },
-      ]);
     },
     [],
   );
@@ -632,7 +614,6 @@ export function useKanaController(appVersion: string) {
       resumedRows: AgentHistoryRow[],
     ) => {
       transcriptRestoreRef.current = true;
-      queueMicrotask(() => setFetchingFromServer(true));
       try {
         let rows = resumedRows;
         if (!rows.length) {
@@ -641,23 +622,7 @@ export function useKanaController(appVersion: string) {
             if (!agent) throw new Error("Hermes client is not connected.");
             const result = await agent.fetchHistory();
             rows = result.messages ?? [];
-            recordFetchDebug(
-              "chat transcript fallback (session.history)",
-              "session.history (open runtime session)",
-              "ok",
-              result,
-            );
           } catch (historyError) {
-            const message =
-              historyError instanceof Error
-                ? historyError.message
-                : String(historyError);
-            recordFetchDebug(
-              "chat transcript fallback failed",
-              "session.history (open runtime session)",
-              "ERR",
-              message,
-            );
             reportError("agent", historyError);
           }
         }
@@ -698,10 +663,9 @@ export function useKanaController(appVersion: string) {
         }
       } finally {
         transcriptRestoreRef.current = false;
-        setFetchingFromServer(false);
       }
     },
-    [persistConversation, recordFetchDebug, reportError],
+    [persistConversation, reportError],
   );
 
   // ---- Agent event handling ----
@@ -2174,22 +2138,14 @@ export function useKanaController(appVersion: string) {
     if (!serverSessionKey) return;
     activitySessionKeyRef.current = serverSessionKey;
     let cancelled = false;
-    queueMicrotask(() => setFetchingFromServer(true));
     void fetch(`/api/kana/activities?session=${encodeURIComponent(serverSessionKey)}`, {
       credentials: "same-origin",
     })
-      .then(async (response) => ({
-        status: response.status,
-        data: response.ok ? await response.json() : await response.text(),
-      }))
-      .then(({ status, data }) => {
+      .then(async (response) =>
+        response.ok ? await response.json() : await response.text(),
+      )
+      .then((data) => {
         if (!cancelled) {
-          recordFetchDebug(
-            "activity turns",
-            `/api/kana/activities?session=${serverSessionKey}`,
-            status,
-            data,
-          );
           const typed = data as {
             turns?: Array<{
               turnAnchorMs: number;
@@ -2216,24 +2172,14 @@ export function useKanaController(appVersion: string) {
           }
         }
       })
-      .catch((error) => {
-        if (!cancelled)
-          recordFetchDebug(
-            "activity turns (network error)",
-            `/api/kana/activities?session=${serverSessionKey}`,
-            "ERR",
-            String(error),
-          );
-      });
+      .catch(() => {});
     // Refresh the cross-browser Hermes session directory too.
     void fetch("/api/kana/sessions", { credentials: "same-origin" })
-      .then(async (response) => ({
-        status: response.status,
-        data: response.ok ? await response.json() : await response.text(),
-      }))
-      .then(({ status, data }) => {
+      .then(async (response) =>
+        response.ok ? await response.json() : await response.text(),
+      )
+      .then((data) => {
         if (!cancelled) {
-          recordFetchDebug("hermes session directory", "/api/kana/sessions", status, data);
           const typed = data as {
             sessions?: Array<{
               hermesSessionKey: string;
@@ -2246,23 +2192,11 @@ export function useKanaController(appVersion: string) {
           if (typed?.sessions) setHermesSessions(typed.sessions);
         }
       })
-      .catch((error) => {
-        if (!cancelled)
-          recordFetchDebug(
-            "hermes sessions (network error)",
-            "/api/kana/sessions",
-            "ERR",
-            String(error),
-          );
-      })
-      .finally(() => {
-        if (!cancelled) setFetchingFromServer(false);
-      });
+      .catch(() => {});
     return () => {
       cancelled = true;
-      setFetchingFromServer(false);
     };
-  }, [recordFetchDebug, serverSessionKey]);
+  }, [serverSessionKey]);
 
   // Transcript restore is event-driven: openSession emits history.restored
   // (carrying the session.resume transcript) only after the agent session for
@@ -2336,12 +2270,8 @@ export function useKanaController(appVersion: string) {
     error,
     diagnostics,
     voiceRuntimeState,
-    voiceCanReplay,
     activities,
     serverActivityTurns,
-    fetchingFromServer,
-    fetchDebugRecords,
-    clearFetchDebugRecords: () => setFetchDebugRecords([]),
     hermesSessions,
     adoptHermesSession,
     avatar,
@@ -2385,10 +2315,9 @@ export function useKanaController(appVersion: string) {
         action: options.restart ? "restart" : "start",
         port: options.port,
         cwd: options.cwd,
-      }),
+    }),
     stopHermesControl: () => controlHermesRuntime({ action: "stop" }),
     abort,
-    replayVoice,
     unlockVoice,
     stopVoice,
     previewAvatarEmotion,

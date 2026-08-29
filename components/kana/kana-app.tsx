@@ -80,7 +80,6 @@ export function KanaApp({ appVersion }: KanaAppProps) {
   // browser session while a dependency is unhealthy.
   const [deps, setDeps] = useState<DependencyFindings>({ hermes: "installed", voice: null });
   const [wizardMode, setWizardMode] = useState<null | "full" | "repair">(null);
-  const selectedCommandIndexRef = useRef(0);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const automaticConnectStartedRef = useRef(false);
   const runtimeInspectionRef = useRef({
@@ -404,7 +403,6 @@ export function KanaApp({ appVersion }: KanaAppProps) {
   }, [clearCommandSuggestions, message]);
 
   const highlightCommand = useCallback((index: number) => {
-    selectedCommandIndexRef.current = index;
     setSelectedCommandIndex(index);
   }, []);
 

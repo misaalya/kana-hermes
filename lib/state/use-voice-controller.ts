@@ -41,7 +41,6 @@ export function useVoiceController(
     null,
   );
   const [voiceRuntimeState, setVoiceRuntimeState] = useState("idle");
-  const [voiceCanReplay, setVoiceCanReplay] = useState(false);
 
   const voiceRef = useRef<VoiceProvider | null>(null);
   const unsubscribeVoiceRef = useRef<(() => void) | null>(null);
@@ -69,7 +68,6 @@ export function useVoiceController(
       snapshot: ReturnType<VoiceProvider["getSnapshot"]>,
     ) => {
       setVoiceRuntimeState(snapshot.state);
-      setVoiceCanReplay(snapshot.canReplay);
       const totalDuration =
         (snapshot.lastSynthesisDurationMs ?? 0) +
         (snapshot.lastPlaybackDurationMs ?? 0);
@@ -87,16 +85,6 @@ export function useVoiceController(
     voiceKeyRef.current = key;
     return provider;
   }, [avatarController, getPreferences, onMetrics]);
-
-  const recreateVoice = useCallback(() => {
-    voiceRef.current?.dispose?.();
-    setVoiceRuntimeState("idle");
-    setVoiceCanReplay(false);
-    unsubscribeVoiceRef.current?.();
-    unsubscribeVoiceRef.current = null;
-    voiceRef.current = null;
-    voiceKeyRef.current = "";
-  }, []);
 
   const inspectVoiceService = useCallback(
     async (baseUrl: string) => {
@@ -137,24 +125,6 @@ export function useVoiceController(
     [],
   );
 
-  const replayVoice = useCallback(async () => {
-    const voice = voiceRef.current;
-    if (!voice || !voice.getSnapshot().canReplay) {
-      onError("voice", "There is no generated speech to replay yet.", "voice");
-      return;
-    }
-    try {
-      await voice.replay();
-    } catch (replayError) {
-      if (
-        replayError instanceof Error &&
-        replayError.name === "AbortError"
-      )
-        return;
-      onError("voice", replayError, "voice");
-    }
-  }, [onError]);
-
   const unlockVoice = useCallback(() => {
     try {
       getVoice().unlock?.();
@@ -174,19 +144,15 @@ export function useVoiceController(
     voiceRef.current = null;
     voiceKeyRef.current = "";
     setVoiceRuntimeState("idle");
-    setVoiceCanReplay(false);
   }, []);
 
   return {
     voiceRuntimeState,
-    voiceCanReplay,
     voiceStatus,
     getVoice,
-    recreateVoice,
     inspectVoiceService,
     cloneVoice,
     deleteClonedVoice,
-    replayVoice,
     unlockVoice,
     stopVoice,
     cleanupVoice,

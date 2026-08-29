@@ -6,7 +6,6 @@
 import type { Emotion } from "@/lib/presentation/types";
 
 export type UiLocale = "id" | "en";
-export const UI_LOCALES: readonly UiLocale[] = ["id", "en"];
 
 export type Copy = {
   common: {
