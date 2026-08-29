@@ -1,3 +1,8 @@
+import type {
+  TtsProviderDescriptor,
+  VoiceProviderStatus,
+} from "@/lib/voice/types";
+
 // Browser client for Kana's persistent voice library (server SQLite +
 // data/voices). Clones survive service cache wipes because the reference
 // audio and metadata live on the Kana side, not inside the Qwen service.
@@ -13,6 +18,9 @@ export type LibraryVoice = {
 export type VoiceLibrarySnapshot = {
   voices: LibraryVoice[];
   engine?: { state?: string };
+  provider?: TtsProviderDescriptor;
+  providerStatus?: VoiceProviderStatus;
+  supportsVoiceLibrary?: boolean;
 };
 
 export async function listKanaVoices(): Promise<VoiceLibrarySnapshot> {

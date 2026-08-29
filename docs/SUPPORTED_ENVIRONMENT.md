@@ -15,7 +15,7 @@ Kana 0.2.x is an alpha local web application.
   The live audit observed the registry dynamically and does not pin command
   counts as a protocol guarantee.
 - Optional Qwen service Python 3.10–3.13 with `qwen-tts==0.1.1` and the pinned
-  0.6B CustomVoice revision.
+  0.6B Base revision.
 - Official pinned Live2D Haru and Mao samples load and switch in Chrome with
   model-specific `ParamMouthOpenY`/`ParamA` bindings.
 
@@ -68,16 +68,21 @@ explicit data directory.
    sudo chown kana:kana /var/lib/kana
    ```
 
-2. Provide secrets outside git (systemd `Environment=` lines or an untracked
-   `.env.production` next to the deployment):
+2. Provide the deployment password outside git (systemd `Environment=` lines
+   or an untracked `.env.production` next to the deployment):
 
    ```bash
+   KANA_DEPLOYMENT_MODE=deployment
    KANA_ACCESS_PASSWORD=<bootstrap password, or pre-seed auth.json>
-   KANA_JWT_SECRET=<64-hex, survives redeploys>
    KANA_DATA_DIR=/var/lib/kana
    AUTH_COOKIE_SECURE=true            # if nginx does not forward X-Forwarded-Proto
-   KANA_TRUSTED_PROXY_SECRET=<long random string, shared with nginx>
    ```
+
+   `KANA_JWT_SECRET` is optional. When omitted, Kana generates an owner-only
+   secret atomically under `KANA_DATA_DIR` on the first readiness request and
+   reuses it across restarts. An explicit value must contain at least 32
+   characters and is useful only when multiple Kana server instances must
+   share sessions. Keep the data directory persistent across redeploys.
 
 3. systemd unit example:
 
@@ -91,9 +96,8 @@ explicit data directory.
    Group=kana
    WorkingDirectory=/var/lib/kana
    Environment=KANA_DATA_DIR=/var/lib/kana
+   Environment=KANA_DEPLOYMENT_MODE=deployment
    Environment=KANA_ACCESS_PASSWORD=<bootstrap password>
-   Environment=KANA_JWT_SECRET=<64-hex>
-   Environment=KANA_TRUSTED_PROXY_SECRET=<same value as nginx>
    Environment=AUTH_COOKIE_SECURE=true
    Environment=HOSTNAME=127.0.0.1
    Environment=PORT=3000
@@ -113,13 +117,12 @@ explicit data directory.
    ```nginx
    proxy_set_header Host $host;
    proxy_set_header X-Forwarded-Proto $scheme;
-   # Shared secret for /api/local-runtime/* — same value as the server env:
-   proxy_set_header X-Kana-Trusted-Proxy "<KANA_TRUSTED_PROXY_SECRET value>";
+   proxy_set_header X-Kana-Trusted-Proxy "";
    ```
 
-   If a route must not trust the proxy, blank the header instead of leaving a
-   spoofable value: `proxy_set_header X-Kana-Trusted-Proxy "";`. See
-   docs/SECURITY.md for the full trust model.
+   Terminate HTTPS at Nginx. Public HTTP-only origins have stricter mobile
+   audio and installable-web-app limitations and are not the intended
+   deployment baseline. See docs/SECURITY.md for the full trust model.
 
 5. First-request sanity check: with auth configured, `/api/auth/status`
    reports `"authEnabled": true` and never `insecureNoAuth: true`. If the

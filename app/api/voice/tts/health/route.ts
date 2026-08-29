@@ -1,4 +1,5 @@
 import { inspectLocalQwen3TtsRuntime } from "@/lib/server/local-qwen3-tts-runtime";
+import { getConfiguredTtsProvider } from "@/lib/server/tts-provider";
 import { requireSession, ttsServiceUrl } from "@/lib/server/tts-relay";
 import {
   QWEN3_TTS_API_VERSION,
@@ -32,6 +33,16 @@ function relayNotice(
 export async function GET(request: Request): Promise<Response> {
   const unauthorized = await requireSession(request);
   if (unauthorized) return unauthorized;
+  const provider = getConfiguredTtsProvider();
+  if (provider.descriptor.type !== "qwen3-local") {
+    return Response.json(
+      {
+        error: "This Qwen3-TTS health endpoint is unavailable for the configured provider.",
+        provider: provider.descriptor,
+      },
+      { status: 409, headers: { "Cache-Control": "no-store" } },
+    );
+  }
   const status = await inspectLocalQwen3TtsRuntime();
   if (status.state === "running" || status.state === "external") {
     try {

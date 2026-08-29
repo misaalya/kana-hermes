@@ -13,6 +13,7 @@ import {
   listLibraryVoices,
   registerVoiceClone,
 } from "@/lib/server/voice-library";
+import { getConfiguredTtsProvider } from "@/lib/server/tts-provider";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,12 +40,28 @@ export async function GET(request: Request): Promise<Response> {
   if (!(await requestAuthorized(request))) {
     return Response.json({ error: "Unauthorized" }, { status: 401, headers: NO_STORE });
   }
+  const provider = getConfiguredTtsProvider();
+  if (!provider.descriptor.capabilities.voiceLibrary) {
+    const providerStatus = await provider.inspect();
+    return Response.json(
+      {
+        voices: [],
+        engine: { state: providerStatus.state },
+        provider: provider.descriptor,
+        providerStatus,
+        supportsVoiceLibrary: false,
+      },
+      { headers: NO_STORE },
+    );
+  }
   void ensureDefaultVoice().catch(() => undefined);
   const readiness = await getQwen3TtsServiceReadiness();
   return Response.json(
     {
       voices: listLibraryVoices(),
       engine: readiness.ready ? { state: "ready" } : { state: readiness.reason },
+      provider: provider.descriptor,
+      supportsVoiceLibrary: true,
     },
     { headers: NO_STORE },
   );
@@ -58,6 +75,13 @@ export async function GET(request: Request): Promise<Response> {
 export async function POST(request: Request): Promise<Response> {
   if (!(await requestAuthorized(request))) {
     return Response.json({ error: "Unauthorized" }, { status: 401, headers: NO_STORE });
+  }
+  const provider = getConfiguredTtsProvider();
+  if (!provider.descriptor.capabilities.voiceLibrary) {
+    return Response.json(
+      { error: `${provider.descriptor.name} uses the voice configured in config.json.` },
+      { status: 409, headers: NO_STORE },
+    );
   }
   let form: FormData;
   try {
@@ -117,6 +141,13 @@ export async function POST(request: Request): Promise<Response> {
 export async function DELETE(request: Request): Promise<Response> {
   if (!(await requestAuthorized(request))) {
     return Response.json({ error: "Unauthorized" }, { status: 401, headers: NO_STORE });
+  }
+  const provider = getConfiguredTtsProvider();
+  if (!provider.descriptor.capabilities.voiceLibrary) {
+    return Response.json(
+      { error: `${provider.descriptor.name} has no Kana-managed voice library.` },
+      { status: 409, headers: NO_STORE },
+    );
   }
   const id = new URL(request.url).searchParams.get("id");
   if (!id) return Response.json({ error: "Missing voice id." }, { status: 400, headers: NO_STORE });

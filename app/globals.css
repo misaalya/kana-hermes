@@ -211,6 +211,20 @@ button,
   transform: translateY(-1px);
 }
 
+/* Avoid Tailwind's arbitrary WebKit pseudo-element variant here. Turbopack's
+   CSS transform can corrupt that generated selector with control characters. */
+.kana-details-summary {
+  list-style: none;
+}
+
+.kana-details-summary::marker {
+  content: "";
+}
+
+.kana-details-summary::-webkit-details-marker {
+  display: none;
+}
+
 .kana-chat-panel {
   border: 4px solid var(--chat-frame);
   background: var(--chat-depth);

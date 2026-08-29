@@ -1,5 +1,6 @@
 import type { Emotion } from "@/lib/presentation/types";
 import type { AvatarProvider } from "./types";
+import type { Live2DModelLayout } from "./model-layout";
 
 const EMOTION_INTENSITY: Record<Emotion, number> = {
   neutral: 0.2,
@@ -37,5 +38,8 @@ export class AvatarController {
     this.provider.setTalking(value);
     if (!value) this.provider.setMouthOpen(0);
   }
-}
 
+  setLayout(layout: Live2DModelLayout): void {
+    this.provider.setLayout?.(layout);
+  }
+}

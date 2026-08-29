@@ -1,5 +1,14 @@
 import { spawn, spawnSync } from "node:child_process";
-import { access, mkdir, mkdtemp, rm } from "node:fs/promises";
+import {
+  access,
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { createServer } from "node:net";
 import { platform, tmpdir } from "node:os";
 import path from "node:path";
@@ -9,6 +18,9 @@ const temporary = await mkdtemp(path.join(tmpdir(), "kana-npm-smoke-"));
 const packRoot = path.join(temporary, "pack");
 const installRoot = path.join(temporary, "install");
 const home = path.join(temporary, "home");
+const fakeBin = path.join(home, "custom-tools", "bin");
+const fakeHermes = path.join(fakeBin, "hermes");
+const fakeHermesPidFile = path.join(temporary, "fake-hermes.pid");
 
 try {
   await mkdir(packRoot, { recursive: true });
@@ -37,7 +49,7 @@ try {
   }
   const forbidden = [...paths].find((entry) =>
     /(^|\/)\.env(?:\.|$)/.test(entry) ||
-    /(^|\/)(?:\.git|\.omo|\.codegraph|data|test-results|auth-reference)(?:\/|$)/.test(entry)
+    /(^|\/)(?:\.git|\.hermes|\.omo|\.codegraph|data|test-results|auth-reference)(?:\/|$)/.test(entry)
   );
   if (forbidden) {
     throw new Error(`npm package contains forbidden local content: ${forbidden}`);
@@ -61,12 +73,50 @@ try {
     : path.join(installRoot, "bin", "kana-ui");
   await access(executable);
   await access(aliasExecutable);
+  await mkdir(fakeBin, { recursive: true });
+  await writeFile(
+    fakeHermes,
+    `#!/usr/bin/env node
+const { createServer } = require("node:http");
+const { writeFileSync } = require("node:fs");
+const args = process.argv.slice(2);
+if (args.includes("--version")) {
+  process.stdout.write("Hermes 0.20.1\\n");
+  process.exit(0);
+}
+if (args[0] !== "serve") process.exit(2);
+const portIndex = args.indexOf("--port");
+const port = Number(args[portIndex + 1]);
+writeFileSync(process.env.KANA_FAKE_HERMES_PID_FILE, String(process.pid));
+const server = createServer((request, response) => {
+  response.setHeader("Content-Type", "application/json");
+  if (request.url === "/api/health") {
+    response.end(JSON.stringify({ ok: true, version: "0.20.1", auth_required: true }));
+    return;
+  }
+  if (request.url === "/api/status") {
+    response.end(JSON.stringify({ version: "0.20.1", config_version: 1 }));
+    return;
+  }
+  response.statusCode = 404;
+  response.end(JSON.stringify({ error: "not found" }));
+});
+server.listen(port, "127.0.0.1");
+const stop = () => server.close(() => process.exit(0));
+process.once("SIGTERM", stop);
+process.once("SIGINT", stop);
+`,
+    { mode: 0o755 },
+  );
+  await chmod(fakeHermes, 0o755);
   const environment = {
     ...process.env,
     HOME: home,
     XDG_CONFIG_HOME: path.join(home, ".config"),
     XDG_DATA_HOME: path.join(home, ".local", "share"),
     XDG_CACHE_HOME: path.join(home, ".cache"),
+    PATH: `${fakeBin}${path.delimiter}${process.env.PATH ?? ""}`,
+    KANA_FAKE_HERMES_PID_FILE: fakeHermesPidFile,
   };
 
   const help = run(executable, ["--help"], root, environment);
@@ -81,8 +131,12 @@ try {
   if (doctor.stdout.includes("first-run setup")) {
     throw new Error("kana doctor unexpectedly launched interactive setup.");
   }
+  if (!doctor.stdout.includes(`Hermes: ${fakeHermes}`)) {
+    throw new Error("kana doctor did not discover Hermes from the user's PATH.");
+  }
 
   const port = await availablePort();
+  const hermesPort = await availablePort();
   const child = spawn(executable, ["--no-open", "--port", String(port)], {
     cwd: root,
     env: environment,
@@ -103,6 +157,49 @@ try {
     if (!setup.ok || setupState.onboardingCompleted !== false) {
       throw new Error("the npm launcher did not preserve the in-app onboarding flow.");
     }
+    const dataDirectory = path.join(home, ".local", "share", "kana");
+    const configFile = path.join(dataDirectory, "config.json");
+    const jwtSecretFile = path.join(dataDirectory, "jwt-secret");
+    const config = JSON.parse(await readFile(configFile, "utf8"));
+    const jwtSecret = (await readFile(jwtSecretFile, "utf8")).trim();
+    if (config.deployment?.mode !== "local") {
+      throw new Error("first npm launch did not create the default local config.json.");
+    }
+    if (
+      config.tts?.provider !== "qwen3-local"
+      || config.tts?.qwen3Local?.model !== "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
+      || config.tts?.qwen3Local?.port !== 7860
+    ) {
+      throw new Error("first npm launch did not create the default local Qwen config.");
+    }
+    if (jwtSecret.length < 32) {
+      throw new Error("first npm launch did not create a strong JWT session secret.");
+    }
+    if (((await stat(configFile)).mode & 0o777) !== 0o600) {
+      throw new Error("generated config.json is not owner-only.");
+    }
+    if (((await stat(jwtSecretFile)).mode & 0o777) !== 0o600) {
+      throw new Error("generated JWT secret is not owner-only.");
+    }
+
+    const startedHermes = await fetch(
+      `http://127.0.0.1:${port}/api/local-runtime/hermes`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "start", port: hermesPort }),
+      },
+    );
+    const hermesState = await startedHermes.json();
+    if (
+      !startedHermes.ok
+      || hermesState.state !== "running"
+      || hermesState.executable !== fakeHermes
+    ) {
+      throw new Error(
+        `installed Kana did not auto-start discovered Hermes: ${JSON.stringify(hermesState)}`,
+      );
+    }
     const foreignOrigin = await fetch(`http://127.0.0.1:${port}/api/kana/sessions`, {
       headers: { Origin: "https://untrusted.example" },
     });
@@ -110,6 +207,16 @@ try {
       throw new Error("no-auth local API accepted a non-loopback Origin.");
     }
   } finally {
+    try {
+      await fetch(`http://127.0.0.1:${port}/api/local-runtime/hermes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "stop" }),
+        signal: AbortSignal.timeout(5_000),
+      });
+    } catch {
+      // The explicit PID cleanup below handles a launcher/server failure.
+    }
     if (child.exitCode === null) child.kill("SIGTERM");
     await Promise.race([
       new Promise((resolve) => child.once("exit", resolve)),
@@ -121,6 +228,12 @@ try {
     `npm package smoke test passed (${packResult.size} bytes packed, ${packResult.unpackedSize} bytes unpacked).\n`,
   );
 } finally {
+  try {
+    const pid = Number((await readFile(fakeHermesPidFile, "utf8")).trim());
+    if (Number.isInteger(pid) && pid > 1) process.kill(pid, "SIGTERM");
+  } catch {
+    // The fake Hermes either never started or already stopped cleanly.
+  }
   await rm(temporary, { recursive: true, force: true });
 }
 

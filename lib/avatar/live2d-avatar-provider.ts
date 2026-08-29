@@ -1,5 +1,6 @@
 import type { Emotion } from "@/lib/presentation/types";
 import type { AvatarModelSource, AvatarProvider } from "./types";
+import type { Live2DModelLayout } from "./model-layout";
 
 export type Live2DModelBindings = {
   mouthOpenParameter: string;
@@ -15,9 +16,10 @@ export interface Live2DModelInstance {
   setExpression(name: string): void;
   clearExpression(): void;
   startMotion(group: string, index?: number): void;
-  setParameter(id: string, value: number): void;
+  setMouthOpen(value: number): void;
   /** Optional speech boundary so runtimes can own the mouth via a plugin. */
   setTalking?(value: boolean): void;
+  setLayout?(layout: Live2DModelLayout): void;
 }
 
 export interface Live2DRuntimeAdapter {
@@ -26,6 +28,7 @@ export interface Live2DRuntimeAdapter {
     modelUrl?: string;
     modelFiles?: File[];
     mouthOpenParameterId: string;
+    layout: Live2DModelLayout;
   }): Promise<Live2DModelInstance>;
 }
 
@@ -42,6 +45,7 @@ export class Live2DAvatarProvider implements AvatarProvider {
   constructor(
     private readonly runtime: Live2DRuntimeAdapter,
     private readonly bindings: Live2DModelBindings,
+    private layout: Live2DModelLayout,
   ) {}
 
   async load(source: AvatarModelSource): Promise<void> {
@@ -59,6 +63,7 @@ export class Live2DAvatarProvider implements AvatarProvider {
       modelUrl: source.modelUrl,
       modelFiles: source.modelFiles,
       mouthOpenParameterId: this.bindings.mouthOpenParameter,
+      layout: this.layout,
     });
     if (generation !== this.loadGeneration) {
       loaded.destroy();
@@ -87,15 +92,17 @@ export class Live2DAvatarProvider implements AvatarProvider {
   }
 
   setMouthOpen(value: number): void {
-    this.model?.setParameter(
-      this.bindings.mouthOpenParameter,
-      Math.max(0, Math.min(1, value)),
-    );
+    this.model?.setMouthOpen(Math.max(0, Math.min(1, value)));
   }
 
   setTalking(value: boolean): void {
     // The runtime owns the mouth during speech; the voice layer supplies the
     // boundary and amplitude samples.
     this.model?.setTalking?.(value);
+  }
+
+  setLayout(layout: Live2DModelLayout): void {
+    this.layout = layout;
+    this.model?.setLayout?.(layout);
   }
 }

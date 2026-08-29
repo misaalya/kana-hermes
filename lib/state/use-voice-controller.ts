@@ -12,7 +12,8 @@ import {
   inspectQwen3TTSService,
   type CreateVoiceCloneInput,
 } from "@/lib/voice/qwen3-tts-contract";
-import { Qwen3TTSProvider } from "@/lib/voice/qwen3-tts-provider";
+import { TtsRelayProvider } from "@/lib/voice/tts-relay-provider";
+import { inspectConfiguredTtsProvider } from "@/lib/voice/tts-relay-contract";
 import type {
   VoiceProvider,
   VoiceProviderStatus,
@@ -55,7 +56,7 @@ export function useVoiceController(
 
     voiceRef.current?.dispose?.();
     unsubscribeVoiceRef.current?.();
-    const provider = new Qwen3TTSProvider(
+    const provider = new TtsRelayProvider(
       {
         baseUrl: prefs.qwen3Tts.baseUrl,
         voiceId: prefs.qwen3Tts.voiceId,
@@ -99,14 +100,15 @@ export function useVoiceController(
 
   const inspectVoiceService = useCallback(
     async (baseUrl: string) => {
+      void baseUrl;
       setVoiceRuntimeState("checking");
-      const inspection = await inspectQwen3TTSService(baseUrl);
+      const { status: inspection } = await inspectConfiguredTtsProvider();
       setVoiceStatus(inspection);
       setVoiceRuntimeState(inspection.state);
       if (inspection.state === "error" || inspection.state === "unavailable") {
         onError(
           "voice",
-          inspection.message || "Qwen3-TTS is unavailable.",
+          inspection.message || "The configured voice provider is unavailable.",
           "voice",
         );
       }

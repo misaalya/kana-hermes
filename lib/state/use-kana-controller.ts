@@ -18,6 +18,10 @@ import { OFFICIAL_HARU_MODEL_URL } from "@/lib/avatar/defaults";
 import { ManagedAvatarProvider } from "@/lib/avatar/managed-avatar-provider";
 import { IndexedDbAvatarModelStore } from "@/lib/avatar/indexed-db-avatar-model-store";
 import {
+  live2DModelBindings,
+  live2DModelLayout,
+} from "@/lib/avatar/model-bindings";
+import {
   createKanaBackup,
   parseKanaBackup,
   serializeKanaBackup,
@@ -55,6 +59,7 @@ import {
   normalizeKanaPreferences,
 } from "@/lib/preferences/local-preferences-store";
 import type { KanaPreferences } from "@/lib/preferences/types";
+import { parseKanaResponse } from "@/lib/presentation/response-parser";
 import { getCopy } from "@/lib/ui/copy";
 import {
   controlHermesRuntime,
@@ -219,20 +224,15 @@ function parseHermesTranscript(rows: AgentHistoryRow[]): {
     let subtitle: KanaMessage["subtitle"] = undefined;
     let emotion: KanaMessage["emotion"] = "neutral";
     try {
-      const envelope = JSON.parse(row.text) as {
-        speech_ja?: string;
-        subtitle?: { text?: string; language?: string };
-        emotion?: KanaMessage["emotion"];
-      };
-      speech_ja = envelope.speech_ja ?? "";
-      if (envelope.subtitle?.text) {
-        subtitle = {
-          text: envelope.subtitle.text,
-          language: envelope.subtitle.language ?? "id",
-        };
-      }
+      const envelope = parseKanaResponse(row.text);
+      speech_ja = envelope.speech_ja;
+      subtitle = { ...envelope.subtitle };
       emotion = envelope.emotion ?? "neutral";
     } catch {
+      // A malformed protocol object was already surfaced as an agent error
+      // during the live turn. Never resurrect its raw JSON as a chat bubble
+      // when Hermes history is restored.
+      if (/\b(?:speech_ja|subtitle)\b/.test(row.text)) return;
       speech_ja = row.text;
       subtitle = { text: row.text, language: "id" };
     }
@@ -1857,12 +1857,33 @@ export function useKanaController(appVersion: string) {
         setStatus(statusCopy(preferencesRef.current.uiLocale).ready);
       }
 
-      const avatarChanged =
+      const avatarRuntimeChanged =
         previous.avatarMode !== next.avatarMode ||
-        JSON.stringify(previous.live2d) !== JSON.stringify(next.live2d);
-      if (avatarChanged) await configureAvatar(next, undefined, true);
+        previous.live2d.coreScriptUrl !== next.live2d.coreScriptUrl ||
+        previous.live2d.modelId !== next.live2d.modelId ||
+        previous.live2d.modelUrl !== next.live2d.modelUrl ||
+        JSON.stringify(live2DModelBindings(previous.live2d)) !==
+          JSON.stringify(live2DModelBindings(next.live2d));
+      const avatarLayoutChanged =
+        JSON.stringify(live2DModelLayout(previous.live2d)) !==
+        JSON.stringify(live2DModelLayout(next.live2d));
+      if (avatarRuntimeChanged) {
+        await configureAvatar(next, undefined, true);
+      } else if (avatarLayoutChanged) {
+        // Sliders update the already-loaded Pixi model directly. Reloading
+        // .moc3/textures for every pointer movement causes visible flashes and
+        // unnecessary GPU churn.
+        avatarController.setLayout(live2DModelLayout(next.live2d));
+      }
     },
-    [busy, cleanupVoice, configureAvatar, flushHeldMessage, preferencesStore],
+    [
+      avatarController,
+      busy,
+      cleanupVoice,
+      configureAvatar,
+      flushHeldMessage,
+      preferencesStore,
+    ],
   );
 
   // ---- Backup ----

@@ -94,6 +94,34 @@ describe("LocalPreferencesStore", () => {
     assert.equal(store.load().stageBackground, "pattern-swirls");
   });
 
+  it("persists and sanitizes a layout independently for each Live2D model", () => {
+    const persistent = new MemoryStorage();
+    const store = new LocalPreferencesStore(persistent);
+    const sourceKey = `url:${DEFAULT_PREFERENCES.live2d.modelUrl}`;
+
+    store.save({
+      ...DEFAULT_PREFERENCES,
+      live2d: {
+        ...DEFAULT_PREFERENCES.live2d,
+        layoutProfiles: {
+          [sourceKey]: { x: 4, y: -4, scale: 99 },
+          "import:another-avatar": { x: 0.12, y: 0.08, scale: 1.25 },
+        },
+      },
+    });
+
+    const loaded = store.load();
+    assert.deepEqual(loaded.live2d.layoutProfiles?.[sourceKey], {
+      x: 0.75,
+      y: -0.75,
+      scale: 2.5,
+    });
+    assert.deepEqual(
+      loaded.live2d.layoutProfiles?.["import:another-avatar"],
+      { x: 0.12, y: 0.08, scale: 1.25 },
+    );
+  });
+
   it("falls back safely when a stored stage background is unknown", () => {
     const persistent = new MemoryStorage();
     persistent.setItem(

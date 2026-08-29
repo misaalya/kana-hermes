@@ -5,6 +5,7 @@ import {
   type Live2DModelInstance,
   type Live2DRuntimeAdapter,
 } from "@/lib/avatar/live2d-avatar-provider";
+import { DEFAULT_LIVE2D_MODEL_LAYOUT } from "@/lib/avatar/model-layout";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -20,7 +21,7 @@ function model(name: string, calls: string[]): Live2DModelInstance {
     setExpression: (value) => calls.push(`${name}:expression:${value}`),
     clearExpression: () => calls.push(`${name}:expression:clear`),
     startMotion: (group) => calls.push(`${name}:motion:${group}`),
-    setParameter: (id, value) => calls.push(`${name}:parameter:${id}:${value}`),
+    setMouthOpen: (value) => calls.push(`${name}:mouth:${value}`),
   };
 }
 
@@ -33,10 +34,14 @@ describe("Live2DAvatarProvider model replacement", () => {
     const runtime: Live2DRuntimeAdapter = {
       load: () => (++loadCount === 1 ? first.promise : second.promise),
     };
-    const provider = new Live2DAvatarProvider(runtime, {
-      mouthOpenParameter: "ParamMouth",
-      emotionExpressions: { happy: "Smile" },
-    });
+    const provider = new Live2DAvatarProvider(
+      runtime,
+      {
+        mouthOpenParameter: "ParamMouth",
+        emotionExpressions: { happy: "Smile" },
+      },
+      DEFAULT_LIVE2D_MODEL_LAYOUT,
+    );
     const canvas = {} as HTMLCanvasElement;
 
     const loadingFirst = provider.load({
@@ -61,7 +66,7 @@ describe("Live2DAvatarProvider model replacement", () => {
     assert.deepEqual(calls, [
       "stale:destroy",
       "new:expression:Smile",
-      "new:parameter:ParamMouth:0.5",
+      "new:mouth:0.5",
     ]);
   });
 
@@ -70,11 +75,15 @@ describe("Live2DAvatarProvider model replacement", () => {
     const runtime: Live2DRuntimeAdapter = {
       load: async () => model("avatar", calls),
     };
-    const provider = new Live2DAvatarProvider(runtime, {
-      mouthOpenParameter: "ParamMouthOpenY",
-      emotionExpressions: { happy: "Smile" },
-      emotionMotions: { happy: { group: "Joy", index: 1 } },
-    });
+    const provider = new Live2DAvatarProvider(
+      runtime,
+      {
+        mouthOpenParameter: "ParamMouthOpenY",
+        emotionExpressions: { happy: "Smile" },
+        emotionMotions: { happy: { group: "Joy", index: 1 } },
+      },
+      DEFAULT_LIVE2D_MODEL_LAYOUT,
+    );
     await provider.load({
       id: "avatar",
       name: "Avatar",
