@@ -334,7 +334,7 @@ test.beforeEach(async ({ page }) => {
         subtitleLanguage: "en",
         agentMode: "hermes",
         voiceEnabled: false,
-        voiceMode: "qwen3",
+        voiceMode: "configured",
         avatarMode: "live2d",
         hermes: {
           websocketUrl: "ws://127.0.0.1:9119/api/ws",
@@ -421,6 +421,45 @@ test("persists the selected stage background across refreshes", async ({ page })
     "data-background",
     "pattern-stars",
   );
+});
+
+test("adjusts the active avatar from the workspace instead of settings", async ({
+  page,
+}) => {
+  const trigger = page.getByRole("button", {
+    name: "Adjust avatar position and size",
+  });
+  await trigger.click();
+
+  const panel = page.getByRole("region", {
+    name: "Adjust avatar position and size",
+  });
+  await expect(panel).toBeVisible();
+  const horizontal = panel.getByRole("slider", { name: /X position/ });
+  await horizontal.evaluate((input) => {
+    const slider = input as HTMLInputElement;
+    const nativeSetter = Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      "value",
+    )?.set;
+    nativeSetter?.call(slider, "20");
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await expect(horizontal).toHaveValue("20");
+
+  await page.keyboard.press("Escape");
+  await expect(panel).toBeHidden();
+  await page.reload();
+  await trigger.click();
+  await expect(
+    page.getByRole("region", { name: "Adjust avatar position and size" })
+      .getByRole("slider", { name: /X position/ }),
+  ).toHaveValue("20");
+
+  await trigger.click();
+  await page.getByRole("button", { name: "Open settings" }).click();
+  await page.getByRole("button", { name: /^Avatar(?: Avatar and stage)?$/ }).click();
+  await expect(page.getByRole("slider", { name: /X position/ })).toHaveCount(0);
 });
 
 test("changes the active Hermes model with an explicit provider", async ({ page }) => {

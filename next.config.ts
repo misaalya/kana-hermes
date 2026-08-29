@@ -40,6 +40,7 @@ const nextConfig: NextConfig = {
     "/*": [
       "./.codegraph",
       "./.codegraph/**/*",
+      "./.hermes/**/*",
       "./.omo/**/*",
       "./.playwright-mcp/**/*",
       "./acceptance/**/*",

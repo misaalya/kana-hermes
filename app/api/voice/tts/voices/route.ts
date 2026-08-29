@@ -1,4 +1,5 @@
 import { ensureOr503, requireSession, ttsServiceUrl } from "@/lib/server/tts-relay";
+import { getConfiguredTtsProvider } from "@/lib/server/tts-provider";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,6 +13,13 @@ async function forward(
   pathname: string,
   init?: RequestInit,
 ): Promise<Response> {
+  const provider = getConfiguredTtsProvider();
+  if (!provider.descriptor.capabilities.voiceLibrary) {
+    return Response.json(
+      { error: `${provider.descriptor.name} does not expose Kana's local voice library.` },
+      { status: 409 },
+    );
+  }
   const ensured = await ensureOr503();
   if (!ensured.ok) return ensured.response;
   try {

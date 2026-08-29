@@ -44,6 +44,23 @@ export type VoiceProviderStatus = {
   };
 };
 
+/** Sanitized server-provider metadata; credentials and upstream URLs are excluded. */
+export type TtsProviderDescriptor = {
+  id: string;
+  type: "qwen3-local" | "openai-compatible";
+  name: string;
+  preset?: string;
+  configured: boolean;
+  model?: string;
+  voice?: string;
+  capabilities: {
+    instruction: boolean;
+    runtimeControl: boolean;
+    upstreamCancellation: boolean;
+    voiceLibrary: boolean;
+  };
+};
+
 export type VoiceLifecycleState =
   | "idle"
   | "checking"

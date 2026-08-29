@@ -5,6 +5,7 @@ import {
 } from "@/lib/server/local-hermes-runtime";
 import { isAuthEnabled } from "@/lib/server/auth/password-store";
 import { isSessionValid } from "@/lib/server/auth/session";
+import { resolveKanaDeploymentMode } from "@/lib/server/user-config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,7 +20,8 @@ export const dynamic = "force-dynamic";
 // holds it; the browser connects through the server-side relay instead.
 
 async function requestAuthorized(request: Request): Promise<boolean> {
-  return !isAuthEnabled() || (await isSessionValid(request));
+  if (isAuthEnabled()) return isSessionValid(request);
+  return resolveKanaDeploymentMode().mode === "local";
 }
 
 export async function GET(request: Request): Promise<Response> {

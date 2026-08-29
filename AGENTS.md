@@ -64,9 +64,10 @@ capability.
   language changes.
 - Do not add a dependency until the existing project and browser APIs have been
   checked for an equivalent capability.
-- Kana has no second mock agent, voice, or conversation-store provider; modes
-  are fixed to Hermes, Qwen3-TTS, and Live2D, and integrations must fail
-  honestly when their external service is unavailable.
+- Kana has no second mock agent or conversation-store provider; agent and
+  avatar modes remain Hermes and Live2D. TTS is selected server-side between
+  local Qwen3-TTS and explicitly configured OpenAI-compatible providers, and
+  integrations must fail honestly when their service is unavailable.
 
 ## Hermes environment and safety
 
@@ -298,17 +299,22 @@ ornamental dashboard. This is a product direction, not a temporary theme.
 - Browser audio decoding/playback and amplitude-based lip sync through the Web
   Audio API, with autoplay-policy timeouts and per-playback graph cleanup.
 - A versioned local Qwen3-TTS API service backed by the official
-  `qwen-tts==0.1.1` package and pinned official 0.6B CustomVoice model. It
+  `qwen-tts==0.1.1` package and pinned official 0.6B Base model. It
   exposes health, voice discovery, Japanese WAV synthesis, request
   cancellation, local-only CORS, and a CPU-safe default.
-- `Qwen3TTSProvider` reaches the service only through the Kana relay
-  (`/api/voice/tts/*`), checks API compatibility, discovers live voices,
+- `TtsRelayProvider` reaches the selected server provider only through the
+  Kana relay (`/api/voice/tts/*`). For local Qwen it checks API compatibility and discovers live voices,
   sends `speech_ja` as Japanese, cancels server work when stopped (dedicated
   cancel route + upstream abort propagation), decodes WAV audio, and drives
   Live2D lip sync. Complete WAV is the default. An opt-in
   experimental sentence mode preserves the exact text/order, prefetches the
   next part, cancels safely, and replays all cached parts without another
   Hermes request.
+- A server-side TTS provider boundary keeps synthesis transport separate from
+  browser playback/cache/lip sync. Local Qwen3-TTS remains the default;
+  OpenAI-compatible `POST /v1/audio/speech` is supported with user-owned
+  credentials in owner-only `config.json`, and Pollinations is a preset over
+  that generic adapter rather than a dedicated playback implementation.
 - A concrete Pixi/WebGL Live2D renderer, centered responsive canvas, emotion
   expressions, motions, talking state, and mouth-parameter updates.
 - AIRI-style cursor focus: the avatar watches the pointer and drifts its gaze
@@ -385,13 +391,16 @@ ornamental dashboard. This is a product direction, not a temporary theme.
   generation is functional but slower than realtime. Streaming audio is not
   implemented; sentence delivery is experimental until a VPS baseline exists.
 - The local package is a self-contained web runtime, not a signed native
-  desktop application. It does not start or supervise Hermes/Qwen processes.
+  desktop application. Kana's server can supervise loopback Hermes/Qwen child
+  processes, but it is not an OS-level service manager or native auto-start.
 
-### Fixed modes and fallbacks
+### Fixed agent/avatar modes and TTS fallbacks
 
-- Agent, voice, and avatar modes are fixed to Hermes, Qwen3-TTS, and Live2D.
-  `normalizeKanaPreferences` forces these values on every load and save, so
-  legacy stored values cannot re-enable anything else.
+- Agent and avatar modes are fixed to Hermes and Live2D. Browser voice mode is
+  the configured server provider; `config.json` chooses local Qwen3-TTS or an
+  OpenAI-compatible source without exposing its API key to browser state.
+  `normalizeKanaPreferences` forces these presentation modes on every load and
+  save, so legacy stored values cannot re-enable unsupported implementations.
 - The placeholder avatar state (formerly the CSS mock preview) lives inside
   `ManagedAvatarProvider` as the honest fallback shown whenever the remote
   Cubism Core, hosted model, or imported model cannot load.
@@ -440,9 +449,12 @@ lib/avatar/indexed-db-avatar-model-store.ts Imported model persistence
 lib/avatar/model-bindings.ts               Per-source binding resolution
 lib/avatar/binding-backup.ts               Asset-free binding import/export
 lib/voice/qwen3-tts-contract.ts            Versioned browser/service protocol
-lib/voice/qwen3-tts-provider.ts            TTS client via /api/voice/tts relay
+lib/voice/tts-relay-provider.ts            Provider-neutral TTS playback client
+lib/voice/qwen3-tts-provider.ts            Compatibility re-export for old imports
 lib/server/tts-relay.ts                    Relay helpers (session + port guard)
 lib/server/local-qwen3-tts-runtime.ts      Python service spawn/probe control
+lib/server/tts-provider/                   Server synthesis provider boundary,
+                                          local Qwen and OpenAI-compatible adapters
 lib/voice/audio-lip-sync.ts                Web Audio lip-sync mechanism
 lib/preferences/local-preferences-store.ts Local settings persistence
 lib/diagnostics/safe-diagnostics.ts        Redacted local diagnostics

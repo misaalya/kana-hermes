@@ -5,7 +5,7 @@ treated as automatically trusted.
 
 ## Trust boundaries
 
-- Hermes and Qwen are separate, user-controlled local services.
+- Hermes and the selected TTS provider are separate, user-controlled services.
 - Hermes is the only agent and executes every tool. Kana does not execute shell
   commands, filesystem actions, MCP calls, or model requests itself.
 - The browser stores non-secret preferences and imported avatar packages.
@@ -20,6 +20,7 @@ treated as automatically trusted.
 | --- | --- |
 | WebSocket origin | Hermes validates browser origin; Kana documents that hostname forms must match |
 | Hermes credential | Minted/discovered and held by Kana's server process; never returned to the browser, preferences, diagnostics, URLs, or backups |
+| TTS API key | User-supplied in owner-only server `config.json`; attached only to the upstream request and excluded from browser status, preferences, diagnostics, and backups |
 | Protected input | Password/secret fields are uncontrolled, ephemeral, and submitted directly to Hermes |
 | Qwen CORS | Service defaults to `127.0.0.1`/`localhost`, no credentials, and a small method/header allow-list |
 | Rendered text | React text nodes render transcript/tool status; Kana does not inject response HTML or Markdown |
@@ -27,7 +28,7 @@ treated as automatically trusted.
 | Remote models | HTTPS or localhost HTTP `.model3.json`, no embedded credentials; CSP permits data fetch but not remote scripts |
 | Folder import | Relative paths, duplicate paths, JSON, required assets, and folder escapes are validated before IndexedDB write |
 | Diagnostics | Endpoint queries and common token/password/secret forms are redacted; content and protected input are omitted |
-| Local-only routes | Trusted via shared secret (`KANA_TRUSTED_PROXY_SECRET` + `X-Kana-Trusted-Proxy` header, timing-safe compare) or direct loopback Host/Origin evidence; the bare `x-kana-trusted-proxy: 1` marker is no longer honored |
+| Local passwordless mode | Direct loopback Host/Origin evidence is required. Explicit deployment mode requires an authenticated Kana session for Hermes and Qwen process controls |
 | Backup | Versioned and size-limited; parser validates records; tokens and imported avatar assets are excluded |
 | Offline cache | Service worker handles same-origin navigation/static assets only and explicitly ignores `/api` plus all cross-origin Hermes/Qwen/model traffic |
 | Framing/injection | CSP blocks objects and framing; `nosniff`, no-referrer, and restrictive permissions headers are set |
@@ -41,28 +42,15 @@ location / {
     proxy_pass http://127.0.0.1:3000;
     proxy_set_header Host $host;
     proxy_set_header X-Forwarded-Proto $scheme;
-
-    # Shared-secret trust for local-only routes (/api/local-runtime/*).
-    # Set the SAME value as the server's KANA_TRUSTED_PROXY_SECRET.
-    proxy_set_header X-Kana-Trusted-Proxy "<same value as KANA_TRUSTED_PROXY_SECRET>";
+    proxy_set_header X-Kana-Trusted-Proxy "";
 }
 ```
 
-Trust model for spawn-capable local-only routes:
-
-- **`KANA_TRUSTED_PROXY_SECRET` set (recommended on a VPS):** a request is
-  trusted only when its `X-Kana-Trusted-Proxy` header equals the configured
-  secret (compared with `timingSafeEqual`). Hostname evidence is ignored,
-  because nginx forwards whatever `Host` the client sent — a remote caller
-  sending `Host: 127.0.0.1` must not unlock these routes.
-- **Secret unset:** the header is ignored entirely and only direct-loopback
-  `Host`/`Origin` pairs are trusted.
-
-Never leave an old plain marker such as `proxy_set_header X-Kana-Trusted-Proxy
-"1";` in place, and never forward a client-supplied value of this header:
-either set it to the shared secret or blank it with `proxy_set_header
-X-Kana-Trusted-Proxy "";`. A spoofable trusted-proxy header would let remote
-callers reach Hermes process control.
+Set `KANA_DEPLOYMENT_MODE=deployment` and configure Kana authentication. A
+valid Kana session then authorizes the same process controls for Hermes and
+Qwen. Never forward a client-supplied `X-Kana-Trusted-Proxy` value; the header
+is only retained for deliberately proxied local/no-auth compatibility and is
+not needed by an authenticated deployment.
 
 Forwarding `X-Forwarded-Proto $scheme` keeps session cookies `Secure`
 automatically; if your proxy cannot forward it, set `AUTH_COOKIE_SECURE=true`.
@@ -76,9 +64,11 @@ the local browser flow from cross-origin requests. This is defense in depth;
 the loopback network bind is what prevents remote clients from reaching it.
 
 Do not use passwordless mode for a VPS, shared machine, container port publish,
-or reverse proxy. Those deployments must configure `KANA_ACCESS_PASSWORD` (or
-an existing `auth.json`), a stable JWT secret, and the trusted-proxy secret.
-Production without authentication logs a warning and surfaces the state as
+or reverse proxy. Those deployments must set `deployment.mode` to
+`"deployment"` in `$KANA_DATA_DIR/config.json` (or use
+`KANA_DEPLOYMENT_MODE=deployment`) and configure `KANA_ACCESS_PASSWORD` or an
+existing `auth.json`. Production or explicit deployment mode without
+authentication logs a warning and surfaces the state as
 `insecureNoAuth: true` in `/api/auth/status` plus an
 `x-kana-insecure-no-auth: 1` response header from the auth guard. UI layers may
 use that flag to warn the operator; the flag stays `true` even while the opt-out

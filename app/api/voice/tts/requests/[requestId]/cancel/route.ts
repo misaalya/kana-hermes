@@ -1,7 +1,8 @@
 import {
-  inspectLocalQwen3TtsRuntime,
-} from "@/lib/server/local-qwen3-tts-runtime";
-import { requireSession, ttsServiceUrl } from "@/lib/server/tts-relay";
+  getConfiguredTtsProvider,
+  TtsProviderError,
+} from "@/lib/server/tts-provider";
+import { requireSession } from "@/lib/server/tts-relay";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,36 +19,23 @@ export async function POST(
   const unauthorized = await requireSession(request);
   if (unauthorized) return unauthorized;
   const { requestId } = await context.params;
-  const status = await inspectLocalQwen3TtsRuntime();
-  if (status.state !== "running" && status.state !== "external") {
+  const provider = getConfiguredTtsProvider();
+  if (!provider.cancel) {
     return Response.json({
       request_id: requestId,
-      cancelled: false,
-      detail: "The Qwen3-TTS service is not running; nothing to cancel.",
+      cancelled: true,
+      detail: "The synthesis HTTP request was cancelled; this provider has no separate cancel endpoint.",
     });
   }
   try {
-    // The browser disconnecting must also tear down this forward, and the
-    // cancel call itself may not hang longer than the timeout below.
-    const upstream = await fetch(
-      ttsServiceUrl(status.port, `/v1/requests/${encodeURIComponent(requestId)}/cancel`),
-      {
-        method: "POST",
-        headers: { Accept: "application/json" },
-        signal: AbortSignal.any([
-          request.signal,
-          AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
-        ]),
-        cache: "no-store",
-      },
-    );
-    const body = await upstream.text();
-    return new Response(body, {
-      status: upstream.status,
-      headers: {
-        "Content-Type": upstream.headers.get("Content-Type") ?? "application/json",
-        "Cache-Control": "no-store",
-      },
+    const cancelled = await provider.cancel(requestId, AbortSignal.any([
+      request.signal,
+      AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+    ]));
+    return Response.json({
+      request_id: requestId,
+      cancelled,
+      ...(!cancelled ? { detail: "No active provider request was found." } : {}),
     });
   } catch (error) {
     return Response.json(
@@ -57,7 +45,7 @@ export async function POST(
         detail:
           error instanceof Error ? error.message : "Cancel relay failed.",
       },
-      { status: 502 },
+      { status: error instanceof TtsProviderError ? error.status : 502 },
     );
   }
 }

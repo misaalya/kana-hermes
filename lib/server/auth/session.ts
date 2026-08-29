@@ -18,6 +18,11 @@ function loadSecret(): Uint8Array {
   return cachedSecret;
 }
 
+/** Ensure first-run session state exists even before a login token is minted. */
+export function ensureSessionSecret(): void {
+  loadSecret();
+}
+
 function secretFile(): string {
   adoptLegacyKanaFile("jwt-secret");
   return path.join(resolveKanaDataDir(), "jwt-secret");
@@ -25,18 +30,47 @@ function secretFile(): string {
 
 function newSecret(): Uint8Array {
   const fromEnv = process.env.KANA_JWT_SECRET?.trim();
-  if (fromEnv) return new TextEncoder().encode(fromEnv);
+  if (fromEnv) {
+    if (fromEnv.length < 32) {
+      throw new Error("KANA_JWT_SECRET must contain at least 32 characters.");
+    }
+    return new TextEncoder().encode(fromEnv);
+  }
   const file = secretFile();
   try {
     const raw = fs.readFileSync(file, "utf8").trim();
-    if (raw.length >= 32) return new TextEncoder().encode(raw);
-  } catch {
-    // Fall through to first-run generation.
+    if (raw.length < 32) {
+      throw new Error(
+        `Kana's session secret at ${file} is invalid. It must contain at least 32 characters.`,
+      );
+    }
+    fs.chmodSync(file, 0o600);
+    return new TextEncoder().encode(raw);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== "ENOENT") throw error;
   }
-  fs.mkdirSync(resolveKanaDataDir(), { recursive: true });
+  fs.mkdirSync(resolveKanaDataDir(), { recursive: true, mode: 0o700 });
   const generated = randomBytes(32).toString("hex");
-  fs.writeFileSync(file, generated, { encoding: "utf8", mode: 0o600 });
-  return new TextEncoder().encode(generated);
+  try {
+    fs.writeFileSync(file, generated, {
+      encoding: "utf8",
+      flag: "wx",
+      mode: 0o600,
+    });
+    return new TextEncoder().encode(generated);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== "EEXIST") throw error;
+    const winner = fs.readFileSync(file, "utf8").trim();
+    if (winner.length < 32) {
+      throw new Error(
+        `Kana's session secret at ${file} is invalid. It must contain at least 32 characters.`,
+      );
+    }
+    fs.chmodSync(file, 0o600);
+    return new TextEncoder().encode(winner);
+  }
 }
 
 export function sessionTokenFromRequest(request: Request): string | null {

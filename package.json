@@ -25,6 +25,7 @@
   "files": [
     ".npm-package",
     "bin",
+    "config",
     "README.md",
     "CHANGELOG.md",
     "PLAN.md",
@@ -55,6 +56,7 @@
     "prepublishOnly": "node scripts/assert-npm-release.mjs",
     "start": "next start",
     "start:standalone": "HOSTNAME=127.0.0.1 PORT=3000 node .next/standalone/server.js",
+    "config": "node bin/kana.mjs config",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/**/*.test.ts",

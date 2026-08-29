@@ -59,7 +59,7 @@ export function ActivityStack({ activities, locale }: ActivityStackProps) {
       className="group w-full border border-line bg-surface-strong px-3 py-2"
       open={activities.some((activity) => activity.state === "running")}
     >
-      <summary className="kana-focus flex cursor-pointer list-none items-center justify-between gap-3 text-[10px] font-bold text-muted [&::-webkit-details-marker]:hidden">
+      <summary className="kana-details-summary kana-focus flex cursor-pointer items-center justify-between gap-3 text-[10px] font-bold text-muted">
         <span>{getCopy(locale).activity.title}</span>
         <span className="font-medium text-faint">{getCopy(locale).activity.steps(activities.length)}</span>
       </summary>

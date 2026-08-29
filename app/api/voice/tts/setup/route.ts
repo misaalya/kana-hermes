@@ -3,6 +3,7 @@ import {
   requireSession,
   ttsServiceUrl,
 } from "@/lib/server/tts-relay";
+import { getConfiguredTtsProvider } from "@/lib/server/tts-provider";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,6 +16,13 @@ const UPSTREAM_TIMEOUT_MS = 5_000;
 export async function GET(request: Request): Promise<Response> {
   const unauthorized = await requireSession(request);
   if (unauthorized) return unauthorized;
+  const provider = getConfiguredTtsProvider();
+  if (provider.descriptor.type !== "qwen3-local") {
+    return Response.json(
+      { error: "Setup information is only available for local Qwen3-TTS." },
+      { status: 409 },
+    );
+  }
   const ensured = await probeOnlyPortOr503();
   if (!ensured.ok) return ensured.response;
   try {

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { UiLocale } from "@/lib/ui/copy";
 import { getCopy } from "@/lib/ui/copy";
+import type { TtsProviderDescriptor } from "@/lib/voice/types";
 import { btnGhost, btnSecondary } from "./ui";
 
 export type TtsRuntimeStatus = {
@@ -14,6 +15,8 @@ export type TtsRuntimeStatus = {
   model?: string;
   device?: string;
   message: string;
+  provider?: TtsProviderDescriptor;
+  controllable?: boolean;
 };
 
 type TtsControlPanelProps = {
@@ -96,7 +99,10 @@ export function TtsControlPanel({ locale, onInspect, onStart, onStop }: TtsContr
       <div className="mb-3 flex items-center justify-between gap-2">
         <div>
           <p className="text-xs font-bold text-ink">{copy.ttsTitle}</p>
-          <p className="text-[10px] text-faint">{copy.ttsSubtitle}</p>
+          <p className="text-[10px] text-faint">
+            {status?.provider?.name ?? copy.ttsSubtitle}
+            {status?.model ? ` · ${status.model}` : ""}
+          </p>
         </div>
         <span
           className={`border px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase ${STATE_STYLE[status?.state ?? ""] ?? "border-line-strong text-muted"}`}
@@ -105,14 +111,16 @@ export function TtsControlPanel({ locale, onInspect, onStart, onStop }: TtsContr
         </span>
       </div>
 
-      <p className="mb-2 text-[11px] leading-relaxed text-faint">{copy.ttsAutoNote}</p>
+      <p className="mb-2 text-[11px] leading-relaxed text-faint">
+        {status?.controllable === false ? status.message : copy.ttsAutoNote}
+      </p>
 
-      {status?.state === "starting" ? (
+      {status?.state === "starting" && status?.controllable !== false ? (
         <p className="text-[11px] leading-relaxed text-muted">{copy.ttsFirstStart}</p>
       ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
-        {["running", "external"].includes(status?.state ?? "") && status?.managed ? (
+        {status?.controllable !== false && ["running", "external"].includes(status?.state ?? "") && status?.managed ? (
           <>
             <button type="button" className={btnSecondary} disabled={busy} onClick={() => void run("restart")}>
               {copy.restart}
@@ -127,7 +135,7 @@ export function TtsControlPanel({ locale, onInspect, onStart, onStop }: TtsContr
             </button>
           </>
         ) : null}
-        {!["running", "external", "starting"].includes(status?.state ?? "") && (
+        {status?.controllable !== false && !["running", "external", "starting"].includes(status?.state ?? "") && (
           <button type="button" className={btnSecondary} disabled={busy} onClick={() => void run("start")}>
             {busy ? copy.starting : copy.start}
           </button>

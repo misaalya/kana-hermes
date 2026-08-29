@@ -1,11 +1,20 @@
-import type { MotionManagerLike, MotionUpdateCoreModel } from "./live2d/motion-update";
+import {
+  createLipSyncPlugin,
+  createMotionUpdateHook,
+  type MotionManagerLike,
+  type MotionUpdateCoreModel,
+} from "./live2d/motion-update";
 import type {
   Live2DModelInstance,
   Live2DRuntimeAdapter,
 } from "./live2d-avatar-provider";
 import { normalizeCubismCoreUrl, normalizeLive2DModelUrl } from "./defaults";
-import { createLipSyncPlugin, createMotionUpdateHook } from "./live2d/motion-update";
-import { fitLive2DModel } from "./live2d/fit-model";
+import { fitLive2DModel, type Live2DModelBounds } from "./live2d/fit-model";
+import {
+  normalizeLive2DModelLayout,
+  type Live2DModelLayout,
+} from "./model-layout";
+import { withRecoveredLive2DPresets } from "./live2d-model-capabilities";
 
 /**
  * Concrete Live2D runtime built on PixiJS 6 + pixi-live2d-display/cubism4,
@@ -17,7 +26,7 @@ import { fitLive2DModel } from "./live2d/fit-model";
  *   which Kana's IndexedDB model store restores);
  * - an AIRI-style motion-manager hook whose final-phase plugin owns the
  *   bound mouth parameter during Qwen3-TTS playback;
- * - AIRI's fit normalization (model = two canvas heights, upper body shown);
+ * - bounds-aware automatic fit with a per-model normalized user adjustment;
  * - pointer focus plus idle Lissajous gaze wander through FocusController;
  * - ticker-level maxFPS and render guarding, pause when hidden/offscreen,
  *   WebGL context-loss recovery, and deferred destruction of retired models.
@@ -98,10 +107,27 @@ type PixiApplicationLike = {
 };
 
 type KanaLive2DInternalModel = {
-  coreModel: MotionUpdateCoreModel;
+  coreModel: MotionUpdateCoreModel & {
+    /** Cubism SDK's loaded parameter IDs; used only for compatibility detection. */
+    _parameterIds?: unknown[];
+    getModel?(): { parameters?: { ids?: unknown[] } };
+  };
+  /** Cubism vertices converted into the model's logical canvas coordinates. */
+  getDrawableIDs?(): string[];
+  getDrawableVertices?(drawIndex: string | number): number[];
+  /** Optional model3.json layout transform applied before rendering. */
+  localTransform?: {
+    a: number;
+    b: number;
+    c: number;
+    d: number;
+    tx: number;
+    ty: number;
+  };
   focusController: { focus(x: number, y: number, instant?: boolean): void };
   motionManager: MotionManagerLike & {
     expressionManager?: { resetExpression(): void };
+    lipSyncIds?: string[];
   };
   renderer?: { setClippingMaskBufferSize?(size: number): void };
 };
@@ -109,10 +135,12 @@ type KanaLive2DInternalModel = {
 type KanaLive2DModel = {
   autoUpdate: boolean;
   anchor: { set(x: number, y: number): void };
+  pivot: { x: number; y: number };
   x: number;
   y: number;
   width: number;
   height: number;
+  getLocalBounds(): { x: number; y: number; width: number; height: number };
   scale: { set(x: number, y?: number): void };
   focus(x: number, y: number, instant?: boolean): void;
   expression(name?: string): Promise<unknown>;
@@ -284,6 +312,67 @@ function flushRetiredModels(runtime: CanvasRuntime): void {
   });
 }
 
+/**
+ * Measure the visible Cubism drawables instead of only the model canvas.
+ * Some packages reserve a large transparent margin (or put the character
+ * below the canvas midpoint); fitting the canvas in that case still leaves
+ * the artwork cropped. The internal model exposes drawable vertices after
+ * applying PixelsPerUnit and the canvas origin, so this remains independent
+ * of texture resolution and works for imported model3.json packages.
+ */
+function measureDrawableBounds(model: KanaLive2DModel): Live2DModelBounds | null {
+  const internal = model.internalModel;
+  const ids = internal.getDrawableIDs?.();
+  const getVertices = internal.getDrawableVertices;
+  if (!ids?.length || !getVertices) return null;
+
+  const transform = internal.localTransform;
+  const a = Number.isFinite(transform?.a) ? transform!.a : 1;
+  const b = Number.isFinite(transform?.b) ? transform!.b : 0;
+  const c = Number.isFinite(transform?.c) ? transform!.c : 0;
+  const d = Number.isFinite(transform?.d) ? transform!.d : 1;
+  const tx = Number.isFinite(transform?.tx) ? transform!.tx : 0;
+  const ty = Number.isFinite(transform?.ty) ? transform!.ty : 0;
+
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const id of ids) {
+    let vertices: number[];
+    try {
+      vertices = getVertices.call(internal, id);
+    } catch {
+      continue;
+    }
+    for (let index = 0; index + 1 < vertices.length; index += 2) {
+      const sourceX = vertices[index];
+      const sourceY = vertices[index + 1];
+      if (!Number.isFinite(sourceX) || !Number.isFinite(sourceY)) continue;
+      const x = a * sourceX + c * sourceY + tx;
+      const y = b * sourceX + d * sourceY + ty;
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
+
+  const width = maxX - minX;
+  const height = maxY - minY;
+  if (
+    !Number.isFinite(minX) ||
+    !Number.isFinite(minY) ||
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
+    width <= 0 ||
+    height <= 0
+  ) {
+    return null;
+  }
+  return { x: minX, y: minY, width, height };
+}
+
 function retireCurrentModel(runtime: CanvasRuntime): void {
   const previous = runtime.currentModel;
   runtime.currentModel = null;
@@ -292,6 +381,82 @@ function retireCurrentModel(runtime: CanvasRuntime): void {
   runtime.app.stage.removeChild(previous);
   runtime.retiredModels.add(previous);
 }
+
+function parameterId(value: unknown): string | null {
+  if (typeof value === "string") return value;
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as { s?: unknown; id?: unknown; toString?(): string };
+  if (typeof candidate.s === "string") return candidate.s;
+  if (typeof candidate.id === "string") return candidate.id;
+  const text = candidate.toString?.();
+  return text && text !== "[object Object]" ? text : null;
+}
+
+function loadedParameterIds(model: KanaLive2DModel): string[] {
+  const core = model.internalModel.coreModel;
+  const raw = core._parameterIds ?? core.getModel?.().parameters?.ids ?? [];
+  return raw.map(parameterId).filter((id): id is string => Boolean(id));
+}
+
+function looksLikeMouthParameter(id: string): boolean {
+  const normalized = id.toLowerCase();
+  return (
+    id === "ParamA" ||
+    ((normalized.includes("mouth") || normalized.includes("lip")) &&
+      (normalized.includes("open") || normalized.endsWith("a") || normalized.includes("vowel")))
+  );
+}
+
+/**
+ * Resolve lip-sync internally. A stale/manual body parameter is deliberately
+ * rejected instead of making the avatar move incorrectly while speaking.
+ */
+export function selectLive2DMouthParameterId(options: {
+  configured: string;
+  loaded: string[];
+  registered: string[];
+}): string | null {
+  const loaded = new Set(options.loaded);
+  const configured = options.configured.trim();
+
+  // A manual choice is an explicit expert override. Respect it even when it
+  // is unconventional, but only if it exists in the loaded model.
+  if (configured && configured !== "auto" && loaded.has(configured)) {
+    return configured;
+  }
+
+  const registeredCandidates = options.registered.filter(
+    (id) => !loaded.size || loaded.has(id),
+  );
+  // Some exporters register both ParamMouthForm and ParamMouthOpenY in the
+  // LipSync group. Form controls the vowel shape, not whether the mouth is
+  // open, so prefer the actual opening control when more than one is present.
+  const registeredMatch = registeredCandidates.length === 1
+    ? registeredCandidates[0]
+    : registeredCandidates.find(looksLikeMouthParameter);
+  if (registeredMatch) return registeredMatch;
+
+  const candidates = [
+    "ParamMouthOpenY",
+    "ParamA",
+    ...loaded,
+  ];
+  return candidates.find((id) => (
+    id && id !== "auto" && looksLikeMouthParameter(id) && (!loaded.size || loaded.has(id))
+  )) ?? null;
+}
+
+function resolveMouthParameterId(
+  model: KanaLive2DModel,
+  configured: string,
+): string | null {
+  return selectLive2DMouthParameterId({
+    configured,
+    loaded: loadedParameterIds(model),
+    registered: model.internalModel.motionManager.lipSyncIds ?? [],
+  });
+}
+
 export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
   constructor(
     private readonly coreScriptUrl: string,
@@ -303,11 +468,13 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
     modelUrl,
     modelFiles,
     mouthOpenParameterId,
+    layout,
   }: {
     canvas: HTMLCanvasElement;
     modelUrl?: string;
     modelFiles?: File[];
     mouthOpenParameterId: string;
+    layout: Live2DModelLayout;
   }): Promise<Live2DModelInstance> {
     await ensureCubismCore(this.coreScriptUrl);
 
@@ -320,7 +487,9 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
 
     let source: string | File[];
     if (modelFiles?.length) {
-      source = prepareLive2DPackageFiles(modelFiles);
+      source = prepareLive2DPackageFiles(
+        await withRecoveredLive2DPresets(modelFiles),
+      );
     } else {
       if (!modelUrl) {
         throw new Error("Live2D requires a model URL or imported files.");
@@ -345,9 +514,32 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
     const host = canvas.parentElement;
     if (!host) throw new Error("The Live2D canvas has no layout host.");
 
-    // --- AIRI-style fit normalization -------------------------------------
-    const initialWidth = model.width;
-    const initialHeight = model.height;
+    // --- Model-bounds-aware fit --------------------------------------------
+    // getLocalBounds() is computed after pixi-live2d-display has interpreted
+    // Cubism's canvas size and pixels-per-unit metadata. It is therefore a
+    // safer normalization source than assuming every package has Haru's
+    // proportions or that texture dimensions equal its model canvas.
+    const measuredBounds = measureDrawableBounds(model) ?? model.getLocalBounds();
+    const initialBounds =
+      Number.isFinite(measuredBounds.width) && measuredBounds.width > 0 &&
+      Number.isFinite(measuredBounds.height) && measuredBounds.height > 0
+        ? {
+            // Pixi's getLocalBounds() intentionally ignores the display
+            // object's own transform, including the pivot installed by the
+            // Live2D anchor. Convert the measured Cubism canvas into the
+            // model's anchored coordinate space before centering it.
+            x: measuredBounds.x - model.pivot.x,
+            y: measuredBounds.y - model.pivot.y,
+            width: measuredBounds.width,
+            height: measuredBounds.height,
+          }
+        : {
+            x: -model.width / 2,
+            y: -model.height / 2,
+            width: model.width,
+            height: model.height,
+          };
+    let activeLayout = normalizeLive2DModelLayout(layout);
     let appliedMaskSize = -1;
 
     const applyFit = () => {
@@ -355,8 +547,8 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
       const fit = fitLive2DModel(
         bounds.width,
         bounds.height,
-        initialWidth,
-        initialHeight,
+        initialBounds,
+        activeLayout,
       );
       model.scale.set(fit.scale, fit.scale);
       model.x = fit.x;
@@ -382,21 +574,26 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
       }
     };
 
-    // --- Speech state feeding the final-phase lip-sync plugin --------------
+    // --- Speech state feeding the proven motion-manager lip-sync hook ------
     const speech = { speaking: false, mouthOpen: 0 };
-    const mouthParameterId = mouthOpenParameterId.trim() || "ParamMouthOpenY";
+    const mouthParameterId = resolveMouthParameterId(
+      model,
+      mouthOpenParameterId.trim() || "auto",
+    );
 
-    const motionUpdateHook = createMotionUpdateHook(
-      model.internalModel.motionManager,
-    );
-    motionUpdateHook.register(
-      createLipSyncPlugin({
-        mouthOpenParameterId: mouthParameterId,
-        getMouthOpen: () => speech.mouthOpen,
-        isSpeaking: () => speech.speaking,
-      }),
-      "final",
-    );
+    if (mouthParameterId) {
+      const motionUpdateHook = createMotionUpdateHook(
+        model.internalModel.motionManager,
+      );
+      motionUpdateHook.register(
+        createLipSyncPlugin({
+          mouthOpenParameterId: mouthParameterId,
+          getMouthOpen: () => speech.mouthOpen,
+          isSpeaking: () => speech.speaking,
+        }),
+        "final",
+      );
+    }
 
     // --- Single ticker drives render + Cubism updates ------------------
     // PixiJS v6 Ticker.add callback receives deltaTime (a multiplier, ~1 at
@@ -521,17 +718,16 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
         // FORCE guarantees emotion-triggered motions interrupt idle motions.
         void model.motion(group, index, 3);
       },
-      setParameter(id, value) {
-        const clamped = Math.max(0, Math.min(1, value));
-        if (id === mouthParameterId) {
-          speech.mouthOpen = clamped;
-          return;
-        }
-        model.internalModel.coreModel.setParameterValueById(id, clamped);
+      setMouthOpen(value) {
+        speech.mouthOpen = Math.max(0, Math.min(1, value));
       },
       setTalking(value) {
         speech.speaking = value;
         if (!value) speech.mouthOpen = 0;
+      },
+      setLayout(nextLayout) {
+        activeLayout = normalizeLive2DModelLayout(nextLayout);
+        applyFit();
       },
     };
   }

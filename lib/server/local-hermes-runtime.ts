@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { spawn, execSync, type ChildProcess } from "node:child_process";
 import { access, readFile, stat } from "node:fs/promises";
 import { constants } from "node:fs";
+import { homedir, platform } from "node:os";
 import path from "node:path";
 import { readKanaUserConfig } from "./user-config";
 
@@ -75,23 +76,90 @@ export function localRuntimeControlEnabled(): boolean {
   return true;
 }
 
-async function resolveHermesExecutable(): Promise<string | null> {
-  const explicit = process.env.KANA_HERMES_BIN?.trim() || readKanaUserConfig().hermes?.executable;
-  const windowsLocalAppData = process.env.LOCALAPPDATA?.trim();
-  const windowsUserProfile = process.env.USERPROFILE?.trim();
-  const unixHome = process.env.HOME?.trim();
-  const candidates = [
-    explicit,
-    windowsLocalAppData
-      ? path.join(windowsLocalAppData, "hermes", "bin", "hermes.exe")
-      : undefined,
-    windowsUserProfile
-      ? path.join(windowsUserProfile, ".local", "bin", "hermes.exe")
-      : undefined,
-    unixHome ? path.join(unixHome, ".local", "bin", "hermes") : undefined,
-    "/usr/local/bin/hermes",
-    "/usr/bin/hermes",
-  ].filter((value): value is string => Boolean(value));
+export type HermesExecutableCandidateInput = {
+  explicit?: string | null;
+  configured?: string | null;
+  pathValue?: string | null;
+  home?: string | null;
+  hermesHome?: string | null;
+  installDirectory?: string | null;
+  prefix?: string | null;
+  localAppData?: string | null;
+  userProfile?: string | null;
+  operatingSystem?: NodeJS.Platform;
+};
+
+/** Ordered, absolute candidates shared by source, deployment, and npm starts. */
+export function hermesExecutableCandidates(
+  input: HermesExecutableCandidateInput,
+): string[] {
+  const operatingSystem = input.operatingSystem ?? platform();
+  const windows = operatingSystem === "win32";
+  const executableName = windows ? "hermes.exe" : "hermes";
+  const home = input.home?.trim() || null;
+  const hermesHome = input.hermesHome?.trim()
+    || (home ? path.join(home, ".hermes") : null);
+  const installDirectory = input.installDirectory?.trim() || null;
+  const candidates: Array<string | null | undefined> = [
+    input.explicit?.trim(),
+    input.configured?.trim(),
+    ...(input.pathValue || "")
+      .split(path.delimiter)
+      .filter(Boolean)
+      .map((directory) => path.join(directory, executableName)),
+    hermesHome ? path.join(hermesHome, "bin", executableName) : null,
+    hermesHome ? path.join(hermesHome, "venv", "bin", executableName) : null,
+    hermesHome
+      ? path.join(hermesHome, "hermes-agent", "venv", "bin", executableName)
+      : null,
+    installDirectory
+      ? path.join(
+          /* turbopackIgnore: true */ installDirectory,
+          "venv",
+          "bin",
+          executableName,
+        )
+      : null,
+    installDirectory
+      ? path.join(/* turbopackIgnore: true */ installDirectory, executableName)
+      : null,
+    home ? path.join(home, ".local", "bin", executableName) : null,
+    input.prefix?.trim()
+      ? path.join(input.prefix.trim(), "bin", executableName)
+      : null,
+    windows && input.localAppData?.trim()
+      ? path.join(input.localAppData.trim(), "hermes", "bin", executableName)
+      : null,
+    windows && input.userProfile?.trim()
+      ? path.join(input.userProfile.trim(), ".local", "bin", executableName)
+      : null,
+    windows ? null : "/usr/local/bin/hermes",
+    windows ? null : "/usr/bin/hermes",
+  ];
+  return [...new Set(
+    candidates
+      .filter((value): value is string => Boolean(value))
+      .map((value) => path.resolve(value)),
+  )];
+}
+
+export async function resolveHermesExecutable(): Promise<string | null> {
+  const fromEnvironment = process.env.KANA_HERMES_BIN?.trim();
+  if (fromEnvironment && !path.isAbsolute(fromEnvironment)) {
+    throw new Error("KANA_HERMES_BIN must be an absolute path.");
+  }
+  const configured = readKanaUserConfig().hermes?.executable;
+  const candidates = hermesExecutableCandidates({
+    explicit: fromEnvironment,
+    configured,
+    pathValue: process.env.PATH,
+    home: process.env.HOME?.trim() || homedir(),
+    hermesHome: process.env.HERMES_HOME,
+    installDirectory: process.env.HERMES_INSTALL_DIR,
+    prefix: process.env.PREFIX,
+    localAppData: process.env.LOCALAPPDATA,
+    userProfile: process.env.USERPROFILE,
+  });
   for (const candidate of candidates) {
     try {
       await access(candidate, constants.X_OK);
@@ -160,11 +228,21 @@ async function probe(port: number, timeoutMs = 750): Promise<boolean> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(`http://127.0.0.1:${port}/api/status`, {
+    const response = await fetch(`http://127.0.0.1:${port}/api/health`, {
       cache: "no-store",
       signal: controller.signal,
     });
-    return response.ok;
+    if (!response.ok) return false;
+    const body: unknown = await response.json();
+    return Boolean(
+      body
+      && typeof body === "object"
+      && "ok" in body
+      && body.ok === true
+      && "version" in body
+      && typeof body.version === "string"
+      && body.version.length > 0,
+    );
   } catch {
     return false;
   } finally {
@@ -266,7 +344,8 @@ export async function inspectLocalHermesRuntime(
     current.token = null;
   }
   if (!current.executable) {
-    current.lastMessage = "Hermes was not found. Install Hermes or set KANA_HERMES_BIN.";
+    current.lastMessage =
+      "Hermes was not found automatically. Run `kana doctor`, then set hermes.executable in Kana's config.json if Hermes is installed in a custom location.";
   } else if (current.state === "stopped") {
     current.lastMessage = "No running Hermes gateway was detected on this machine.";
   }
@@ -308,7 +387,11 @@ export async function startLocalHermesRuntime(options: {
     return publicStatus(current, true);
   }
   const executable = await resolveHermesExecutable();
-  if (!executable) throw new Error("Hermes executable was not found on this machine.");
+  if (!executable) {
+    throw new Error(
+      "Hermes executable was not found automatically. Run `kana doctor`, then set hermes.executable in Kana's config.json if needed.",
+    );
+  }
   let workingDirectory: string | undefined;
   const configuredWorkingDirectory = readKanaUserConfig().hermes?.workingDirectory;
   const requestedWorkingDirectory = options.cwd?.trim() || configuredWorkingDirectory;

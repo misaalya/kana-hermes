@@ -4,6 +4,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import bcrypt from "bcryptjs";
 import { adoptLegacyKanaFile, resolveKanaDataDir } from "@/lib/server/data-dir";
+import { resolveKanaDeploymentMode } from "@/lib/server/user-config";
 
 // Single shared access password — deliberately no user management, mirroring
 // the proven 9Router dashboard model: one bcrypt hash on disk (set via the
@@ -29,7 +30,11 @@ export function isAuthEnabled(): boolean {
 // Security contract: this stays true even when KANA_ALLOW_NO_AUTH=1 — the
 // env var only records operator acknowledgment, the flag reports reality.
 export function isInsecureNoAuthMode(): boolean {
-  return process.env.NODE_ENV === "production" && !isAuthEnabled();
+  return (
+    (process.env.NODE_ENV === "production" ||
+      resolveKanaDeploymentMode().mode === "deployment") &&
+    !isAuthEnabled()
+  );
 }
 
 export function isNoAuthExplicitlyAllowed(): boolean {
@@ -77,6 +82,6 @@ export async function changeAccessPassword(newPassword: string): Promise<void> {
     throw new Error("The new password must contain at least 8 characters.");
   }
   const passwordHash = await bcrypt.hash(newPassword, 10);
-  await mkdir(resolveKanaDataDir(), { recursive: true });
+  await mkdir(resolveKanaDataDir(), { recursive: true, mode: 0o700 });
   await writeFile(authFile(), JSON.stringify({ passwordHash }), { encoding: "utf8", mode: 0o600 });
 }

@@ -50,7 +50,7 @@ describe("safe diagnostics", () => {
         websocketUrl: "ws://127.0.0.1:9119/api/ws?token=never-store-this",
       },
       voice: {
-        mode: "qwen3" as const,
+        mode: "configured" as const,
         enabled: true,
         state: "ready",
         service: "kana-qwen3-tts",

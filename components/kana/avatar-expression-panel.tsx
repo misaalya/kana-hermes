@@ -26,12 +26,14 @@ export function AvatarExpressionPanel({
   copy,
   onChange,
   onPreview,
+  onPreviewTalking,
 }: {
   bindings: Live2DModelBindings;
   capabilities: Live2DModelCapabilities;
   copy: Copy["settings"];
   onChange(bindings: Live2DModelBindings): void;
   onPreview(emotion: Emotion): Promise<void>;
+  onPreviewTalking(): Promise<void>;
 }) {
   const [previewing, setPreviewing] = useState<Emotion | null>(null);
   const mappedCount = useMemo(
@@ -42,13 +44,17 @@ export function AvatarExpressionPanel({
     ).length,
     [bindings.emotionExpressions, bindings.emotionMotions],
   );
+  const manualMouthParameter = bindings.mouthOpenParameter !== "auto";
   const mouthOptions = useMemo(() => {
     const options = [...capabilities.parameters];
-    if (!options.some(({ id }) => id === bindings.mouthOpenParameter)) {
+    if (
+      manualMouthParameter &&
+      !options.some(({ id }) => id === bindings.mouthOpenParameter)
+    ) {
       options.unshift({ id: bindings.mouthOpenParameter });
     }
     return options;
-  }, [bindings.mouthOpenParameter, capabilities.parameters]);
+  }, [bindings.mouthOpenParameter, capabilities.parameters, manualMouthParameter]);
   const hasPresets = capabilities.expressions.length > 0 || capabilities.motions.length > 0;
   const unregisteredCount =
     capabilities.unregisteredExpressionFiles.length +
@@ -96,26 +102,61 @@ export function AvatarExpressionPanel({
       </header>
 
       <div className="space-y-4 p-4 sm:p-5">
-        <label className="block max-w-md">
+        <div className="flex flex-col gap-3 rounded-xl bg-surface-strong px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
           <span className="text-xs font-bold text-ink">{copy.avatarMouthParameter}</span>
           <span className="mt-0.5 block text-[9px] leading-relaxed text-muted">
             {copy.avatarMouthHint}
           </span>
-          <select
-            className={`${inputBase} mt-2 w-full`}
-            value={bindings.mouthOpenParameter}
-            onChange={(event) => onChange({
-              ...bindings,
-              mouthOpenParameter: event.target.value,
-            })}
-          >
-            {mouthOptions.map((parameter) => (
-              <option key={parameter.id} value={parameter.id}>
-                {parameter.name ? `${parameter.name} · ${parameter.id}` : parameter.id}
-              </option>
-            ))}
-          </select>
-        </label>
+          </div>
+          <span className={`shrink-0 text-[9px] font-bold ${manualMouthParameter ? "text-ink" : "text-accent"}`}>
+            {manualMouthParameter
+              ? copy.avatarMouthManual
+              : copy.avatarMouthReady}
+          </span>
+          <details className="basis-full sm:basis-auto">
+            <summary className="kana-details-summary kana-focus cursor-pointer text-[9px] font-semibold text-muted">
+              {copy.avatarMouthAdvanced}
+            </summary>
+            <div className="mt-3 flex flex-col gap-2 sm:min-w-80">
+              <select
+                className={`${inputBase} w-full`}
+                value={bindings.mouthOpenParameter}
+                aria-label={copy.avatarMouthParameter}
+                onChange={(event) => onChange({
+                  ...bindings,
+                  mouthOpenParameter: event.target.value,
+                })}
+              >
+                <option value="auto">{copy.avatarMouthAutomaticOption}</option>
+                {mouthOptions.map((parameter) => (
+                  <option key={parameter.id} value={parameter.id}>
+                    {parameter.name ? `${parameter.name} · ${parameter.id}` : parameter.id}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className={btnGhost}
+                onClick={() => void onPreviewTalking()}
+              >
+                {copy.avatarMouthPreview}
+              </button>
+              {manualMouthParameter ? (
+                <button
+                  type="button"
+                  className={btnGhost}
+                  onClick={() => onChange({
+                    ...bindings,
+                    mouthOpenParameter: "auto",
+                  })}
+                >
+                  {copy.avatarMouthReset}
+                </button>
+              ) : null}
+            </div>
+          </details>
+        </div>
 
         {!hasPresets ? (
           <p className="rounded-xl bg-surface-strong px-4 py-3 text-[10px] leading-relaxed text-muted">
@@ -170,7 +211,7 @@ export function AvatarExpressionPanel({
                         <option value="">{copy.avatarNoMotion}</option>
                         {capabilities.motions.map((candidate) => (
                           <option key={motionValue(candidate)} value={motionValue(candidate)}>
-                            {candidate.group} · {candidate.index + 1}
+                            {candidate.name ?? `${candidate.group} · ${candidate.index + 1}`}
                           </option>
                         ))}
                       </select>

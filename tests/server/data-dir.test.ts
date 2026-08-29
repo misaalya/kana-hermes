@@ -26,6 +26,13 @@ describe("data dir resolution precedence", () => {
     );
   });
 
+  it("rejects a relative KANA_DATA_DIR instead of writing state under cwd", () => {
+    assert.throws(
+      () => resolveKanaDataDirFrom({ kanaDataDir: "relative/data", home: "/home/kana" }),
+      /KANA_DATA_DIR must be an absolute path/,
+    );
+  });
+
   it("honors an absolute XDG_DATA_HOME when KANA_DATA_DIR is unset", () => {
     assert.equal(
       resolveKanaDataDirFrom({ xdgDataHome: "/xdg/data", home: "/home/kana" }),
@@ -61,6 +68,13 @@ describe("data dir resolution precedence", () => {
       XDG_DATA_HOME: "",
     });
     assert.equal(resolved, path.join(process.cwd(), "data"));
+  });
+
+  it("does not hide an explicit relative KANA_DATA_DIR in development", () => {
+    assert.throws(
+      () => resolveKanaDataDir({ NODE_ENV: "development", KANA_DATA_DIR: "relative" }),
+      /must be an absolute path/,
+    );
   });
 });
 

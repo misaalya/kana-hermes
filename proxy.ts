@@ -7,6 +7,7 @@ import {
 } from "@/lib/server/auth/password-store";
 import { verifySessionToken } from "@/lib/server/auth/session";
 import { isLoopbackRequest } from "@/lib/server/auth/loopback";
+import { resolveKanaDeploymentMode } from "@/lib/server/user-config";
 
 // Auth guard following 9Router's deny-by-default dashboard model:
 // - auth APIs needed to bootstrap a session stay public;
@@ -49,7 +50,16 @@ function unauthorized(): NextResponse {
 function forbidden(): NextResponse {
   return surfaceInsecureNoAuth(
     NextResponse.json(
-      { error: "Local process control accepts loopback requests only." },
+      { error: "Passwordless local mode accepts API requests from loopback only." },
+      { status: 403 },
+    ),
+  );
+}
+
+function deploymentNeedsAuthentication(): NextResponse {
+  return surfaceInsecureNoAuth(
+    NextResponse.json(
+      { error: "Authentication is required when Kana runs in deployment mode." },
       { status: 403 },
     ),
   );
@@ -64,15 +74,22 @@ export async function proxy(request: NextRequest) {
   const authEnabled = isAuthEnabled();
 
   if (pathname.startsWith("/api/")) {
+    if (PUBLIC_API_PATHS.some((path) => pathname === path)) {
+      return surfaceInsecureNoAuth(NextResponse.next());
+    }
+
+    if (
+      !authEnabled &&
+      resolveKanaDeploymentMode().mode === "deployment"
+    ) {
+      return deploymentNeedsAuthentication();
+    }
+
     // The npm launcher intentionally runs without a password on loopback for
     // a zero-setup local experience. In that mode, require loopback-shaped
     // Host/Origin evidence as browser-CSRF and DNS-rebinding defense in depth.
     // Binding the launcher to 127.0.0.1 remains the actual network boundary.
     if (!authEnabled && !isLoopbackRequest(request)) return forbidden();
-
-    if (PUBLIC_API_PATHS.some((path) => pathname === path)) {
-      return surfaceInsecureNoAuth(NextResponse.next());
-    }
 
     if (!authEnabled) return surfaceInsecureNoAuth(NextResponse.next());
     if (!(await hasValidSession(request))) return unauthorized();

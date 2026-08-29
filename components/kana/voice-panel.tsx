@@ -10,6 +10,7 @@ import {
 import { convertToWav } from "@/lib/voice/audio-to-wav";
 import { btnGhost, btnPrimary, btnSecondary, inputBase } from "./ui";
 import { getCopy, type Copy, type UiLocale } from "@/lib/ui/copy";
+import type { VoiceProviderStatus } from "@/lib/voice/types";
 
 type VoicePanelProps = {
   selectedVoiceId: string;
@@ -17,7 +18,13 @@ type VoicePanelProps = {
   locale: UiLocale;
 };
 
-type EngineState = "ready" | "loading" | "error" | "stopped";
+type EngineState =
+  | "ready"
+  | "loading"
+  | "error"
+  | "stopped"
+  | "unavailable"
+  | "external";
 
 function VoiceChoice({
   active,
@@ -94,6 +101,8 @@ export function VoicePanel({
     loading: copy.engineLoading,
     error: copy.engineError,
     stopped: copy.engineStopped,
+    unavailable: copy.externalUnavailable,
+    external: "",
   };
   const [voices, setVoices] = useState<LibraryVoice[]>([]);
   const [engineState, setEngineState] = useState<EngineState>("stopped");
@@ -104,6 +113,9 @@ export function VoicePanel({
   const [cloneAudio, setCloneAudio] = useState<File | null>(null);
   const [cloneConsent, setCloneConsent] = useState(false);
   const [addingVoice, setAddingVoice] = useState(false);
+  const [supportsVoiceLibrary, setSupportsVoiceLibrary] = useState(true);
+  const [providerName, setProviderName] = useState("");
+  const [providerStatus, setProviderStatus] = useState<VoiceProviderStatus | null>(null);
   const audioInputRef = useRef<HTMLInputElement | null>(null);
 
   const refresh = useCallback(async () => {
@@ -112,6 +124,9 @@ export function VoicePanel({
       const value = await listKanaVoices();
       setVoices(value.voices);
       setEngineState((value.engine?.state as EngineState) ?? "stopped");
+      setSupportsVoiceLibrary(value.supportsVoiceLibrary !== false);
+      setProviderName(value.provider?.name ?? "");
+      setProviderStatus(value.providerStatus ?? null);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : copy.checkFailed);
     } finally {
@@ -126,6 +141,9 @@ export function VoicePanel({
         if (!active) return;
         setVoices(value.voices);
         setEngineState((value.engine?.state as EngineState) ?? "stopped");
+        setSupportsVoiceLibrary(value.supportsVoiceLibrary !== false);
+        setProviderName(value.provider?.name ?? "");
+        setProviderStatus(value.providerStatus ?? null);
         setLoadingVoices(false);
       })
       .catch((error) => {
@@ -194,6 +212,53 @@ export function VoicePanel({
     selectedVoiceId && registeredIds.has(selectedVoiceId)
       ? selectedVoiceId
       : (voices.find((voice) => voice.registered)?.serviceVoiceId ?? "");
+
+  if (!supportsVoiceLibrary) {
+    const providerReady = providerStatus?.state === "ready";
+    const providerChecking = loadingVoices || providerStatus?.state === "loading";
+    return (
+      <div className="rounded-xl border-2 border-line bg-surface-strong px-4 py-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h4 className="text-xs font-bold text-ink">{copy.title}</h4>
+            <p className="mt-1 text-[10px] leading-relaxed text-muted">
+              {copy.externalProvider(providerName || "External TTS")}
+            </p>
+          </div>
+          <span
+            className={`shrink-0 rounded-full px-2.5 py-1 text-[9px] font-bold ${
+              providerReady
+                ? "bg-accent text-white"
+                : "bg-danger text-white"
+            }`}
+          >
+            {providerChecking
+              ? copy.externalChecking
+              : providerReady
+                ? copy.externalReady
+                : copy.externalUnavailable}
+          </span>
+        </div>
+        {providerStatus?.message ? (
+          <p
+            className={`mt-3 rounded-lg bg-raised px-3 py-2 text-[10px] leading-relaxed ${
+              providerReady ? "text-muted" : "text-danger"
+            }`}
+          >
+            {providerStatus.message}
+          </p>
+        ) : null}
+        <button
+          type="button"
+          className={`${btnSecondary} mt-3`}
+          disabled={loadingVoices}
+          onClick={() => void refresh()}
+        >
+          {loadingVoices ? copy.externalChecking : copy.externalRefresh}
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div>

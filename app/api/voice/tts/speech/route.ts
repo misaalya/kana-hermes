@@ -1,11 +1,22 @@
-import { ensureOr503, requireSession, ttsServiceUrl } from "@/lib/server/tts-relay";
+import {
+  getConfiguredTtsProvider,
+  TtsProviderError,
+} from "@/lib/server/tts-provider";
+import { EMOTIONS, type Emotion } from "@/lib/presentation/types";
+import { requireSession } from "@/lib/server/tts-relay";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Relay POST /v1/speech: JSON in (text/voice), raw audio bytes out. The
-// request may block for a long time while the model loads or synthesizes on
-// CPU, so the upstream timeout is generous and configurable.
+function parseEmotion(value: unknown): Emotion | undefined {
+  return typeof value === "string" && (EMOTIONS as readonly string[]).includes(value)
+    ? value as Emotion
+    : undefined;
+}
+
+// Stable browser boundary: JSON in, raw audio bytes out. The selected
+// server-side provider owns synthesis and credentials; playback never needs
+// to know whether the bytes came from local Qwen or a remote compatible API.
 const UPSTREAM_TIMEOUT_MS = Number(
   process.env.KANA_TTS_RELAY_TIMEOUT_MS ?? "300000",
 );
@@ -13,31 +24,39 @@ const UPSTREAM_TIMEOUT_MS = Number(
 export async function POST(request: Request): Promise<Response> {
   const unauthorized = await requireSession(request);
   if (unauthorized) return unauthorized;
-  const ensured = await ensureOr503();
-  if (!ensured.ok) return ensured.response;
   try {
-    const body = await request.text();
-    const upstream = await fetch(ttsServiceUrl(ensured.port, "/v1/speech"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body,
-      // A browser abort must break the upstream fetch so Python's
-      // request.is_disconnected() fires and sets its cancel event; the
-      // timeout still bounds a wedged upstream on its own.
-      signal: AbortSignal.any([
-        request.signal,
-        AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
-      ]),
-    });
-    return new Response(upstream.body, {
-      status: upstream.status,
+    const value = (await request.json()) as Record<string, unknown>;
+    if (typeof value.text !== "string" || !value.text.trim()) {
+      return Response.json({ error: "Speech text is required." }, { status: 400 });
+    }
+    const provider = getConfiguredTtsProvider();
+    const audio = await provider.synthesize({
+      text: value.text,
+      language: typeof value.language === "string" ? value.language : "ja",
+      voiceId: typeof value.voice_id === "string" ? value.voice_id : undefined,
+      emotion: parseEmotion(value.emotion),
+      requestId: request.headers.get("X-Kana-Request-Id") ?? undefined,
+    }, AbortSignal.any([
+      request.signal,
+      AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+    ]));
+    return new Response(audio.body, {
       headers: {
-        "Content-Type":
-          upstream.headers.get("Content-Type") ?? "application/octet-stream",
+        "Content-Type": audio.contentType,
+        ...(audio.contentLength ? { "Content-Length": audio.contentLength } : {}),
         "Cache-Control": "no-store",
       },
     });
   } catch (error) {
+    if (error instanceof TtsProviderError) {
+      return Response.json(
+        { error: error.message },
+        { status: error.status, headers: { "Cache-Control": "no-store" } },
+      );
+    }
+    if (error instanceof DOMException && error.name === "AbortError") {
+      return Response.json({ error: "TTS synthesis was cancelled." }, { status: 499 });
+    }
     return Response.json(
       {
         error:
