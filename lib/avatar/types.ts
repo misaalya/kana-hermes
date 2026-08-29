@@ -1,4 +1,5 @@
 import type { Emotion } from "@/lib/presentation/types";
+import type { Live2DModelLayout } from "./model-layout";
 
 export type AvatarModelSource = {
   id: string;
@@ -26,6 +27,8 @@ export interface AvatarProvider {
   playMotion(name: string): void;
   setMouthOpen(value: number): void;
   setTalking(value: boolean): void;
+  /** Optional runtime-only layout update that must not reload model assets. */
+  setLayout?(layout: Live2DModelLayout): void;
 }
 
 export interface ObservableAvatarProvider extends AvatarProvider {

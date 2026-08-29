@@ -1,4 +1,5 @@
 import type { Emotion } from "@/lib/presentation/types";
+import type { Live2DModelLayout } from "./model-layout";
 import { MockAvatarProvider } from "./mock-avatar-provider";
 import type {
   AvatarModelSource,
@@ -61,6 +62,10 @@ export class ManagedAvatarProvider implements ObservableAvatarProvider {
   setTalking(value: boolean): void {
     if (this.active !== this.state) this.active.setTalking(value);
     this.state.setTalking(value);
+  }
+
+  setLayout(layout: Live2DModelLayout): void {
+    if (this.active !== this.state) this.active.setLayout?.(layout);
   }
 
   getSnapshot(): AvatarSnapshot {

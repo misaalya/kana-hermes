@@ -33,6 +33,10 @@ export function SettingsIcon(props: IconProps) {
   return <Icon {...props}><path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h6M14 18h6" /><circle cx="16" cy="6" r="2" /><circle cx="8" cy="12" r="2" /><circle cx="12" cy="18" r="2" /></Icon>;
 }
 
+export function AvatarPositionIcon(props: IconProps) {
+  return <Icon {...props}><path d="M12 3v18M3 12h18" /><path d="m9 6 3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3" /></Icon>;
+}
+
 export function SendIcon(props: IconProps) {
   return <Icon {...props}><path d="m22 2-7 20-4-9-9-4Z" /><path d="M22 2 11 13" /></Icon>;
 }

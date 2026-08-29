@@ -128,7 +128,7 @@ export function HermesControlPanel({
               <button
                 type="button"
                 className={btnSecondary}
-                disabled={busy || !status.executable || status.state === "running"}
+                disabled={busy || !status.executable}
                 onClick={() => void run("start")}
               >
                 {busy ? copy.starting : copy.start}

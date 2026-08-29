@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, describe, it } from "node:test";
@@ -78,6 +78,10 @@ describe("login limiter", () => {
 describe("JWT session tokens", () => {
   it("round-trips a valid token and rejects forged or empty ones", async () => {
     const token = await createSessionToken();
+    const secretFile = path.join(dataDir, "jwt-secret");
+    const generated = readFileSync(secretFile, "utf8").trim();
+    assert.equal(generated.length, 64);
+    assert.equal(statSync(secretFile).mode & 0o777, 0o600);
     assert.notEqual(token.includes("."), false);
     assert.equal(await verifySessionToken(token), true);
     assert.equal(await verifySessionToken(`${token}x`), false);

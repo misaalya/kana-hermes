@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentInputDialog } from "./agent-input-dialog";
+import { AvatarLayoutControl } from "./avatar-layout-control";
 import { AvatarStage } from "./avatar-stage";
 import { ConversationSidebar } from "./conversation-sidebar";
 import { LiveChatFeed } from "./live-chat-feed";
@@ -19,6 +20,14 @@ import {
 import { getCopy, type Copy } from "@/lib/ui/copy";
 import type { KanaPreferences } from "@/lib/preferences/types";
 import { IndexedDbStageBackgroundStore } from "@/lib/background/indexed-db-stage-background-store";
+import {
+  live2DModelLayout,
+  withLive2DModelLayout,
+} from "@/lib/avatar/model-bindings";
+import {
+  DEFAULT_LIVE2D_MODEL_LAYOUT,
+  type Live2DModelLayout,
+} from "@/lib/avatar/model-layout";
 import { btnPrimary } from "./ui";
 import {
   ChevronLeftIcon,
@@ -52,6 +61,7 @@ export function KanaApp({ appVersion }: KanaAppProps) {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sessionsOpen, setSessionsOpen] = useState(false);
+  const [avatarLayoutOpen, setAvatarLayoutOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(true);
   const [usesMobileChat, setUsesMobileChat] = useState(false);
   const [customBackground, setCustomBackground] = useState<{
@@ -73,11 +83,67 @@ export function KanaApp({ appVersion }: KanaAppProps) {
   const selectedCommandIndexRef = useRef(0);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const automaticConnectStartedRef = useRef(false);
+  const runtimeInspectionRef = useRef({
+    connectionState: kana.connectionState,
+    preferences: kana.preferences,
+    inspectHermesControl: kana.inspectHermesControl,
+    inspectVoiceService: kana.inspectVoiceService,
+  });
   const stageBackgroundStore = useMemo(
     () => new IndexedDbStageBackgroundStore(),
     [],
   );
   const { clearCommandSuggestions } = kana;
+
+  useEffect(() => {
+    runtimeInspectionRef.current = {
+      connectionState: kana.connectionState,
+      preferences: kana.preferences,
+      inspectHermesControl: kana.inspectHermesControl,
+      inspectVoiceService: kana.inspectVoiceService,
+    };
+  });
+
+  const inspectDependencyFindings = useCallback(async (): Promise<DependencyFindings> => {
+    const current = runtimeInspectionRef.current;
+    let hermes: DependencyFindings["hermes"] =
+      current.connectionState === "connected" ? "running" : "installed";
+    try {
+      const status = await current.inspectHermesControl();
+      setHermesRuntime(status);
+      if (status.state === "running" || current.connectionState === "connected") {
+        hermes = "running";
+      } else {
+        hermes = status.executable ? "installed" : "missing";
+      }
+    } catch {
+      // A live Hermes relay is stronger evidence than the optional process
+      // controller, particularly for externally managed VPS services.
+      hermes = current.connectionState === "connected" ? "running" : "missing";
+    }
+
+    let voice: DependencyFindings["voice"] = null;
+    if (current.preferences.voiceEnabled) {
+      try {
+        const status = await current.inspectVoiceService(
+          current.preferences.qwen3Tts.baseUrl,
+        );
+        voice =
+          status.state === "error"
+            ? "error"
+            : status.state === "loading"
+              ? "loading"
+              : status.state === "ready"
+                ? "ok"
+                : "stopped";
+      } catch {
+        voice = "error";
+      }
+    }
+    const findings = { hermes, voice };
+    setDeps(findings);
+    return findings;
+  }, []);
 
   useEffect(() => {
     const media = window.matchMedia("(max-width: 1023px)");
@@ -129,6 +195,15 @@ export function KanaApp({ appVersion }: KanaAppProps) {
     (id: string) => stageBackgroundStore.delete(id),
     [stageBackgroundStore],
   );
+  const currentPreferences = kana.preferences;
+  const savePreferences = kana.savePreferences;
+  const avatarLayout = live2DModelLayout(currentPreferences.live2d);
+  const updateAvatarLayout = useCallback((layout: Live2DModelLayout) => {
+    void savePreferences({
+      ...currentPreferences,
+      live2d: withLive2DModelLayout(currentPreferences.live2d, layout),
+    });
+  }, [currentPreferences, savePreferences]);
   // Latest-ref mirror: the typing effect below must fire only when the message
   // changes, not whenever controller identities churn between renders.
   const completeCommandsRef = useRef(kana.completeCommands);
@@ -282,38 +357,8 @@ export function KanaApp({ appVersion }: KanaAppProps) {
       const state = await fetchSetupState();
       if (!active) return;
 
-      let hermes: DependencyFindings["hermes"] = "installed";
-      try {
-        const status = await kana.inspectHermesControl();
-        if (active) setHermesRuntime(status);
-        hermes =
-          status.state === "running" || Boolean(status.executable)
-            ? "installed"
-            : "missing";
-        if (status.state === "running") hermes = "running";
-      } catch {
-        hermes = "missing";
-      }
-
-      let voice: DependencyFindings["voice"] = null;
-      if (kana.preferences.voiceEnabled) {
-        try {
-          const status = await kana.inspectVoiceService(kana.preferences.qwen3Tts.baseUrl);
-          voice =
-            status.state === "error"
-              ? "error"
-              : status.state === "loading"
-                ? "loading"
-                : status.state === "ready"
-                  ? "ok"
-                  : "stopped";
-        } catch {
-          voice = "error";
-        }
-      }
+      const findings = await inspectDependencyFindings();
       if (!active) return;
-      const findings = { hermes, voice };
-      setDeps(findings);
 
       const degraded = findings.hermes === "missing" || findings.voice === "error";
       if (state && !state.onboardingCompleted) {
@@ -328,8 +373,22 @@ export function KanaApp({ appVersion }: KanaAppProps) {
       }
     })();
     return () => { active = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kana.ready]);
+  }, [inspectDependencyFindings, kana.ready]);
+
+  // A cold Qwen start or a temporarily inaccessible process-control route
+  // must not leave the repair banner frozen for the lifetime of the page.
+  useEffect(() => {
+    if (
+      !kana.ready ||
+      (deps.hermes !== "missing" && deps.voice !== "error")
+    ) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      void inspectDependencyFindings();
+    }, 10_000);
+    return () => window.clearInterval(timer);
+  }, [deps.hermes, deps.voice, inspectDependencyFindings, kana.ready]);
 
   const completeWizard = async (next: KanaPreferences) => {
     // Server flag first: it is the source other browsers read.
@@ -443,10 +502,21 @@ export function KanaApp({ appVersion }: KanaAppProps) {
             {theme === "dark" ? <SunIcon /> : <MoonIcon />}
             <span className="max-sm:sr-only">{theme === "dark" ? workspaceCopy.light : workspaceCopy.dark}</span>
           </button>
+          <AvatarLayoutControl
+            layout={avatarLayout}
+            copy={copy}
+            open={avatarLayoutOpen}
+            onOpenChange={setAvatarLayoutOpen}
+            onChange={updateAvatarLayout}
+            onReset={() => updateAvatarLayout({ ...DEFAULT_LIVE2D_MODEL_LAYOUT })}
+          />
           <button
             type="button"
             className="kana-workspace-action kana-focus"
-            onClick={() => setSessionsOpen(true)}
+            onClick={() => {
+              setAvatarLayoutOpen(false);
+              setSessionsOpen(true);
+            }}
             aria-label={workspaceCopy.openHistory}
           >
             <HistoryIcon />
@@ -455,7 +525,10 @@ export function KanaApp({ appVersion }: KanaAppProps) {
           <button
             type="button"
             className="kana-workspace-action kana-focus"
-            onClick={() => setSettingsOpen(true)}
+            onClick={() => {
+              setAvatarLayoutOpen(false);
+              setSettingsOpen(true);
+            }}
             aria-label={workspaceCopy.openSettings}
           >
             <SettingsIcon />
@@ -704,7 +777,11 @@ export function KanaApp({ appVersion }: KanaAppProps) {
           onListAgentModels={kana.listAgentModels}
           onSelectAgentModel={kana.selectAgentModel}
           onPreviewAvatarEmotion={kana.previewAvatarEmotion}
-          onClose={() => setSettingsOpen(false)}
+          onPreviewAvatarTalking={kana.previewAvatarTalking}
+          onClose={() => {
+            setSettingsOpen(false);
+            void inspectDependencyFindings();
+          }}
         />
       ) : null}
 

@@ -10,11 +10,11 @@ Kana adds:
 - a Japanese-speaking presentation persona and structured response protocol;
 - user-selectable subtitle languages for future responses;
 - locally persistent conversation history that preserves the exact subtitle text and language originally displayed;
-- replaceable agent, voice, avatar, and conversation-store providers;
+- replaceable TTS and avatar providers while Hermes remains the only agent;
 - a responsive Live2D canvas with two official free sample avatars and
   replaceable, locally persistent URL/folder model sources;
-- local Qwen3-TTS speech with voice cloning: create personal voice profiles
-  from consented reference audio and speak every response with them;
+- local Qwen3-TTS speech with voice cloning, plus a server-side
+  OpenAI-compatible speech adapter with a Pollinations preset;
 - an npm global launcher that starts the packaged web app and can discover or
   supervise the user's unmodified `hermes serve` process;
 - a mobile-safe workspace plus an installable offline app shell and a
@@ -44,20 +44,38 @@ personalization wizard, and automatically tries to connect to or start the
 installed Hermes service. It never asks for a Hermes token in the browser and
 does not block first start with a terminal setup prompt.
 
+The global npm install itself deliberately does not write user configuration:
+it may be executed with `sudo`, which would create root-owned files in the
+wrong home directory. The first `kana` launch performs an idempotent bootstrap
+under the actual account running Kana. It creates an owner-only `config.json`,
+generates and persists a cryptographically random JWT signing secret, and lets
+the server create its databases as they are first needed. Existing files are
+never overwritten.
+
+Hermes discovery checks, in order, an explicit environment/JSON override,
+every directory in `PATH`, Hermes-managed homes and virtual environments,
+`~/.local/bin`, Termux's prefix, and standard system locations. Kana also
+adopts a compatible running `hermes serve` when its server-side session token
+can be recovered. If all automatic checks fail, `kana doctor` prints the
+resolved config path; set the absolute `hermes.executable` there and restart
+Kana.
+
 The current prebuilt target is Linux x64 with glibc and Node.js 22.13 or newer.
 The package declares those limits so npm rejects unsupported systems instead
 of installing a runtime built for a different platform. Windows, macOS, ARM64,
 and musl/Alpine packages require separate build artifacts and testing.
 
 The multi-gigabyte Qwen3-TTS model, its isolated Python environment, cloned
-voice profiles, and all Kana data live in user directories
-(`~/.local/share/kana`, `~/.cache/kana`, `~/.config/kana`), never inside the npm
-package. Voice setup remains optional and explicit:
+voice profiles, and all Kana data live under Kana's resolved data root, never
+inside the npm package. Voice setup remains optional and explicit. The
+launcher has no second Qwen configuration or background process; the Kana
+server manages the selected provider from its central `config.json`.
 
 Other commands:
 
 ```bash
 kana setup        # configure or reconfigure optional Qwen3-TTS voice
+kana config       # open/print the editable advanced JSON path
 kana doctor       # check Hermes/uv availability and data locations
 kana --port 4000  # choose the local web port
 ```
@@ -74,7 +92,7 @@ npm install
 npm run dev -- --hostname 127.0.0.1
 ```
 
-Open [http://127.0.0.1:3000](http://127.0.0.1:3000). Kana always connects to a real `hermes serve` gateway, the local Qwen3-TTS service, and Live2D; official sample models need internet access for the Cubism Core and sample assets, and an honest placeholder avatar is shown whenever Live2D cannot load.
+Open [http://127.0.0.1:3000](http://127.0.0.1:3000). Kana connects to a real `hermes serve` gateway, uses the TTS provider selected in the server `config.json`, and renders Live2D; official sample models need internet access for the Cubism Core and sample assets, and an honest placeholder avatar is shown whenever Live2D cannot load.
 
 ## Connect to Hermes
 
@@ -102,9 +120,11 @@ Kana does not update, patch, or write to the Hermes installation. New Kana conve
 
 Before publishing or installing a release candidate, run
 `npm run test:package:npm`. It packs the exact npm artifact, installs it into an
-isolated global prefix, exercises `kana --help` and `kana doctor`, starts the
-installed server, checks the first-run API state, and verifies that a foreign
-web origin cannot drive the passwordless loopback API.
+isolated global prefix and clean user home, exercises `kana --help` and
+`kana doctor`, verifies generated file permissions, starts the installed
+server, starts a discovered fake Hermes executable through the packaged API,
+checks the first-run state, and verifies that a foreign web origin cannot drive
+the passwordless loopback API.
 
 ## Hermes slash commands
 
@@ -135,30 +155,36 @@ Commands returned as `send` or `skill` directives are submitted to the same Herm
 
 `hermes gateway` is the messaging gateway used by Telegram, Discord, Slack, and other platform adapters. Kana does not need to impersonate one of those platforms. `hermes serve` is the separate JSON-RPC/WebSocket backend explicitly intended for desktop and remote UI clients, and exposes richer command completion, live session, tool event, and approval interfaces. Hermes's optional OpenAI-compatible API server is useful for generic chat clients, but does not expose this full slash-command control plane.
 
+## Voice providers
+
+Kana defaults to its local Qwen3-TTS provider. It can instead call a server-side
+OpenAI-compatible `POST /v1/audio/speech` provider; Pollinations is the first
+built-in preset. User API keys stay in the owner-only `config.json` and never
+enter the browser. See [advanced configuration](docs/CONFIGURATION.md#tts-providers)
+for complete JSON examples.
+
 ## Run real Qwen3-TTS
 
 Kana includes a separate Python service under `services/qwen3-tts`. It uses the
 official [`qwen-tts`](https://github.com/QwenLM/Qwen3-TTS) package and the
-official `Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice` model. Inference never runs in
+official pinned `Qwen/Qwen3-TTS-12Hz-0.6B-Base` model. Inference never runs in
 the Next.js process.
 
-The model and CPU-only Python environment need roughly 4 GB. On this machine,
-choose storage outside the nearly full home partition:
+The model and CPU-only Python environment need roughly 4 GB. Configure custom
+storage under `tts.qwen3Local` in Kana's `config.json`, then prepare Qwen:
 
 ```bash
-export KANA_TTS_RUNTIME_DIR=/path/with/free/space/kana-qwen3-tts-runtime
-export KANA_TTS_CACHE_DIR=/path/with/free/space/kana-qwen3-tts-cache
-UV_PROJECT_ENVIRONMENT="$KANA_TTS_RUNTIME_DIR" npm run tts:dev
+kana config
+kana setup
 ```
 
-The first start downloads about 2.3 GB. When `/v1/health` reports `ready`, open
-**Settings → Japanese voice**, select **Qwen3-TTS**, keep the service URL at
-`http://127.0.0.1:7860`, and click **Check service**. Kana discovers the live
-speaker catalog; `ono_anna` is the default Japanese voice.
+The first speech request starts the managed loopback service and may download
+about 2.3 GB. Kana discovers the live cloned-voice catalog through its own
+same-origin relay; no service URL is stored in browser settings.
 
 ### Voice cloning
 
-The 0.6B CustomVoice model supports zero-shot speaker cloning. In
+The 0.6B Base model supports zero-shot speaker cloning. In
 **Settings → Japanese voice → Voice clone**, record or upload consented
 reference audio (up to 20 MB), name the profile, and optionally provide the
 reference transcript for higher fidelity. Kana sends the audio to the local
@@ -326,6 +352,10 @@ npm run test:live2d:official
 ```
 
 Operational references:
+
+For a VPS or reverse proxy, set `KANA_DEPLOYMENT_MODE=deployment` (or edit the
+JSON shown by `npm run config` / `kana config`), configure a Kana access
+password, and use HTTPS.
 
 - [quality and user journeys](docs/QUALITY.md)
 - [local security model](docs/SECURITY.md)

@@ -276,7 +276,9 @@ export class IndexedDbAvatarModelStore implements AvatarModelStore {
     )) as StoredAvatarModel | undefined;
     await transactionDone(transaction);
     if (!result) return null;
-    return result.capabilities ?? discoverLive2DModelCapabilities(storedFiles(result));
+    // Rediscover on inspect so models imported by an older Kana release gain
+    // newer compatibility recovery without forcing the user to import again.
+    return discoverLive2DModelCapabilities(storedFiles(result));
   }
 
   async rename(id: string, name: string): Promise<AvatarModelSummary | null> {

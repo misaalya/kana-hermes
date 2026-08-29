@@ -7,7 +7,12 @@ import {
   QWEN3_TTS_API_VERSION,
   QWEN3_TTS_SERVICE_NAME,
 } from "@/lib/voice/qwen3-tts-contract";
-import { readKanaUserConfig } from "./user-config";
+import { resolveKanaDataDir } from "./data-dir";
+import {
+  defaultQwen3LocalConfig,
+  readKanaUserConfig,
+  type KanaQwen3LocalConfig,
+} from "./user-config";
 
 // Server-side custody of the local Qwen3-TTS service process.
 //
@@ -37,12 +42,18 @@ type ManagedRuntime = {
   stderrTail: string[];
 };
 
-const configuredPort = Number(process.env.KANA_TTS_PORT);
-const DEFAULT_TTS_PORT =
-  Number.isInteger(configuredPort) && configuredPort >= 1024 && configuredPort <= 65_535
-    ? configuredPort
-    : (readKanaUserConfig().tts?.port ?? 7860);
-const PROJECT_DIR_ENV = "KANA_QWEN3_TTS_PROJECT_DIR";
+function qwenConfig(): KanaQwen3LocalConfig & ReturnType<typeof defaultQwen3LocalConfig> {
+  const configured = readKanaUserConfig().tts?.qwen3Local ?? {};
+  const definedOverrides = Object.fromEntries(
+    Object.entries(configured).filter(([, value]) => value !== undefined),
+  ) as KanaQwen3LocalConfig;
+  return {
+    ...defaultQwen3LocalConfig(),
+    ...definedOverrides,
+  };
+}
+
+const DEFAULT_TTS_PORT = qwenConfig().port;
 
 function moduleDirectory(): string | null {
   try {
@@ -57,17 +68,15 @@ function moduleDirectory(): string | null {
   }
 }
 
-// Resolution order: KANA_QWEN3_TTS_PROJECT_DIR → this module's location →
-// cwd. Each candidate must contain pyproject.toml so a bundled/standalone
+// Resolution order: Kana config.json → this module's location → cwd. Each
+// candidate must contain pyproject.toml so a bundled/standalone
 // module path never wins over a real checkout, and a systemd unit with a
 // different WorkingDirectory still resolves the service source.
 async function resolveProjectDir(): Promise<string> {
-  const fromEnv = process.env[PROJECT_DIR_ENV]?.trim();
-  const fromConfig = readKanaUserConfig().tts?.projectDirectory;
+  const fromConfig = qwenConfig().projectDirectory;
   const moduleDir = moduleDirectory();
   const candidates = [
-    ...(fromEnv ? [path.resolve(fromEnv)] : []),
-    ...(!fromEnv && fromConfig ? [fromConfig] : []),
+    ...(fromConfig ? [fromConfig] : []),
     ...(moduleDir
       ? [path.resolve(moduleDir, "..", "..", "services", "qwen3-tts")]
       : []),
@@ -109,22 +118,21 @@ export const __setTestTtsPort = (port: number | null): void => {
 };
 
 function publicStatus(current: ManagedRuntime): LocalQwen3TtsRuntimeStatus {
-  const config = readKanaUserConfig().tts;
+  const config = qwenConfig();
   return {
     state: current.state,
     managed: current.child !== null && current.child.exitCode === null,
     pid: current.child?.pid,
     port: current.port,
     executable: current.executable,
-    model: process.env.KANA_TTS_MODEL ?? config?.model,
-    device: process.env.KANA_TTS_DEVICE ?? config?.device ?? "cpu",
+    model: config.model,
+    device: config.device,
     message: current.lastMessage,
   };
 }
 
 function resolveUv(): string | null {
-  if (process.env.KANA_TTS_UV_BIN) return process.env.KANA_TTS_UV_BIN;
-  const configured = readKanaUserConfig().tts?.uvExecutable;
+  const configured = qwenConfig().uvExecutable;
   if (configured) return configured;
   for (const dir of (process.env.PATH ?? "").split(path.delimiter)) {
     if (!dir) continue;
@@ -279,7 +287,7 @@ export async function inspectLocalQwen3TtsRuntime(
   }
   if (!resolveUv()) {
     current.lastMessage =
-      "The uv tool was not found on this machine; install uv or set KANA_TTS_UV_BIN.";
+      "The uv tool was not found on this machine; install uv or set tts.qwen3Local.uvExecutable in Kana config.json.";
   } else if (current.state === "stopped") {
     current.lastMessage = "No running Qwen3-TTS service was detected on this machine.";
   }
@@ -341,11 +349,12 @@ export async function startLocalQwen3TtsRuntime(options: {
   if (!uv) {
     current.state = "failed";
     current.lastMessage =
-      "The uv tool was not found on this machine; install uv or set KANA_TTS_UV_BIN.";
+      "The uv tool was not found on this machine; install uv or set tts.qwen3Local.uvExecutable in Kana config.json.";
     throw new Error(current.lastMessage);
   }
   const projectDir = await resolveProjectDir();
-  const userConfig = readKanaUserConfig().tts;
+  const userConfig = qwenConfig();
+  const dataRoot = resolveKanaDataDir();
   try {
     await access(projectDir, constants.R_OK);
   } catch {
@@ -365,14 +374,22 @@ export async function startLocalQwen3TtsRuntime(options: {
     {
       env: {
         ...process.env,
+        UV_PROJECT_ENVIRONMENT:
+          userConfig.runtimeDirectory ?? path.join(dataRoot, "qwen-runtime"),
         KANA_TTS_HOST: "127.0.0.1",
         KANA_TTS_PORT: String(port),
-        ...(process.env.KANA_TTS_MODEL || !userConfig?.model
-          ? {}
-          : { KANA_TTS_MODEL: userConfig.model }),
-        ...(process.env.KANA_TTS_DEVICE || !userConfig?.device
-          ? {}
-          : { KANA_TTS_DEVICE: userConfig.device }),
+        KANA_TTS_CACHE_DIR:
+          userConfig.cacheDirectory ?? path.join(dataRoot, "qwen3-tts-cache"),
+        KANA_TTS_DATA_DIR:
+          userConfig.dataDirectory ?? path.join(dataRoot, "qwen3-tts"),
+        KANA_TTS_MODEL: userConfig.model,
+        KANA_TTS_MODEL_REVISION: userConfig.modelRevision ?? "",
+        KANA_TTS_DEVICE: userConfig.device,
+        KANA_TTS_DTYPE: userConfig.dtype,
+        KANA_TTS_ATTENTION: userConfig.attention,
+        KANA_TTS_DEFAULT_VOICE: userConfig.defaultVoice ?? "",
+        KANA_TTS_MAX_CHARACTERS: String(userConfig.maxCharacters),
+        KANA_TTS_MAX_NEW_TOKENS: String(userConfig.maxNewTokens),
       },
       stdio: ["ignore", "ignore", "pipe"],
     },

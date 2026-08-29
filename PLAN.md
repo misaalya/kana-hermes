@@ -206,8 +206,8 @@ Bug utama pemilik. Dua perubahan saling melengkapi:
 
 ### D4 — PROJECT_DIR & uv resolution portable `[S]` `P1`
 - `path.resolve(process.cwd(), "services/qwen3-tts")` gagal di standalone/
-  systemd dengan WorkingDirectory lain. Urutan resolusi: env
-  `KANA_QWEN3_TTS_PROJECT_DIR` → path relatif module (import.meta.url) → cwd.
+  systemd dengan WorkingDirectory lain. Urutan resolusi: central Kana
+  `tts.qwen3Local.projectDirectory` → path relatif module (import.meta.url) → cwd.
 - Windows: tangani PATHEXT untuk `uv` (best effort; target utama Linux).
 
 ### D5 — Health cold-start jujur `[S]` `P1`
@@ -395,7 +395,7 @@ disentuh + larangan menyentuh file track lain (hindari konflik merge).
 ```bash
 # Environment (systemd Environment= atau .env.production TIDAK di-commit):
 KANA_ACCESS_PASSWORD=<bootstrap>   # atau pre-seed auth.json
-KANA_JWT_SECRET=<64-hex>           # bertahan antar redeploy
+KANA_JWT_SECRET=<opsional>         # jika kosong dibuat atomik di KANA_DATA_DIR
 KANA_DATA_DIR=/var/lib/kana        # SATU root: auth.json, jwt-secret, activities.db
 AUTH_COOKIE_SECURE=true            # jika nginx tidak set X-Forwarded-Proto
 

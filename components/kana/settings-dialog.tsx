@@ -78,6 +78,7 @@ type SettingsDialogProps = {
   onListAgentModels(refresh?: boolean): Promise<AgentModelCatalog>;
   onSelectAgentModel(provider: string, model: string, confirm?: boolean): Promise<AgentModelSwitchResult>;
   onPreviewAvatarEmotion(preferences: KanaPreferences, emotion: Emotion): Promise<void>;
+  onPreviewAvatarTalking(preferences: KanaPreferences): Promise<void>;
   onClose(): void;
 };
 
@@ -324,12 +325,24 @@ function SecuritySection({ locale }: { locale: UiLocale }) {
 function AdvancedConfigCard({ locale }: { locale: UiLocale }) {
   const copy = getCopy(locale).settings;
   const [configPath, setConfigPath] = useState("$KANA_DATA_DIR/config.json");
+  const [deploymentMode, setDeploymentMode] = useState<"local" | "deployment">("local");
+  const [deploymentModeSource, setDeploymentModeSource] = useState<
+    "environment" | "config" | "default"
+  >("default");
   useEffect(() => {
     let active = true;
     void fetch("/api/kana/config", { credentials: "same-origin", cache: "no-store" })
       .then((response) => response.ok ? response.json() : null)
-      .then((value: { path?: string } | null) => {
+      .then((value: {
+        path?: string;
+        deploymentMode?: "local" | "deployment";
+        deploymentModeSource?: "environment" | "config" | "default";
+      } | null) => {
         if (active && value?.path) setConfigPath(value.path);
+        if (active && value?.deploymentMode) setDeploymentMode(value.deploymentMode);
+        if (active && value?.deploymentModeSource) {
+          setDeploymentModeSource(value.deploymentModeSource);
+        }
       })
       .catch(() => undefined);
     return () => { active = false; };
@@ -337,7 +350,7 @@ function AdvancedConfigCard({ locale }: { locale: UiLocale }) {
 
   return (
     <details className="rounded-2xl border border-line bg-surface">
-      <summary className="kana-focus cursor-pointer list-none px-4 py-4 text-xs font-bold text-ink [&::-webkit-details-marker]:hidden">
+      <summary className="kana-details-summary kana-focus cursor-pointer px-4 py-4 text-xs font-bold text-ink">
         {copy.advancedTitle}
         <span className="ml-2 font-normal text-muted">{copy.advancedSuffix}</span>
       </summary>
@@ -348,6 +361,19 @@ function AdvancedConfigCard({ locale }: { locale: UiLocale }) {
         <code className="mt-3 block overflow-x-auto rounded-xl border border-line bg-surface-strong px-3 py-2.5 text-[11px] text-accent-strong">
           {configPath}
         </code>
+        <p className="mt-3 text-[10px] font-bold text-ink">{copy.advancedMode}</p>
+        <p className="mt-1 text-[10px] leading-relaxed text-muted">
+          {deploymentMode === "deployment"
+            ? copy.advancedModeDeployment
+            : copy.advancedModeLocal}
+        </p>
+        <p className="mt-1 text-[10px] leading-relaxed text-faint">
+          {deploymentModeSource === "environment"
+            ? copy.advancedModeSourceEnvironment
+            : deploymentModeSource === "config"
+              ? copy.advancedModeSourceConfig
+              : copy.advancedModeSourceDefault}
+        </p>
         <p className="mt-2 text-[10px] text-faint">{copy.advancedRestart}</p>
       </div>
     </details>
@@ -374,6 +400,7 @@ export function SettingsDialog({
   onListAgentModels,
   onSelectAgentModel,
   onPreviewAvatarEmotion,
+  onPreviewAvatarTalking,
 }: SettingsDialogProps) {
   const { dialogRef, onDialogKeyDown } = useDialogFocus(onClose);
   const [draft, setDraft] = useState(() => structuredClone(preferences));
@@ -1000,7 +1027,7 @@ export function SettingsDialog({
                 </div>
 
                 <details className="border-t-2 border-line px-4 py-3 text-[9px] leading-relaxed text-faint sm:px-5">
-                  <summary className="kana-focus cursor-pointer font-semibold text-muted marker:content-none [&::-webkit-details-marker]:hidden">
+                  <summary className="kana-details-summary kana-focus cursor-pointer font-semibold text-muted">
                     {settingsCopy.includedAvatarAbout}
                   </summary>
                   <p className="mt-2">{LIVE2D_SAMPLE_COPYRIGHT_NOTICE}</p>
@@ -1027,6 +1054,7 @@ export function SettingsDialog({
                     copy={settingsCopy}
                     onChange={updateActiveAvatarBindings}
                     onPreview={(emotion) => onPreviewAvatarEmotion(draft, emotion)}
+                    onPreviewTalking={() => onPreviewAvatarTalking(draft)}
                   />
                 )
               ) : (

@@ -22,6 +22,7 @@ await cp(standalone, runtime, {
 for (const localDirectory of [
   ".codegraph",
   ".git",
+  ".hermes",
   ".omo",
   ".playwright-mcp",
   "acceptance",

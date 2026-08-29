@@ -14,7 +14,7 @@ const HARU_PREFS = {
   subtitleLanguage: "en",
   agentMode: "hermes",
   voiceEnabled: false,
-  voiceMode: "qwen3",
+  voiceMode: "configured",
   avatarMode: "live2d",
   hermes: {
     websocketUrl: "ws://127.0.0.1:9119/api/ws",

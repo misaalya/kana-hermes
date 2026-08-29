@@ -119,6 +119,8 @@ export type Copy = {
     history: string;
     openSettings: string;
     settings: string;
+    openAvatarLayout: string;
+    avatar: string;
     hideChat: string;
     showChat: string;
     messagePlaceholder: string;
@@ -276,8 +278,23 @@ export type Copy = {
     avatarBehaviorLoading: string;
     avatarBehaviorFailed: string;
     avatarBehaviorBuiltin: string;
+    avatarLayoutTitle: string;
+    avatarLayoutDescription: string;
+    avatarLayoutAutomatic: string;
+    avatarLayoutAdjusted: string;
+    avatarLayoutHorizontal: string;
+    avatarLayoutVertical: string;
+    avatarLayoutScale: string;
+    avatarLayoutReset: string;
+    avatarLayoutAria: string;
     avatarMouthParameter: string;
     avatarMouthHint: string;
+    avatarMouthReady: string;
+    avatarMouthManual: string;
+    avatarMouthAdvanced: string;
+    avatarMouthAutomaticOption: string;
+    avatarMouthReset: string;
+    avatarMouthPreview: string;
     avatarNoCapabilities: string;
     avatarUnregistered(expressions: number, motions: number): string;
     avatarEmotionExpression: string;
@@ -323,6 +340,12 @@ export type Copy = {
     advancedTitle: string;
     advancedSuffix: string;
     advancedBody: string;
+    advancedMode: string;
+    advancedModeLocal: string;
+    advancedModeDeployment: string;
+    advancedModeSourceEnvironment: string;
+    advancedModeSourceConfig: string;
+    advancedModeSourceDefault: string;
     advancedRestart: string;
     checkingAccess: string;
     noPassword: string;
@@ -355,6 +378,11 @@ export type Copy = {
     engineLoading: string;
     engineError: string;
     engineStopped: string;
+    externalProvider(name: string): string;
+    externalReady: string;
+    externalUnavailable: string;
+    externalChecking: string;
+    externalRefresh: string;
     addTitle: string;
     addBody: string;
     addSample: string;
@@ -447,8 +475,8 @@ const id: Copy = {
   panels: {
     hermesTitle: "Hermes — otak asisten",
     hermesSubtitle: "Proses resmi di mesin ini, tanpa dimodifikasi.",
-    ttsTitle: "Mesin suara Jepang (Qwen3-TTS)",
-    ttsSubtitle: "Menyala otomatis saat suara dibutuhkan.",
+    ttsTitle: "Provider suara Jepang",
+    ttsSubtitle: "Sumber audio yang dipilih di config.json.",
     states: {
       checking: "memeriksa…",
       running: "menyala",
@@ -470,7 +498,7 @@ const id: Copy = {
     cwdLabel: "Folder kerja (opsional)",
     cwdPlaceholder: "/home/user/project",
     hermesAria: "Kontrol proses Hermes",
-    ttsAria: "Kontrol proses Qwen3-TTS",
+    ttsAria: "Status provider suara",
     checkFailed: "Pemeriksaan kontrol gagal.",
     controlFailed: "Kontrol layanan gagal.",
   },
@@ -486,7 +514,7 @@ const id: Copy = {
     detectedExternal: (port: number) => `Gateway Hermes terdeteksi di port ${port}.`,
     managedRunning: (pid: number | null) => `Hermes sedang berjalan (PID ${pid ?? "—"}).`,
     installedReady: "Hermes terpasang, siap dijalankan.",
-    missingBinary: "Pasang Hermes atau atur KANA_HERMES_BIN.",
+    missingBinary: "Hermes belum ditemukan. Jalankan `kana doctor`, lalu atur hermes.executable di config.json jika lokasinya khusus.",
     relayNote: "Koneksi diproses di server Kana — token tidak diperlukan di browser.",
   },
   workspace: {
@@ -500,6 +528,8 @@ const id: Copy = {
     history: "Riwayat",
     openSettings: "Buka pengaturan",
     settings: "Pengaturan",
+    openAvatarLayout: "Atur posisi dan ukuran avatar",
+    avatar: "Avatar",
     hideChat: "Sembunyikan chat",
     showChat: "Tampilkan chat",
     messagePlaceholder: "Katakan sesuatu kepada Kana…",
@@ -672,10 +702,25 @@ const id: Copy = {
     avatarBehaviorLoading: "Membaca kemampuan avatar…",
     avatarBehaviorFailed: "Kemampuan avatar tidak dapat dibaca.",
     avatarBehaviorBuiltin: "Avatar bawaan sudah memiliki pemetaan ekspresi yang disiapkan oleh Kana.",
-    avatarMouthParameter: "Parameter mulut",
-    avatarMouthHint: "Digunakan untuk lip-sync. Kana memilih kandidat paling aman dari paket model.",
-    avatarNoCapabilities: "Model ini tidak mendaftarkan preset ekspresi atau gerakan. Percakapan tetap berfungsi, tetapi emosi tidak akan mengubah pose avatar.",
-    avatarUnregistered: (expressions, motions) => `${expressions} file ekspresi dan ${motions} file gerakan ada di folder, tetapi tidak terdaftar di model3.json sehingga tidak dijalankan secara otomatis.`,
+    avatarLayoutTitle: "Posisi dan ukuran avatar",
+    avatarLayoutDescription: "Kana menyesuaikan model otomatis dari bounds Live2D-nya. Koreksi ini disimpan khusus untuk avatar yang sedang dipilih.",
+    avatarLayoutAutomatic: "Posisi otomatis",
+    avatarLayoutAdjusted: "Disesuaikan",
+    avatarLayoutHorizontal: "Posisi X",
+    avatarLayoutVertical: "Posisi Y",
+    avatarLayoutScale: "Ukuran",
+    avatarLayoutReset: "Kembali otomatis",
+    avatarLayoutAria: "Atur posisi dan ukuran avatar",
+    avatarMouthParameter: "Lip-sync otomatis",
+    avatarMouthHint: "Kana mendeteksi kontrol mulut saat avatar dimuat. Jika model tidak menyediakannya, avatar tetap berfungsi tanpa lip-sync.",
+    avatarMouthReady: "Diatur otomatis",
+    avatarMouthManual: "Pilihan manual",
+    avatarMouthAdvanced: "Ubah secara manual",
+    avatarMouthAutomaticOption: "Otomatis (disarankan)",
+    avatarMouthReset: "Kembali ke lip-sync otomatis",
+    avatarMouthPreview: "Tes lip-sync",
+    avatarNoCapabilities: "Folder ini tidak memiliki ekspresi atau gerakan yang dapat digunakan. Percakapan dan avatar tetap berfungsi, tetapi pose tidak akan berubah mengikuti emosi.",
+    avatarUnregistered: (expressions, motions) => `${expressions} ekspresi dan ${motions} gerakan tambahan ditemukan dan sudah disiapkan oleh Kana. Pilih pada emosi di bawah, lalu gunakan Pratinjau untuk melihat hasilnya.`,
     avatarEmotionExpression: "Ekspresi wajah",
     avatarEmotionMotion: "Gerakan opsional",
     avatarNoExpression: "Tanpa ekspresi",
@@ -728,6 +773,12 @@ const id: Copy = {
     advancedTitle: "Konfigurasi lanjutan",
     advancedSuffix: "untuk instalasi mandiri",
     advancedBody: "Path runtime dan port dapat dikonfigurasi di luar antarmuka. Kana membaca file ini saat menjalankan layanannya:",
+    advancedMode: "Mode instalasi",
+    advancedModeLocal: "Lokal — hanya digunakan dari mesin yang sama",
+    advancedModeDeployment: "Deployment — diakses lewat VPS, Nginx, atau jaringan",
+    advancedModeSourceEnvironment: "Mode ini sedang ditentukan oleh KANA_DEPLOYMENT_MODE dan mengesampingkan file JSON.",
+    advancedModeSourceConfig: "Mode ini dibaca dari file JSON di atas.",
+    advancedModeSourceDefault: "Mode lokal bawaan digunakan karena belum ada pilihan eksplisit.",
     advancedRestart: "Mulai ulang Kana setelah mengubah file ini.",
     checkingAccess: "Memeriksa perlindungan akses…",
     noPassword: "Kata sandi tidak diperlukan",
@@ -760,6 +811,11 @@ const id: Copy = {
     engineLoading: "Mesin suara sedang bersiap. Suaramu akan muncul otomatis setelah selesai.",
     engineError: "Mesin suara tidak dapat dijalankan. Buka Koneksi untuk memeriksanya.",
     engineStopped: "Mesin suara sedang tidur. Kana akan menjalankannya saat suara dibutuhkan.",
+    externalProvider: (name) => `Kana memakai ${name}. Suara, model, dan kredensial provider ini diatur melalui config.json.`,
+    externalReady: "Siap digunakan",
+    externalUnavailable: "Konfigurasi belum siap",
+    externalChecking: "Memeriksa provider…",
+    externalRefresh: "Periksa ulang",
     addTitle: "Tambahkan suaramu",
     addBody: "Gunakan satu sampel audio jelas yang boleh kamu gunakan.",
     addSample: "Tambah sampel",
@@ -879,8 +935,8 @@ const en: Copy = {
   panels: {
     hermesTitle: "Hermes — the assistant's brain",
     hermesSubtitle: "The official, unmodified process on this machine.",
-    ttsTitle: "Japanese voice engine (Qwen3-TTS)",
-    ttsSubtitle: "Starts automatically whenever voice is needed.",
+    ttsTitle: "Japanese voice provider",
+    ttsSubtitle: "The audio source selected in config.json.",
     states: {
       checking: "checking…",
       running: "running",
@@ -902,7 +958,7 @@ const en: Copy = {
     cwdLabel: "Working folder (optional)",
     cwdPlaceholder: "/home/user/project",
     hermesAria: "Hermes process control",
-    ttsAria: "Qwen3-TTS process control",
+    ttsAria: "Voice provider status",
     checkFailed: "Control check failed.",
     controlFailed: "Service control failed.",
   },
@@ -918,7 +974,7 @@ const en: Copy = {
     detectedExternal: (port: number) => `Hermes gateway detected on port ${port}.`,
     managedRunning: (pid: number | null) => `Hermes is running (PID ${pid ?? "—"}).`,
     installedReady: "Hermes is installed and ready to start.",
-    missingBinary: "Install Hermes or set KANA_HERMES_BIN.",
+    missingBinary: "Hermes was not found. Run `kana doctor`, then set hermes.executable in config.json if it uses a custom location.",
     relayNote: "The connection is handled by the Kana server — no token needed in the browser.",
   },
   workspace: {
@@ -932,6 +988,8 @@ const en: Copy = {
     history: "History",
     openSettings: "Open settings",
     settings: "Settings",
+    openAvatarLayout: "Adjust avatar position and size",
+    avatar: "Avatar",
     hideChat: "Hide chat",
     showChat: "Show chat",
     messagePlaceholder: "Say something to Kana…",
@@ -1104,10 +1162,25 @@ const en: Copy = {
     avatarBehaviorLoading: "Reading avatar capabilities…",
     avatarBehaviorFailed: "Could not read this avatar's capabilities.",
     avatarBehaviorBuiltin: "Included avatars already have expression mappings prepared by Kana.",
-    avatarMouthParameter: "Mouth parameter",
-    avatarMouthHint: "Used for lip sync. Kana selects the safest candidate found in the model package.",
-    avatarNoCapabilities: "This model does not register any expression or motion presets. Chat still works, but emotions will not change the avatar's pose.",
-    avatarUnregistered: (expressions, motions) => `${expressions} expression files and ${motions} motion files exist in the folder but are not registered in model3.json, so they are not run automatically.`,
+    avatarLayoutTitle: "Avatar position and size",
+    avatarLayoutDescription: "Kana fits the model automatically from its Live2D bounds. These corrections are stored only for the selected avatar.",
+    avatarLayoutAutomatic: "Automatic position",
+    avatarLayoutAdjusted: "Adjusted",
+    avatarLayoutHorizontal: "X position",
+    avatarLayoutVertical: "Y position",
+    avatarLayoutScale: "Size",
+    avatarLayoutReset: "Reset to automatic",
+    avatarLayoutAria: "Adjust avatar position and size",
+    avatarMouthParameter: "Automatic lip sync",
+    avatarMouthHint: "Kana detects the mouth control when the avatar loads. If the model does not provide one, the avatar still works without lip sync.",
+    avatarMouthReady: "Automatic",
+    avatarMouthManual: "Manual selection",
+    avatarMouthAdvanced: "Change manually",
+    avatarMouthAutomaticOption: "Automatic (recommended)",
+    avatarMouthReset: "Reset to automatic lip sync",
+    avatarMouthPreview: "Test lip sync",
+    avatarNoCapabilities: "This folder has no usable expressions or motions. Chat and the avatar still work, but its pose will not react to emotions.",
+    avatarUnregistered: (expressions, motions) => `${expressions} extra expressions and ${motions} extra motions were found and prepared by Kana. Assign them to an emotion below, then use Preview to check the result.`,
     avatarEmotionExpression: "Facial expression",
     avatarEmotionMotion: "Optional motion",
     avatarNoExpression: "No expression",
@@ -1160,6 +1233,12 @@ const en: Copy = {
     advancedTitle: "Advanced configuration",
     advancedSuffix: "for self-hosted setups",
     advancedBody: "Runtime paths and ports can be configured outside the interface. Kana reads this file when starting its services:",
+    advancedMode: "Installation mode",
+    advancedModeLocal: "Local — used only from the same machine",
+    advancedModeDeployment: "Deployment — accessed through a VPS, Nginx, or network",
+    advancedModeSourceEnvironment: "This mode is currently set by KANA_DEPLOYMENT_MODE and overrides the JSON file.",
+    advancedModeSourceConfig: "This mode is read from the JSON file above.",
+    advancedModeSourceDefault: "The local default is used because no explicit mode is configured.",
     advancedRestart: "Restart Kana after changing this file.",
     checkingAccess: "Checking access protection…",
     noPassword: "No password required",
@@ -1192,6 +1271,11 @@ const en: Copy = {
     engineLoading: "The voice engine is getting ready. Your voices will appear automatically when it finishes.",
     engineError: "The voice engine could not start. Open Connection to check it.",
     engineStopped: "The voice engine is asleep. Kana will start it when voice is needed.",
+    externalProvider: (name) => `Kana is using ${name}. Its voice, model, and credentials are managed in config.json.`,
+    externalReady: "Ready to use",
+    externalUnavailable: "Configuration is not ready",
+    externalChecking: "Checking provider…",
+    externalRefresh: "Check again",
     addTitle: "Add your own voice",
     addBody: "Use one clear audio sample that you have permission to use.",
     addSample: "Add sample",

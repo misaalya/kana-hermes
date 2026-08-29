@@ -4,12 +4,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AvatarController } from "@/lib/avatar/avatar-controller";
 import type { AvatarModelSummary } from "@/lib/avatar/indexed-db-avatar-model-store";
 import {
+  discoverLive2DModelCapabilities,
   suggestLive2DModelBindings,
   type Live2DModelCapabilities,
 } from "@/lib/avatar/live2d-model-capabilities";
 import { Live2DAvatarProvider } from "@/lib/avatar/live2d-avatar-provider";
 import { ManagedAvatarProvider } from "@/lib/avatar/managed-avatar-provider";
-import { live2DModelBindings } from "@/lib/avatar/model-bindings";
+import {
+  live2DModelBindings,
+  live2DModelLayout,
+} from "@/lib/avatar/model-bindings";
 import { PixiLive2DRuntimeAdapter } from "@/lib/avatar/pixi-live2d-runtime-adapter";
 import type { AvatarSnapshot } from "@/lib/avatar/types";
 import type {
@@ -88,7 +92,17 @@ export function useAvatarController(
           }
         }
 
-        const bindings = live2DModelBindings(next.live2d);
+        let bindings = live2DModelBindings(next.live2d);
+        if (bindings.mouthOpenParameter === "auto" && modelFiles?.length) {
+          const capabilities = await discoverLive2DModelCapabilities(modelFiles);
+          if (capabilities.suggestedMouthParameter) {
+            bindings = {
+              ...bindings,
+              mouthOpenParameter: capabilities.suggestedMouthParameter,
+            };
+          }
+        }
+        const layout = live2DModelLayout(next.live2d);
         const key = modelFiles?.length
           ? `files:${modelFiles
               .map(
@@ -97,12 +111,15 @@ export function useAvatarController(
               )
               .join("|")}:${JSON.stringify(bindings)}`
           : `live2d:${next.live2d.coreScriptUrl}:${next.live2d.modelId || next.live2d.modelUrl}:${JSON.stringify(bindings)}`;
-        if (!force && avatarKeyRef.current === key) return true;
+        if (!force && avatarKeyRef.current === key) {
+          avatarController.setLayout(layout);
+          return true;
+        }
 
         const runtime = new PixiLive2DRuntimeAdapter(
           next.live2d.coreScriptUrl.trim(),
         );
-        const provider = new Live2DAvatarProvider(runtime, bindings);
+        const provider = new Live2DAvatarProvider(runtime, bindings, layout);
         await avatarProvider.use(provider, {
           id: modelFiles?.length ? "imported-live2d" : "configured-live2d",
           name: modelFiles?.length ? "Imported Live2D model" : "Live2D model",
@@ -263,12 +280,21 @@ export function useAvatarController(
       }
       await avatarModelStore.delete(id);
       const sourceKey = `import:${id}`;
-      if (prefs.live2d.bindingProfiles?.[sourceKey]) {
+      if (
+        prefs.live2d.bindingProfiles?.[sourceKey] ||
+        prefs.live2d.layoutProfiles?.[sourceKey]
+      ) {
         const bindingProfiles = { ...prefs.live2d.bindingProfiles };
+        const layoutProfiles = { ...prefs.live2d.layoutProfiles };
         delete bindingProfiles[sourceKey];
+        delete layoutProfiles[sourceKey];
         savePreferences({
           ...prefs,
-          live2d: { ...prefs.live2d, bindingProfiles },
+          live2d: {
+            ...prefs.live2d,
+            bindingProfiles,
+            layoutProfiles,
+          },
         });
       }
     },

@@ -7,6 +7,7 @@ import {
   normalizeCubismCoreUrl,
   normalizeLive2DModelUrl,
 } from "@/lib/avatar/defaults";
+import { normalizeLive2DLayoutProfiles } from "@/lib/avatar/model-layout";
 import {
   DEFAULT_QWEN3_TTS_BASE_URL,
   DEFAULT_QWEN3_TTS_VOICE_ID,
@@ -52,7 +53,7 @@ export const DEFAULT_PREFERENCES: KanaPreferences = {
   subtitleLanguage: DEFAULT_SUBTITLE_LANGUAGE,
   agentMode: "hermes",
   voiceEnabled: true,
-  voiceMode: "qwen3",
+  voiceMode: "configured",
   avatarMode: "live2d",
   stageBackground: "plain",
   hermes: {
@@ -68,6 +69,7 @@ export const DEFAULT_PREFERENCES: KanaPreferences = {
     coreScriptUrl: OFFICIAL_CUBISM_CORE_URL,
     mouthOpenParameter: DEFAULT_HARU_BINDINGS.mouthOpenParameter,
     bindingProfiles: {},
+    layoutProfiles: {},
     hostedModels: [],
   },
 };
@@ -86,9 +88,10 @@ export function normalizeKanaPreferences(
   return {
     ...preferences,
     // Runtime guard: stored or restored values can never re-enable another
-    // mode — Kana always talks to Hermes, Qwen3-TTS, and Live2D.
+    // mode — Kana always talks to Hermes and Live2D; the TTS provider is
+    // selected server-side so its credentials never enter browser storage.
     agentMode: "hermes",
-    voiceMode: "qwen3",
+    voiceMode: "configured",
     avatarMode: "live2d",
     stageBackground,
     customBackgroundId,
@@ -104,6 +107,9 @@ export function normalizeKanaPreferences(
       ...preferences.live2d,
       modelUrl: normalizeLive2DModelUrl(preferences.live2d.modelUrl),
       coreScriptUrl: normalizeCubismCoreUrl(preferences.live2d.coreScriptUrl),
+      layoutProfiles: normalizeLive2DLayoutProfiles(
+        preferences.live2d.layoutProfiles,
+      ),
       hostedModels: (preferences.live2d.hostedModels ?? []).map((candidate) => ({
         ...candidate,
         url: normalizeLive2DModelUrl(candidate.url),

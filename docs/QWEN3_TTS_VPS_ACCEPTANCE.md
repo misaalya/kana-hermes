@@ -5,22 +5,30 @@ not used for heavy inference because its available GPU memory and local disk
 are below the practical target. Passing browser contract tests does not count
 as passing real synthesis.
 
-## 1. Prepare isolated storage
+## 1. Configure Kana's central file
 
-From the Kana repository:
+Set `deployment.mode` and the desired Qwen paths in the same `config.json` used
+by Kana. Do not maintain a separate Qwen environment file:
 
-```bash
-export KANA_TTS_RUNTIME_DIR=/srv/kana/qwen3-tts-runtime
-export KANA_TTS_CACHE_DIR=/srv/kana/qwen3-tts-cache
-export KANA_TTS_DEVICE=cpu
-UV_PROJECT_ENVIRONMENT="$KANA_TTS_RUNTIME_DIR" \
-  uv run --project services/qwen3-tts kana-qwen3-tts
+```json
+{
+  "deployment": { "mode": "deployment" },
+  "tts": {
+    "provider": "qwen3-local",
+    "qwen3Local": {
+      "runtimeDirectory": "/srv/kana/qwen3-tts-runtime",
+      "cacheDirectory": "/srv/kana/qwen3-tts-cache",
+      "dataDirectory": "/srv/kana/qwen3-tts-data",
+      "device": "cpu"
+    }
+  }
+}
 ```
 
-Use `KANA_TTS_DEVICE=cuda:0` only when the installed PyTorch build and GPU are
-compatible. Kana's checked lock currently selects CPU-only PyTorch; a CUDA
-deployment should use a separately reviewed lock/environment rather than
-silently changing the web package.
+Use `"device": "cuda:0"` only when the installed PyTorch build and GPU are
+compatible. Kana's checked lock currently selects CPU-only PyTorch.
+
+Start Kana and enable voice. The first synthesis request starts Qwen lazily.
 
 Expected startup: the HTTP server listens on `127.0.0.1:7860`; first start may
 download roughly 2.3 GB; health can report `loading` until model load finishes.
@@ -36,12 +44,12 @@ curl -s http://127.0.0.1:7860/v1/voices | python -m json.tool
 Success criteria:
 
 - service is `kana-qwen3-tts` and API version is `1`;
-- configured model is the pinned Qwen 0.6B CustomVoice model;
+- configured model is the pinned Qwen 0.6B Base model;
 - cache path is the selected external path and `model_cache_detected` becomes
   true after download;
 - free disk reports at least 4 GB before installation;
 - health eventually becomes `ready`;
-- voices include `ono_anna` and it is the default voice.
+- at least one consented cloned voice profile is available before synthesis.
 
 ## 3. Synthesize Japanese WAV
 
@@ -49,7 +57,7 @@ Success criteria:
 curl -sS \
   -H 'Content-Type: application/json' \
   -H 'X-Kana-Request-Id: vps-acceptance-001' \
-  -d '{"text":"こんにちは。カナの音声テストです。","language":"ja","voice_id":"ono_anna","emotion":"neutral"}' \
+  -d '{"text":"こんにちは。カナの音声テストです。","language":"ja","voice_id":"YOUR_CLONED_VOICE_ID","emotion":"neutral"}' \
   http://127.0.0.1:7860/v1/speech \
   --output /tmp/kana-qwen-acceptance.wav
 
@@ -84,7 +92,7 @@ repository on the same machine:
 ```bash
 npm run tts:acceptance -- \
   --url http://127.0.0.1:7860 \
-  --voice ono_anna \
+  --voice YOUR_CLONED_VOICE_ID \
   --warmup 1 \
   --runs 20 \
   --hardware "VPS plan, CPU model, RAM, GPU and VRAM if present" \

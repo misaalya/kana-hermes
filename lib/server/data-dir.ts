@@ -26,7 +26,12 @@ export type KanaDataDirInput = {
 
 export function resolveKanaDataDirFrom(input: KanaDataDirInput): string {
   const explicit = input.kanaDataDir?.trim();
-  if (explicit) return explicit;
+  if (explicit) {
+    if (!path.isAbsolute(explicit)) {
+      throw new Error(`${KANA_DATA_DIR_ENV} must be an absolute path.`);
+    }
+    return path.normalize(explicit);
+  }
 
   // XDG Base Directory spec: relative $XDG_DATA_HOME values must be ignored.
   const xdgDataHome = input.xdgDataHome?.trim();
@@ -58,6 +63,9 @@ export function resolveKanaDataDir(env: NodeJS.ProcessEnv = process.env): string
       home: env.HOME ?? safeHomeDirectory(),
     });
   } catch (error) {
+    // An explicit but invalid root is operator input, not a missing-home
+    // development case. Never silently redirect it into the current checkout.
+    if (env.KANA_DATA_DIR?.trim()) throw error;
     if (env.NODE_ENV === "production") throw error;
     // Dev-only last resort preserves the historical local layout.
     return path.join(process.cwd(), "data");

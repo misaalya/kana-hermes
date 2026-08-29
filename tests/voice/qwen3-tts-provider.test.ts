@@ -64,6 +64,27 @@ afterEach(() => {
 });
 
 describe("Qwen3-TTS browser contract", () => {
+  it("primes and disposes browser audio through the provider boundary", () => {
+    let unlocked = 0;
+    let disposed = 0;
+    const provider = new Qwen3TTSProvider(
+      { baseUrl: "http://127.0.0.1:7860" },
+      null as unknown as AvatarController,
+      {
+        play: async () => undefined,
+        stop: () => undefined,
+        unlock: () => { unlocked += 1; },
+        dispose: () => { disposed += 1; },
+      },
+    );
+
+    provider.unlock();
+    provider.dispose();
+
+    assert.equal(unlocked, 1);
+    assert.equal(disposed, 1);
+  });
+
   it("reports model, voice, cache, disk, and device setup", async () => {
     Object.defineProperty(globalThis, "fetch", {
       configurable: true,
@@ -121,6 +142,55 @@ describe("Qwen3-TTS browser contract", () => {
     assert.equal(speechBodies[0]?.text, "こんにちは。");
     assert.equal(played.length, 2);
     assert.equal(provider.getSnapshot().canReplay, true);
+    assert.equal(provider.getSnapshot().state, "ready");
+  });
+
+  it("does not announce audio start until synthesis has completed and playback begins", async () => {
+    let finishSynthesis: ((response: Response) => void) | null = null;
+    Object.defineProperty(globalThis, "fetch", {
+      configurable: true,
+      value: (input: string | URL | Request) => {
+        if (String(input).endsWith("/speech")) {
+          return new Promise<Response>((resolve) => {
+            finishSynthesis = resolve;
+          });
+        }
+        return Promise.resolve(json({ cancelled: true }));
+      },
+    });
+
+    let audioStarts = 0;
+    const provider = new Qwen3TTSProvider(
+      { deliveryMode: "complete" },
+      null as unknown as AvatarController,
+      {
+        play: async (_audio, onStarted) => {
+          onStarted?.();
+        },
+        stop: () => undefined,
+      },
+    );
+    const speaking = provider.speak({
+      text: "音声ができてから表示します。",
+      language: "ja",
+      onAudioStart: () => {
+        audioStarts += 1;
+      },
+    });
+
+    await Promise.resolve();
+    assert.equal(provider.getSnapshot().state, "synthesizing");
+    assert.equal(audioStarts, 0);
+    assert.ok(finishSynthesis);
+    const resolveSynthesis = finishSynthesis as (response: Response) => void;
+    resolveSynthesis(
+      new Response(new Uint8Array([82, 73, 70, 70]), {
+        headers: { "content-type": "audio/wav" },
+      }),
+    );
+    await speaking;
+
+    assert.equal(audioStarts, 1);
     assert.equal(provider.getSnapshot().state, "ready");
   });
 
