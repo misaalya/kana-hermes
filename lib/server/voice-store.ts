@@ -56,17 +56,6 @@ function openDb(): DatabaseSync {
   return database;
 }
 
-/** Test seam: drop the cached handle so a test can point at another directory. */
-export function resetVoiceStoreForTests(): void {
-  const shared = globalThis as StoreGlobal;
-  try {
-    shared[globalKey]?.close();
-  } catch {
-    // The handle may already be closed.
-  }
-  delete shared[globalKey];
-}
-
 export function listVoiceClones(): VoiceCloneRow[] {
   return db()
     .prepare(

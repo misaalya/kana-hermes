@@ -128,7 +128,7 @@ function parseConversation(value: unknown): Conversation {
   };
 }
 
-export function sanitizeBackupPreferences(
+function sanitizeBackupPreferences(
   preferences: KanaPreferences,
 ): KanaPreferences {
   preferences = normalizeKanaPreferences(preferences);

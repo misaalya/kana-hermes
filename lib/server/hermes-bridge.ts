@@ -22,7 +22,6 @@ type BridgeState = {
   listeners: Set<(frame: unknown) => void>;
   pending: Map<string, { resolve: (value: unknown) => void; reject: (reason: Error) => void; timer: ReturnType<typeof setTimeout> }>;
   requestId: number;
-  lastError: string | null;
 };
 
 const bridgeKey = Symbol.for("kana.hermesBridge");
@@ -36,7 +35,6 @@ function bridge(): BridgeState {
     listeners: new Set(),
     pending: new Map(),
     requestId: 0,
-    lastError: null,
   };
   return shared[bridgeKey];
 }
@@ -152,7 +150,6 @@ export async function ensureHermesConnection(): Promise<WebSocket> {
 
     await opened;
     state.socket = socket;
-    state.lastError = null;
     return socket;
   })();
 
@@ -186,12 +183,4 @@ export async function hermesRpc(
       reject(error instanceof Error ? error : new Error(`Could not send Hermes request: ${method}`));
     }
   });
-}
-
-export function hermesBridgeStatus(): { connected: boolean; lastError: string | null } {
-  const state = bridge();
-  return {
-    connected: Boolean(state.socket && state.socket.readyState === WebSocket.OPEN),
-    lastError: state.lastError,
-  };
 }

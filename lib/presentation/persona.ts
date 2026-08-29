@@ -1,14 +1,6 @@
 import { subtitleLanguageName } from "./languages";
 import type { SubtitleLanguage } from "./types";
 
-export const KANA_PERSONA = {
-  id: "kana",
-  name: "Kana",
-  version: 1,
-  description:
-    "A warm Japanese-speaking presentation persona layered over Hermes Agent.",
-} as const;
-
 /**
  * The response contract, shared by every delivery path so the wording can
  * never drift between them.

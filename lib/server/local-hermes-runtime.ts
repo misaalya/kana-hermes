@@ -72,10 +72,6 @@ export function managedRuntimePort(): number {
   return runtime().port;
 }
 
-export function localRuntimeControlEnabled(): boolean {
-  return true;
-}
-
 export type HermesExecutableCandidateInput = {
   explicit?: string | null;
   configured?: string | null;
@@ -143,7 +139,7 @@ export function hermesExecutableCandidates(
   )];
 }
 
-export async function resolveHermesExecutable(): Promise<string | null> {
+async function resolveHermesExecutable(): Promise<string | null> {
   const fromEnvironment = process.env.KANA_HERMES_BIN?.trim();
   if (fromEnvironment && !path.isAbsolute(fromEnvironment)) {
     throw new Error("KANA_HERMES_BIN must be an absolute path.");

@@ -73,7 +73,7 @@ function newSecret(): Uint8Array {
   }
 }
 
-export function sessionTokenFromRequest(request: Request): string | null {
+function sessionTokenFromRequest(request: Request): string | null {
   const header = request.headers.get("cookie");
   if (!header) return null;
   for (const part of header.split(";")) {
@@ -105,7 +105,7 @@ export async function verifySessionToken(token?: string | null): Promise<boolean
   }
 }
 
-export function shouldUseSecureCookie(request: Request): boolean {
+function shouldUseSecureCookie(request: Request): boolean {
   if (process.env.AUTH_COOKIE_SECURE === "true") return true;
   return request.headers.get("x-forwarded-proto") === "https";
 }

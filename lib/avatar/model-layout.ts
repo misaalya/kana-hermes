@@ -17,7 +17,7 @@ export const DEFAULT_LIVE2D_MODEL_LAYOUT: Live2DModelLayout = Object.freeze({
   scale: 1,
 });
 
-export const LIVE2D_LAYOUT_LIMITS = Object.freeze({
+const LIVE2D_LAYOUT_LIMITS = Object.freeze({
   x: { minimum: -0.75, maximum: 0.75 },
   y: { minimum: -0.75, maximum: 0.75 },
   scale: { minimum: 0.25, maximum: 2.5 },

@@ -8,7 +8,7 @@ import {
 
 const MAX_BACKGROUND_BYTES = 25 * 1024 * 1024;
 
-export const SUPPORTED_STAGE_BACKGROUND_TYPES = [
+const SUPPORTED_STAGE_BACKGROUND_TYPES = [
   "image/png",
   "image/jpeg",
   "image/webp",

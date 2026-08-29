@@ -127,12 +127,12 @@ export function createLipSyncPlugin(options: {
 
   return (context) => {
     if (options.isSpeaking()) {
-      lastForcedValue = options.getMouthOpen();
+      lastForcedValue = Math.max(0, Math.min(1, options.getMouthOpen()));
       releaseRemainingMs = RELEASE_DURATION_MS;
       handoffRemainingMs = HANDOFF_HOLD_MS;
       context.model.setParameterValueById(
         options.mouthOpenParameterId,
-        options.getMouthOpen(),
+        lastForcedValue,
       );
       return;
     }
