@@ -1,9 +1,9 @@
 {
-  "name": "kana-ui",
+  "name": "kana-alya",
   "version": "0.2.0-alpha.1",
   "private": false,
   "description": "Local visual-novel interface and launcher for an existing Hermes Agent",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/misaalya/kana-ui.git"
@@ -20,7 +20,7 @@
   ],
   "bin": {
     "kana": "bin/kana.mjs",
-    "kana-ui": "bin/kana.mjs"
+    "kana-alya": "bin/kana.mjs"
   },
   "files": [
     ".npm-package",

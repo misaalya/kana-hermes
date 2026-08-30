@@ -1,9 +1,8 @@
 # Kana release checklist
 
-1. Confirm ownership or an authorized transfer of the npm package name, choose
-   and record the project license, and verify that the publish guard passes.
-   `kana-ui` currently belongs to an unrelated npm package; never overwrite it
-   without an explicit ownership transfer.
+1. Confirm the authenticated npm account may claim or update `kana-alya`,
+   choose and record the project license, and verify that the publish guard
+   passes. The guard refuses every other package name.
 2. Confirm no open credential leak, data loss, duplicate prompt, or wrong-session issue.
 3. Update version, user changelog, migration notes, supported Hermes version, and known limitations.
 4. Run `npm audit --omit=dev` and review—not blindly auto-fix—every production finding.

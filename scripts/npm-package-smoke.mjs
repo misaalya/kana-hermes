@@ -69,8 +69,8 @@ try {
     ? path.join(installRoot, "kana.cmd")
     : path.join(installRoot, "bin", "kana");
   const aliasExecutable = platform() === "win32"
-    ? path.join(installRoot, "kana-ui.cmd")
-    : path.join(installRoot, "bin", "kana-ui");
+    ? path.join(installRoot, "kana-alya.cmd")
+    : path.join(installRoot, "bin", "kana-alya");
   await access(executable);
   await access(aliasExecutable);
   await mkdir(fakeBin, { recursive: true });
@@ -125,7 +125,7 @@ process.once("SIGINT", stop);
   }
   const aliasHelp = run(aliasExecutable, ["--help"], root, environment);
   if (!aliasHelp.stdout.includes("Start Kana and open the browser")) {
-    throw new Error("installed kana-ui command alias did not render its help output.");
+    throw new Error("installed kana-alya command alias did not render its help output.");
   }
   const doctor = run(executable, ["doctor"], root, environment);
   if (doctor.stdout.includes("first-run setup")) {
