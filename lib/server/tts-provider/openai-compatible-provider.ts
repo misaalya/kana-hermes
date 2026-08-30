@@ -5,7 +5,7 @@ import type {
 } from "@/lib/server/user-config";
 import type { VoiceProviderStatus } from "@/lib/voice/types";
 import {
-  isAudioContentType,
+  normalizedAudioContentType,
   TtsProviderError,
   upstreamErrorMessage,
   type ServerTtsProvider,
@@ -229,8 +229,11 @@ export class OpenAiCompatibleTtsProvider implements ServerTtsProvider {
         response.status,
       );
     }
-    const contentType = response.headers.get("content-type") ?? "";
-    if (!isAudioContentType(contentType) || !response.body) {
+    const contentType = normalizedAudioContentType(
+      response.headers.get("content-type") ?? "",
+      this.responseFormat,
+    );
+    if (!contentType || !response.body) {
       throw new TtsProviderError(`${this.name} returned a non-audio response.`);
     }
     return {

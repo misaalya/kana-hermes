@@ -75,7 +75,7 @@ field is absent. Optional local-only fields belong under `tts.qwen3Local`:
 | Field | Default | Purpose |
 | --- | --- | --- |
 | `projectDirectory` | bundled service | Override the Qwen service source directory |
-| `uvExecutable` | discovered from `PATH` | Absolute path to `uv` when discovery fails |
+| `uvExecutable` | auto-discovered | Absolute path to `uv` when discovery fails; Kana checks `PATH`, `~/.local/bin`, `~/.cargo/bin`, Termux, and system paths |
 | `runtimeDirectory` | `$KANA_DATA_DIR/qwen-runtime` | Isolated Python environment |
 | `cacheDirectory` | `$KANA_DATA_DIR/qwen3-tts-cache` | Downloaded model cache |
 | `dataDirectory` | `$KANA_DATA_DIR/qwen3-tts` | Voice profiles and local service data |
@@ -143,6 +143,10 @@ The API key belongs to the user. It is read from the owner-only server
 never included in browser preferences, provider status, diagnostics, backups,
 or client-side requests. Remote providers require HTTPS and an API key;
 credential-free HTTP is accepted only for loopback-compatible services.
+Kana rejects empty or mislabeled responses and caps each generated audio file
+at 64 MB before it can be buffered by the browser. The generic adapter also
+limits a single speech input to 20,000 characters; provider presets may impose
+a smaller upstream-specific limit (Pollinations currently uses 4,096).
 
 Normally `hermes.executable` should be omitted. Kana searches the environment,
 the full `PATH`, Hermes-managed homes/virtual environments, user-local and

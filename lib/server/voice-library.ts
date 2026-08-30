@@ -4,6 +4,7 @@ import { getQwen3TtsServiceReadiness } from "@/lib/server/local-qwen3-tts-runtim
 import {
   createVoiceClone,
   getDefaultVoiceClone,
+  getVoiceCloneByServiceId,
   listVoiceClones,
   setVoiceCloneServiceId,
   type VoiceCloneRow,
@@ -67,11 +68,17 @@ async function registerWithService(
       `Voice registration failed (HTTP ${response.status}).${detail ? ` ${detail.slice(0, 300)}` : ""}`,
     );
   }
-  const value = (await response.json()) as { id?: unknown };
-  if (typeof value.id !== "string" || !value.id) {
+  const value = (await response.json()) as {
+    id?: unknown;
+    voice?: { id?: unknown };
+  };
+  // API v2 returns the descriptor under `voice`. Retain the top-level form
+  // for compatibility with an older local service during a rolling update.
+  const serviceVoiceId = value.voice?.id ?? value.id;
+  if (typeof serviceVoiceId !== "string" || !serviceVoiceId) {
     throw new Error("Voice registration returned no id.");
   }
-  return value.id;
+  return serviceVoiceId;
 }
 
 /** Register one library row; returns the service voice id or null (pending). */
@@ -91,6 +98,99 @@ export async function registerVoiceClone(row: VoiceCloneRow): Promise<string | n
   }
 }
 
+type ServiceVoiceSnapshot = {
+  default_voice_id?: unknown;
+  supports_voice_clone?: unknown;
+  voices?: Array<{ id?: unknown }>;
+};
+
+async function serviceVoiceSnapshot(port: number): Promise<{
+  defaultVoiceId: string;
+  supportsVoiceClone: boolean;
+  voiceIds: Set<string>;
+}> {
+  const response = await fetch(`http://127.0.0.1:${port}/v1/voices`, {
+    headers: { Accept: "application/json" },
+    signal: AbortSignal.timeout(15_000),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(`Voice discovery failed (HTTP ${response.status}).`);
+  }
+  const value = (await response.json()) as ServiceVoiceSnapshot;
+  return {
+    defaultVoiceId:
+      typeof value.default_voice_id === "string" ? value.default_voice_id : "",
+    supportsVoiceClone: value.supports_voice_clone === true,
+    voiceIds: new Set(
+      Array.isArray(value.voices)
+        ? value.voices.flatMap((voice) =>
+            typeof voice.id === "string" && voice.id ? [voice.id] : [],
+          )
+        : [],
+    ),
+  };
+}
+
+function ensureDefaultVoiceRow(): VoiceCloneRow | null {
+  const existing = getDefaultVoiceClone();
+  if (existing) return existing;
+  const assetPath = defaultVoiceAssetPath();
+  if (!assetPath) return null;
+  try {
+    return createVoiceClone({
+      id: "kc-default",
+      name: DEFAULT_VOICE_NAME,
+      filePath: assetPath,
+      isDefault: true,
+    });
+  } catch {
+    // Another request may have won the first-run insert race.
+    return getDefaultVoiceClone();
+  }
+}
+
+/**
+ * Resolve the service-side voice immediately before local synthesis.
+ *
+ * The Python profile directory may be wiped independently from Kana's data
+ * root. Verify the stored service id against the live service and re-register
+ * the original reference when necessary. This also guarantees that a fresh
+ * installation can speak on its first turn without opening Settings first.
+ */
+export async function resolveVoiceForSynthesis(
+  port: number,
+  requestedServiceVoiceId?: string,
+): Promise<string | undefined> {
+  const snapshot = await serviceVoiceSnapshot(port);
+  const requested = requestedServiceVoiceId?.trim() ?? "";
+  if (!snapshot.supportsVoiceClone) {
+    return requested || snapshot.defaultVoiceId || undefined;
+  }
+  if (requested && snapshot.voiceIds.has(requested)) return requested;
+
+  const requestedRow = requested ? getVoiceCloneByServiceId(requested) : null;
+  const row = requestedRow ?? ensureDefaultVoiceRow();
+  if (!row) {
+    throw new Error("Kana's bundled default voice reference is missing.");
+  }
+  if (row.service_voice_id && snapshot.voiceIds.has(row.service_voice_id)) {
+    return row.service_voice_id;
+  }
+
+  // A stale id proves that the service-side profile disappeared. Clear it so
+  // registerVoiceClone cannot mistake stale SQLite metadata for availability.
+  if (row.service_voice_id) setVoiceCloneServiceId(row.id, null);
+  const refreshed = { ...row, service_voice_id: null };
+  const serviceVoiceId = await registerWithService(
+    port,
+    refreshed.name,
+    new Uint8Array(fs.readFileSync(refreshed.file_path)),
+  );
+  setVoiceCloneServiceId(refreshed.id, serviceVoiceId);
+  return serviceVoiceId;
+}
+
 /**
  * Make sure the shipped default voice exists in the library and is
  * registered with the service. Fire-and-forget and throttled: safe to call
@@ -102,21 +202,8 @@ export async function ensureDefaultVoice(): Promise<void> {
   if (Date.now() - lastRegistrationAttempt < REGISTRATION_THROTTLE_MS) return;
   lastRegistrationAttempt = Date.now();
 
-  let row = existing;
-  if (!row) {
-    const assetPath = defaultVoiceAssetPath();
-    if (!assetPath) return;
-    try {
-      row = createVoiceClone({
-        id: "kc-default",
-        name: DEFAULT_VOICE_NAME,
-        filePath: assetPath,
-        isDefault: true,
-      });
-    } catch {
-      return;
-    }
-  }
+  const row = existing ?? ensureDefaultVoiceRow();
+  if (!row) return;
 
   try {
     await registerVoiceClone(row);

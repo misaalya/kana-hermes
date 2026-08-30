@@ -102,6 +102,35 @@ describe("OpenAI-compatible TTS provider", () => {
     });
   });
 
+  it("normalizes an octet-stream only when an audio format was explicitly configured", async () => {
+    Object.defineProperty(globalThis, "fetch", {
+      configurable: true,
+      value: async () => new Response(new Uint8Array([82, 73, 70, 70]), {
+        headers: { "Content-Type": "application/octet-stream" },
+      }),
+    });
+    const configured = new OpenAiCompatibleTtsProvider({
+      baseUrl: "http://127.0.0.1:8080/v1",
+      model: "tts-1",
+      voice: "alloy",
+      responseFormat: "wav",
+    });
+    assert.equal(
+      (await configured.synthesize({ text: "hello" }, new AbortController().signal)).contentType,
+      "audio/wav",
+    );
+
+    const ambiguous = new OpenAiCompatibleTtsProvider({
+      baseUrl: "http://127.0.0.1:8080/v1",
+      model: "tts-1",
+      voice: "alloy",
+    });
+    await assert.rejects(
+      ambiguous.synthesize({ text: "hello" }, new AbortController().signal),
+      /non-audio response/,
+    );
+  });
+
   it("fails safely when a remote provider has no user API key", async () => {
     const provider = new OpenAiCompatibleTtsProvider({
       baseUrl: "https://voice.example/v1",
