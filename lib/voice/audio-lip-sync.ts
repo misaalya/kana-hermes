@@ -18,9 +18,18 @@ export class AudioLipSyncController {
    */
   unlock(): void {
     const context = this.ensureContext();
-    if (context.state === "suspended") {
+    if (context.state !== "running" && context.state !== "closed") {
       void context.resume().catch(() => undefined);
     }
+    // Some browsers do not retain a resume-only autoplay unlock when the
+    // audible source is created much later (after Hermes + remote TTS). Start
+    // one silent frame while this method still owns the Send/Enter gesture so
+    // the same reusable context is authorized for the eventual WAV.
+    const source = context.createBufferSource();
+    source.buffer = context.createBuffer(1, 1, context.sampleRate);
+    source.connect(context.destination);
+    source.addEventListener("ended", () => source.disconnect(), { once: true });
+    source.start();
   }
 
   async play(audioData: ArrayBuffer, onStarted?: () => void): Promise<void> {
@@ -113,7 +122,10 @@ export class AudioLipSyncController {
   // Autoplay policies leave resume() pending forever until a user gesture
   // happens; fail loudly with an actionable message instead of hanging.
   private async resumeContext(context: AudioContext): Promise<void> {
-    if (context.state !== "suspended") return;
+    if (context.state === "running") return;
+    if (context.state === "closed") {
+      throw new Error("The browser audio output is closed.");
+    }
     const resuming = context.resume();
     let timer: ReturnType<typeof setTimeout> | null = null;
     const blocked = new Promise<never>((_, reject) => {
@@ -128,6 +140,13 @@ export class AudioLipSyncController {
     });
     try {
       await Promise.race([resuming, blocked]);
+      // `resume()` changes state asynchronously; String() prevents TypeScript
+      // from incorrectly retaining the pre-await suspended/interrupted narrow.
+      if (String(context.state) !== "running") {
+        throw new Error(
+          "Audio is still blocked. Interact with the page and allow sound for this site.",
+        );
+      }
     } finally {
       if (timer !== null) clearTimeout(timer);
       resuming.catch(() => undefined);
