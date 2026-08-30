@@ -21,6 +21,7 @@ treated as automatically trusted.
 | WebSocket origin | Hermes validates browser origin; Kana documents that hostname forms must match |
 | Hermes credential | Minted/discovered and held by Kana's server process; never returned to the browser, preferences, diagnostics, URLs, or backups |
 | TTS API key | User-supplied in owner-only server `config.json`; attached only to the upstream request and excluded from browser status, preferences, diagnostics, and backups |
+| TTS response abuse | Speech text and provider error bodies are bounded, non-audio/empty responses are rejected, and local or external audio is capped at 64 MB before browser buffering |
 | Protected input | Password/secret fields are uncontrolled, ephemeral, and submitted directly to Hermes |
 | Qwen CORS | Service defaults to `127.0.0.1`/`localhost`, no credentials, and a small method/header allow-list |
 | Rendered text | React text nodes render transcript/tool status; Kana does not inject response HTML or Markdown |

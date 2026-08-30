@@ -2,6 +2,10 @@ import {
   getConfiguredTtsProvider,
   TtsProviderError,
 } from "@/lib/server/tts-provider";
+import {
+  boundedAudioResult,
+  MAX_TTS_TEXT_CHARACTERS,
+} from "@/lib/server/tts-provider/types";
 import { EMOTIONS, type Emotion } from "@/lib/presentation/types";
 import { requireSession } from "@/lib/server/tts-relay";
 
@@ -21,6 +25,13 @@ const UPSTREAM_TIMEOUT_MS = Number(
   process.env.KANA_TTS_RELAY_TIMEOUT_MS ?? "300000",
 );
 
+function safeRequestId(value: string | null): string | undefined {
+  if (!value || value.length > 128 || !/^[A-Za-z0-9._:-]+$/.test(value)) {
+    return undefined;
+  }
+  return value;
+}
+
 export async function POST(request: Request): Promise<Response> {
   const unauthorized = await requireSession(request);
   if (unauthorized) return unauthorized;
@@ -29,17 +40,30 @@ export async function POST(request: Request): Promise<Response> {
     if (typeof value.text !== "string" || !value.text.trim()) {
       return Response.json({ error: "Speech text is required." }, { status: 400 });
     }
+    if (value.text.length > MAX_TTS_TEXT_CHARACTERS) {
+      return Response.json(
+        { error: `Speech text must be ${MAX_TTS_TEXT_CHARACTERS} characters or fewer.` },
+        { status: 413, headers: { "Cache-Control": "no-store" } },
+      );
+    }
     const provider = getConfiguredTtsProvider();
-    const audio = await provider.synthesize({
+    const generated = await provider.synthesize({
       text: value.text,
-      language: typeof value.language === "string" ? value.language : "ja",
-      voiceId: typeof value.voice_id === "string" ? value.voice_id : undefined,
+      language:
+        typeof value.language === "string" && value.language.length <= 32
+          ? value.language
+          : "ja",
+      voiceId:
+        typeof value.voice_id === "string" && value.voice_id.length <= 500
+          ? value.voice_id
+          : undefined,
       emotion: parseEmotion(value.emotion),
-      requestId: request.headers.get("X-Kana-Request-Id") ?? undefined,
+      requestId: safeRequestId(request.headers.get("X-Kana-Request-Id")),
     }, AbortSignal.any([
       request.signal,
       AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     ]));
+    const audio = await boundedAudioResult(generated);
     return new Response(audio.body, {
       headers: {
         "Content-Type": audio.contentType,
@@ -55,7 +79,16 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
     if (error instanceof DOMException && error.name === "AbortError") {
-      return Response.json({ error: "TTS synthesis was cancelled." }, { status: 499 });
+      return Response.json(
+        { error: "TTS synthesis was cancelled." },
+        { status: 499, headers: { "Cache-Control": "no-store" } },
+      );
+    }
+    if (error instanceof DOMException && error.name === "TimeoutError") {
+      return Response.json(
+        { error: "TTS synthesis timed out." },
+        { status: 504, headers: { "Cache-Control": "no-store" } },
+      );
     }
     return Response.json(
       {
@@ -64,7 +97,7 @@ export async function POST(request: Request): Promise<Response> {
             ? `TTS synthesis failed: ${error.message}`
             : "TTS synthesis failed.",
       },
-      { status: 502 },
+      { status: 502, headers: { "Cache-Control": "no-store" } },
     );
   }
 }

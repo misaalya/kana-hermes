@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { after, before, describe, it } from "node:test";
 import {
   __setTestTtsPort,
   ensureQwen3TTSService,
   inspectLocalQwen3TtsRuntime,
+  resolveUvExecutable,
   startLocalQwen3TtsRuntime,
   stopLocalQwen3TtsRuntime,
 } from "@/lib/server/local-qwen3-tts-runtime";
@@ -64,6 +68,26 @@ after(() => {
 });
 
 describe("local qwen3-tts runtime", () => {
+  it("finds uv in the standard user install location even with a minimal service PATH", () => {
+    const home = mkdtempSync(path.join(tmpdir(), "kana-uv-discovery-"));
+    const executable = path.join(home, ".local", "bin", "uv");
+    mkdirSync(path.dirname(executable), { recursive: true });
+    writeFileSync(executable, "#!/bin/sh\nexit 0\n");
+    chmodSync(executable, 0o755);
+    try {
+      assert.equal(
+        resolveUvExecutable({
+          ...process.env,
+          HOME: home,
+          PATH: "/usr/sbin:/usr/bin",
+        }),
+        executable,
+      );
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   it("reports stopped when no service answers on any candidate port", async () => {
     // Null the default-port candidate so the test never sees a real service
     // that may be running on the host's 7860.

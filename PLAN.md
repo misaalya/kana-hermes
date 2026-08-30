@@ -231,6 +231,11 @@ Bug utama pemilik. Dua perubahan saling melengkapi:
   `ss -ltnp | grep 7860`. Jika masih hidup, spawn langsung ke venv python
   atau `uv run --no-sync` + process group kill (`detached: false` +
   kill `-pid`). Catat hasil di docs.
+- **Hasil 2026-08-30**: build standalone menyalakan Qwen melalui relay pada
+  port audit terisolasi, menghasilkan WAV, lalu `POST .../control {stop}`
+  mengembalikan `stopped`; pemeriksaan process table setelah shutdown tidak
+  menemukan proses `uv`/`kana-qwen3-tts` tersisa. Tidak perlu process-group
+  kill tambahan pada runtime Linux yang diuji.
 
 ### D9 — Sentence-mode replay & canReplay `[XS]` `P3`
 - `qwen3-tts-provider.ts:105,119,143`: promosikan chunk ke `lastAudio`
@@ -356,9 +361,10 @@ sudah ada di `package.json` — dipakai, bukan dependency baru.
 1. [x] R1                                  (selesai 2026-08-25)
 2. [x] Paralel:  Track 1 (A1→A4)           (selesai — event-driven restore,
                                             schema v2 ordinal, dedup, retry fix)
-        [x] Track 2 (D1..D7, D9)           (selesai — cancel relay route,
+        [x] Track 2 (D1..D9)               (selesai — cancel relay route,
                                             single-flight spawn, portable dir,
-                                            honest health, adoption guard)
+                                            honest health, adoption guard,
+                                            dan audit zombie child nyata)
         [x] Track 3 (B1→B2, C1→C3)         (selesai — KANA_DATA_DIR resolver +
                                             migrasi legacy, launcher env,
                                             placeholder credentials, fail-loud
@@ -378,6 +384,11 @@ Hotfix pasca-merge (2026-08-25, di luar task awal):
       membuka sesi terlink (pemicu history.restored); connectAgent mengadopsi
       sesi Hermes terakhir yang berisi pesan sebagai landing conversation
       (bukan membuat sesi kosong baru tiap refresh).
+- [x] Audit TTS production 2026-08-30 → kontrak registrasi voice API v2
+      diperbaiki, voice bawaan disiapkan sebelum sintesis pertama dan
+      diregistrasi ulang bila profile service hilang; Qwen nyata dan
+      Pollinations nyata menghasilkan WAV melalui standalone relay, cancel
+      Qwen berakhir 499, dan abort provider eksternal menutup upstream.
 ```
 
 Status verifikasi gabungan pasca-merge (2026-08-25): `tsc --noEmit` bersih,
@@ -437,5 +448,5 @@ proxy_set_header X-Kana-Trusted-Proxy "";   # blank kecuali memang sengaja
 - **C2 kekerasan fail-loud**: ✅ warning keras + flag `insecureNoAuth`
   (bukan tolak-start) — sudah diimplementasikan Track 3.
 - **E6 skala refactor**: ✅ berhenti di E5; E6 tidak dikerjakan untuk saat ini.
-- **D8 zombie uv**: ✅ boleh diuji di mesin ini — **belum dieksekusi**, masuk
-  daftar sisa kerja (§13).
+- **D8 zombie uv**: ✅ diuji pada build standalone 2026-08-30; tidak ada child
+  `uv`/`kana-qwen3-tts` tersisa setelah control stop dan shutdown.

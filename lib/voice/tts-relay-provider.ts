@@ -15,6 +15,8 @@ import type {
   VoiceSpeakOptions,
 } from "./types";
 
+const MAX_BROWSER_AUDIO_BYTES = 64 * 1024 * 1024;
+
 export type TtsRelayProviderOptions = {
   /** Retained for preference migration; synthesis always uses the same-origin relay. */
   baseUrl?: string;
@@ -360,7 +362,18 @@ export class TtsRelayProvider implements VoiceProvider {
         throw new Error("The voice provider must return an audio response body.");
       }
 
+      const declaredLength = response.headers.get("content-length");
+      if (declaredLength && Number(declaredLength) > MAX_BROWSER_AUDIO_BYTES) {
+        throw new Error("The voice provider returned an audio response that is too large.");
+      }
+
       const audio = await response.arrayBuffer();
+      if (audio.byteLength === 0) {
+        throw new Error("The voice provider returned an empty audio response.");
+      }
+      if (audio.byteLength > MAX_BROWSER_AUDIO_BYTES) {
+        throw new Error("The voice provider returned an audio response that is too large.");
+      }
       if (operation !== this.operation || controller.signal.aborted) {
         throw aborted();
       }
