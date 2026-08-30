@@ -37,9 +37,9 @@ Kana instance.
 
 ### Install globally from npm (recommended user flow)
 
-> **Registry status:** `kana-alya` is the intended npm package name. Until its
-> first verified release is published, npm will correctly report that no
-> matching package version exists.
+> **Published package:** [`kana-alya`](https://www.npmjs.com/package/kana-alya).
+> The command below installs the prebuilt production runtime; it does not build
+> the frontend from source on the user's machine.
 
 ```bash
 npm install -g kana-alya
@@ -49,7 +49,7 @@ kana
 `kana-alya` is also installed as a command alias for users who prefer the package
 name (`kana-alya` and `kana` start the same launcher).
 
-The intended package contains a thin launcher plus the traced standalone web
+The published package contains a thin launcher plus the traced standalone web
 runtime, so it does not compile Kana on the user's machine. Running `kana`
 binds the app to `127.0.0.1`, opens the browser, preserves Kana's in-app
 personalization wizard, and automatically tries to connect to or start the
@@ -109,8 +109,8 @@ development server.
 For a local production build:
 
 ```bash
-git clone https://github.com/misaalya/kana-ui.git
-cd kana-ui
+git clone https://github.com/misaalya/kana-hermes.git
+cd kana-hermes
 npm ci
 npm run package:local
 
