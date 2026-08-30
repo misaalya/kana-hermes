@@ -37,18 +37,17 @@ Kana instance.
 
 ### Install globally from npm (recommended user flow)
 
-> **Registry status:** `kana-ui` currently resolves to an unrelated package on
-> npm. Do not run the command below until this project owns that package name
-> and publishes a verified release. The repository's release guard refuses to
-> publish over the occupied name without explicit ownership confirmation.
+> **Registry status:** `kana-alya` is the intended npm package name. Until its
+> first verified release is published, npm will correctly report that no
+> matching package version exists.
 
 ```bash
-npm install -g kana-ui
+npm install -g kana-alya
 kana
 ```
 
-`kana-ui` is also installed as a command alias for users who prefer the package
-name (`kana-ui` and `kana` start the same launcher).
+`kana-alya` is also installed as a command alias for users who prefer the package
+name (`kana-alya` and `kana` start the same launcher).
 
 The intended package contains a thin launcher plus the traced standalone web
 runtime, so it does not compile Kana on the user's machine. Running `kana`
@@ -97,6 +96,8 @@ Kana's server may start, restart, and stop the official `hermes serve` gateway
 on loopback. It mints and keeps the Hermes session token in server memory; the
 token never reaches browser preferences, storage, URLs, or forms. Kana only
 spawns the unmodified Hermes executable and never edits its installation.
+
+Kana is released under the [MIT License](LICENSE).
 
 ### Build and run from source
 
