@@ -112,17 +112,45 @@ explicit data directory.
    explicit `HOME` into the spawned Next server automatically; under systemd,
    set both explicitly as shown.
 
-4. nginx must forward:
+4. Nginx must preserve the public request metadata and give both the Hermes
+   event stream and speech synthesis enough time to complete. The speech route
+   may legitimately stay open while a remote provider generates audio:
 
    ```nginx
-   proxy_set_header Host $host;
-   proxy_set_header X-Forwarded-Proto $scheme;
-   proxy_set_header X-Kana-Trusted-Proxy "";
+   location / {
+       proxy_pass http://127.0.0.1:3000;
+       proxy_http_version 1.1;
+       proxy_set_header Host $host;
+       proxy_set_header X-Forwarded-Proto $scheme;
+       proxy_set_header X-Kana-Trusted-Proxy "";
+   }
+
+   location = /api/hermes/events {
+       proxy_pass http://127.0.0.1:3000;
+       proxy_http_version 1.1;
+       proxy_set_header Host $host;
+       proxy_set_header X-Forwarded-Proto $scheme;
+       proxy_set_header X-Kana-Trusted-Proxy "";
+       proxy_buffering off;
+       proxy_read_timeout 1h;
+   }
+
+   location = /api/voice/tts/speech {
+       proxy_pass http://127.0.0.1:3000;
+       proxy_http_version 1.1;
+       proxy_set_header Host $host;
+       proxy_set_header X-Forwarded-Proto $scheme;
+       proxy_set_header X-Kana-Trusted-Proxy "";
+       proxy_buffering off;
+       proxy_read_timeout 310s;
+       proxy_send_timeout 310s;
+   }
    ```
 
-   Terminate HTTPS at Nginx. Public HTTP-only origins have stricter mobile
-   audio and installable-web-app limitations and are not the intended
-   deployment baseline. See docs/SECURITY.md for the full trust model.
+   Terminate HTTPS at Nginx. Do not expose Kana only as a public `http://IP`
+   origin: browser autoplay behavior is less reliable there and installable
+   web-app features require a secure context. See docs/SECURITY.md for the full
+   trust model.
 
 5. First-request sanity check: with auth configured, `/api/auth/status`
    reports `"authEnabled": true` and never `insecureNoAuth: true`. If the

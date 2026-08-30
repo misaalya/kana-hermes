@@ -24,6 +24,63 @@ afterEach(() => {
 });
 
 describe("AudioLipSyncController", () => {
+  it("primes the reusable audio context during the user gesture", async () => {
+    const provider: AvatarProvider = {
+      id: "audio-unlock-test",
+      load: async () => undefined,
+      unload: () => undefined,
+      setEmotion: () => undefined,
+      playMotion: () => undefined,
+      setMouthOpen: () => undefined,
+      setTalking: () => undefined,
+    };
+    let resumed = 0;
+    let started = 0;
+    let disconnected = 0;
+    let ended: (() => void) | null = null;
+    const source = {
+      buffer: null,
+      connect: () => undefined,
+      disconnect: () => {
+        disconnected += 1;
+      },
+      addEventListener: (_event: string, listener: () => void) => {
+        ended = listener;
+      },
+      start: () => {
+        started += 1;
+        queueMicrotask(() => ended?.());
+      },
+    };
+    class FakeAudioContext {
+      state = "suspended";
+      sampleRate = 48_000;
+      destination = {};
+      createBuffer = () => ({ duration: 1 / this.sampleRate });
+      createBufferSource = () => source;
+      resume = async () => {
+        resumed += 1;
+        this.state = "running";
+      };
+      close = async () => undefined;
+    }
+
+    Object.defineProperty(globalThis, "AudioContext", {
+      configurable: true,
+      value: FakeAudioContext,
+    });
+
+    const controller = new AudioLipSyncController(
+      new AvatarController(provider),
+    );
+    controller.unlock();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.equal(resumed, 1);
+    assert.equal(started, 1);
+    assert.equal(disconnected, 1);
+  });
+
   it("turns decoded audio amplitude into Live2D mouth movement", async () => {
     const mouthValues: number[] = [];
     const talkingValues: boolean[] = [];
