@@ -131,15 +131,32 @@ function publicStatus(current: ManagedRuntime): LocalQwen3TtsRuntimeStatus {
   };
 }
 
-function resolveUv(): string | null {
+export function resolveUvExecutable(
+  environment: NodeJS.ProcessEnv = process.env,
+): string | null {
   const configured = qwenConfig().uvExecutable;
-  if (configured) return configured;
-  for (const dir of (process.env.PATH ?? "").split(path.delimiter)) {
-    if (!dir) continue;
-    const candidate = path.join(dir, "uv");
+  const home = environment.HOME?.trim();
+  const prefix = environment.PREFIX?.trim();
+  const candidates = [
+    configured,
+    ...(environment.PATH ?? "")
+      .split(path.delimiter)
+      .filter(Boolean)
+      .map((directory) => path.join(directory, "uv")),
+    ...(home
+      ? [
+          path.join(home, ".local", "bin", "uv"),
+          path.join(home, ".cargo", "bin", "uv"),
+        ]
+      : []),
+    ...(prefix ? [path.join(prefix, "bin", "uv")] : []),
+    "/usr/local/bin/uv",
+    "/usr/bin/uv",
+  ].filter((candidate): candidate is string => Boolean(candidate));
+  for (const candidate of new Set(candidates)) {
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports -- sync check at spawn time
-      require("node:fs").accessSync(candidate);
+      require("node:fs").accessSync(candidate, constants.X_OK);
       return candidate;
     } catch {
       // keep scanning
@@ -285,7 +302,7 @@ export async function inspectLocalQwen3TtsRuntime(
   if (current.state !== "starting" && current.state !== "stopping") {
     current.state = current.child && current.child.exitCode !== null ? "failed" : "stopped";
   }
-  if (!resolveUv()) {
+  if (!resolveUvExecutable()) {
     current.lastMessage =
       "The uv tool was not found on this machine; install uv or set tts.qwen3Local.uvExecutable in Kana config.json.";
   } else if (current.state === "stopped") {
@@ -345,7 +362,7 @@ export async function startLocalQwen3TtsRuntime(options: {
     current.lastMessage = externalServiceMessage(existing, port);
     return publicStatus(current);
   }
-  const uv = resolveUv();
+  const uv = resolveUvExecutable();
   if (!uv) {
     current.state = "failed";
     current.lastMessage =

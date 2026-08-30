@@ -81,6 +81,15 @@ export function getDefaultVoiceClone(): VoiceCloneRow | null {
   return row ?? null;
 }
 
+export function getVoiceCloneByServiceId(serviceVoiceId: string): VoiceCloneRow | null {
+  const row = db()
+    .prepare(
+      "SELECT id, name, file_path, service_voice_id, is_default, created_at FROM voice_clones WHERE service_voice_id = ? LIMIT 1",
+    )
+    .get(serviceVoiceId) as unknown as VoiceCloneRow | undefined;
+  return row ?? null;
+}
+
 export function createVoiceClone(input: {
   id: string;
   name: string;
@@ -96,7 +105,7 @@ export function createVoiceClone(input: {
   return getVoiceClone(input.id) as VoiceCloneRow;
 }
 
-export function setVoiceCloneServiceId(id: string, serviceVoiceId: string): void {
+export function setVoiceCloneServiceId(id: string, serviceVoiceId: string | null): void {
   db()
     .prepare("UPDATE voice_clones SET service_voice_id = ? WHERE id = ?")
     .run(serviceVoiceId, id);

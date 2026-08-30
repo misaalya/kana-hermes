@@ -3,6 +3,7 @@ import {
   getQwen3TtsServiceReadiness,
   inspectLocalQwen3TtsRuntime,
 } from "@/lib/server/local-qwen3-tts-runtime";
+import { resolveVoiceForSynthesis } from "@/lib/server/voice-library";
 import { ttsServiceUrl } from "@/lib/server/tts-relay";
 import type { VoiceProviderStatus } from "@/lib/voice/types";
 import {
@@ -73,6 +74,20 @@ export class LocalQwen3TtsProvider implements ServerTtsProvider {
         503,
       );
     }
+    let voiceId: string | undefined;
+    try {
+      voiceId = await resolveVoiceForSynthesis(
+        ensured.status.port,
+        input.voiceId,
+      );
+    } catch (error) {
+      throw new TtsProviderError(
+        error instanceof Error
+          ? `Kana could not prepare the local voice: ${error.message}`
+          : "Kana could not prepare the local voice.",
+        503,
+      );
+    }
     const response = await fetch(ttsServiceUrl(ensured.status.port, "/v1/speech"), {
       method: "POST",
       headers: {
@@ -82,7 +97,7 @@ export class LocalQwen3TtsProvider implements ServerTtsProvider {
       body: JSON.stringify({
         text: input.text,
         language: input.language ?? "ja",
-        voice_id: input.voiceId,
+        voice_id: voiceId,
         emotion: input.emotion,
       }),
       signal,
