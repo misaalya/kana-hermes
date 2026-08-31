@@ -61,6 +61,8 @@ reference/
 
 # Local audit/debug artifacts
 .playwright-mcp/
+/.hermes/
+/.omo/
 /*.png
 /snapshot.txt
 
