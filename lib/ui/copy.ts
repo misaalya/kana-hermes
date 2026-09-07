@@ -347,8 +347,8 @@ export type Copy = {
     advancedModeSourceDefault: string;
     advancedRestart: string;
     checkingAccess: string;
-    noPassword: string;
-    noPasswordBody: string;
+    defaultPasswordTitle: string;
+    defaultPasswordBody: string;
     currentPassword: string;
     newPassword: string;
     confirmPassword: string;
@@ -780,8 +780,8 @@ const id: Copy = {
     advancedModeSourceDefault: "Mode lokal bawaan digunakan karena belum ada pilihan eksplisit.",
     advancedRestart: "Mulai ulang Kana setelah mengubah file ini.",
     checkingAccess: "Memeriksa perlindungan akses…",
-    noPassword: "Kata sandi tidak diperlukan",
-    noPasswordBody: "Instalasi Kana ini saat ini dapat dibuka tanpa kata sandi. Konfigurasi akses lanjutan tersedia di file konfigurasi Kana.",
+    defaultPasswordTitle: "Kata sandi bawaan",
+    defaultPasswordBody: "Kana menggunakan kata sandi bawaan ini. Kamu boleh tetap menggunakannya atau menggantinya kapan saja.",
     currentPassword: "Kata sandi saat ini",
     newPassword: "Kata sandi baru",
     confirmPassword: "Konfirmasi kata sandi",
@@ -1240,8 +1240,8 @@ const en: Copy = {
     advancedModeSourceDefault: "The local default is used because no explicit mode is configured.",
     advancedRestart: "Restart Kana after changing this file.",
     checkingAccess: "Checking access protection…",
-    noPassword: "No password required",
-    noPasswordBody: "This Kana installation currently opens without a password. Advanced access configuration lives in the Kana config file.",
+    defaultPasswordTitle: "Default password",
+    defaultPasswordBody: "Kana is using this built-in password. You can keep it or change it at any time.",
     currentPassword: "Current password",
     newPassword: "New password",
     confirmPassword: "Confirm password",

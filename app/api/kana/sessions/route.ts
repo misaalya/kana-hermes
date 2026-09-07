@@ -1,6 +1,5 @@
 import { hermesRpc } from "@/lib/server/hermes-bridge";
 import { inspectLocalHermesRuntime } from "@/lib/server/local-hermes-runtime";
-import { isAuthEnabled } from "@/lib/server/auth/password-store";
 import { isSessionValid } from "@/lib/server/auth/session";
 
 export const runtime = "nodejs";
@@ -27,7 +26,7 @@ type HermesSessionRow = {
  * though this browser has no local IndexedDB record for it yet.
  */
 export async function GET(request: Request): Promise<Response> {
-  if (!isAuthEnabled() || (await isSessionValid(request))) {
+  if (await isSessionValid(request)) {
     try {
       // Attach to an externally started `hermes serve` if Kana has not
       // spawned one itself; discovery reads the gateway's port and session

@@ -30,11 +30,10 @@ export default defineConfig({
     timeout: 30_000,
     env: {
       NEXT_TELEMETRY_DISABLED: "1",
-      KANA_ALLOW_NO_AUTH: "1",
       KANA_DATA_DIR: path.join(
         process.cwd(),
         "test-results",
-        "kana-pwa-data",
+        `kana-pwa-data-${process.pid}`,
       ),
     },
   },

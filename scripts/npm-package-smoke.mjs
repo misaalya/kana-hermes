@@ -12,6 +12,7 @@ import {
 import { createServer } from "node:net";
 import { platform, tmpdir } from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 
 const root = process.cwd();
 const temporary = await mkdtemp(path.join(tmpdir(), "kana-npm-smoke-"));
@@ -143,6 +144,7 @@ process.once("SIGINT", stop);
     stdio: ["ignore", "pipe", "pipe"],
   });
   let output = "";
+  let sessionCookie;
   child.stdout.on("data", (chunk) => { output += chunk.toString(); });
   child.stderr.on("data", (chunk) => { output += chunk.toString(); });
   try {
@@ -152,7 +154,26 @@ process.once("SIGINT", stop);
     }
     const status = await fetch(`http://127.0.0.1:${port}/api/auth/status`);
     if (!status.ok) throw new Error(`installed Kana health returned ${status.status}.`);
-    const setup = await fetch(`http://127.0.0.1:${port}/api/kana/setup`);
+    const authState = await status.json();
+    if (
+      authState.authEnabled !== true
+      || authState.usingDefaultPassword !== true
+      || authState.defaultPassword !== "chankana123"
+    ) {
+      throw new Error("fresh npm installation did not expose the default login flow.");
+    }
+    const login = await fetch(`http://127.0.0.1:${port}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: "chankana123" }),
+    });
+    sessionCookie = login.headers.get("set-cookie")?.split(";", 1)[0];
+    if (!login.ok || !sessionCookie) {
+      throw new Error("fresh npm installation rejected the documented default password.");
+    }
+    const setup = await fetch(`http://127.0.0.1:${port}/api/kana/setup`, {
+      headers: { Cookie: sessionCookie },
+    });
     const setupState = await setup.json();
     if (!setup.ok || setupState.onboardingCompleted !== false) {
       throw new Error("the npm launcher did not preserve the in-app onboarding flow.");
@@ -182,11 +203,56 @@ process.once("SIGINT", stop);
       throw new Error("generated JWT secret is not owner-only.");
     }
 
+    const passwordChange = await fetch(`http://127.0.0.1:${port}/api/auth/password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: sessionCookie },
+      body: JSON.stringify({
+        currentPassword: "chankana123",
+        newPassword: "npm-smoke-password",
+      }),
+    });
+    if (!passwordChange.ok) {
+      throw new Error(`installed Kana could not persist a custom password: ${passwordChange.status}.`);
+    }
+    sessionCookie = passwordChange.headers.get("set-cookie")?.split(";", 1)[0] ?? sessionCookie;
+
+    const changedStatus = await fetch(`http://127.0.0.1:${port}/api/auth/status`, {
+      headers: { Cookie: sessionCookie },
+    });
+    const changedAuthState = await changedStatus.json();
+    if (
+      !changedStatus.ok
+      || changedAuthState.usingDefaultPassword !== false
+      || changedAuthState.defaultPassword !== null
+    ) {
+      throw new Error("custom password state was not reflected by the installed runtime.");
+    }
+
+    const appStateFile = path.join(dataDirectory, "appstate.db");
+    const appState = new DatabaseSync(appStateFile, { readOnly: true });
+    const authRow = appState
+      .prepare("SELECT value FROM app_state WHERE key = 'auth.password'")
+      .get();
+    appState.close();
+    const storedAuth = JSON.parse(authRow?.value ?? "null");
+    if (
+      typeof storedAuth?.passwordHash !== "string"
+      || !storedAuth.passwordHash.startsWith("$2")
+    ) {
+      throw new Error("custom password hash was not stored in appstate.db.");
+    }
+    try {
+      await stat(path.join(dataDirectory, "auth.json"));
+      throw new Error("installed Kana wrote the obsolete auth.json password store.");
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+    }
+
     const startedHermes = await fetch(
       `http://127.0.0.1:${port}/api/local-runtime/hermes`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Cookie: sessionCookie },
         body: JSON.stringify({ action: "start", port: hermesPort }),
       },
     );
@@ -203,14 +269,17 @@ process.once("SIGINT", stop);
     const foreignOrigin = await fetch(`http://127.0.0.1:${port}/api/kana/sessions`, {
       headers: { Origin: "https://untrusted.example" },
     });
-    if (foreignOrigin.status !== 403) {
-      throw new Error("no-auth local API accepted a non-loopback Origin.");
+    if (foreignOrigin.status !== 401) {
+      throw new Error("installed Kana accepted an API request without a login session.");
     }
   } finally {
     try {
       await fetch(`http://127.0.0.1:${port}/api/local-runtime/hermes`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(typeof sessionCookie === "string" ? { Cookie: sessionCookie } : {}),
+        },
         body: JSON.stringify({ action: "stop" }),
         signal: AbortSignal.timeout(5_000),
       });

@@ -12,16 +12,7 @@ export const dynamic = "force-dynamic";
 // base URL; this server process is the only client of the Python service.
 
 export async function requireSession(request: Request): Promise<Response | null> {
-  const { isAuthEnabled } = await import("@/lib/server/auth/password-store");
   const { isSessionValid } = await import("@/lib/server/auth/session");
-  const { resolveKanaDeploymentMode } = await import("@/lib/server/user-config");
-  if (!isAuthEnabled()) {
-    if (resolveKanaDeploymentMode().mode === "local") return null;
-    return Response.json(
-      { error: "Authentication is required when Kana runs in deployment mode." },
-      { status: 403 },
-    );
-  }
   if (await isSessionValid(request)) return null;
   return Response.json({ error: "Unauthorized" }, { status: 401 });
 }

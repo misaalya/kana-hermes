@@ -1,6 +1,8 @@
 export type AuthStatus = {
   authEnabled: boolean;
   authenticated: boolean;
+  usingDefaultPassword: boolean;
+  defaultPassword: string | null;
 };
 
 export async function fetchAuthStatus(): Promise<AuthStatus> {
@@ -30,4 +32,3 @@ export async function logoutAccessSession(): Promise<void> {
   // eslint-disable-next-line @next/next/no-location-assign-relative-destination
   window.location.assign("/");
 }
-

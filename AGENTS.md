@@ -136,10 +136,12 @@ RPC  POST /api/hermes/rpc    ->  allow-listed JSON-RPC forward
   under one data root resolved by `lib/server/data-dir.ts`
   (`KANA_DATA_DIR` → XDG → HOME; production fails loudly without it). Legacy
   files from `$HOME/.kana` / `$CWD/data` are adopted on first use.
-- Login is password-based with a deny-by-default proxy. Production without
-  auth config surfaces `insecureNoAuth` (header + auth status) and logs
-  loudly unless `KANA_ALLOW_NO_AUTH=1`. Local process-control routes trust a
-  shared-secret header (`KANA_TRUSTED_PROXY_SECRET`), not a spoofable flag.
+- Login is password-based with a deny-by-default proxy. Fresh npm and source
+  installations use the documented `chankana123` password shown on the login
+  screen; a user-owned bcrypt hash in the `auth.password` row of
+  `appstate.db` takes precedence after an optional password change. Legacy
+  `auth.json` hashes migrate into SQLite on first access. Every process-control
+  route requires a session.
 - The Qwen3-TTS Python service is spawned/probed by the Node runtime and
   reached by the browser only through `/api/voice/tts/*` relay routes,
   including request cancellation.
@@ -293,9 +295,9 @@ ornamental dashboard. This is a product direction, not a temporary theme.
   subtitles, language, and emotion.
 - Local user preferences in browser storage; the Hermes session token is
   server-side only and never enters browser storage in any form.
-- Password-based login behind a deny-by-default proxy, single data root for
-  auth/JWT/activity state, production no-auth surfacing (`insecureNoAuth`),
-  and a shared-secret trusted-proxy model — see the custody section above.
+- Password-based login behind a deny-by-default proxy and a single data root
+  for auth/JWT/activity state. The same displayed default-password flow is
+  used by npm packages, source builds, local development, and deployments.
 - Browser audio decoding/playback and amplitude-based lip sync through the Web
   Audio API, with autoplay-policy timeouts and per-playback graph cleanup.
 - A versioned local Qwen3-TTS API service backed by the official
@@ -431,8 +433,7 @@ app/api/hermes/events                     SSE downstream relay
 app/api/hermes/rpc                        Allow-listed JSON-RPC relay
 app/api/kana/sessions                     session.list filtered to source "kana"
 app/api/kana/activities                   Activity turn store GET/PUT
-lib/server/auth/*                         Password store, JWT session, loopback,
-                                          login limiter
+lib/server/auth/*                         Password store, JWT session, login limiter
 proxy.ts                                  Deny-by-default auth proxy (Next 16)
 lib/presentation/persona.ts               Persona and response instructions
 lib/presentation/response-parser.ts       Structured response validation
@@ -462,8 +463,7 @@ scripts/package-standalone.mjs              Local production package assembly
 scripts/hermes-restart-acceptance.ts         Isolated real-server restart audit
 scripts/qwen3-tts-acceptance.mjs             Target-host latency/cancel evidence
 tests/agent/hermes-agent-client.test.ts     Adapter/control/recovery tests
-tests/server/                               data-dir, trusted-proxy, auth,
-                                            activity-store unit tests
+tests/server/                               data-dir, auth, activity-store unit tests
 tests/e2e/kana-critical-journeys.spec.ts    Desktop/mobile acceptance journeys
 docs/SECURITY.md                            Local threat model and controls
 docs/SUPPORTED_ENVIRONMENT.md               Tested versions + VPS deploy guide

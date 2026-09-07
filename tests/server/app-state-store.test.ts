@@ -6,12 +6,13 @@ import { afterEach, describe, it } from "node:test";
 import path from "node:path";
 import {
   getAppState,
+  getAppStateEntry,
   resetAppStateStoreForTests,
   setAppState,
 } from "@/lib/server/app-state-store";
 
 function useTempDataDir(): string {
-    const dir = mkdtempSync(path.join(os.tmpdir(), "kana-appstate-"));
+  const dir = mkdtempSync(path.join(os.tmpdir(), "kana-appstate-"));
   process.env.KANA_DATA_DIR = dir;
   resetAppStateStoreForTests();
   return dir;
@@ -52,6 +53,7 @@ describe("app state store (sqlite)", () => {
     raw.close();
     resetAppStateStoreForTests();
     assert.equal(getAppState("broken"), null);
+    assert.deepEqual(getAppStateEntry("broken"), { status: "invalid" });
     rmSync(dir, { recursive: true, force: true });
   });
 });

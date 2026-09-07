@@ -1,6 +1,6 @@
 # Supported environment and compatibility
 
-Kana 0.2.x is an alpha local web application.
+Kana 0.2.0-alpha.1 is an alpha local web application.
 
 ## Tested baseline
 
@@ -55,11 +55,12 @@ available when WebGL, audio, internet, Hermes, or Qwen is unavailable.
 
 ## VPS deploy checklist
 
-Kana's server-side files (auth hash, JWT secret, activity database) live in one
-authoritative data directory resolved as `KANA_DATA_DIR` → `$XDG_DATA_HOME/kana`
-→ `~/.local/share/kana`. Files from the legacy roots (`./data`, `~/.kana`) are
-migrated automatically on first use. Never run Kana in production without an
-explicit data directory.
+Kana's server-side files (`appstate.db` containing the auth hash, `jwt-secret`,
+and `activities.db`) live in one authoritative data directory resolved as
+`KANA_DATA_DIR` → `$XDG_DATA_HOME/kana` → `~/.local/share/kana`. Files from the
+legacy roots (`./data`, `~/.kana`) and the former standalone `auth.json` store
+are migrated automatically on first use. Never run Kana in production without
+an explicit data directory.
 
 1. Create a non-root user and its data directory:
 
@@ -68,12 +69,12 @@ explicit data directory.
    sudo chown kana:kana /var/lib/kana
    ```
 
-2. Provide the deployment password outside git (systemd `Environment=` lines
-   or an untracked `.env.production` next to the deployment):
+2. Configure the deployment mode and persistent data root (systemd
+   `Environment=` lines or an untracked `.env.production` next to the
+   deployment):
 
    ```bash
    KANA_DEPLOYMENT_MODE=deployment
-   KANA_ACCESS_PASSWORD=<bootstrap password, or pre-seed auth.json>
    KANA_DATA_DIR=/var/lib/kana
    AUTH_COOKIE_SECURE=true            # if nginx does not forward X-Forwarded-Proto
    ```
@@ -97,7 +98,6 @@ explicit data directory.
    WorkingDirectory=/var/lib/kana
    Environment=KANA_DATA_DIR=/var/lib/kana
    Environment=KANA_DEPLOYMENT_MODE=deployment
-   Environment=KANA_ACCESS_PASSWORD=<bootstrap password>
    Environment=AUTH_COOKIE_SECURE=true
    Environment=HOSTNAME=127.0.0.1
    Environment=PORT=3000
@@ -122,7 +122,6 @@ explicit data directory.
        proxy_http_version 1.1;
        proxy_set_header Host $host;
        proxy_set_header X-Forwarded-Proto $scheme;
-       proxy_set_header X-Kana-Trusted-Proxy "";
    }
 
    location = /api/hermes/events {
@@ -130,7 +129,6 @@ explicit data directory.
        proxy_http_version 1.1;
        proxy_set_header Host $host;
        proxy_set_header X-Forwarded-Proto $scheme;
-       proxy_set_header X-Kana-Trusted-Proxy "";
        proxy_buffering off;
        proxy_read_timeout 1h;
    }
@@ -140,7 +138,6 @@ explicit data directory.
        proxy_http_version 1.1;
        proxy_set_header Host $host;
        proxy_set_header X-Forwarded-Proto $scheme;
-       proxy_set_header X-Kana-Trusted-Proxy "";
        proxy_buffering off;
        proxy_read_timeout 310s;
        proxy_send_timeout 310s;
@@ -152,7 +149,7 @@ explicit data directory.
    web-app features require a secure context. See docs/SECURITY.md for the full
    trust model.
 
-5. First-request sanity check: with auth configured, `/api/auth/status`
-   reports `"authEnabled": true` and never `insecureNoAuth: true`. If the
-   server logs the no-auth security warning at boot, fix the environment
-   before exposing the port.
+5. First-request sanity check: `/api/auth/status` reports
+   `"authEnabled": true`, `"usingDefaultPassword": true`, and the login UI
+   shows `chankana123`. After an optional password change,
+   `usingDefaultPassword` becomes `false`.
