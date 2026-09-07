@@ -247,22 +247,20 @@ function SecuritySection({ locale }: { locale: UiLocale }) {
     let active = true;
     fetchAuthStatus()
       .then((next) => { if (active) setStatus(next); })
-      .catch(() => { if (active) setStatus({ authEnabled: false, authenticated: false }); });
+      .catch(() => {
+        if (active) {
+          setStatus({
+            authEnabled: true,
+            authenticated: false,
+            usingDefaultPassword: false,
+            defaultPassword: null,
+          });
+        }
+      });
     return () => { active = false; };
   }, []);
 
   if (!status) return <p className="text-[11px] text-muted">{copy.checkingAccess}</p>;
-
-  if (!status.authEnabled) {
-    return (
-      <div className="rounded-xl border border-line bg-surface-strong p-3">
-        <p className="text-xs font-bold text-ink">{copy.noPassword}</p>
-        <p className="mt-1 text-[11px] leading-relaxed text-muted">
-          {copy.noPasswordBody}
-        </p>
-      </div>
-    );
-  }
 
   const submit = async () => {
     setError(null);
@@ -281,6 +279,7 @@ function SecuritySection({ locale }: { locale: UiLocale }) {
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
+      setStatus({ ...status, usingDefaultPassword: false, defaultPassword: null });
       setSuccess(copy.passwordUpdated);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : copy.passwordFailed);
@@ -291,6 +290,17 @@ function SecuritySection({ locale }: { locale: UiLocale }) {
 
   return (
     <div className="grid gap-3">
+      {status.usingDefaultPassword && status.defaultPassword ? (
+        <div className="rounded-xl border border-line bg-surface-strong p-3">
+          <p className="text-xs font-bold text-ink">{copy.defaultPasswordTitle}</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-muted">
+            {copy.defaultPasswordBody}
+          </p>
+          <code className="mt-2 block text-sm font-bold text-ink">
+            {status.defaultPassword}
+          </code>
+        </div>
+      ) : null}
       <label className="grid gap-1.5">
         <span className={fieldLabel}>{copy.currentPassword}</span>
         <input type="password" autoComplete="current-password" className={inputBase}

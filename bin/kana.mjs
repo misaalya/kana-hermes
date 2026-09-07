@@ -122,11 +122,9 @@ const app = spawn(
       ...(detectedHermesExecutable
         ? { KANA_HERMES_BIN: detectedHermesExecutable }
         : {}),
-      // The npm launcher is deliberately loopback-only. Acknowledge local
-      // no-auth operation by default. Deployment mode is resolved by the
-      // server from KANA_DEPLOYMENT_MODE or the editable config.json; remote
-      // deployments still require explicit authentication.
-      KANA_ALLOW_NO_AUTH: process.env.KANA_ALLOW_NO_AUTH || "1",
+      // The npm launcher is deliberately loopback-only. Deployment mode is
+      // resolved by the server from KANA_DEPLOYMENT_MODE or the editable
+      // config.json; every mode uses the same built-in first-login password.
     },
     stdio: "inherit",
   },

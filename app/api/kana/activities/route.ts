@@ -1,5 +1,4 @@
 import { listTurnActivities, saveTurnActivities } from "@/lib/server/activity-store";
-import { isAuthEnabled } from "@/lib/server/auth/password-store";
 import { isSessionValid } from "@/lib/server/auth/session";
 
 export const runtime = "nodejs";
@@ -9,7 +8,7 @@ const NO_STORE = { "Cache-Control": "no-store" };
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 
 async function requestAuthorized(request: Request): Promise<boolean> {
-  return !isAuthEnabled() || (await isSessionValid(request));
+  return isSessionValid(request);
 }
 
 function parseKey(value: unknown): string | null {

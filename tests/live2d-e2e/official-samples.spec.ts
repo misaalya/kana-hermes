@@ -51,6 +51,10 @@ test("renders both official samples with model-specific bindings across reloads"
     localStorage.setItem("kana.preferences.v5", JSON.stringify(prefs));
   }, HARU_PREFS);
 
+  const login = await page.request.post("/api/auth/login", {
+    data: { password: "chankana123" },
+  });
+  expect(login.ok()).toBe(true);
   await page.goto("/");
 
   // Haru loads through pixi-live2d-display and becomes the visible stage.

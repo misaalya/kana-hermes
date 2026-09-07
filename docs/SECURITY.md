@@ -29,7 +29,7 @@ treated as automatically trusted.
 | Remote models | HTTPS or localhost HTTP `.model3.json`, no embedded credentials; CSP permits data fetch but not remote scripts |
 | Folder import | Relative paths, duplicate paths, JSON, required assets, and folder escapes are validated before IndexedDB write |
 | Diagnostics | Endpoint queries and common token/password/secret forms are redacted; content and protected input are omitted |
-| Local passwordless mode | Direct loopback Host/Origin evidence is required. Explicit deployment mode requires an authenticated Kana session for Hermes and Qwen process controls |
+| Kana access | Every installation requires a signed Kana session. Fresh installs show the documented default password; a user-owned bcrypt hash takes precedence after an optional change |
 | Backup | Versioned and size-limited; parser validates records; tokens and imported avatar assets are excluded |
 | Offline cache | Service worker handles same-origin navigation/static assets only and explicitly ignores `/api` plus all cross-origin Hermes/Qwen/model traffic |
 | Framing/injection | CSP blocks objects and framing; `nosniff`, no-referrer, and restrictive permissions headers are set |
@@ -43,37 +43,29 @@ location / {
     proxy_pass http://127.0.0.1:3000;
     proxy_set_header Host $host;
     proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_set_header X-Kana-Trusted-Proxy "";
 }
 ```
 
-Set `KANA_DEPLOYMENT_MODE=deployment` and configure Kana authentication. A
-valid Kana session then authorizes the same process controls for Hermes and
-Qwen. Never forward a client-supplied `X-Kana-Trusted-Proxy` value; the header
-is only retained for deliberately proxied local/no-auth compatibility and is
-not needed by an authenticated deployment.
+Set `KANA_DEPLOYMENT_MODE=deployment`. A valid Kana session authorizes the
+same process controls for Hermes and Qwen.
 
 Forwarding `X-Forwarded-Proto $scheme` keeps session cookies `Secure`
 automatically; if your proxy cannot forward it, set `AUTH_COOKIE_SECURE=true`.
 
-## Production without authentication
+## Default access password
 
-The global `kana` launcher deliberately binds to `127.0.0.1` and acknowledges
-passwordless local-only use with `KANA_ALLOW_NO_AUTH=1`. In this mode the auth
-guard also rejects API requests whose Host/Origin is not loopback, protecting
-the local browser flow from cross-origin requests. This is defense in depth;
-the loopback network bind is what prevents remote clients from reaching it.
+Authentication is always enabled. Fresh npm installs, source builds, and
+development servers use `chankana123`; the login screen displays it so the
+first run has no terminal configuration step. Changing it is optional. When a
+user changes it in Settings, Kana stores only a bcrypt hash in the
+`auth.password` row of `$KANA_DATA_DIR/appstate.db`, stops displaying the
+built-in password, and no longer accepts it. Upgrades from the older
+`auth.json` layout migrate that hash into SQLite before removing the legacy
+file.
 
-Do not use passwordless mode for a VPS, shared machine, container port publish,
-or reverse proxy. Those deployments must set `deployment.mode` to
-`"deployment"` in `$KANA_DATA_DIR/config.json` (or use
-`KANA_DEPLOYMENT_MODE=deployment`) and configure `KANA_ACCESS_PASSWORD` or an
-existing `auth.json`. Production or explicit deployment mode without
-authentication logs a warning and surfaces the state as
-`insecureNoAuth: true` in `/api/auth/status` plus an
-`x-kana-insecure-no-auth: 1` response header from the auth guard. UI layers may
-use that flag to warn the operator; the flag stays `true` even while the opt-out
-is acknowledged because the exposure itself does not disappear.
+The built-in value is public product behavior, not a private deployment
+secret. A public or shared installation should still use HTTPS and may replace
+the password from Settings, but Kana does not force that change.
 
 ## CSP rationale
 

@@ -62,7 +62,10 @@ wrong home directory. The first `kana` launch performs an idempotent bootstrap
 under the actual account running Kana. It creates an owner-only `config.json`,
 generates and persists a cryptographically random JWT signing secret, and lets
 the server create its databases as they are first needed. Existing files are
-never overwritten.
+never overwritten. A fresh installation opens the login screen and shows the
+built-in password `chankana123`. Changing it later in Settings is optional; a
+user-chosen bcrypt hash is stored in the installation's `appstate.db` and
+takes precedence when present.
 
 Hermes discovery checks, in order, an explicit environment/JSON override,
 every directory in `PATH`, Hermes-managed homes and virtual environments,
@@ -119,8 +122,8 @@ HOSTNAME=127.0.0.1 PORT=3000 node .next/standalone/server.js
 
 For a VPS or reverse-proxy deployment, create an explicit persistent data
 directory owned by the account that will run Kana. Put its `config.json`
-there, select `deployment` mode, configure an access password outside Git,
-and run the standalone server on loopback:
+there, select `deployment` mode, and run the standalone server on loopback.
+The first login uses the same displayed default password as the npm package:
 
 ```bash
 git pull
@@ -130,7 +133,6 @@ npm run package:local
 
 KANA_DATA_DIR=/var/lib/kana \
 KANA_DEPLOYMENT_MODE=deployment \
-KANA_ACCESS_PASSWORD='REPLACE_WITH_A_STRONG_PASSWORD' \
 HOSTNAME=127.0.0.1 \
 PORT=3000 \
 node .next/standalone/server.js
@@ -144,11 +146,12 @@ allow a long read timeout for Hermes SSE and speech generation. See the
 [reverse-proxy security guide](docs/SECURITY.md#reverse-proxy-vps) for the
 complete service and Nginx configuration.
 
-The source checkout does not receive the global launcher's first-run
-bootstrap merely from `npm ci`. `npm run config` creates or opens the same
-owner-only `$KANA_DATA_DIR/config.json`; Kana generates its persistent JWT
-secret under that data root on first use. Existing config and secrets are not
-overwritten.
+`npm run config` creates or opens the owner-only
+`$KANA_DATA_DIR/config.json`; Kana generates its persistent JWT secret under
+that data root on first use. The source build and `npm run dev` both use
+`chankana123` until a password is changed in Settings. Existing config,
+password hashes, and secrets are not overwritten. Older `auth.json` password
+stores are migrated into `appstate.db` automatically on first use.
 
 ### Run locally for development only
 
@@ -195,7 +198,7 @@ isolated global prefix and clean user home, exercises `kana --help` and
 `kana doctor`, verifies generated file permissions, starts the installed
 server, starts a discovered fake Hermes executable through the packaged API,
 checks the first-run state, and verifies that a foreign web origin cannot drive
-the passwordless loopback API.
+the authenticated API without a session.
 
 ## Hermes slash commands
 
@@ -422,8 +425,8 @@ npm run test:live2d:official
 Operational references:
 
 For a VPS or reverse proxy, set `KANA_DEPLOYMENT_MODE=deployment` (or edit the
-JSON shown by `npm run config` / `kana config`), configure a Kana access
-password, and use HTTPS.
+JSON shown by `npm run config` / `kana config`) and use HTTPS. Kana displays
+the initial password on the login screen; changing it in Settings is optional.
 
 - [quality and user journeys](docs/QUALITY.md)
 - [local security model](docs/SECURITY.md)

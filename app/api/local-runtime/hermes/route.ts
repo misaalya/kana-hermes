@@ -3,25 +3,20 @@ import {
   startLocalHermesRuntime,
   stopLocalHermesRuntime,
 } from "@/lib/server/local-hermes-runtime";
-import { isAuthEnabled } from "@/lib/server/auth/password-store";
 import { isSessionValid } from "@/lib/server/auth/session";
-import { resolveKanaDeploymentMode } from "@/lib/server/user-config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Process control for the managed `hermes serve`. On a local no-auth install,
-// the proxy admits only loopback requests. On a VPS, a valid Kana session is
-// required, matching the Qwen process-control posture. This lets an
-// authenticated remote owner inspect/restart Hermes without opening the route
-// to unauthenticated internet traffic.
+// Process control for the managed `hermes serve` always requires a valid Kana
+// session. This lets an authenticated owner inspect/restart Hermes without
+// opening the route to unauthenticated traffic.
 //
 // The Hermes session token is NOT part of this API. Kana's server mints and
 // holds it; the browser connects through the server-side relay instead.
 
 async function requestAuthorized(request: Request): Promise<boolean> {
-  if (isAuthEnabled()) return isSessionValid(request);
-  return resolveKanaDeploymentMode().mode === "local";
+  return isSessionValid(request);
 }
 
 export async function GET(request: Request): Promise<Response> {

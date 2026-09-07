@@ -5,14 +5,19 @@ import { adoptLegacyKanaFile, resolveKanaDataDir } from "@/lib/server/data-dir";
 
 /**
  * Install-level key/value state in SQLite (`appstate.db` under the unified
- * KANA_DATA_DIR root). This is where per-installation UI state lives —
- * onboarding completion, dismissed install-wide notices — as opposed to
- * browser-local preferences (localStorage) and secrets (.env). All browsers
- * for the single user share one row set, so a flag written here is seen by
- * every device that talks to this Kana server.
+ * KANA_DATA_DIR root). This is where shared per-installation state lives —
+ * onboarding completion, the bcrypt access-password hash, and dismissed
+ * install-wide notices — as opposed to browser-local preferences
+ * (localStorage). All browsers for the single user share one row set, so a
+ * value written here is seen by every device that talks to this Kana server.
  */
 
 type AppStateRow = { value: string };
+
+export type AppStateEntry<T> =
+  | { status: "missing" }
+  | { status: "invalid" }
+  | { status: "found"; value: T };
 
 const globalKey = Symbol.for("kana.appStateStore");
 type StoreGlobal = typeof globalThis & {
@@ -22,7 +27,7 @@ type StoreGlobal = typeof globalThis & {
 function dbPath(): string {
   adoptLegacyKanaFile("appstate.db");
   const dir = resolveKanaDataDir();
-  fs.mkdirSync(dir, { recursive: true });
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   return path.join(dir, "appstate.db");
 }
 
@@ -33,7 +38,9 @@ function db(): DatabaseSync {
 }
 
 function openDb(): DatabaseSync {
-  const database = new DatabaseSync(dbPath());
+  const file = dbPath();
+  const database = new DatabaseSync(file);
+  fs.chmodSync(file, 0o600);
   database.exec("PRAGMA journal_mode = WAL;");
   database.exec(`
     CREATE TABLE IF NOT EXISTS app_state (
@@ -57,15 +64,23 @@ export function resetAppStateStoreForTests(): void {
 }
 
 export function getAppState<T>(key: string): T | null {
+  const entry = getAppStateEntry<T>(key);
+  return entry.status === "found" ? entry.value : null;
+}
+
+/**
+ * Read a state row without conflating missing and corrupt data. Security-
+ * sensitive consumers must fail closed when a persisted row cannot be parsed.
+ */
+export function getAppStateEntry<T>(key: string): AppStateEntry<T> {
   const row = db()
     .prepare("SELECT value FROM app_state WHERE key = ?")
     .get(key) as AppStateRow | undefined;
-  if (!row) return null;
+  if (!row) return { status: "missing" };
   try {
-    return JSON.parse(row.value) as T;
+    return { status: "found", value: JSON.parse(row.value) as T };
   } catch {
-    // A corrupt row behaves like a missing one; writers overwrite it.
-    return null;
+    return { status: "invalid" };
   }
 }
 

@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import path from "node:path";
 
 const baseURL = "http://127.0.0.1:3102";
 
@@ -25,6 +26,13 @@ export default defineConfig({
     url: baseURL,
     reuseExistingServer: false,
     timeout: 120_000,
-    env: { NEXT_TELEMETRY_DISABLED: "1" },
+    env: {
+      NEXT_TELEMETRY_DISABLED: "1",
+      KANA_DATA_DIR: path.join(
+        process.cwd(),
+        "test-results",
+        `kana-live2d-data-${process.pid}`,
+      ),
+    },
   },
 });

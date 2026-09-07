@@ -35,7 +35,11 @@ export default defineConfig({
       // Keep acceptance isolated from a developer's already-running server in
       // the same checkout; Next uses one lock per dist directory.
       KANA_NEXT_DIST_DIR: ".next-e2e",
-      KANA_DATA_DIR: path.join(process.cwd(), "test-results", "kana-e2e-data"),
+      KANA_DATA_DIR: path.join(
+        process.cwd(),
+        "test-results",
+        `kana-e2e-data-${process.pid}`,
+      ),
     },
   },
   projects: [

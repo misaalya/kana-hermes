@@ -8,8 +8,8 @@ import {
 import { homedir } from "node:os";
 import path from "node:path";
 
-// Single authoritative Kana data directory (auth.json, jwt-secret, and — via a
-// follow-up rewiring — activities.db). Precedence:
+// Single authoritative Kana data directory (appstate.db, jwt-secret, and
+// activities.db). Precedence:
 //   1. KANA_DATA_DIR environment variable
 //   2. XDG data home ($XDG_DATA_HOME/kana, absolute values only)
 //   3. $HOME/.local/share/kana

@@ -1,5 +1,4 @@
 import { hermesRpc } from "@/lib/server/hermes-bridge";
-import { isAuthEnabled } from "@/lib/server/auth/password-store";
 import { isSessionValid } from "@/lib/server/auth/session";
 
 export const runtime = "nodejs";
@@ -46,7 +45,7 @@ const LONG_RUNNING_METHODS = new Set(["session.compress", "model.options"]);
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 
 async function requestAuthorized(request: Request): Promise<boolean> {
-  return !isAuthEnabled() || (await isSessionValid(request));
+  return isSessionValid(request);
 }
 
 export async function POST(request: Request): Promise<Response> {

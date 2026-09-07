@@ -1,5 +1,4 @@
 import { existsSync } from "node:fs";
-import { isAuthEnabled } from "@/lib/server/auth/password-store";
 import { isSessionValid } from "@/lib/server/auth/session";
 import {
   ensureKanaUserConfigFile,
@@ -12,8 +11,7 @@ export const dynamic = "force-dynamic";
 const NO_STORE = { "Cache-Control": "no-store" };
 
 async function requestAuthorized(request: Request): Promise<boolean> {
-  if (isAuthEnabled()) return isSessionValid(request);
-  return resolveKanaDeploymentMode().mode === "local";
+  return isSessionValid(request);
 }
 
 /** Only exposes the file location, never its potentially sensitive content. */

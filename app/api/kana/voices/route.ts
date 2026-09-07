@@ -5,7 +5,6 @@ import {
   saveVoiceReferenceFile,
 } from "@/lib/server/voice-store";
 import { getQwen3TtsServiceReadiness } from "@/lib/server/local-qwen3-tts-runtime";
-import { isAuthEnabled } from "@/lib/server/auth/password-store";
 import { isSessionValid } from "@/lib/server/auth/session";
 import {
   DEFAULT_VOICE_NAME,
@@ -22,7 +21,7 @@ const NO_STORE = { "Cache-Control": "no-store" };
 const MAX_REFERENCE_BYTES = 20 * 1024 * 1024;
 
 async function requestAuthorized(request: Request): Promise<boolean> {
-  return !isAuthEnabled() || (await isSessionValid(request));
+  return isSessionValid(request);
 }
 
 const PENDING_REASON_MESSAGE: Record<string, string> = {

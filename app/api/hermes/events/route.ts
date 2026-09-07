@@ -1,5 +1,4 @@
 import { subscribeHermesEvents, ensureHermesConnection } from "@/lib/server/hermes-bridge";
-import { isAuthEnabled } from "@/lib/server/auth/password-store";
 import { isSessionValid } from "@/lib/server/auth/session";
 
 export const runtime = "nodejs";
@@ -13,7 +12,7 @@ export const dynamic = "force-dynamic";
 const HEARTBEAT_MS = 25_000;
 
 export async function GET(request: Request): Promise<Response> {
-  if (isAuthEnabled() && !(await isSessionValid(request))) {
+  if (!(await isSessionValid(request))) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
