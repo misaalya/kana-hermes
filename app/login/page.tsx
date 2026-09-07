@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { btnPrimary, inputBase, fieldLabel, sectionEyebrow } from "@/components/kana/ui";
+import { fetchAuthStatus } from "@/lib/runtime/auth-client";
 import { useTheme } from "@/lib/state/use-theme";
 
 export default function LoginPage() {
@@ -11,6 +12,21 @@ export default function LoginPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [defaultPassword, setDefaultPassword] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetchAuthStatus()
+      .then((status) => {
+        if (active && status.usingDefaultPassword) {
+          setDefaultPassword(status.defaultPassword);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const submit = useCallback(
     async (event: React.FormEvent) => {
@@ -54,6 +70,18 @@ export default function LoginPage() {
           </div>
         </div>
         <p className="text-xs leading-relaxed text-muted">Enter your local password to return to your companion.</p>
+
+          {defaultPassword ? (
+            <div className="mt-4 rounded-xl border border-line bg-surface-strong p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted">
+                Default password
+              </p>
+              <code className="mt-1 block text-sm font-bold text-ink">{defaultPassword}</code>
+              <p className="mt-1 text-[10px] leading-relaxed text-faint">
+                You can keep it or change it later in Settings.
+              </p>
+            </div>
+          ) : null}
 
           <form className="mt-6 flex flex-col gap-3" onSubmit={submit}>
             <label className="flex flex-col gap-1">

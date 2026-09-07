@@ -319,7 +319,7 @@ test.beforeEach(async ({ page }) => {
   );
   // The dev server may sit behind the local access-password gate.
   await page.request.post("/api/auth/login", {
-    data: { password: process.env.KANA_E2E_PASSWORD ?? "test" },
+    data: { password: "chankana123" },
   });
   // Most journeys exercise the established workspace. Keep the install-level
   // wizard from racing those interactions; the dedicated onboarding journey
@@ -358,6 +358,19 @@ async function openHistory(page: Page): Promise<void> {
   });
   await openHistory.click();
 }
+
+test("shows and accepts the built-in password on a fresh installation", async ({
+  page,
+  context,
+}) => {
+  await context.clearCookies();
+  await page.goto("/login");
+  await expect(page.getByText("Default password", { exact: true })).toBeVisible();
+  await expect(page.getByText("chankana123", { exact: true })).toBeVisible();
+  await page.getByLabel("Password").fill("chankana123");
+  await page.getByRole("button", { name: "Enter Kana" }).click();
+  await expect(page.getByRole("textbox", { name: "Message Kana" })).toBeVisible();
+});
 
 test("renders text replies without entering the TTS pipeline when voice is off", async ({
   page,

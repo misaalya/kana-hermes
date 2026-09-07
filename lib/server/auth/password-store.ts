@@ -1,65 +1,80 @@
 import { createHash, timingSafeEqual } from "node:crypto";
-import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import bcrypt from "bcryptjs";
 import { adoptLegacyKanaFile, resolveKanaDataDir } from "@/lib/server/data-dir";
-import { resolveKanaDeploymentMode } from "@/lib/server/user-config";
+import {
+  getAppStateEntry,
+  setAppState,
+} from "@/lib/server/app-state-store";
 
-// Single shared access password — deliberately no user management, mirroring
-// the proven 9Router dashboard model: one bcrypt hash on disk (set via the
-// authenticated change-password route) with an optional bootstrap password
-// from the environment for fresh installs.
+// Single shared access password — deliberately no user management. Fresh
+// installs use one documented default so both the prebuilt npm runtime and a
+// source checkout have the same first-login flow. Following 9Router's storage
+// pattern, a bcrypt hash written by the authenticated change-password route is
+// kept in Kana's primary SQLite state database and takes precedence.
 
-function authFile(): string {
+export const DEFAULT_ACCESS_PASSWORD = "chankana123";
+const PASSWORD_STATE_KEY = "auth.password";
+
+function legacyAuthFile(): string {
   adoptLegacyKanaFile("auth.json");
   return path.join(resolveKanaDataDir(), "auth.json");
 }
 
 type PasswordStore = { passwordHash: string };
+type PasswordState =
+  | { status: "default" }
+  | { status: "stored"; passwordHash: string }
+  | { status: "invalid" };
 
-export function bootstrapPassword(): string | null {
-  const value = process.env.KANA_ACCESS_PASSWORD?.trim();
-  return value ? value : null;
-}
-
-export function isAuthEnabled(): boolean {
-  return existsSync(authFile()) || Boolean(bootstrapPassword());
-}
-
-// Security contract: this stays true even when KANA_ALLOW_NO_AUTH=1 — the
-// env var only records operator acknowledgment, the flag reports reality.
-export function isInsecureNoAuthMode(): boolean {
-  return (
-    (process.env.NODE_ENV === "production" ||
-      resolveKanaDeploymentMode().mode === "deployment") &&
-    !isAuthEnabled()
-  );
-}
-
-export function isNoAuthExplicitlyAllowed(): boolean {
-  return process.env.KANA_ALLOW_NO_AUTH === "1";
-}
-
-function parseStore(raw: string): PasswordStore | null {
-  try {
-    const parsed = JSON.parse(raw) as Partial<PasswordStore>;
-    if (typeof parsed.passwordHash === "string" && parsed.passwordHash.length > 0) {
-      return { passwordHash: parsed.passwordHash };
-    }
-  } catch {
-    // An unreadable store must not lock the operator out of the bootstrap path.
+function parseStore(value: unknown): PasswordStore | null {
+  if (!value || typeof value !== "object") return null;
+  const parsed = value as Partial<PasswordStore>;
+  if (typeof parsed.passwordHash === "string" && parsed.passwordHash.length > 0) {
+    return { passwordHash: parsed.passwordHash };
   }
   return null;
 }
 
-async function readHash(): Promise<string | null> {
-  if (!existsSync(authFile())) return null;
+function migrateLegacyStore(): PasswordState {
+  const file = legacyAuthFile();
+  if (!existsSync(file)) return { status: "default" };
+
   try {
-    return (await parseStore(await readFile(authFile(), "utf8")))?.passwordHash ?? null;
+    const parsed = parseStore(JSON.parse(readFileSync(file, "utf8")));
+    if (!parsed) return { status: "invalid" };
+
+    // Persist first, remove second. A crash can leave the source file behind,
+    // but it can never erase the only copy of the user's password hash.
+    setAppState(PASSWORD_STATE_KEY, parsed);
+    try {
+      unlinkSync(file);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        console.warn(`[kana] Password hash migrated to SQLite but ${file} could not be removed.`);
+      }
+    }
+    console.info(`[kana] Migrated the password hash from ${file} into appstate.db.`);
+    return { status: "stored", passwordHash: parsed.passwordHash };
   } catch {
-    return null;
+    return { status: "invalid" };
   }
+}
+
+function readPasswordState(): PasswordState {
+  const entry = getAppStateEntry<unknown>(PASSWORD_STATE_KEY);
+  if (entry.status === "invalid") return { status: "invalid" };
+  if (entry.status === "missing") return migrateLegacyStore();
+
+  const parsed = parseStore(entry.value);
+  return parsed
+    ? { status: "stored", passwordHash: parsed.passwordHash }
+    : { status: "invalid" };
+}
+
+export function isUsingDefaultPassword(): boolean {
+  return readPasswordState().status === "default";
 }
 
 function safeEqual(a: string, b: string): boolean {
@@ -70,11 +85,10 @@ function safeEqual(a: string, b: string): boolean {
 
 export async function verifyAccessPassword(password: string): Promise<boolean> {
   if (typeof password !== "string" || password.length === 0) return false;
-  const stored = await readHash();
-  if (stored) return bcrypt.compare(password, stored);
-  const bootstrap = bootstrapPassword();
-  if (!bootstrap) return false;
-  return safeEqual(password, bootstrap);
+  const state = readPasswordState();
+  if (state.status === "stored") return bcrypt.compare(password, state.passwordHash);
+  if (state.status === "invalid") return false;
+  return safeEqual(password, DEFAULT_ACCESS_PASSWORD);
 }
 
 export async function changeAccessPassword(newPassword: string): Promise<void> {
@@ -82,6 +96,5 @@ export async function changeAccessPassword(newPassword: string): Promise<void> {
     throw new Error("The new password must contain at least 8 characters.");
   }
   const passwordHash = await bcrypt.hash(newPassword, 10);
-  await mkdir(resolveKanaDataDir(), { recursive: true, mode: 0o700 });
-  await writeFile(authFile(), JSON.stringify({ passwordHash }), { encoding: "utf8", mode: 0o600 });
+  setAppState(PASSWORD_STATE_KEY, { passwordHash });
 }

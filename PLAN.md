@@ -22,7 +22,7 @@ Terakhir diperbarui: 2026-08-25.
 | RC-1 | `fetchHistory` mengirim **durable key** ke `session.history`, padahal Hermes hanya menerima **runtime session id** (`_sessions` map berisi uuid acak) | `lib/agent/hermes/hermes-agent-client.ts:395-418`, `use-kana-controller.ts:383`; Hermes: `tui_gateway/server.py:2386` + `methods_session.py:2444` | Resume hampir selalu error 4001 "session not found", `.catch` menelannya → **transcript kosong** |
 | RC-2 | Proyeksi `_history_to_messages` Hermes **tidak memuat timestamp**; Kana mengalikan `row.timestamp * 1000` yang selalu undefined → fallback `Date.now()` | Hermes `server.py:7254-7267`; Kana `use-kana-controller.ts:412-415` | Anchor aktivitas hasil rekonstruksi ≠ anchor live turn → blok tool duplikat/misposisi antar browser |
 | RC-3 | Data dir terpecah 3 root (`$CWD/data`, `$HOME/.kana`, XDG) tanpa `KANA_DATA_DIR` yang diteruskan launcher | `password-store.ts:12-18`, `session.ts:24-34`, `activity-store.ts:29-35`, `bin/kana.mjs:100-107` | Pindah mesin/redeploy = password hash tertinggal, JWT regenerasi, **activities.db hilang** (terbukti: `~/.kana` tidak ada di mesin ini) |
-| RC-4 | Auth bisa silent-off: `.env.production` kosong & ter-commit, tanpa `auth.json` → `isAuthEnabled()` false | `password-store.ts:27-29`, `proxy.ts:49-59` | VPS publik terbuka tanpa login. Bonus: `.env.development` berisi password asli di git |
+| RC-4 | Instalasi baru sebelumnya dapat berjalan tanpa autentikasi saat belum memiliki password tersimpan | Implementasi auth/proxy lama | Terselesaikan: autentikasi selalu aktif dengan password bawaan yang ditampilkan, kemudian dapat dioverride hash milik user di SQLite |
 | RC-5 | Relay TTS tidak punya route cancel; abort browser tidak diteruskan upstream; delete voice clone salah mapping path/query | provider `qwen3-tts-provider.ts:248-254`; `app/api/voice/tts/` (tanpa `[voiceId]`); `speech/route.ts:20-25` | Stop tidak menghentikan sintesis CPU (sampai 300 s), fitur delete voice mati total |
 | RC-6 | God-hook 1.931 baris dengan ref paralel, subscription stale, cache module-level, debug overlay di production | `use-kana-controller.ts` (60, 895-925, 946-985), `memory-conversation-store.ts:22-38`, `kana-app.tsx:153-164, 291-295` | Bug stale-state halus, keystroke me-re-run seluruh hook, cache basi antar mesin |
 
@@ -274,21 +274,15 @@ Bug utama pemilik. Dua perubahan saling melengkapi:
   password tersebut di mana pun dipakai. Pastikan `.env.production` di
   `.gitignore` (atau tetap tracked tapi tanpa nilai).
 
-### C2 — Fail-loud auth production `[S]` `P0`
-- Production (`NODE_ENV=production`): jika auth disabled DAN tidak ada
-  flag eksplisit `KANA_ALLOW_NO_AUTH=1` → log warning besar + tampilkan
-  banner di UI "AUTH OFF"; idealnya tolak start kecuali flag diset.
-- Bootstrap: `KANA_ACCESS_PASSWORD` di production otomatis menulis
-  `auth.json` saat pertama kali (sehingga .env cukup untuk first-run).
+### C2 — Default authentication `[S]` `P0`
+- Fresh npm/source/dev installations always enable authentication with the
+  displayed `chankana123` password. An optional user-owned bcrypt hash in
+  `appstate.db` takes precedence after a password change; legacy `auth.json`
+  hashes migrate once without resetting the password.
 
-### C3 — Trusted-proxy & cookie hardening `[S]` `P1`
-- `loopback.ts:26-29`: `x-kana-trusted-proxy: 1` bisa di-spoof kecuali nginx
-  mem-blank header. Ganti menjadi shared secret env
-  (`KANA_TRUSTED_PROXY_SECRET`) ATAU minimal dokumentasikan wajib
-  `proxy_set_header X-Kana-Trusted-Proxy "";` di docs deploy.
+### C3 — Cookie hardening `[S]` `P1`
 - Cookie: dokumen/contoh nginx wajib `X-Forwarded-Proto`; rekomendasikan
   `AUTH_COOKIE_SECURE=true` di VPS checklist.
-- Simulasi spoof: curl dengan header palsu harus 403 tanpa secret.
 
 ### C4 — CSP loopback cleanup `[XS]` `P3`
 - `next.config.ts:8,12`: hole `connect-src`/`img-src` http://127.0.0.1 sudah
@@ -368,7 +362,7 @@ sudah ada di `package.json` — dipakai, bukan dependency baru.
         [x] Track 3 (B1→B2, C1→C3)         (selesai — KANA_DATA_DIR resolver +
                                             migrasi legacy, launcher env,
                                             placeholder credentials, fail-loud
-                                            flag insecureNoAuth, trusted-proxy
+                                            default auth and secure cookies
                                             secret; C4 skip dengan alasan)
    [x] B3-lite: activity-store.ts dbPath diarahkan ke
        lib/server/data-dir.ts + adopsi legacy activities.db (2026-08-25)
@@ -405,15 +399,13 @@ disentuh + larangan menyentuh file track lain (hindari konflik merge).
 
 ```bash
 # Environment (systemd Environment= atau .env.production TIDAK di-commit):
-KANA_ACCESS_PASSWORD=<bootstrap>   # atau pre-seed auth.json
 KANA_JWT_SECRET=<opsional>         # jika kosong dibuat atomik di KANA_DATA_DIR
-KANA_DATA_DIR=/var/lib/kana        # SATU root: auth.json, jwt-secret, activities.db
+KANA_DATA_DIR=/var/lib/kana        # SATU root: appstate.db, jwt-secret, activities.db
 AUTH_COOKIE_SECURE=true            # jika nginx tidak set X-Forwarded-Proto
 
 # nginx wajib:
 proxy_set_header Host $host;
 proxy_set_header X-Forwarded-Proto $scheme;
-proxy_set_header X-Kana-Trusted-Proxy "";   # blank kecuali memang sengaja
 
 # Runtime: non-root user pemilik KANA_DATA_DIR;
 # node .next/standalone/server.js dengan HOSTNAME=127.0.0.1 PORT=3000.
@@ -430,8 +422,9 @@ proxy_set_header X-Kana-Trusted-Proxy "";   # blank kecuali memang sengaja
    setelah refresh berulang.
 3. **TTS**: stop ≤ 2 dtk menghentikan CPU; delete clone sukses; double-start
    aman; cold-start menampilkan "loading model" bukan "unavailable".
-4. **Auth**: fresh VPS simulasi (env kosong) → banner/fail-loud; login works;
-   spoof trusted-proxy ditolak.
+4. **Auth**: fresh VPS/source/npm install menerima password bawaan yang
+   ditampilkan; password tersimpan mengesampingkan bawaan; endpoint tanpa sesi
+   ditolak.
 5. **Refactor**: `npm run lint && npx tsc --noEmit && npm run build &&
    npm run package:local`; e2e critical journeys lulus; tidak ada regresi
    subtitle historis (byte-for-byte).
@@ -445,8 +438,8 @@ proxy_set_header X-Kana-Trusted-Proxy "";   # blank kecuali memang sengaja
 (Semua sudah diputuskan 2026-08-25:)
 
 - **A2 skema anchor**: ✅ ordinal `turn_index` — sudah diimplementasikan Track 1.
-- **C2 kekerasan fail-loud**: ✅ warning keras + flag `insecureNoAuth`
-  (bukan tolak-start) — sudah diimplementasikan Track 3.
+- **C2 autentikasi awal**: ✅ satu password bawaan yang ditampilkan untuk npm,
+  source, dev, dan deployment; pergantian password tetap opsional.
 - **E6 skala refactor**: ✅ berhenti di E5; E6 tidak dikerjakan untuk saat ini.
 - **D8 zombie uv**: ✅ diuji pada build standalone 2026-08-30; tidak ada child
   `uv`/`kana-qwen3-tts` tersisa setelah control stop dan shutdown.

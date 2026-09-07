@@ -1,5 +1,4 @@
 import { getAppState, setAppState } from "@/lib/server/app-state-store";
-import { isAuthEnabled } from "@/lib/server/auth/password-store";
 import { isSessionValid } from "@/lib/server/auth/session";
 
 export const runtime = "nodejs";
@@ -12,7 +11,7 @@ type OnboardingState = { completedAt: number };
 const ONBOARDING_KEY = "onboarding";
 
 async function requestAuthorized(request: Request): Promise<boolean> {
-  return !isAuthEnabled() || (await isSessionValid(request));
+  return isSessionValid(request);
 }
 
 /**

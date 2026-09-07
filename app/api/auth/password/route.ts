@@ -7,7 +7,7 @@ const NO_STORE = { "Cache-Control": "no-store" };
 
 // Change the shared access password. Requires an authenticated session and a
 // correct current password (re-auth for sensitive actions), then persists a
-// bcrypt hash that takes precedence over the bootstrap environment password.
+// bcrypt hash that takes precedence over the built-in first-login password.
 export async function POST(request: Request): Promise<Response> {
   if (!(await isSessionValid(request))) {
     return Response.json({ error: "Unauthorized" }, { status: 401, headers: NO_STORE });

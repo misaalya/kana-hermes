@@ -30,6 +30,10 @@ test("is installable on mobile and restores the local shell while offline", asyn
   });
   try {
     const page = context.pages()[0] ?? (await context.newPage());
+    const login = await context.request.post(`${baseURL}/api/auth/login`, {
+      data: { password: "chankana123" },
+    });
+    expect(login.ok()).toBe(true);
     await page.goto("/");
     const composer = page.getByRole("textbox", {
       name: /^(?:Message Kana|Pesan untuk Kana)$/,
