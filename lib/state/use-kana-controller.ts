@@ -1,5 +1,7 @@
 "use client";
 
+import { SpokenReplyQueue } from "@/lib/presentation/spoken-reply-queue";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { HermesAgentClient } from "@/lib/agent/hermes/hermes-agent-client";
 import { classifyHermesTool } from "@/lib/agent/tool-kind";
@@ -129,10 +131,6 @@ function isFreshConversation(
   conversation: Conversation | undefined,
 ): boolean {
   return Boolean(conversation && conversation.messages.length === 0);
-}
-
-function isAbortError(error: unknown): boolean {
-  return error instanceof Error && error.name === "AbortError";
 }
 
 function monotonicNow(): number {
@@ -402,6 +400,13 @@ export function useKanaController(appVersion: string) {
     [],
   );
 
+  const getCurrentPreferences = useCallback(() => preferencesRef.current, []);
+  const persistAvatarPreferences = useCallback((next: KanaPreferences) => {
+    preferencesRef.current = next;
+    setPreferences(next);
+    preferencesStore.save(next);
+  }, [preferencesStore]);
+
   // ---- Avatar controller (extracted) ----
   const {
     avatar,
@@ -420,12 +425,8 @@ export function useKanaController(appVersion: string) {
     avatarProvider,
     avatarModelStore,
     avatarController,
-    () => preferencesRef.current,
-    (next) => {
-      preferencesRef.current = next;
-      setPreferences(next);
-      preferencesStore.save(next);
-    },
+    getCurrentPreferences,
+    persistAvatarPreferences,
     reportError,
     accumulateMetrics,
   );
@@ -443,7 +444,6 @@ export function useKanaController(appVersion: string) {
     cleanupVoice,
   } = useVoiceController(
     avatarController,
-    () => preferencesRef.current,
     accumulateMetrics,
     reportError,
   );
@@ -526,11 +526,7 @@ export function useKanaController(appVersion: string) {
     [resetConversationActivities],
   );
 
-  // Hold-UX plumbing: a reply stays invisible while its voice synthesizes.
-  // heldMessageRef is the single pending reply (abort/disconnect flush it);
-  // the chain serializes turns so two replies can never interleave commits.
-  const heldMessageRef = useRef<{ conversationId: string; message: KanaMessage } | null>(null);
-  const ttsChainRef = useRef<Promise<void>>(Promise.resolve());
+  const spokenReplies = useMemo(() => new SpokenReplyQueue(), []);
 
   const commitAssistantMessage = useCallback(
     async (conversationId: string, message: KanaMessage) => {
@@ -567,11 +563,9 @@ export function useKanaController(appVersion: string) {
   );
 
   const flushHeldMessage = useCallback(() => {
-    const held = heldMessageRef.current;
-    if (!held) return;
-    heldMessageRef.current = null;
-    void commitAssistantMessage(held.conversationId, held.message);
-  }, [commitAssistantMessage]);
+    stopVoice();
+    spokenReplies.cancel();
+  }, [spokenReplies, stopVoice]);
 
   // ---- Activities ----
   const addActivity = useCallback((activity: ActivityItem) => {
@@ -722,9 +716,10 @@ export function useKanaController(appVersion: string) {
         // row may be a just-restored history row; comparing against it would
         // swallow or duplicate the incoming reply. Skip dedup in that window.
         if (!transcriptRestoreRef.current) {
-          const previousAssistant = [...conversation.messages]
-            .reverse()
-            .find((message) => message.role === "assistant");
+          // A new user turn may legitimately get the same short answer.
+          // Deduplicate only an adjacent assistant reply (e.g. reconnect recovery).
+          const lastMessage = conversation.messages.at(-1);
+          const previousAssistant = lastMessage?.role === "assistant" ? lastMessage : undefined;
           if (
             previousAssistant?.speech_ja === event.response.speech_ja &&
             previousAssistant.subtitle?.text ===
@@ -751,68 +746,38 @@ export function useKanaController(appVersion: string) {
           return;
         }
 
-        // Hold-UX: synthesis runs FIRST; the reply only becomes visible the
-        // moment her voice actually starts (or as text-only fallback when
-        // synthesis fails or is aborted). heldMessageRef lets abort and
-        // disconnect flush the text so a reply can never be lost.
-        heldMessageRef.current = {
-          conversationId: conversation.id,
-          message: assistantMessage,
-        };
         setStatus(statusCopy(preferencesRef.current.uiLocale).preparingVoice);
-        const previousChain = ttsChainRef.current ?? Promise.resolve();
-        ttsChainRef.current = previousChain.then(async () => {
-          // Let React flush the held status before the long synth.
-          await new Promise((resolve) => setTimeout(resolve, 0));
-          const commitOnce = async () => {
-            if (heldMessageRef.current?.message.id !== assistantMessage.id) return;
-            heldMessageRef.current = null;
-            await commitAssistantMessage(conversation.id, assistantMessage);
-          };
-          // Voice may have been switched off while a previous spoken reply
-          // was still finishing. In text-only mode never instantiate or call
-          // the TTS provider; release this response immediately instead.
-          if (!preferencesRef.current.voiceEnabled) {
-            avatarController.presentEmotion(assistantMessage.emotion);
-            await commitOnce();
-            setStatus(statusCopy(preferencesRef.current.uiLocale).ready);
-            return;
-          }
-          return getVoice()
-            .speak({
+        spokenReplies.enqueue({
+          id: assistantMessage.id,
+          reveal: () => commitAssistantMessage(conversation.id, assistantMessage),
+          speak: async (reveal) => {
+            if (!preferencesRef.current.voiceEnabled) return;
+            setStatus(statusCopy(preferencesRef.current.uiLocale).preparingVoice);
+            await getVoice().speak({
               text: event.response.speech_ja,
               language: "ja",
               emotion: assistantMessage.emotion,
               voiceId: preferencesRef.current.qwen3Tts.voiceId || undefined,
+              deliveryMode: preferencesRef.current.qwen3Tts.deliveryMode,
               onAudioStart: () => {
                 avatarController.presentEmotion(assistantMessage.emotion);
                 setStatus(statusCopy(preferencesRef.current.uiLocale).speaking);
-                void commitOnce();
+                reveal();
               },
-            })
-            .then(async () => {
-              await commitOnce();
-              setStatus(statusCopy(preferencesRef.current.uiLocale).ready);
-            })
-            .catch(async (voiceError) => {
-              if (!isAbortError(voiceError)) {
-                reportError(
-                  "voice",
-                  voiceError instanceof Error
-                    ? voiceError.message
-                    : "Voice playback failed.",
-                );
-              }
-              avatarController.presentEmotion(assistantMessage.emotion);
-              await commitOnce();
-              setStatus(statusCopy(preferencesRef.current.uiLocale).ready);
             });
+          },
+          onError: (voiceError) => reportError("voice", voiceError, "voice"),
+          onFinished: () => {
+            avatarController.presentEmotion(assistantMessage.emotion);
+            if (!spokenReplies.active) setStatus(statusCopy(preferencesRef.current.uiLocale).ready);
+          },
         });
       }
     },
     [
       avatarController,
       commitAssistantMessage,
+      spokenReplies,
       getVoice,
       persistConversation,
       rememberConversation,
@@ -944,7 +909,6 @@ export function useKanaController(appVersion: string) {
 
       if (event.type === "assistant.message") {
         void updateConversationFromEvent(event);
-        setStatus(statusCopy(preferencesRef.current.uiLocale).responseReceived);
         return;
       }
 
@@ -1071,7 +1035,7 @@ export function useKanaController(appVersion: string) {
         // Don't overwrite "Kana menyiapkan suara…" / "Kana berbicara…" when
         // the reply is being held for synthesis — it will resolve to "Ready
         // when you are" once speech finishes or fails.
-        if (!heldMessageRef.current) {
+        if (!spokenReplies.active) {
           setStatus(statusCopy(preferencesRef.current.uiLocale).ready);
         }
         turnConversationRef.current = null;
@@ -1128,6 +1092,7 @@ export function useKanaController(appVersion: string) {
       persistConversation,
       reportError,
       restoreConversationTranscript,
+      spokenReplies,
       updateConversationFromEvent,
     ],
   );
@@ -1267,6 +1232,7 @@ export function useKanaController(appVersion: string) {
     return () => {
       mounted = false;
       globalThis.clearTimeout(timeout);
+      spokenReplies.cancel(false);
       cleanupVoice();
       unsubscribeAgentRef.current?.();
       void agentRef.current?.disconnect();
@@ -1662,6 +1628,7 @@ export function useKanaController(appVersion: string) {
   // ---- Conversation CRUD ----
   const createConversation = useCallback(async () => {
     if (busy) return;
+    flushHeldMessage();
     const current = conversationsRef.current.find(
       (item) => item.id === activeConversationIdRef.current,
     );
@@ -1678,7 +1645,7 @@ export function useKanaController(appVersion: string) {
     rememberConversation(conversation);
     openedConversationRef.current = null;
     setError(null);
-  }, [busy, commitConversations, conversationStore, rememberConversation, resetConversationActivities]);
+  }, [busy, commitConversations, conversationStore, flushHeldMessage, rememberConversation, resetConversationActivities]);
 
   // ---- Cross-browser Hermes sessions ----
   // Sessions created on other surfaces/browsers have no local IndexedDB
@@ -1687,6 +1654,7 @@ export function useKanaController(appVersion: string) {
   const adoptHermesSession = useCallback(
     async (entry: HermesConversationDirectoryEntry) => {
       if (busy) return;
+      flushHeldMessage();
       const existing = conversationsRef.current.find(
         (item) => item.agent?.persistentSessionId === entry.hermesSessionKey,
       );
@@ -1708,7 +1676,7 @@ export function useKanaController(appVersion: string) {
       openedConversationRef.current = null;
       await ensureAgent(saved);
     },
-    [busy, ensureAgent, persistConversation, rememberConversation],
+    [busy, ensureAgent, flushHeldMessage, persistConversation, rememberConversation],
   );
 
   const selectConversation = useCallback(
@@ -1716,6 +1684,7 @@ export function useKanaController(appVersion: string) {
       if (busy || id === activeConversationId) return;
       const target = conversationsRef.current.find((item) => item.id === id);
       if (!target) return;
+      flushHeldMessage();
       rememberConversation(target);
       openedConversationRef.current = null;
       setError(null);
@@ -1738,6 +1707,7 @@ export function useKanaController(appVersion: string) {
       avatarController,
       busy,
       cleanupVoice,
+      flushHeldMessage,
       ensureAgent,
       rememberConversation,
     ],
@@ -1761,6 +1731,10 @@ export function useKanaController(appVersion: string) {
   const deleteConversation = useCallback(
     async (id: string) => {
       if (busy) return;
+      if (activeConversationIdRef.current === id) {
+        stopVoice();
+        spokenReplies.cancel(false);
+      }
       await conversationStore.delete(id);
       let remaining = conversationsRef.current.filter(
         (item) => item.id !== id,
@@ -1792,6 +1766,8 @@ export function useKanaController(appVersion: string) {
       commitConversations,
       conversationStore,
       rememberConversation,
+      spokenReplies,
+      stopVoice,
     ],
   );
 
@@ -1807,12 +1783,6 @@ export function useKanaController(appVersion: string) {
         setStatus(statusCopy(next.uiLocale).ready);
       }
 
-      const voiceChanged =
-        previous.voiceEnabled !== next.voiceEnabled ||
-        previous.qwen3Tts.baseUrl !== next.qwen3Tts.baseUrl ||
-        previous.qwen3Tts.voiceId !== next.qwen3Tts.voiceId ||
-        previous.qwen3Tts.deliveryMode !== next.qwen3Tts.deliveryMode;
-      if (voiceChanged) cleanupVoice();
       if (previous.voiceEnabled && !next.voiceEnabled) {
         // Turning voice off is an immediate text-only transition: stop any
         // active synthesis/playback and reveal a response that was waiting
@@ -1843,7 +1813,6 @@ export function useKanaController(appVersion: string) {
     [
       avatarController,
       busy,
-      cleanupVoice,
       configureAvatar,
       flushHeldMessage,
       preferencesStore,
@@ -2034,9 +2003,9 @@ export function useKanaController(appVersion: string) {
 
   // ---- Abort ----
   const abort = useCallback(async () => {
-    stopVoice();
-    await agentRef.current?.abort();
-  }, [stopVoice]);
+    flushHeldMessage();
+    if (busy) await agentRef.current?.abort();
+  }, [busy, flushHeldMessage]);
 
   // ---- Input responses ----
   const respondToInput = useCallback(

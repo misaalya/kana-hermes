@@ -9,7 +9,7 @@ Kana adds:
   copying any game's artwork, characters, or proprietary assets;
 - a Japanese-speaking presentation persona and structured response protocol;
 - user-selectable subtitle languages for future responses;
-- locally persistent conversation history that preserves the exact subtitle text and language originally displayed;
+- Hermes-backed conversation history that preserves the exact subtitle text and language originally displayed, with browser-local drafts and presentation preferences;
 - replaceable TTS and avatar providers while Hermes remains the only agent;
 - a responsive Live2D canvas with two official free sample avatars and
   replaceable, locally persistent URL/folder model sources;
@@ -24,10 +24,13 @@ Kana adds:
 
 ## Installation
 
+Kana supports local use and VPS deployment through the same application.
+[Install and deploy Kana](docs/INSTALLATION.md) explains the choices.
+
 Kana supports two production installation paths:
 
 1. install the published package globally from npm (the intended path for
-   normal users); or
+   normal users, also usable on a VPS with `kana serve`); or
 2. build the standalone production server from a source checkout (the path
    for contributors, custom builds, and VPS operators).
 
@@ -93,6 +96,7 @@ kana setup        # configure or reconfigure optional Qwen3-TTS voice
 kana config       # open/print the editable advanced JSON path
 kana doctor       # check Hermes/uv availability and data locations
 kana --port 4000  # choose the local web port
+kana serve       # foreground server; no browser, deployment mode
 ```
 
 Kana's server may start, restart, and stop the official `hermes serve` gateway
@@ -180,7 +184,7 @@ choice:
 
 ```bash
 HERMES_DASHBOARD_SESSION_TOKEN="replace-with-a-long-local-token" \
-  /home/kenobu/.local/bin/hermes serve --host 127.0.0.1 --port 9119
+  hermes serve --host 127.0.0.1 --port 9119
 ```
 
 The explicit environment token lets Kana safely discover and adopt that
@@ -192,7 +196,7 @@ Hermes sessions.
 
 Kana does not update, patch, or write to the Hermes installation. New Kana conversations seed a per-session Hermes system message containing the Kana persona and response contract; the user's global Hermes configuration is not changed.
 
-Before publishing or installing a release candidate, run
+Before publishing or installing a release build, run
 `npm run test:package:npm`. It packs the exact npm artifact, installs it into an
 isolated global prefix and clean user home, exercises `kana --help` and
 `kana doctor`, verifies generated file permissions, starts the installed
@@ -266,7 +270,8 @@ service's clone endpoint, which embeds the speaker and stores the profile under
 the service's data directory; cloned voices then appear alongside preset
 speakers and can be selected like any other voice. Profiles are deletable, and
 only user-created `clone-*` profiles can ever be deleted. Cloning happens
-entirely on your machine: audio never leaves the local Qwen3-TTS service.
+on the Kana server machine, including when deployed to a VPS. Reference audio
+is uploaded from the browser to that server.
 
 The versioned API exposes:
 
@@ -293,8 +298,8 @@ The service returns PCM WAV audio. Kana decodes it in the browser, derives
 mouth openness through the Web Audio API, and cancels active generation when
 voice playback is stopped. The default 0.6B model reports that it does not
 support instruction-based emotion control; it still speaks Japanese and the
-avatar keeps the response emotion visually. A 1.7B CustomVoice deployment can
-use the same API with emotion instructions on stronger hardware.
+avatar keeps the response emotion visually. The bundled service supports the
+pinned 0.6B Base model.
 
 Complete-response playback is the default. Settings also exposes experimental
 sentence delivery for slow hosts: Kana splits the same `speech_ja`
@@ -302,8 +307,8 @@ deterministically, prefetches the next ordered part, and replays/cancels the
 parts as one voice turn. This never sends another Hermes or translation
 request. Keep the default until target-host measurements show a real benefit.
 
-This maturity pass does not rerun multi-gigabyte model inference on the
-low-resource development machine. Use the repeatable
+Real CPU synthesis through the authenticated relay produced a valid WAV during
+the September 8 audit. Latency varies with hardware; use the repeatable
 [VPS acceptance procedure](docs/QWEN3_TTS_VPS_ACCEPTANCE.md) to verify real WAV,
 cancellation, and latency on the target host. See
 [the service guide](services/qwen3-tts/README.md) for configuration.
@@ -350,20 +355,18 @@ sole discretion. See the [official sample model terms](https://www.live2d.com/en
 
 ```text
 Kana UI
-  ├─ AgentClient
-  │    └─ HermesAgentClient → hermes serve /api/ws
-  ├─ ConversationStore
-  │    └─ IndexedDbConversationStore
-  │         └─ LocalConversationStore migration/fallback
-  ├─ VoiceProvider
-  │    └─ Qwen3TTSProvider → local API v2 (speech + voice clones)
-  │                         → AudioLipSyncController
+  ├─ HermesAgentClient → same-origin /api/hermes/* relay
+  │                       → server-held bridge → hermes serve /api/ws
+  ├─ Conversation view → Hermes transcript
+  │    └─ browser-local drafts, sidebar metadata, and presentation preferences
+  ├─ TtsRelayProvider → same-origin /api/voice/tts/* relay
+  │    └─ server-selected provider → local Qwen3-TTS or external OpenAI-compatible API
+  │                                 → browser AudioLipSyncController
   ├─ AvatarProvider
   │    ├─ ManagedAvatarProvider → placeholder fallback state
   │    └─ Live2DAvatarProvider → PixiLive2DRuntimeAdapter → Cubism Web
   │                             └─ IndexedDbAvatarModelStore
-  └─ Hermes control panel
-       └─ /api/local-runtime/hermes → LocalHermesRuntime → `hermes serve`
+  └─ Server runtime → LocalHermesRuntime → unmodified `hermes serve`
 ```
 
 Hermes events are translated into Kana's stable internal event model. The current Hermes adapter maps session, message, status, tool, interruption, and input-request events. It does not infer a separate filesystem protocol from tool output.
@@ -371,12 +374,12 @@ Hermes events are translated into Kana's stable internal event model. The curren
 ## Current integration limitations
 
 - CPU Qwen3-TTS is slower than realtime on the target MX330 laptop, and direct WAV playback is used instead of streaming audio.
-- Kana history and imported avatars are browser-local; there is no cloud sync
-  or cross-browser model library. Hermes keeps its own independently managed
-  session history.
-- The npm launcher supervises Qwen3-TTS and, when launched through it, the
-  official `hermes serve` process. It remains a local launcher, not an OS-native
-  signed desktop binary.
+- Hermes owns the transcript. Imported avatars, drafts, and presentation
+  preferences are browser-local; there is no cloud sync or cross-browser model
+  library.
+- The npm launcher starts the same web server for a laptop or VPS and can
+  supervise local Qwen3-TTS plus the unmodified `hermes serve` process. It is
+  not an OS-native signed desktop binary or service manager.
 
 Stored preferences always resolve to the real agent, voice, and avatar modes;
 legacy values from older installs are normalized away on load.
@@ -396,7 +399,8 @@ CSS avatar remains the honest fallback.
 
 The standalone directory also includes dependency-free release tools. Run
 `node tools/qwen3-tts-acceptance.mjs` on the target Qwen host and
-`node tools/dogfood-check.mjs dogfood/journal.json` during beta acceptance.
+`node tools/dogfood-check.mjs dogfood/journal.json` for extended
+field-validation evidence.
 The source checkout exposes the same tools through the shorter npm commands.
 
 ## Checks
@@ -432,8 +436,8 @@ the initial password on the login screen; changing it in Settings is optional.
 - [local security model](docs/SECURITY.md)
 - [Qwen3-TTS VPS acceptance](docs/QWEN3_TTS_VPS_ACCEPTANCE.md)
 - [Hermes restart acceptance](docs/HERMES_RESTART_ACCEPTANCE.md)
-- [dogfood and beta gate](docs/DOGFOOD.md)
-- [remaining beta acceptance handoff](docs/BETA_ACCEPTANCE_HANDOFF.md)
+- [dogfood and field-validation evidence](docs/DOGFOOD.md)
+- [remaining field-validation handoff](docs/BETA_ACCEPTANCE_HANDOFF.md)
 - [release checklist](docs/RELEASE_CHECKLIST.md)
 - [supported environment](docs/SUPPORTED_ENVIRONMENT.md)
 - [compatibility policy](docs/COMPATIBILITY_POLICY.md)

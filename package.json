@@ -1,16 +1,16 @@
 {
-  "name": "kana-alya",
-  "version": "0.2.0-alpha.1",
-  "private": false,
+  "name": "kana-app",
+  "version": "0.2.0",
+  "private": true,
   "description": "Local visual-novel interface and launcher for an existing Hermes Agent",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/misaalya/kana-ui.git"
+    "url": "git+https://github.com/misaalya/kana-hermes.git"
   },
-  "homepage": "https://github.com/misaalya/kana-ui#readme",
+  "homepage": "https://github.com/misaalya/kana-hermes#readme",
   "bugs": {
-    "url": "https://github.com/misaalya/kana-ui/issues"
+    "url": "https://github.com/misaalya/kana-hermes/issues"
   },
   "keywords": [
     "hermes-agent",
@@ -18,42 +18,14 @@
     "local-first",
     "vtuber"
   ],
-  "bin": {
-    "kana": "bin/kana.mjs",
-    "kana-alya": "bin/kana.mjs"
-  },
-  "files": [
-    ".npm-package",
-    "bin",
-    "config",
-    "README.md",
-    "CHANGELOG.md",
-    "PLAN.md",
-    "docs"
-  ],
   "engines": {
     "node": ">=22.13"
-  },
-  "os": [
-    "linux"
-  ],
-  "cpu": [
-    "x64"
-  ],
-  "libc": [
-    "glibc"
-  ],
-  "publishConfig": {
-    "access": "public",
-    "tag": "next"
   },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "package:local": "npm run build && node scripts/package-standalone.mjs",
-    "package:npm": "npm run build && node scripts/prepare-npm-package.mjs && npm pack --dry-run --ignore-scripts",
-    "prepack": "npm run build && node scripts/prepare-npm-package.mjs",
-    "prepublishOnly": "node scripts/assert-npm-release.mjs",
+    "package:npm": "npm run build && node scripts/prepare-npm-package.mjs && npm pack ./cli --dry-run --ignore-scripts",
     "start": "next start",
     "start:standalone": "HOSTNAME=127.0.0.1 PORT=3000 node .next/standalone/server.js",
     "config": "node bin/kana.mjs config",
@@ -78,7 +50,10 @@
     "hermes:active-check": "node scripts/hermes-active-restart-check.mjs",
     "tts:dev": "uv run --project services/qwen3-tts kana-qwen3-tts",
     "tts:acceptance": "node scripts/qwen3-tts-acceptance.mjs",
-    "tts:test": "uv run --project services/qwen3-tts python -m unittest discover -s services/qwen3-tts/tests"
+    "tts:test": "uv run --project services/qwen3-tts python -m unittest discover -s services/qwen3-tts/tests",
+    "package:cli": "npm run package:npm",
+    "publish:cli": "node scripts/assert-npm-release.mjs && npm publish ./cli",
+    "serve": "node bin/kana.mjs serve"
   },
   "dependencies": {},
   "devDependencies": {

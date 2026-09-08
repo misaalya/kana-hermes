@@ -1,15 +1,15 @@
-# Kana beta acceptance handoff
+# Kana field-validation handoff
 
-Kana's deterministic local quality gate is complete. Beta remains blocked by
-target-environment evidence that cannot be truthfully generated with mocks or
-by waiting inside an automated test. This is the shortest complete handoff for
-the remaining matrix.
+Kana's deterministic local quality gate is complete. Extended compatibility
+claims remain pending target-environment evidence that cannot be truthfully
+generated with mocks or by waiting inside an automated test. This is the
+shortest complete handoff for the remaining matrix.
 
 Never record prompts, conversation text, tool output, tokens, passwords,
 secret values, private model URLs, or production credentials in acceptance
 files. Use disposable conversations and harmless tools.
 
-## Current gate
+## Current field-validation report
 
 Run:
 
@@ -91,7 +91,8 @@ npm run dogfood:record -- \
 ```
 
 Seven distinct dates spanning at least seven calendar days are required. Any
-data loss, credential exposure, or unverified P0/P1 issue keeps beta blocked.
+data loss, credential exposure, or unverified P0/P1 issue keeps the
+field-validation report incomplete.
 
 ## Final commands
 
@@ -106,6 +107,7 @@ npm run dogfood:check
 npm audit --omit=dev --audit-level=high
 ```
 
-Beta is ready only when every command exits 0, `dogfood:check` reports 13/13
-and seven days, target Qwen evidence is preserved, and no P0/P1 issue remains
-open or merely fixed without verification.
+Field validation is complete only when every command exits 0,
+`dogfood:check` reports 13/13 and seven days, target Qwen evidence is
+preserved, and no P0/P1 issue remains open or merely fixed without
+verification.

@@ -55,6 +55,7 @@ type KanaAppProps = { appVersion: string };
 
 export function KanaApp({ appVersion }: KanaAppProps) {
   const kana = useKanaController(appVersion);
+  const voiceActive = ["synthesizing", "playing", "stopping"].includes(kana.voiceRuntimeState);
   const { theme, toggleTheme } = useTheme();
   const copy = getCopy(kana.preferences.uiLocale);
   const workspaceCopy = copy.workspace;
@@ -571,12 +572,21 @@ export function KanaApp({ appVersion }: KanaAppProps) {
             messages={kana.activeConversation?.messages ?? NO_MESSAGES}
             activities={kana.activities}
             serverActivityTurns={kana.serverActivityTurns}
-            busy={kana.busy}
+            busy={kana.busy || voiceActive}
             status={kana.status}
             locale={kana.preferences.uiLocale}
           />
         </div>
         <div className="kana-composer-shell shrink-0 border-t px-4 pb-3 pt-2.5 max-sm:px-3 max-sm:pb-[max(12px,env(safe-area-inset-bottom))]">
+          {kana.error ? (
+            <div role="alert" className="mb-2 flex items-start gap-2 rounded-lg border border-red-300/40 bg-red-500/10 px-3 py-2 text-xs">
+              <p className="min-w-0 flex-1 break-words">{kana.error}</p>
+              <button type="button" onClick={kana.clearError} className="kana-focus min-h-8 shrink-0 px-2"
+                aria-label={kana.preferences.uiLocale === "id" ? "Tutup pesan kesalahan" : "Dismiss error"}>
+                ×
+              </button>
+            </div>
+          ) : null}
           <div className="relative">
             <SlashCommandMenu
               suggestions={kana.commandSuggestions}
@@ -627,7 +637,7 @@ export function KanaApp({ appVersion }: KanaAppProps) {
                   }
                 }}
               />
-              {kana.busy ? (
+              {kana.busy || voiceActive ? (
                 <button
                   type="button"
                   aria-label={workspaceCopy.stop}

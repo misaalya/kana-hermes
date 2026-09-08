@@ -19,13 +19,6 @@ type LiveChatFeedProps = {
   locale: UiLocale;
 };
 
-function formatTime(timestamp: number, locale: UiLocale): string {
-  return new Intl.DateTimeFormat(locale === "id" ? "id-ID" : "en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(timestamp);
-}
-
 export const LiveChatFeed = memo(function LiveChatFeed({
   messages,
   activities,
@@ -35,6 +28,12 @@ export const LiveChatFeed = memo(function LiveChatFeed({
   locale,
 }: LiveChatFeedProps) {
   const copy = getCopy(locale);
+  const dateFormatter = useMemo(
+    () => new Intl.DateTimeFormat(locale === "id" ? "id-ID" : "en-US", {
+      hour: "2-digit", minute: "2-digit",
+    }),
+    [locale],
+  );
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [pinnedToBottom, setPinnedToBottom] = useState(true);
 
@@ -92,7 +91,7 @@ export const LiveChatFeed = memo(function LiveChatFeed({
               <article key={message.id} className="rounded-xl border-2 border-line bg-raised px-3 py-2.5 max-sm:px-2.5 max-sm:py-2">
                 <div className="mb-1 flex items-center justify-between gap-3">
                   <strong className="text-[9px] font-bold tracking-[0.14em] text-muted uppercase">{copy.chat.hermesNote}</strong>
-                  <span className="text-[9px] tabular-nums text-faint">{formatTime(message.timestamp, locale)}</span>
+                  <span className="text-[9px] tabular-nums text-faint">{dateFormatter.format(message.timestamp)}</span>
                 </div>
                 <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-ink-dim max-sm:text-[10px]">{messageCopy}</p>
               </article>
@@ -110,7 +109,7 @@ export const LiveChatFeed = memo(function LiveChatFeed({
             >
               <p className="whitespace-pre-wrap text-[13px] leading-relaxed max-sm:text-[11px] max-sm:leading-[1.5]">{messageCopy}</p>
               <span className="mt-1.5 block text-right text-[9px] tabular-nums opacity-50 max-sm:text-[8px]">
-                {formatTime(message.timestamp, locale)}
+                {dateFormatter.format(message.timestamp)}
               </span>
             </article>
           );

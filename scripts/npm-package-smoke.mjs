@@ -31,7 +31,7 @@ try {
     "--json",
     "--pack-destination",
     packRoot,
-  ], root);
+  ], path.join(root, "cli"));
   const packResult = JSON.parse(packed.stdout)[0];
   if (!packResult?.filename || !Array.isArray(packResult.files)) {
     throw new Error("npm pack did not return a file manifest.");
@@ -40,6 +40,8 @@ try {
   const paths = new Set(packResult.files.map((entry) => entry.path));
   for (const required of [
     "bin/kana.mjs",
+    "CHANGELOG.md",
+    "PLAN.md",
     ".npm-package/runtime/server.js",
     ".npm-package/runtime/.next/BUILD_ID",
     ".npm-package/runtime/assets/voices/kana-default.wav",
@@ -49,6 +51,7 @@ try {
     if (!paths.has(required)) throw new Error(`npm package is missing ${required}`);
   }
   const forbidden = [...paths].find((entry) =>
+    /^\.npm-package\/runtime\/(?:app|components)\//.test(entry) ||
     /(^|\/)\.env(?:\.|$)/.test(entry) ||
     /(^|\/)(?:\.git|\.hermes|\.omo|\.codegraph|data|test-results|auth-reference)(?:\/|$)/.test(entry)
   );
@@ -289,6 +292,46 @@ process.once("SIGINT", stop);
     if (child.exitCode === null) child.kill("SIGTERM");
     await Promise.race([
       new Promise((resolve) => child.once("exit", resolve)),
+      new Promise((resolve) => setTimeout(resolve, 5_000)),
+    ]);
+  }
+
+  // The same installed artifact is a headless deployment, with a separate data root.
+  const serverData = path.join(temporary, "server-data");
+  const browserMarker = path.join(temporary, "browser-opened");
+  await writeFile(path.join(fakeBin, "xdg-open"), `#!/usr/bin/env node
+require("node:fs").writeFileSync(process.env.KANA_SMOKE_BROWSER_MARKER, "opened");
+`, { mode: 0o755 });
+  const serverPort = await availablePort();
+  const server = spawn(executable, ["serve", "--port", String(serverPort)], {
+    cwd: temporary,
+    env: { ...environment, KANA_DATA_DIR: serverData, KANA_SMOKE_BROWSER_MARKER: browserMarker },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let serverOutput = "";
+  server.stdout.on("data", (chunk) => { serverOutput += chunk; });
+  server.stderr.on("data", (chunk) => { serverOutput += chunk; });
+  try {
+    await waitFor(() => serverOutput.includes("Kana is ready at"), 30_000);
+    const login = await fetch(`http://127.0.0.1:${serverPort}/api/auth/login`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: "chankana123" }),
+    });
+    const cookie = login.headers.get("set-cookie")?.split(";", 1)[0];
+    if (!login.ok || !cookie) throw new Error("kana serve login failed");
+    const configResponse = await fetch(`http://127.0.0.1:${serverPort}/api/kana/config`, { headers: { Cookie: cookie } });
+    const config = await configResponse.json();
+    if (config.deploymentMode !== "deployment" || config.path !== path.join(serverData, "config.json")) {
+      throw new Error("kana serve did not select deployment mode and the requested data root");
+    }
+    try {
+      await access(browserMarker);
+      throw new Error("kana serve tried to open a browser");
+    } catch (error) { if (error.code !== "ENOENT") throw error; }
+  } finally {
+    if (server.exitCode === null) server.kill("SIGTERM");
+    await Promise.race([
+      new Promise((resolve) => server.once("exit", resolve)),
       new Promise((resolve) => setTimeout(resolve, 5_000)),
     ]);
   }

@@ -88,3 +88,29 @@ describe("Kana voice library registration", () => {
     assert.equal(getDefaultVoiceClone()?.service_voice_id, voiceId);
   });
 });
+
+it("uses the current bundled reference after a package path changes", async () => {
+  const { DatabaseSync } = await import("node:sqlite");
+  const database = new DatabaseSync(path.join(root, "appstate.db"));
+  database.prepare("UPDATE voice_clones SET file_path = ?, service_voice_id = NULL WHERE id = ?")
+    .run("/removed/previous-install/assets/voices/kana-default.wav", "kc-default");
+  database.close();
+  let registered = false;
+  globalThis.fetch = async (_input, init) => {
+    if (!init?.method) return Response.json({ voices: [], supports_voice_clone: true });
+    const body = JSON.parse(String(init.body));
+    assert.ok(Buffer.from(body.audio_base64, "base64").byteLength > 100);
+    registered = true;
+    return Response.json({ voice: { id: "new-install-voice" } });
+  };
+  assert.equal(await resolveVoiceForSynthesis(17860), "new-install-voice");
+  assert.equal(registered, true);
+});
+
+it("honors a live service default without unnecessary voice cloning", async () => {
+  globalThis.fetch = async (_input, init) => {
+    assert.equal(init?.method, undefined);
+    return Response.json({ default_voice_id: "operator-voice", voices: [{ id: "operator-voice" }], supports_voice_clone: true });
+  };
+  assert.equal(await resolveVoiceForSynthesis(17860), "operator-voice");
+});

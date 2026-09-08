@@ -18,7 +18,6 @@ import type {
   VoiceProvider,
   VoiceProviderStatus,
 } from "@/lib/voice/types";
-import type { KanaPreferences } from "@/lib/preferences/types";
 
 type VoiceMetricsCallback = (metrics: {
   lastVoiceDurationMs: number;
@@ -29,7 +28,6 @@ type VoiceMetricsCallback = (metrics: {
 
 export function useVoiceController(
   avatarController: AvatarController,
-  getPreferences: () => KanaPreferences,
   onMetrics: VoiceMetricsCallback,
   onError: (
     source: KanaErrorSource,
@@ -44,25 +42,12 @@ export function useVoiceController(
 
   const voiceRef = useRef<VoiceProvider | null>(null);
   const unsubscribeVoiceRef = useRef<(() => void) | null>(null);
-  const voiceKeyRef = useRef("");
 
   const getVoice = useCallback((): VoiceProvider => {
-    const prefs = getPreferences();
-    const key = `${prefs.voiceMode}:${prefs.qwen3Tts.baseUrl}:${prefs.qwen3Tts.voiceId}:${prefs.qwen3Tts.deliveryMode}`;
-    if (voiceRef.current && voiceKeyRef.current === key) {
-      return voiceRef.current;
-    }
-
-    voiceRef.current?.dispose?.();
-    unsubscribeVoiceRef.current?.();
-    const provider = new TtsRelayProvider(
-      {
-        baseUrl: prefs.qwen3Tts.baseUrl,
-        voiceId: prefs.qwen3Tts.voiceId,
-        deliveryMode: prefs.qwen3Tts.deliveryMode,
-      },
-      avatarController,
-    );
+    if (voiceRef.current) return voiceRef.current;
+    // Keep the gesture-unlocked AudioContext across preference changes.
+    // Voice/delivery choices are passed per utterance; the server owns provider selection.
+    const provider = new TtsRelayProvider({}, avatarController);
     voiceRef.current = provider;
     const applySnapshot = (
       snapshot: ReturnType<VoiceProvider["getSnapshot"]>,
@@ -82,9 +67,8 @@ export function useVoiceController(
     };
     applySnapshot(provider.getSnapshot());
     unsubscribeVoiceRef.current = provider.subscribe(applySnapshot);
-    voiceKeyRef.current = key;
     return provider;
-  }, [avatarController, getPreferences, onMetrics]);
+  }, [avatarController, onMetrics]);
 
   const inspectVoiceService = useCallback(
     async (baseUrl: string) => {
@@ -142,7 +126,6 @@ export function useVoiceController(
     unsubscribeVoiceRef.current = null;
     voiceRef.current?.dispose?.();
     voiceRef.current = null;
-    voiceKeyRef.current = "";
     setVoiceRuntimeState("idle");
   }, []);
 

@@ -6,8 +6,8 @@ send an LLM prompt merely to verify connectivity.
 
 | Journey | Automated evidence | Manual acceptance |
 | --- | --- | --- |
-| First run | Preference migration tests | New browser profile shows four setup steps; offline defaults enter mock mode |
-| Mock conversation | Playwright desktop/mobile | User message, tool activity, Japanese speech contract, and stored subtitle appear |
+| First run | Preference migration tests | New browser profile shows four setup steps and an honest unavailable state until Hermes is connected |
+| Controlled conversation fixture | Playwright desktop/mobile | User message, tool activity, Japanese speech contract, and stored subtitle appear |
 | Subtitle change | Playwright desktop/mobile | Existing subtitle stays byte-for-byte unchanged after change and reload |
 | Conversation lifecycle | Playwright draft/search test | Create, reopen, rename, search, delete with confirmation; draft remains per conversation |
 | Slash commands | Playwright keyboard test; Hermes adapter tests | `/` catalog, argument completion, aliases, send/skill/prefill, and unavailable platform commands are honest |
@@ -70,8 +70,8 @@ npm run test:live2d:official
 ```
 
 On target Qwen hardware, run `npm run tts:acceptance` and preserve its JSON
-report. During the beta period, `npm run dogfood:check` reports the remaining
-seven-day, environment-matrix, and P0/P1 gates.
+report. `npm run dogfood:check` reports the remaining seven-day,
+environment-matrix, and P0/P1 field-validation gates.
 
 Record real daily evidence with `npm run dogfood:record`, update completed
 matrix rows with `npm run dogfood:matrix`, and validate the five active Hermes
@@ -88,4 +88,5 @@ procedure is in `docs/BETA_ACCEPTANCE_HANDOFF.md`.
 - Verify browser storage quota and WebGL context-loss behavior on target GPUs.
 - Run real Qwen inference and latency sampling on target hardware using the
   VPS acceptance procedure.
-- Dogfood for at least one week before calling a build beta-ready.
+- Dogfood for at least one week before expanding the supported-environment
+  claim.

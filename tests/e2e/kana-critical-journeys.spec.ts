@@ -945,3 +945,104 @@ test("serves security headers and keeps the composer reachable at target widths"
   expect(landscape.documentWidth).toBeLessThanOrEqual(landscape.viewportWidth);
   expect(landscape.composerBottom).toBeLessThanOrEqual(landscape.viewportHeight);
 });
+
+function testToneWav(): Buffer {
+  const samples = 16000;
+  const wav = Buffer.alloc(44 + samples * 2);
+  wav.write("RIFF", 0); wav.writeUInt32LE(wav.length - 8, 4); wav.write("WAVEfmt ", 8);
+  wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
+  wav.writeUInt32LE(16000, 24); wav.writeUInt32LE(32000, 28);
+  wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write("data", 36);
+  wav.writeUInt32LE(samples * 2, 40);
+  for (let i = 0; i < samples; i++) wav.writeInt16LE(Math.round(Math.sin(i * 2 * Math.PI * 220 / 16000) * 12000), 44 + i * 2);
+  return wav;
+}
+
+async function enableTestVoice(page: Page, type = "openai-compatible") {
+  await page.route("**/api/voice/tts/provider", (route) => route.fulfill({ json: {
+    provider: { id: type, type, name: "Test voice", configured: true, capabilities: {
+      instruction: false, runtimeControl: type === "qwen3-local", upstreamCancellation: true, voiceLibrary: false,
+    } }, status: { state: "ready", voices: [], message: "Ready" },
+  } }));
+  await page.route("**/api/kana/voices**", (route) => route.fulfill({ json: { voices: [] } }));
+  await page.getByRole("button", { name: "Open settings" }).click();
+  await page.getByRole("button", { name: /^Voice/ }).click();
+  await page.getByRole("switch", { name: "Japanese voice" }).check();
+  await page.getByRole("button", { name: "Close settings" }).click();
+}
+
+for (const provider of ["qwen3-local", "openai-compatible"]) {
+  test(`TTS holds text until audible playback and runs lip sync for ${provider} without randomUUID`, async ({ page }) => {
+    await enableTestVoice(page, provider);
+    await page.evaluate(() => {
+      Object.defineProperty(crypto, "randomUUID", { configurable: true, value: undefined });
+      const original = AnalyserNode.prototype.getByteTimeDomainData;
+      AnalyserNode.prototype.getByteTimeDomainData = function (samples) {
+        original.call(this, samples);
+        if (samples.some((value) => value !== 128)) document.body.dataset.audioLipSync = "active";
+      };
+    });
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    let requests = 0;
+    await page.route("**/api/voice/tts/speech", async (route) => {
+      requests++;
+      expect(route.request().postDataJSON().language).toBe("ja");
+      await held;
+      await route.fulfill({ contentType: "audio/wav", body: testToneWav() });
+    });
+    const composer = page.getByRole("textbox", { name: "Message Kana" });
+    await composer.fill("Please speak after the audio is ready"); await composer.press("Enter");
+    try {
+      await expect.poll(() => requests).toBe(1);
+      await expect(page.getByText("Hello! I am here.", { exact: true })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeVisible();
+    } finally { release(); }
+    await expect(page.getByText("Hello! I am here.", { exact: true }).first()).toBeVisible();
+    await expect(page.locator("body")).toHaveAttribute("data-audio-lip-sync", "active");
+    await expect(page.getByRole("button", { name: "Stop", exact: true })).not.toBeVisible();
+  });
+}
+
+test("TTS failure reveals held text with an explicit voice error", async ({ page }) => {
+  await enableTestVoice(page);
+  await page.route("**/api/voice/tts/speech", (route) => route.fulfill({ status: 503, json: { error: "Test voice unavailable" } }));
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
+  await composer.fill("Handle an unavailable voice"); await composer.press("Enter");
+  await expect(page.getByText("Hello! I am here.", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText(/Test voice unavailable/).first()).toBeVisible();
+});
+
+test("a failed spoken reply does not suppress an identical answer to a new user turn", async ({ page }) => {
+  await enableTestVoice(page);
+  let count = 0;
+  await page.route("**/api/voice/tts/speech", (route) => {
+    count++;
+    return count === 1
+      ? route.fulfill({ status: 503, json: { error: "Temporary voice failure" } })
+      : route.fulfill({ contentType: "audio/wav", body: testToneWav() });
+  });
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
+  await composer.fill("First greeting"); await composer.press("Enter");
+  await expect(page.getByText("Hello! I am here.", { exact: true })).toHaveCount(1);
+  await composer.fill("Say that again"); await composer.press("Enter");
+  await expect.poll(() => count).toBe(2);
+  await expect(page.getByText("Hello! I am here.", { exact: true })).toHaveCount(2);
+});
+
+test("Stop reveals held text and cancels synthesis before playback", async ({ page }) => {
+  await enableTestVoice(page);
+  let requested = false;
+  let cancelled = false;
+  await page.route("**/api/voice/tts/speech", () => { requested = true; });
+  await page.route("**/api/voice/tts/requests/*/cancel", (route) => {
+    cancelled = true; return route.fulfill({ json: { cancelled: true } });
+  });
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
+  await composer.fill("Stop this pending voice"); await composer.press("Enter");
+  await expect.poll(() => requested).toBe(true);
+  await expect(page.getByText("Hello! I am here.", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  await expect(page.getByText("Hello! I am here.", { exact: true }).first()).toBeVisible();
+  await expect.poll(() => cancelled).toBe(true);
+});

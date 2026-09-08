@@ -1,4 +1,4 @@
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import bcrypt from "bcryptjs";
@@ -22,17 +22,19 @@ function legacyAuthFile(): string {
   return path.join(resolveKanaDataDir(), "auth.json");
 }
 
-type PasswordStore = { passwordHash: string };
+type PasswordStore = { passwordHash: string; sessionVersion?: string };
 type PasswordState =
   | { status: "default" }
-  | { status: "stored"; passwordHash: string }
+  | ({ status: "stored" } & PasswordStore)
   | { status: "invalid" };
 
 function parseStore(value: unknown): PasswordStore | null {
   if (!value || typeof value !== "object") return null;
   const parsed = value as Partial<PasswordStore>;
   if (typeof parsed.passwordHash === "string" && parsed.passwordHash.length > 0) {
-    return { passwordHash: parsed.passwordHash };
+    if (parsed.sessionVersion !== undefined &&
+        (typeof parsed.sessionVersion !== "string" || !parsed.sessionVersion)) return null;
+    return { passwordHash: parsed.passwordHash, sessionVersion: parsed.sessionVersion };
   }
   return null;
 }
@@ -56,7 +58,7 @@ function migrateLegacyStore(): PasswordState {
       }
     }
     console.info(`[kana] Migrated the password hash from ${file} into appstate.db.`);
-    return { status: "stored", passwordHash: parsed.passwordHash };
+    return { status: "stored", ...parsed };
   } catch {
     return { status: "invalid" };
   }
@@ -69,12 +71,19 @@ function readPasswordState(): PasswordState {
 
   const parsed = parseStore(entry.value);
   return parsed
-    ? { status: "stored", passwordHash: parsed.passwordHash }
+    ? { status: "stored", ...parsed }
     : { status: "invalid" };
 }
 
 export function isUsingDefaultPassword(): boolean {
   return readPasswordState().status === "default";
+}
+
+/** Stored with the password hash so a password change revokes sessions atomically. */
+export function accessSessionVersion(): string | null {
+  const state = readPasswordState();
+  if (state.status === "invalid") return null;
+  return state.status === "stored" ? state.sessionVersion ?? "initial" : "initial";
 }
 
 function safeEqual(a: string, b: string): boolean {
@@ -95,6 +104,10 @@ export async function changeAccessPassword(newPassword: string): Promise<void> {
   if (typeof newPassword !== "string" || newPassword.length < 8) {
     throw new Error("The new password must contain at least 8 characters.");
   }
+  // bcrypt silently ignores bytes after the first 72, including UTF-8 bytes.
+  if (Buffer.byteLength(newPassword, "utf8") > 72) {
+    throw new Error("The new password must contain at most 72 UTF-8 bytes.");
+  }
   const passwordHash = await bcrypt.hash(newPassword, 10);
-  setAppState(PASSWORD_STATE_KEY, { passwordHash });
+  setAppState(PASSWORD_STATE_KEY, { passwordHash, sessionVersion: randomUUID() });
 }

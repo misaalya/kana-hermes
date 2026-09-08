@@ -1,4 +1,5 @@
 import type { AvatarController } from "@/lib/avatar/avatar-controller";
+import { createId } from "@/lib/conversation/types";
 import { AudioLipSyncController } from "./audio-lip-sync";
 import {
   inspectConfiguredTtsProvider,
@@ -74,7 +75,7 @@ export class TtsRelayProvider implements VoiceProvider {
     this.stop();
     const operation = ++this.operation;
     const startedAt = performance.now();
-    const deliveryMode = this.options.deliveryMode ?? "complete";
+    const deliveryMode = options.deliveryMode ?? this.options.deliveryMode ?? "complete";
     const chunks =
       deliveryMode === "sentence_chunks"
         ? splitJapaneseSpeech(
@@ -96,6 +97,7 @@ export class TtsRelayProvider implements VoiceProvider {
 
     this.update({
       state: "synthesizing",
+      canReplay: false,
       deliveryMode,
       currentChunk: 1,
       chunkCount: chunks.length,
@@ -175,19 +177,18 @@ export class TtsRelayProvider implements VoiceProvider {
             : "Voice ready.",
       });
     } catch (error) {
-      this.lipSync.stop();
+      if (operation !== this.operation) throw error;
+      this.stop();
       if (error instanceof DOMException && error.name === "AbortError") {
         throw error;
       }
-      if (operation === this.operation) {
-        this.update({
+      this.update({
           state: "failed",
           canReplay: this.lastAudio.length > 0,
           requestId: undefined,
           message:
             error instanceof Error ? error.message : "Voice playback failed.",
-        });
-      }
+      });
       throw error;
     }
   }
@@ -304,7 +305,8 @@ export class TtsRelayProvider implements VoiceProvider {
   ): Promise<{ audio: ArrayBuffer; durationMs: number }> {
     if (operation !== this.operation) throw aborted();
     const controller = new AbortController();
-    const requestId = crypto.randomUUID();
+    // Correlation only, never a credential. randomUUID is absent on HTTP LAN/IP origins.
+    const requestId = createId("tts");
     this.request = { controller, id: requestId };
     const synthesisStartedAt = performance.now();
     if (chunk === 1 || this.snapshot.state !== "playing") {

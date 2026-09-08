@@ -1,8 +1,15 @@
-import { access, cp, mkdir, readdir, rm } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { access, cp, mkdir, readFile, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 
-const root = process.cwd();
-const output = path.join(root, ".npm-package");
+const root = fileURLToPath(new URL("..", import.meta.url));
+const cli = path.join(root, "cli");
+const appManifest = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
+const cliManifest = JSON.parse(await readFile(path.join(cli, "package.json"), "utf8"));
+if (appManifest.version !== cliManifest.version) throw new Error("App and CLI versions must match before packaging.");
+if (process.argv.includes("--build")) execFileSync("npm", ["run", "build"], { cwd: root, stdio: "inherit" });
+const output = path.join(cli, ".npm-package");
 const runtime = path.join(output, "runtime");
 const standalone = path.join(root, ".next", "standalone");
 await access(path.join(standalone, "server.js"));
@@ -28,6 +35,8 @@ for (const localDirectory of [
   "acceptance",
   "auth-reference",
   "data",
+  "cli",
+  ".npm-package",
   "reference",
   "scripts",
   "test-results",
@@ -66,3 +75,9 @@ await cp(path.join(root, "assets", "voices"), path.join(runtime, "assets", "voic
   force: true,
 });
 process.stdout.write(`Prepared npm runtime at ${runtime}\n`);
+
+// One launcher/config source; generated distribution copies are never edited.
+for (const name of ["bin", "config", "docs", "README.md", "CHANGELOG.md", "PLAN.md", "LICENSE"]) {
+  await rm(path.join(cli, name), { recursive: true, force: true });
+  await cp(path.join(root, name), path.join(cli, name), { recursive: true });
+}

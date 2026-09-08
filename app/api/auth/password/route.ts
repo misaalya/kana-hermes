@@ -1,3 +1,4 @@
+import { readJsonObject, RequestBodyError } from "@/lib/server/request-body";
 import { verifyAccessPassword, changeAccessPassword } from "@/lib/server/auth/password-store";
 import { createSessionToken, isSessionValid, sessionCookie } from "@/lib/server/auth/session";
 
@@ -15,9 +16,12 @@ export async function POST(request: Request): Promise<Response> {
 
   let body: { currentPassword?: unknown; newPassword?: unknown };
   try {
-    body = (await request.json()) as { currentPassword?: unknown; newPassword?: unknown };
-  } catch {
-    return Response.json({ error: "A request body is required." }, { status: 400 });
+    body = await readJsonObject(request, 4096);
+  } catch (error) {
+    return Response.json(
+      { error: error instanceof RequestBodyError ? error.message : "A JSON object is required." },
+      { status: error instanceof RequestBodyError ? error.status : 400, headers: NO_STORE },
+    );
   }
 
   const { currentPassword, newPassword } = body;
@@ -41,7 +45,7 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  // Rotate the session so other tabs keep working under the new secret state.
+  // The password update revokes previous tokens; issue a replacement for this browser.
   const token = await createSessionToken();
   return Response.json(
     { ok: true },

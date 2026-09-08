@@ -68,3 +68,15 @@ reference/
 
 # Server-side activity store (SQLite)
 .kana/
+
+# Generated npm CLI distribution (cli/package.json is the publication manifest)
+/cli/.npm-package/
+/cli/bin/
+/cli/config/
+/cli/docs/
+/cli/README.md
+/cli/CHANGELOG.md
+/cli/PLAN.md
+/cli/LICENSE
+/*.tgz
+/cli/*.tgz

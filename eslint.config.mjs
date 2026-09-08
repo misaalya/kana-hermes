@@ -17,6 +17,7 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Generated npm-package payload from scripts/prepare-npm-package.mjs.
     ".npm-package/**",
+    "cli/**",
     // Local Python runtimes contain generated third-party frontend bundles.
     "**/.venv/**",
     // Read-only AIRI reference checkout used for pattern study; it has its
