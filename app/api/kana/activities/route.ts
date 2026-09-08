@@ -1,3 +1,4 @@
+import { readJsonObject, RequestBodyError } from "@/lib/server/request-body";
 import { listTurnActivities, saveTurnActivities } from "@/lib/server/activity-store";
 import { isSessionValid } from "@/lib/server/auth/session";
 
@@ -60,17 +61,16 @@ export async function PUT(request: Request): Promise<Response> {
     activities?: unknown;
   };
   try {
-    const raw = await request.text();
-    if (raw.length > MAX_BODY_BYTES) {
-      return Response.json({ error: "Request body is too large." }, { status: 413, headers: NO_STORE });
-    }
-    body = JSON.parse(raw);
-  } catch {
-    return Response.json({ error: "Request body must be JSON." }, { status: 400, headers: NO_STORE });
+    body = await readJsonObject(request, MAX_BODY_BYTES);
+  } catch (error) {
+    return Response.json(
+      { error: error instanceof RequestBodyError ? error.message : "A JSON object is required." },
+      { status: error instanceof RequestBodyError ? error.status : 400, headers: NO_STORE },
+    );
   }
   const sessionKey = parseKey(body.session);
-  const anchor = Number(body.turnAnchorMs);
-  if (!sessionKey || !Number.isFinite(anchor) || anchor <= 0) {
+  const anchor = body.turnAnchorMs;
+  if (!sessionKey || typeof anchor !== "number" || !Number.isSafeInteger(Math.round(anchor)) || anchor < 1) {
     return Response.json(
       { error: "Fields 'session' (valid key) and 'turnAnchorMs' (positive number) are required." },
       { status: 400, headers: NO_STORE },
@@ -78,8 +78,8 @@ export async function PUT(request: Request): Promise<Response> {
   }
   let turnIndex: number | undefined;
   if (body.turnIndex !== undefined && body.turnIndex !== null) {
-    const parsed = Number(body.turnIndex);
-    if (!Number.isInteger(parsed) || parsed < 0) {
+    const parsed = body.turnIndex;
+    if (typeof parsed !== "number" || !Number.isSafeInteger(parsed) || parsed < 0) {
       return Response.json(
         { error: "Field 'turnIndex' must be a non-negative integer." },
         { status: 400, headers: NO_STORE },

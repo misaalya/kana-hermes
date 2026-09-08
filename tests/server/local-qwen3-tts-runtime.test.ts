@@ -15,7 +15,7 @@ import {
 
 // Fake /v1/health endpoints so probe classification exercises the real HTTP
 // path without spawning the Python service.
-type HealthMode = "ready" | "loading" | "foreign";
+type HealthMode = "ready" | "loading" | "foreign" | "error";
 
 let healthServer: Server | null = null;
 let healthPort = 0;
@@ -163,4 +163,23 @@ describe("ensureQwen3TTSService", () => {
       if (result.ok) assert.equal(result.status.port, healthPort);
     }
   });
+});
+
+it("waits for the model instead of treating HTTP 200 loading as ready", async () => {
+  healthMode = "loading";
+  __setTestTtsPort(healthPort);
+  let finished = false;
+  const result = ensureQwen3TTSService().then((value) => { finished = true; return value; });
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.equal(finished, false);
+  healthMode = "ready";
+  assert.equal((await result).ok, true);
+});
+
+it("returns the actual model load error instead of attempting synthesis", async () => {
+  healthMode = "error";
+  __setTestTtsPort(healthPort);
+  const result = await ensureQwen3TTSService();
+  assert.equal(result.ok, false);
+  assert.match(result.status.message, /checkpoint missing/);
 });

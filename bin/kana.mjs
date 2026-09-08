@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn } from "node:child_process";
+import { isIP } from "node:net";
 import { randomBytes } from "node:crypto";
 import { constants } from "node:fs";
 import {
@@ -19,10 +20,10 @@ import readline from "node:readline/promises";
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const packagedRuntime = path.join(packageRoot, ".npm-package", "runtime");
-const sourceRuntime = packageRoot;
-const runtimeRoot = await exists(path.join(packagedRuntime, ".next", "BUILD_ID"))
+const packageManifest = JSON.parse(await readFile(path.join(packageRoot, "package.json"), "utf8"));
+const runtimeRoot = packageManifest.name === "kana-alya"
   ? packagedRuntime
-  : sourceRuntime;
+  : packageRoot;
 const userHome = homedir();
 const xdgRoot = (value, fallback) => {
   const candidate = value?.trim();
@@ -48,6 +49,7 @@ if (command === "help" || command === "--help" || command === "-h" || has("--hel
 
 Usage:
   kana                       Start Kana and open the browser
+  kana serve                 Run as a server without opening a browser
   kana setup                 Configure optional Qwen3-TTS voice cloning
   kana config                Open the editable advanced JSON configuration
   kana doctor                Check local dependencies and data locations
@@ -55,6 +57,7 @@ Usage:
 Options:
   --port <number>            Kana web port (default 3000)
   --no-open                  Do not open a browser automatically
+  --host <address>           Bind address for kana serve (default 127.0.0.1)
   --dev-mocks                Expose development mock providers (source builds only)
 \n`);
   process.exit(0);
@@ -80,12 +83,16 @@ if (command === "doctor") {
   await printDoctor();
   process.exit(0);
 }
-if (command !== "start") {
+if (command !== "start" && command !== "serve") {
   process.stderr.write(`Unknown Kana command: ${command}\nRun kana --help for usage.\n`);
   process.exit(1);
 }
 
-const port = Number(option("--port", process.env.KANA_PORT || "3000"));
+const serving = command === "serve";
+const host = option("--host", "127.0.0.1");
+if (!isIP(host) && host !== "localhost") throw new Error("--host must be an IP address or localhost.");
+if (!serving && host !== "127.0.0.1") throw new Error("Use kana serve --host to listen on another address.");
+const port = Number(option("--port", process.env.KANA_PORT || process.env.PORT || "3000"));
 if (!Number.isInteger(port) || port < 1024 || port > 65535) {
   throw new Error("Kana port must be an integer between 1024 and 65535.");
 }
@@ -104,7 +111,7 @@ const appArgs = packaged
       require.resolve("next/dist/bin/next"),
       "start",
       "--hostname",
-      "127.0.0.1",
+      host,
       "--port",
       String(port),
     ];
@@ -115,27 +122,27 @@ const app = spawn(
     cwd: runtimeRoot,
     env: {
       ...process.env,
-      HOSTNAME: "127.0.0.1",
+      HOSTNAME: host,
+      ...(serving ? { KANA_DEPLOYMENT_MODE: "deployment" } : {}),
       PORT: String(port),
       HOME: process.env.HOME || userHome,
       KANA_DATA_DIR: resolvedDataRoot,
       ...(detectedHermesExecutable
         ? { KANA_HERMES_BIN: detectedHermesExecutable }
         : {}),
-      // The npm launcher is deliberately loopback-only. Deployment mode is
-      // resolved by the server from KANA_DEPLOYMENT_MODE or the editable
-      // config.json; every mode uses the same built-in first-login password.
+      // serve is the explicit deployment entry point; start keeps local defaults.
     },
     stdio: "inherit",
   },
 );
 children.push(app);
 
-const url = `http://127.0.0.1:${port}`;
+const probeHost = host === "0.0.0.0" ? "127.0.0.1" : host === "::" ? "::1" : host;
+const url = `http://${isIP(probeHost) === 6 ? `[${probeHost}]` : probeHost}:${port}`;
 try {
   await waitForKana(url, app, 30_000);
   process.stdout.write(`\nKana is ready at ${url}\n`);
-  if (!has("--no-open")) openBrowser(url);
+  if (!serving && !has("--no-open")) openBrowser(url);
 } catch (error) {
   process.stderr.write(`Kana did not become ready: ${error.message}\n`);
   for (const child of children) {
@@ -175,7 +182,7 @@ async function runSetup() {
     prepareQwen = /^y(es)?$/i.test(answer.trim());
   } else {
     process.stdout.write(
-      "Non-interactive setup: Qwen was left disabled. Run `kana setup` in a terminal later.\n",
+      "Non-interactive setup: the configured voice provider was left unchanged. Run `kana setup` in a terminal later.\n",
     );
   }
   if (prepareQwen) {
@@ -188,7 +195,7 @@ async function runSetup() {
     } else {
       process.stdout.write("Preparing the isolated Qwen3-TTS Python environment…\n");
       const serviceRoot = path.join(runtimeRoot, "services", "qwen3-tts");
-      await runChild(uv, ["sync", "--project", serviceRoot], {
+      await runChild(uv, ["sync", "--frozen", "--project", serviceRoot], {
         UV_PROJECT_ENVIRONMENT: path.join(resolvedDataRoot, "qwen-runtime"),
       });
       await selectLocalQwenProvider();
@@ -211,7 +218,7 @@ async function ensureAdvancedConfig() {
     try {
       await writeFile(
         advancedConfigPath,
-        `${JSON.stringify(defaultAdvancedConfig, null, 2)}\n`,
+        `${JSON.stringify({ ...defaultAdvancedConfig, deployment: { mode: command === "serve" ? "deployment" : "local" } }, null, 2)}\n`,
         { encoding: "utf8", mode: 0o600, flag: "wx" },
       );
     } catch (error) {

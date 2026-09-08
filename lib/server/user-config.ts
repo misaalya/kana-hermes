@@ -20,6 +20,8 @@ export type KanaUserConfig = {
   tts?: {
     /** The server-side audio source. Defaults to the bundled local provider. */
     provider?: KanaTtsProviderType;
+    /** Entire synthesis request, including local startup and voice registration. */
+    timeoutSeconds?: number;
     /** Provider-specific values are isolated so model/voice fields cannot clash. */
     qwen3Local?: KanaQwen3LocalConfig;
     openAiCompatible?: KanaOpenAiCompatibleTtsConfig;
@@ -46,6 +48,7 @@ export type KanaQwen3LocalConfig = {
   defaultVoice?: string;
   maxCharacters?: number;
   maxNewTokens?: number;
+  startupTimeoutSeconds?: number;
 };
 
 export type KanaOpenAiCompatibleTtsConfig = {
@@ -282,17 +285,21 @@ export function readKanaUserConfig(): KanaUserConfig {
         "instructionField",
         "responseFormat",
       ].some((key) => ttsRecord[key] !== undefined);
+    if (provider === undefined && ttsRecord.qwen3Local !== undefined && ttsRecord.openAiCompatible !== undefined) {
+      throw new Error("Set tts.provider when keeping both local and external configurations.");
+    }
     const resolvedProvider = provider ??
-      (legacyExternalConfig ? "openai-compatible" : undefined);
-    const qwenRecord = ttsRecord.qwen3Local === undefined
-      ? resolvedProvider === "openai-compatible" ? {} : ttsRecord
-      : ttsRecord.qwen3Local;
+      (legacyExternalConfig || ttsRecord.openAiCompatible !== undefined ? "openai-compatible" : "qwen3-local");
+    // Inactive values stay untouched on disk and cannot break the selected provider.
+    const qwenRecord = resolvedProvider === "qwen3-local"
+      ? (ttsRecord.qwen3Local === undefined ? ttsRecord : ttsRecord.qwen3Local)
+      : {};
     if (!isRecord(qwenRecord)) {
       throw new Error("tts.qwen3Local must be a JSON object.");
     }
-    const openAiRecord = ttsRecord.openAiCompatible === undefined
-      ? resolvedProvider === "openai-compatible" ? ttsRecord : {}
-      : ttsRecord.openAiCompatible;
+    const openAiRecord = resolvedProvider === "openai-compatible"
+      ? (ttsRecord.openAiCompatible === undefined ? ttsRecord : ttsRecord.openAiCompatible)
+      : {};
     if (!isRecord(openAiRecord)) {
       throw new Error("tts.openAiCompatible must be a JSON object.");
     }
@@ -400,6 +407,7 @@ export function readKanaUserConfig(): KanaUserConfig {
           "tts.qwen3Local",
           100_000,
         ),
+        startupTimeoutSeconds: optionalPositiveInteger(qwenRecord, "startupTimeoutSeconds", "tts.qwen3Local", 3600),
       });
     const openAiCompatible = withoutUndefined<KanaOpenAiCompatibleTtsConfig>({
         preset: preset as KanaOpenAiTtsPreset | undefined,
@@ -433,6 +441,7 @@ export function readKanaUserConfig(): KanaUserConfig {
       });
     config.tts = {
       provider: resolvedProvider as KanaTtsProviderType | undefined,
+      ...withoutUndefined({ timeoutSeconds: optionalPositiveInteger(ttsRecord, "timeoutSeconds", "tts", 3600) }),
       ...(Object.keys(qwen3Local).length ? { qwen3Local } : {}),
       ...(Object.keys(openAiCompatible).length ? { openAiCompatible } : {}),
     };

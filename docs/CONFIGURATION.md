@@ -44,7 +44,9 @@ The complete starter file is:
   },
   "tts": {
     "provider": "qwen3-local",
+    "timeoutSeconds": 900,
     "qwen3Local": {
+      "startupTimeoutSeconds": 600,
       "port": 7860,
       "model": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
       "modelRevision": "5d83992436eae1d760afd27aff78a71d676296fc",
@@ -69,11 +71,26 @@ internal Python process environment from this JSON.
 uses Kana's same-origin speech relay, playback cache, replay controls, Web
 Audio decoder, and Live2D lip sync regardless of the selected provider.
 
-The default is `qwen3-local`, including when the `tts` section or `provider`
-field is absent. Optional local-only fields belong under `tts.qwen3Local`:
+The default is `qwen3-local` when no TTS provider configuration is supplied.
+`tts.provider` is the single explicit selector. You may keep both provider
+blocks in the file and switch just this field: inactive fields are preserved
+on disk and do not affect validation or requests for the selected provider.
+If both blocks exist, the selector is required. For compatibility, an external
+block by itself (or an old flat external config) still selects the external
+adapter; older flat local settings remain readable.
+
+`tts.timeoutSeconds` defaults to **900 seconds** for the whole speech request,
+including local warmup and generation. It accepts integers from 1 to 3600.
+For VPS deployments set the reverse proxy read timeout above this value
+(the example uses 910 seconds). Provider changes apply to new requests;
+cancellation of an in-flight request still follows its original provider.
+There is no automatic fallback between local and external providers.
+
+Optional local-only fields belong under `tts.qwen3Local`:
 
 | Field | Default | Purpose |
 | --- | --- | --- |
+| `startupTimeoutSeconds` | `600` | Maximum wait for model readiness, 1–3600 seconds; bounded by the whole request timeout |
 | `projectDirectory` | bundled service | Override the Qwen service source directory |
 | `uvExecutable` | auto-discovered | Absolute path to `uv` when discovery fails; Kana checks `PATH`, `~/.local/bin`, `~/.cargo/bin`, Termux, and system paths |
 | `runtimeDirectory` | `$KANA_DATA_DIR/qwen-runtime` | Isolated Python environment |
@@ -90,7 +107,16 @@ field is absent. Optional local-only fields belong under `tts.qwen3Local`:
 
 Kana starts Qwen lazily when voice is enabled and speech is first requested.
 The npm launcher no longer has a separate `qwenEnabled` state and never starts
-a competing Qwen process.
+a competing Qwen process. A responding health endpoint is not sufficient:
+Kana waits for the model to report ready before voice registration or synthesis.
+On a first installation, dependency/model downloads may exceed the request's
+wait limit. Shared warmup continues so a subsequent request can use the model;
+stopping a reply cancels that reply without killing other callers' warmup.
+Explicit runtime Stop remains available for a model process managed by Kana.
+The loader resolves one model snapshot at `modelRevision` and loads its
+processor/tokenizer from that same directory. A complete cache can be used
+with Hugging Face's `HF_HUB_OFFLINE=1` operator setting; a first installation
+still needs network access to download dependencies and model files.
 
 To use Pollinations, replace the `tts` section with:
 
@@ -160,7 +186,7 @@ environment-variable override and takes precedence over the JSON value.
   the default used by the global `kana` launcher.
 - `deployment` means Kana is exposed through Nginx, a public/private network,
   a VPS, or another remote host. Authentication is mandatory for Hermes and
-  Qwen process controls in this mode.
+  Qwen process controls in this mode. Local mode also requires authentication.
 
 `KANA_DEPLOYMENT_MODE=local|deployment` remains an operator-level deployment
 override. `KANA_DATA_DIR` selects the single data root, and
@@ -168,3 +194,16 @@ override. `KANA_DATA_DIR` selects the single data root, and
 settings intentionally have no environment-variable override; edit this JSON
 instead. Provider selection is resolved per request, but restart Kana after
 editing local runtime fields so every server worker agrees.
+
+
+## Local computer versus VPS
+
+Installation and deployment instructions are in [Install and deploy Kana](INSTALLATION.md).
+The same config schema applies everywhere. A local Qwen model runs on the
+machine hosting Kana, including when that machine is a VPS. Config paths,
+Hermes discovery, model cache and API keys refer to that server, never to the
+visitor's computer. The browser only calls same-origin Kana relay routes.
+Speech text is held until playback starts; Web Audio drives the lip sync.
+If synthesis/decoding/playback fails, Kana reveals the text with a visible
+error. Stop reveals pending text and cancels its audio. Turning voice off
+shows future replies immediately without sending TTS requests.

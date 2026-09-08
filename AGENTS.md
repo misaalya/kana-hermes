@@ -142,6 +142,11 @@ RPC  POST /api/hermes/rpc    ->  allow-listed JSON-RPC forward
   `appstate.db` takes precedence after an optional password change. Legacy
   `auth.json` hashes migrate into SQLite on first access. Every process-control
   route requires a session.
+- Password changes atomically rotate the session version stored with the hash.
+  Prior tokens are rejected, including a login that was still checking the old
+  password. Existing SSE streams revalidate authorization every 25 seconds.
+  Login admits one password check at a time; new passwords cannot exceed
+  bcrypt's 72-byte UTF-8 limit.
 - The Qwen3-TTS Python service is spawned/probed by the Node runtime and
   reached by the browser only through `/api/voice/tts/*` relay routes,
   including request cancellation.
@@ -438,7 +443,7 @@ proxy.ts                                  Deny-by-default auth proxy (Next 16)
 lib/presentation/persona.ts               Persona and response instructions
 lib/presentation/response-parser.ts       Structured response validation
 lib/conversation/memory-conversation-store.ts In-memory conversation state
-                                          (transcripts live in Hermes)
+                                          per controller (transcripts live in Hermes)
 lib/backup/kana-backup.ts                  Versioned credential-free backup format
 lib/avatar/avatar-controller.ts           Provider-independent avatar control
 lib/avatar/defaults.ts                     Official Haru/Mao URLs and bindings
@@ -541,6 +546,27 @@ Work incrementally and keep the application usable after every phase.
       independently updatable.
 - [ ] Add automated cross-browser end-to-end tests when a stable CI browser
       target is chosen; current responsive and accessibility checks are local.
+
+## Distribution and TTS audit update (2026-09-08)
+
+- Root `package.json` is the private source app `kana-app`; `cli/package.json`
+  is the public `kana-alya` package. Keep versions equal. Generate CLI payloads
+  through `npm run package:npm`; publish only through the guarded CLI path.
+  `bin/` and `config/` remain the authoritative sources, not generated `cli/` copies.
+- `kana` opens a local browser; `kana serve` is the foreground, headless
+  deployment command. VPS users may install npm on their VPS or deploy a source
+  standalone build. Both use the same config and server implementation.
+- TTS replies are held in `lib/presentation/spoken-reply-queue.ts` until audio
+  starts. Stop and failure reveal text; failures must remain visible in the UI.
+- Config uses one `tts.provider` selector. Inactive provider settings do not
+  influence active requests; cancellation follows the original request owner.
+  Optional `tts.timeoutSeconds` defaults to 900 and local startup timeout to 600.
+- Local Qwen loads all components from one pinned snapshot directory, including
+  cached/offline use. Never patch installed Qwen/Hermes packages to achieve this.
+- Deployment requires one server process per data root; do not claim support
+  for multiple clustered workers sharing process-held gateway/cancel state.
+- See `docs/INSTALLATION.md`, `docs/CONFIGURATION.md`, and
+  `docs/TTS-AUDIT-2026-09-08.md` for decisions, evidence, and remaining limits.
 
 ## Development workflow
 

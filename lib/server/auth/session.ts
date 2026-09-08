@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { SignJWT, jwtVerify } from "jose";
 import { adoptLegacyKanaFile, resolveKanaDataDir } from "@/lib/server/data-dir";
+import { accessSessionVersion } from "./password-store";
 
 // Stateless JWT session cookie following the 9Router dashboard pattern:
 // HS256 token signed with a per-installation secret (env override or an
@@ -87,8 +88,9 @@ export async function isSessionValid(request: Request): Promise<boolean> {
   return verifySessionToken(sessionTokenFromRequest(request));
 }
 
-export async function createSessionToken(): Promise<string> {
-  return new SignJWT({ authenticated: true })
+export async function createSessionToken(sessionVersion = accessSessionVersion()): Promise<string> {
+  if (sessionVersion === null) throw new Error("Kana authentication state is invalid.");
+  return new SignJWT({ authenticated: true, sessionVersion })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(`${SESSION_MAX_AGE_S}s`)
@@ -98,8 +100,14 @@ export async function createSessionToken(): Promise<string> {
 export async function verifySessionToken(token?: string | null): Promise<boolean> {
   if (!token) return false;
   try {
-    await jwtVerify(token, loadSecret());
-    return true;
+    const { payload } = await jwtVerify(token, loadSecret(), {
+      algorithms: ["HS256"],
+      requiredClaims: ["exp", "iat"],
+    });
+    const version = accessSessionVersion();
+    // Existing installations used no version claim before their first change.
+    return version !== null && payload.authenticated === true &&
+      (payload.sessionVersion ?? "initial") === version;
   } catch {
     return false;
   }
@@ -107,7 +115,8 @@ export async function verifySessionToken(token?: string | null): Promise<boolean
 
 function shouldUseSecureCookie(request: Request): boolean {
   if (process.env.AUTH_COOKIE_SECURE === "true") return true;
-  return request.headers.get("x-forwarded-proto") === "https";
+  return new URL(request.url).protocol === "https:" ||
+    request.headers.get("x-forwarded-proto") === "https";
 }
 
 export function sessionCookie(token: string, request: Request): string {

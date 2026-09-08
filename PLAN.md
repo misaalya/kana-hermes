@@ -11,7 +11,48 @@ user), sehingga bug akibat perbedaan mesin harus minimal. Keluhan utama:
 resume sering mengembalikan transcript kosong/error, caching sisa bermasalah,
 dan pemanfaatan React (state management) masih lemah.
 
-Terakhir diperbarui: 2026-08-25.
+Terakhir diperbarui: 2026-09-08.
+
+### Audit TTS dan distribusi — 2026-09-08
+
+- [x] Perbaiki UUID pada HTTP, antrean hold → synth → playback/display,
+  error yang tidak terlihat, Stop saat Hermes selesai, dan late playback.
+- [x] Pertahankan AudioContext yang sudah di-unlock dan stabilkan callback
+  canvas agar render React tidak memuat ulang avatar.
+- [x] Tunggu model ready, pertahankan warmup bersama, propagasikan cancel,
+  dan pulihkan referensi suara bawaan setelah lokasi instalasi berubah.
+- [x] Pusatkan selector/provider timeout di config dan dokumentasikan batas
+  reverse proxy serta arti model lokal pada VPS.
+- [x] Perbaiki pemuatan Qwen dari satu snapshot revisi agar cache offline
+  benar-benar dapat dipakai; verifikasi WAV nyata dari CPU melalui relay.
+- [x] Pisahkan source app private dan paket CLI npm mengikuti pola 9router;
+  tambahkan `kana serve` dan panduan npm VPS versus standalone source.
+
+Bukti dan keterbatasan rilis 0.2.0: `docs/TTS-AUDIT-2026-09-08.md`.
+Tidak mengklaim pengujian seluruh distro/VPS/GPU.
+
+### Audit tambahan — 2026-09-07
+
+Perbaikan dari inspeksi kode saat ini, di luar status historis track di bawah:
+
+- [x] Batasi pembacaan JSON berdasarkan byte saat stream dibaca, bukan setelah
+  seluruh body masuk memori. Terapkan ke login, password, RPC Hermes, aktivitas,
+  dan speech; JSON `null`/array/primitif menghasilkan 400. Validasi angka
+  aktivitas menolak nilai yang tidak aman untuk representasi integer.
+- [x] Cabut token sesi lama saat password berubah dengan versi sesi atomik di
+  baris hash; login yang masih memeriksa password lama tidak dapat memperoleh
+  versi baru. Sesi SSE ikut diperiksa ulang setiap 25 detik.
+- [x] Batasi verifikasi login yang berjalan bersamaan, validasi klaim/algoritma
+  JWT, tandai cookie HTTPS langsung sebagai Secure, dan tolak password baru
+  di atas batas 72 byte bcrypt tanpa mengubah hash lama.
+- [x] Satukan cleanup SSE untuk abort/cancel/error, cegah subscription muncul
+  setelah pembatalan saat connect, dan batasi antrean pembaca lambat ke 16 MiB.
+- [x] Hapus store percakapan global yang memutasi state Zustand. Working set
+  kini milik instance controller, tetap memakai interface ConversationStore.
+  Ini perbaikan terarah bagian E5; migrasi seluruh state controller belum selesai.
+- [x] Gunakan ulang Intl.DateTimeFormat per locale di feed dan sidebar.
+
+Detail temuan dan bukti verifikasi: `docs/AUDIT-2026-09-07.md`.
 
 ---
 

@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 
 const manifest = JSON.parse(
-  await readFile(new URL("../package.json", import.meta.url), "utf8"),
+  await readFile(new URL("../cli/package.json", import.meta.url), "utf8"),
 );
 
 // Fail closed so a release cannot accidentally target an old or unrelated
@@ -32,4 +32,9 @@ if (
     "Refusing to publish a prerelease version directly under the latest dist-tag.\n",
   );
   process.exit(1);
+}
+
+const app = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+if (!app.private || app.version !== manifest.version) {
+  throw new Error("The source app must stay private and its version must match cli/package.json.");
 }

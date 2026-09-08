@@ -30,6 +30,9 @@ treated as automatically trusted.
 | Folder import | Relative paths, duplicate paths, JSON, required assets, and folder escapes are validated before IndexedDB write |
 | Diagnostics | Endpoint queries and common token/password/secret forms are redacted; content and protected input are omitted |
 | Kana access | Every installation requires a signed Kana session. Fresh installs show the documented default password; a user-owned bcrypt hash takes precedence after an optional change |
+| Login bursts | One password verification is admitted at a time; overlapping attempts receive 429 without running bcrypt or bypassing progressive lockout |
+| JSON input | Login/password, Hermes RPC, activity writes, and speech requests count incoming UTF-8 bytes before decoding, cancel oversized bodies, and reject non-object JSON |
+| Event streams | Abort/cancel releases subscriptions and timers, slow readers are disconnected at a 16 MiB queue limit, and session validity is rechecked every 25 seconds |
 | Backup | Versioned and size-limited; parser validates records; tokens and imported avatar assets are excluded |
 | Offline cache | Service worker handles same-origin navigation/static assets only and explicitly ignores `/api` plus all cross-origin Hermes/Qwen/model traffic |
 | Framing/injection | CSP blocks objects and framing; `nosniff`, no-referrer, and restrictive permissions headers are set |
@@ -62,6 +65,15 @@ user changes it in Settings, Kana stores only a bcrypt hash in the
 built-in password, and no longer accepts it. Upgrades from the older
 `auth.json` layout migrate that hash into SQLite before removing the legacy
 file.
+
+Password changes atomically store a new session version with the hash. Previous
+tokens no longer authorize requests; the browser making the change receives a
+replacement token, while other browsers must sign in again. Existing event
+streams stop on their next authorization heartbeat (within 25 seconds).
+A login already verifying an old password cannot mint a token for the new
+version. Session verification requires HS256, issued-at/expiry claims, and an
+authenticated payload. New passwords are limited to 72 UTF-8 bytes to prevent
+bcrypt from silently ignoring a password suffix; existing hashes are preserved.
 
 The built-in value is public product behavior, not a private deployment
 secret. A public or shared installation should still use HTTPS and may replace

@@ -1,6 +1,9 @@
 # Supported environment and compatibility
 
-Kana 0.2.0-alpha.1 is an alpha local web application.
+Kana 0.2.0 is a stable semver release for the tested Linux baseline below. It
+supports both a personal loopback installation and a VPS deployment of the
+same server. “Stable” describes the versioning and documented behavior; it
+does not claim support for platforms that have not been tested.
 
 ## Tested baseline
 
@@ -26,8 +29,8 @@ WebGL, Web Audio, and IndexedDB behavior.
 ## Browser capabilities
 
 Kana needs JavaScript, IndexedDB, local/session storage, WebSocket, Web Audio,
-Blob/object URLs, and WebGL for the real avatar. Mock avatar and voice remain
-available when WebGL, audio, internet, Hermes, or Qwen is unavailable.
+Blob/object URLs, and WebGL for the real avatar. An avatar placeholder is shown when the model cannot load; audio failures
+are reported explicitly with a text fallback. No mock voice or agent is used.
 
 ## Storage and hardware
 
@@ -48,10 +51,11 @@ available when WebGL, audio, internet, Hermes, or Qwen is unavailable.
 - Qwen streaming is deferred. Complete WAV is the default; experimental
   sentence delivery plays ordered complete WAV parts and remains opt-in until
   target-host latency evidence supports changing the default.
-- History and avatar packages are browser-local; no cloud sync is provided.
+- Hermes owns conversation history on the server; avatar packages and UI
+  preferences are browser-local.
 - Real restart recovery while every kind of pending Hermes protected input,
   two custom Live2D packages, and real Qwen p50/p95 still need target-host
-  acceptance before beta.
+  field validation before broader platform support is claimed.
 
 ## VPS deploy checklist
 
@@ -85,7 +89,8 @@ an explicit data directory.
    characters and is useful only when multiple Kana server instances must
    share sessions. Keep the data directory persistent across redeploys.
 
-3. systemd unit example:
+3. Deploy the complete contents of `.next/standalone` to `/opt/kana`, then
+   use this systemd unit example:
 
    ```ini
    [Unit]
@@ -96,12 +101,13 @@ an explicit data directory.
    User=kana
    Group=kana
    WorkingDirectory=/var/lib/kana
+   Environment=HOME=/var/lib/kana
    Environment=KANA_DATA_DIR=/var/lib/kana
    Environment=KANA_DEPLOYMENT_MODE=deployment
    Environment=AUTH_COOKIE_SECURE=true
    Environment=HOSTNAME=127.0.0.1
    Environment=PORT=3000
-   ExecStart=/usr/bin/node /opt/kana/.next/standalone/server.js
+   ExecStart=/usr/bin/node /opt/kana/server.js
    Restart=on-failure
 
    [Install]
@@ -110,7 +116,10 @@ an explicit data directory.
 
    The npm launcher (`kana`) resolves and forwards `KANA_DATA_DIR` and an
    explicit `HOME` into the spawned Next server automatically; under systemd,
-   set both explicitly as shown.
+   set both explicitly as shown. If installed from npm on the VPS, replace
+   `ExecStart` with the absolute installed `kana` path and `serve --port 3000`.
+   See [the installation choices](INSTALLATION.md). Run one process per data
+   root; clustered workers do not share Hermes sockets or cancellation state.
 
 4. Nginx must preserve the public request metadata and give both the Hermes
    event stream and speech synthesis enough time to complete. The speech route
@@ -139,11 +148,12 @@ an explicit data directory.
        proxy_set_header Host $host;
        proxy_set_header X-Forwarded-Proto $scheme;
        proxy_buffering off;
-       proxy_read_timeout 310s;
-       proxy_send_timeout 310s;
+       proxy_read_timeout 910s;
+       proxy_send_timeout 910s;
    }
    ```
 
+   Keep this timeout above `tts.timeoutSeconds` in config (default 900).
    Terminate HTTPS at Nginx. Do not expose Kana only as a public `http://IP`
    origin: browser autoplay behavior is less reliable there and installable
    web-app features require a secure context. See docs/SECURITY.md for the full

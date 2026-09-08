@@ -1,3 +1,5 @@
+import { trackTtsRequest } from "@/lib/server/tts-provider/active-requests";
+import { readJsonObject, RequestBodyError } from "@/lib/server/request-body";
 import {
   getConfiguredTtsProvider,
   TtsProviderError,
@@ -8,6 +10,7 @@ import {
 } from "@/lib/server/tts-provider/types";
 import { EMOTIONS, type Emotion } from "@/lib/presentation/types";
 import { requireSession } from "@/lib/server/tts-relay";
+import { readKanaUserConfig } from "@/lib/server/user-config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,10 +24,6 @@ function parseEmotion(value: unknown): Emotion | undefined {
 // Stable browser boundary: JSON in, raw audio bytes out. The selected
 // server-side provider owns synthesis and credentials; playback never needs
 // to know whether the bytes came from local Qwen or a remote compatible API.
-const UPSTREAM_TIMEOUT_MS = Number(
-  process.env.KANA_TTS_RELAY_TIMEOUT_MS ?? "300000",
-);
-
 function safeRequestId(value: string | null): string | undefined {
   if (!value || value.length > 128 || !/^[A-Za-z0-9._:-]+$/.test(value)) {
     return undefined;
@@ -35,8 +34,9 @@ function safeRequestId(value: string | null): string | undefined {
 export async function POST(request: Request): Promise<Response> {
   const unauthorized = await requireSession(request);
   if (unauthorized) return unauthorized;
+  let tracked: ReturnType<typeof trackTtsRequest> | undefined;
   try {
-    const value = (await request.json()) as Record<string, unknown>;
+    const value = await readJsonObject(request, 256 * 1024);
     if (typeof value.text !== "string" || !value.text.trim()) {
       return Response.json({ error: "Speech text is required." }, { status: 400 });
     }
@@ -46,7 +46,10 @@ export async function POST(request: Request): Promise<Response> {
         { status: 413, headers: { "Cache-Control": "no-store" } },
       );
     }
-    const provider = getConfiguredTtsProvider();
+    const config = readKanaUserConfig().tts;
+    const provider = getConfiguredTtsProvider(config);
+    const requestId = safeRequestId(request.headers.get("X-Kana-Request-Id"));
+    tracked = trackTtsRequest(requestId, provider);
     const generated = await provider.synthesize({
       text: value.text,
       language:
@@ -58,10 +61,11 @@ export async function POST(request: Request): Promise<Response> {
           ? value.voice_id
           : undefined,
       emotion: parseEmotion(value.emotion),
-      requestId: safeRequestId(request.headers.get("X-Kana-Request-Id")),
+      requestId,
     }, AbortSignal.any([
       request.signal,
-      AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+      tracked.signal,
+      AbortSignal.timeout((config?.timeoutSeconds ?? 900) * 1000),
     ]));
     const audio = await boundedAudioResult(generated);
     return new Response(audio.body, {
@@ -72,7 +76,7 @@ export async function POST(request: Request): Promise<Response> {
       },
     });
   } catch (error) {
-    if (error instanceof TtsProviderError) {
+    if (error instanceof TtsProviderError || error instanceof RequestBodyError) {
       return Response.json(
         { error: error.message },
         { status: error.status, headers: { "Cache-Control": "no-store" } },
@@ -99,5 +103,7 @@ export async function POST(request: Request): Promise<Response> {
       },
       { status: 502, headers: { "Cache-Control": "no-store" } },
     );
+  } finally {
+    tracked?.finish();
   }
 }

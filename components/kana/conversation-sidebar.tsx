@@ -27,13 +27,6 @@ type ConversationSidebarProps = {
   locale: UiLocale;
 };
 
-function formatDate(timestamp: number, locale: UiLocale): string {
-  return new Intl.DateTimeFormat(locale === "id" ? "id-ID" : "en-US", {
-    month: "short",
-    day: "numeric",
-  }).format(timestamp);
-}
-
 export const ConversationSidebar = memo(function ConversationSidebar({
   conversations,
   activeId,
@@ -48,6 +41,12 @@ export const ConversationSidebar = memo(function ConversationSidebar({
   locale,
 }: ConversationSidebarProps) {
   const copy = getCopy(locale).history;
+  const dateFormatter = useMemo(
+    () => new Intl.DateTimeFormat(locale === "id" ? "id-ID" : "en-US", {
+      month: "short", day: "numeric",
+    }),
+    [locale],
+  );
   const localKeys = useMemo(
     () =>
       new Set(
@@ -158,7 +157,7 @@ export const ConversationSidebar = memo(function ConversationSidebar({
                         : preview || copy.startMoment}
                     </span>
                   </span>
-                  <span className="self-start pt-1 text-[9px] text-faint">{formatDate(conversation.updatedAt, locale)}</span>
+                  <span className="self-start pt-1 text-[9px] text-faint">{dateFormatter.format(conversation.updatedAt)}</span>
                 </button>
 
                 <button
@@ -210,7 +209,7 @@ export const ConversationSidebar = memo(function ConversationSidebar({
                 >
                   <span className="block truncate text-xs font-bold text-ink">{session.title}</span>
                   <span className="mt-0.5 block text-[10px] text-muted">
-                    {copy.messages(session.messageCount)} · {formatDate(session.lastActive * 1000, locale)}
+                    {copy.messages(session.messageCount)} · {dateFormatter.format(session.lastActive * 1000)}
                   </span>
                 </button>
               ))}

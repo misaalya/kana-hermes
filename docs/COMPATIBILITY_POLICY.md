@@ -1,14 +1,23 @@
 # Release channels and compatibility policy
 
-## Channels
+## Release policy
 
-- **Alpha (current):** foundation and migrations may still evolve. Every
-  persistent schema change needs a fixture and migration test.
-- **Beta:** allowed only after one week of dogfood, target-host Qwen evidence,
-  two-model Live2D acceptance, complete restart/recovery matrix, clean quality
-  gate, and no P0/P1 issue.
-- **Stable:** not defined until beta has run across multiple real installations
-  and a minimum Hermes compatibility window can be supported from evidence.
+Kana publishes final semantic versions under npm's `latest` tag. Version 0.2.0
+is the current stable release for the tested environment in
+[Supported environment](SUPPORTED_ENVIRONMENT.md). Stable releases preserve
+documented configuration and stored-data migrations within a major version;
+breaking changes require the next major version and an explicit migration note.
+
+Every persistent schema change still needs a fixture and migration test.
+Experimental capabilities remain marked in the documentation, such as
+sentence-based TTS delivery. A stable package version does not turn an
+untested browser, CPU/GPU combination, Linux architecture, or Hermes version
+into a supported target.
+
+Long-running field validation (the dogfood journal, target-host Qwen evidence,
+custom Live2D packages, and active-turn recovery cases) determines when Kana
+can expand the supported-environment claim. It is release evidence, not a
+second npm channel.
 
 ## Hermes compatibility
 
