@@ -1,10 +1,12 @@
 import { access, cp, mkdir } from "node:fs/promises";
 import path from "node:path";
+import { cleanStandalone } from "./clean-standalone.mjs";
 
 const root = process.cwd();
 const standalone = path.join(root, ".next", "standalone");
 
 await access(path.join(standalone, "server.js"));
+await cleanStandalone(standalone);
 await mkdir(path.join(standalone, ".next"), { recursive: true });
 await mkdir(path.join(standalone, "tools"), { recursive: true });
 await mkdir(path.join(standalone, "docs"), { recursive: true });
