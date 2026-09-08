@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { access, cp, mkdir, readFile, readdir, rm } from "node:fs/promises";
 import path from "node:path";
+import { cleanStandalone } from "./clean-standalone.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const cli = path.join(root, "cli");
@@ -23,6 +24,7 @@ await cp(standalone, runtime, {
   recursive: true,
   force: true,
 });
+await cleanStandalone(runtime);
 // Next's standalone directory is incremental and can retain previously traced
 // local state. Scrub the copied runtime defensively instead of trusting the
 // cleanliness of a maintainer's .next directory.
