@@ -224,3 +224,25 @@ describe("advanced user configuration", () => {
     });
   });
 });
+
+it("only validates the selected provider and requires an explicit choice with both blocks", () => {
+  const write = (tts: unknown) => writeFileSync(kanaUserConfigPath(), JSON.stringify({ tts }));
+  write({ provider: "openai-compatible", qwen3Local: { port: 80, projectDirectory: "old/path" }, openAiCompatible: { preset: "pollinations", apiKey: "test" } });
+  assert.equal(readKanaUserConfig().tts?.qwen3Local, undefined);
+  write({ provider: "qwen3-local", qwen3Local: { port: 7860 }, openAiCompatible: { instructionField: "model" } });
+  assert.equal(readKanaUserConfig().tts?.openAiCompatible, undefined);
+  write({ qwen3Local: {}, openAiCompatible: {} });
+  assert.throws(() => readKanaUserConfig(), /Set tts.provider/);
+  write({ openAiCompatible: { preset: "pollinations" } });
+  assert.equal(readKanaUserConfig().tts?.provider, "openai-compatible");
+});
+
+it("validates readable synthesis and startup timeout settings", () => {
+  writeFileSync(kanaUserConfigPath(), JSON.stringify({ tts: { timeoutSeconds: 900, qwen3Local: { startupTimeoutSeconds: 600 } } }));
+  assert.equal(readKanaUserConfig().tts?.timeoutSeconds, 900);
+  assert.equal(readKanaUserConfig().tts?.qwen3Local?.startupTimeoutSeconds, 600);
+  for (const value of [0, -1, 3601, 1.5, "900"]) {
+    writeFileSync(kanaUserConfigPath(), JSON.stringify({ tts: { timeoutSeconds: value } }));
+    assert.throws(() => readKanaUserConfig(), /timeoutSeconds/);
+  }
+});

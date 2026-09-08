@@ -105,6 +105,19 @@ class Qwen3TTSRuntime:
             self._model_type == "custom_voice" and "0.6b" not in model_name
         )
 
+    def _model_directory(self, hub_cache: Path | None) -> str:
+        if Path(self.settings.model_id).is_dir():
+            return self.settings.model_id
+        from huggingface_hub import constants, snapshot_download
+
+        return snapshot_download(
+            repo_id=self.settings.model_id,
+            revision=self.settings.model_revision,
+            cache_dir=str(hub_cache) if hub_cache is not None else None,
+            local_files_only=constants.HF_HUB_OFFLINE,
+            allow_patterns=["*.json", "*.safetensors", "*.txt", "*.model", "speech_tokenizer/*"],
+        )
+
     def load(self) -> None:
         with self._load_lock:
             if self._model is not None:
@@ -137,11 +150,12 @@ class Qwen3TTSRuntime:
                 }
                 if hub_cache is not None:
                     options["cache_dir"] = str(hub_cache)
-                if self.settings.model_revision is not None:
-                    options["revision"] = self.settings.model_revision
-
+                # Qwen's wrapper does not forward revision/cache options to
+                # every nested tokenizer/processor load. Resolve ONE snapshot
+                # first so all components use the same revision and work offline.
+                model_directory = self._model_directory(hub_cache)
                 model = Qwen3TTSModel.from_pretrained(
-                    self.settings.model_id,
+                    model_directory,
                     **options,
                 )
                 speakers = tuple(

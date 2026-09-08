@@ -6,6 +6,7 @@ import {
 import { resolveVoiceForSynthesis } from "@/lib/server/voice-library";
 import { ttsServiceUrl } from "@/lib/server/tts-relay";
 import type { VoiceProviderStatus } from "@/lib/voice/types";
+import { awaitTtsStartup } from "./active-requests";
 import {
   isAudioContentType,
   TtsProviderError,
@@ -17,6 +18,7 @@ import {
 } from "./types";
 
 export class LocalQwen3TtsProvider implements ServerTtsProvider {
+  private synthesisPort?: number;
   readonly descriptor: TtsProviderDescriptor = {
     id: "qwen3-local",
     type: "qwen3-local",
@@ -67,20 +69,24 @@ export class LocalQwen3TtsProvider implements ServerTtsProvider {
     input: TtsSynthesisInput,
     signal: AbortSignal,
   ): Promise<TtsAudioResult> {
-    const ensured = await ensureQwen3TTSService();
+    signal.throwIfAborted();
+    const ensured = await awaitTtsStartup(ensureQwen3TTSService(), signal);
     if (!ensured.ok) {
       throw new TtsProviderError(
         ensured.status.message || "The Qwen3-TTS service is unavailable.",
         503,
       );
     }
+    this.synthesisPort = ensured.status.port;
     let voiceId: string | undefined;
     try {
       voiceId = await resolveVoiceForSynthesis(
         ensured.status.port,
         input.voiceId,
+        signal,
       );
     } catch (error) {
+      signal.throwIfAborted();
       throw new TtsProviderError(
         error instanceof Error
           ? `Kana could not prepare the local voice: ${error.message}`
@@ -120,10 +126,9 @@ export class LocalQwen3TtsProvider implements ServerTtsProvider {
   }
 
   async cancel(requestId: string, signal: AbortSignal): Promise<boolean> {
-    const status = await inspectLocalQwen3TtsRuntime();
-    if (status.state !== "running" && status.state !== "external") return false;
+    if (!this.synthesisPort) return false;
     const response = await fetch(
-      ttsServiceUrl(status.port, `/v1/requests/${encodeURIComponent(requestId)}/cancel`),
+      ttsServiceUrl(this.synthesisPort, `/v1/requests/${encodeURIComponent(requestId)}/cancel`),
       { method: "POST", headers: { Accept: "application/json" }, signal, cache: "no-store" },
     );
     if (!response.ok) {

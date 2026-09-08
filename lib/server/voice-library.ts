@@ -41,7 +41,7 @@ function defaultVoiceAssetPath(): string | null {
   }
   candidates.push(path.resolve(process.cwd(), DEFAULT_VOICE_ASSET));
   for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) return candidate;
+    if (fs.existsSync(/* turbopackIgnore: true */ candidate)) return candidate;
   }
   return null;
 }
@@ -50,6 +50,7 @@ async function registerWithService(
   port: number,
   name: string,
   audioBytes: Uint8Array,
+  signal?: AbortSignal,
 ): Promise<string> {
   const response = await fetch(`http://127.0.0.1:${port}/v1/voices/clone`, {
     method: "POST",
@@ -60,7 +61,7 @@ async function registerWithService(
       x_vector_only: true,
       consent: true,
     }),
-    signal: AbortSignal.timeout(60_000),
+    signal: AbortSignal.any([AbortSignal.timeout(60_000), ...(signal ? [signal] : [])]),
   });
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
@@ -81,14 +82,21 @@ async function registerWithService(
   return serviceVoiceId;
 }
 
+function referencePath(row: VoiceCloneRow): string {
+  // A package upgrade or migration to a VPS changes the install path.
+  if (row.id === "kc-default") return defaultVoiceAssetPath() ?? row.file_path;
+  return row.file_path;
+}
+
 /** Register one library row; returns the service voice id or null (pending). */
 export async function registerVoiceClone(row: VoiceCloneRow): Promise<string | null> {
   if (row.service_voice_id) return row.service_voice_id;
-  if (!fs.existsSync(row.file_path)) return null;
+  // User voice paths are runtime data; packaging copies the default WAV explicitly.
+  if (!fs.existsSync(/* turbopackIgnore: true */ referencePath(row))) return null;
   const readiness = await getQwen3TtsServiceReadiness();
   if (!readiness.ready) return null;
   try {
-    const audioBytes = new Uint8Array(fs.readFileSync(row.file_path));
+    const audioBytes = new Uint8Array(fs.readFileSync(/* turbopackIgnore: true */ referencePath(row)));
     const serviceId = await registerWithService(readiness.port, row.name, audioBytes);
     setVoiceCloneServiceId(row.id, serviceId);
     return serviceId;
@@ -104,14 +112,14 @@ type ServiceVoiceSnapshot = {
   voices?: Array<{ id?: unknown }>;
 };
 
-async function serviceVoiceSnapshot(port: number): Promise<{
+async function serviceVoiceSnapshot(port: number, signal?: AbortSignal): Promise<{
   defaultVoiceId: string;
   supportsVoiceClone: boolean;
   voiceIds: Set<string>;
 }> {
   const response = await fetch(`http://127.0.0.1:${port}/v1/voices`, {
     headers: { Accept: "application/json" },
-    signal: AbortSignal.timeout(15_000),
+    signal: AbortSignal.any([AbortSignal.timeout(15_000), ...(signal ? [signal] : [])]),
     cache: "no-store",
   });
   if (!response.ok) {
@@ -161,9 +169,10 @@ function ensureDefaultVoiceRow(): VoiceCloneRow | null {
 export async function resolveVoiceForSynthesis(
   port: number,
   requestedServiceVoiceId?: string,
+  signal?: AbortSignal,
 ): Promise<string | undefined> {
-  const snapshot = await serviceVoiceSnapshot(port);
-  const requested = requestedServiceVoiceId?.trim() ?? "";
+  const snapshot = await serviceVoiceSnapshot(port, signal);
+  const requested = requestedServiceVoiceId?.trim() || snapshot.defaultVoiceId;
   if (!snapshot.supportsVoiceClone) {
     return requested || snapshot.defaultVoiceId || undefined;
   }
@@ -185,7 +194,8 @@ export async function resolveVoiceForSynthesis(
   const serviceVoiceId = await registerWithService(
     port,
     refreshed.name,
-    new Uint8Array(fs.readFileSync(refreshed.file_path)),
+    new Uint8Array(fs.readFileSync(/* turbopackIgnore: true */ referencePath(refreshed))),
+    signal,
   );
   setVoiceCloneServiceId(refreshed.id, serviceVoiceId);
   return serviceVoiceId;

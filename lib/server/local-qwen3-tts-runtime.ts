@@ -53,8 +53,6 @@ function qwenConfig(): KanaQwen3LocalConfig & ReturnType<typeof defaultQwen3Loca
   };
 }
 
-const DEFAULT_TTS_PORT = qwenConfig().port;
-
 function moduleDirectory(): string | null {
   try {
     if (typeof __dirname === "string" && __dirname.length > 0) return __dirname;
@@ -103,7 +101,7 @@ function runtime(): ManagedRuntime {
   shared[runtimeKey] ??= {
     child: null,
     state: "stopped",
-    port: DEFAULT_TTS_PORT,
+    port: qwenConfig().port,
     lastMessage: "The Qwen3-TTS service is not running under Kana.",
     stderrTail: [],
   };
@@ -111,7 +109,7 @@ function runtime(): ManagedRuntime {
 }
 
 /** Test hook: install a known port without spawning a process. Passing null
- * also removes the DEFAULT_TTS_PORT fallback candidate so tests stay
+ * also removes the configured-port fallback candidate so tests stay
  * independent of whatever happens to listen on the host's real 7860. */
 export const __setTestTtsPort = (port: number | null): void => {
   runtime().port = port ?? 0;
@@ -182,7 +180,8 @@ type Qwen3TtsHealthProbe =
 async function probeHealth(
   port: number,
   timeoutMs = 750,
-): Promise<Qwen3TtsHealthProbe> {  const controller = new AbortController();
+): Promise<Qwen3TtsHealthProbe> {
+  const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(`http://127.0.0.1:${port}/v1/health`, {
@@ -229,7 +228,7 @@ function externalServiceMessage(probe: Qwen3TtsHealthProbe, port: number): strin
     case "loading":
       return `A Qwen3-TTS service was found on port ${port}; the model is still loading.`;
     case "error":
-      return `A Qwen3-TTS service was found on port ${port} but its model failed to load.`;
+      return `A Qwen3-TTS service was found on port ${port} but its model failed to load: ${probe.message}`;
     case "foreign":
     case "unreachable":
       return "";
@@ -273,14 +272,14 @@ export async function inspectLocalQwen3TtsRuntime(
   }
 
   // External instance already running on the preferred or configured port?
-  // When a test nulls the configured port (0), the DEFAULT_TTS_PORT fallback
+  // When a test nulls the configured port (0), the default-port fallback
   // is skipped so tests stay independent of the host's real 7860.
   const candidates = [
     preferredPort,
     current.port >= 1024 ? current.port : undefined,
-    // DEFAULT_TTS_PORT only applies while the configured port is untouched;
+    // The configured fallback only applies while the runtime port is nonzero;
     // a test that nulls it (port 0) must never probe the host's real 7860.
-    runtime().port === DEFAULT_TTS_PORT ? DEFAULT_TTS_PORT : undefined,
+    current.port !== 0 ? qwenConfig().port : undefined,
   ].filter(
     (value): value is number =>
       typeof value === "number" &&
@@ -311,12 +310,17 @@ export async function inspectLocalQwen3TtsRuntime(
   return publicStatus(current);
 }
 
+class TtsStartupTimeout extends Error {}
+
 async function waitUntilReady(
   current: ManagedRuntime,
   deadlineMs: number,
 ): Promise<void> {
   const deadline = Date.now() + deadlineMs;
   while (Date.now() < deadline) {
+    if (current.state === "stopping" || (current.state === "stopped" && !current.child)) {
+      throw new Error("The Qwen3-TTS service was stopped while preparing speech.");
+    }
     if (current.child && current.child.exitCode !== null) {
       throw new Error(
         current.lastMessage ||
@@ -325,6 +329,7 @@ async function waitUntilReady(
           }`,
       );
     }
+    if (current.child && current.state === "failed") throw new Error(current.lastMessage);
     // HTTP 200 alone is not ready: the Python service answers 200 with
     // status "loading" until the model load finishes. A reported load error
     // fails fast instead of burning the whole deadline.
@@ -333,7 +338,7 @@ async function waitUntilReady(
     if (health.kind === "error") throw new Error(health.message);
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
-  throw new Error(
+  throw new TtsStartupTimeout(
     `The Qwen3-TTS service did not become ready within ${Math.round(deadlineMs / 1000)} seconds. First-time model downloads can take much longer; check the server logs.`,
   );
 }
@@ -344,9 +349,7 @@ export async function startLocalQwen3TtsRuntime(options: {
 }): Promise<LocalQwen3TtsRuntimeStatus> {
   const port =
     options.port ??
-    (Number.isInteger(DEFAULT_TTS_PORT) && DEFAULT_TTS_PORT >= 1024
-      ? DEFAULT_TTS_PORT
-      : 7860);
+    qwenConfig().port;
   if (!Number.isInteger(port) || port < 1024 || port > 65_535) {
     throw new Error("The TTS port must be an integer between 1024 and 65535.");
   }
@@ -355,11 +358,15 @@ export async function startLocalQwen3TtsRuntime(options: {
     throw new Error("Kana already manages a running Qwen3-TTS process.");
   }
   const existing = await probeHealth(port);
+  if (existing.kind === "foreign") {
+    throw new Error(`Port ${port} is serving another application. Choose a free tts.qwen3Local.port.`);
+  }
   if (adoptableHealth(existing)) {
     current.port = port;
     current.child = null;
     current.state = "external";
     current.lastMessage = externalServiceMessage(existing, port);
+    await waitUntilReady(current, options.readyTimeoutMs ?? (qwenConfig().startupTimeoutSeconds ?? 600) * 1000);
     return publicStatus(current);
   }
   const uv = resolveUvExecutable();
@@ -387,7 +394,7 @@ export async function startLocalQwen3TtsRuntime(options: {
 
   const child = spawn(
     /* turbopackIgnore: true */ uv,
-    ["run", "--project", projectDir, "kana-qwen3-tts"],
+    ["run", "--frozen", "--project", projectDir, "kana-qwen3-tts"],
     {
       env: {
         ...process.env,
@@ -412,6 +419,11 @@ export async function startLocalQwen3TtsRuntime(options: {
     },
   );
   current.child = child;
+  child.once("error", (error) => {
+    if (current.child !== child) return;
+    current.state = "failed";
+    current.lastMessage = `Could not start Qwen3-TTS: ${error.message}`;
+  });
   child.stderr?.on("data", (chunk: Buffer) => {
     current.stderrTail.push(chunk.toString());
     if (current.stderrTail.length > 50) current.stderrTail.shift();
@@ -419,23 +431,23 @@ export async function startLocalQwen3TtsRuntime(options: {
   child.once("exit", (code) => {
     if (runtime().child === child) {
       current.state = code === 0 ? "stopped" : "failed";
-      current.lastMessage =
-        current.lastMessage ||
-        `The Qwen3-TTS process exited with code ${code}.`;
+      const detail = current.stderrTail.join(" ").trim().slice(-800);
+      current.lastMessage = `The Qwen3-TTS process exited with code ${code}.${
+        code !== 0 && detail ? ` Last output: ${detail}` : ""
+      }`;
     }
   });
 
   try {
-    await waitUntilReady(current, options.readyTimeoutMs ?? 120_000);
+    await waitUntilReady(current, options.readyTimeoutMs ?? (userConfig.startupTimeoutSeconds ?? 600) * 1000);
   } catch (error) {
     current.lastMessage =
       error instanceof Error ? error.message : "The Qwen3-TTS service failed to start.";
-    try {
-      current.child.kill("SIGTERM");
-    } catch {
-      // Already gone.
+    // A first-time dependency/model download may outlive this request. Keep
+    // the shared warmup alive; later requests can join it or use the ready model.
+    if (current.child?.exitCode === null) {
+      current.state = error instanceof TtsStartupTimeout ? "starting" : "failed";
     }
-    current.state = current.state === "starting" ? "failed" : current.state;
     throw error;
   }
   current.state = "running";
@@ -517,11 +529,12 @@ type EnsureGlobal = typeof globalThis & {
 export async function ensureQwen3TTSService(): Promise<EnsureQwen3TtsResult> {
   const shared = globalThis as EnsureGlobal;
   shared[ensureKey] ??= (async (): Promise<EnsureQwen3TtsResult> => {
-    const inspected = await inspectLocalQwen3TtsRuntime();
-    if (inspected.state === "running" || inspected.state === "external") {
-      return { ok: true, status: inspected };
-    }
     try {
+      const inspected = await inspectLocalQwen3TtsRuntime();
+      if (["running", "external", "starting"].includes(inspected.state)) {
+        await waitUntilReady(runtime(), (qwenConfig().startupTimeoutSeconds ?? 600) * 1000);
+        return { ok: true, status: await inspectLocalQwen3TtsRuntime() };
+      }
       return { ok: true, status: await startLocalQwen3TtsRuntime({}) };
     } catch (error) {
       const status = await inspectLocalQwen3TtsRuntime();

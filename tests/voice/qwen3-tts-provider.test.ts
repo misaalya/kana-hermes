@@ -420,3 +420,29 @@ describe("Qwen3-TTS browser contract", () => {
     assert.equal(provider.getSnapshot().state, "idle");
   });
 });
+
+it("a late failure from a stopped utterance cannot stop the newer utterance", async () => {
+  let rejectOld!: (error: Error) => void;
+  let resolvePlay!: () => void;
+  let stops = 0;
+  let requests = 0;
+  globalThis.fetch = async (input) => {
+    if (String(input).includes("/cancel")) return json({ cancelled: true });
+    requests++;
+    if (requests === 1) return new Promise<Response>((_resolve, reject) => { rejectOld = reject; });
+    return new Response(new Uint8Array([82, 73, 70, 70]), { headers: { "content-type": "audio/wav" } });
+  };
+  const provider = new Qwen3TTSProvider({}, null as unknown as AvatarController, {
+    play: () => new Promise<void>((resolve) => { resolvePlay = resolve; }),
+    stop: () => { stops++; },
+  });
+  const old = provider.speak({ text: "古い返事。", language: "ja" });
+  const oldFailed = assert.rejects(old, /late failure/);
+  const next = provider.speak({ text: "新しい返事。", language: "ja" });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const before = stops;
+  rejectOld(new Error("late failure")); await oldFailed;
+  assert.equal(stops, before);
+  assert.equal(provider.getSnapshot().state, "playing");
+  resolvePlay(); await next;
+});

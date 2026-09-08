@@ -38,6 +38,12 @@ const nextConfig: NextConfig = {
   // of every server trace so a release never follows developer-machine state.
   outputFileTracingExcludes: {
     "/*": [
+      // Application source is compiled into .next/server; it is never a
+      // runtime file dependency. Keep it out of NFT's secondary trace too.
+      "./app/**/*",
+      "./components/**/*",
+      "./lib/**/*.ts",
+      "./lib/**/*.tsx",
       "./.codegraph",
       "./.codegraph/**/*",
       "./.hermes/**/*",
@@ -46,6 +52,8 @@ const nextConfig: NextConfig = {
       "./acceptance/**/*",
       "./auth-reference/**/*",
       "./data/**/*",
+      "./cli/**/*",
+      "./.npm-package/**/*",
       "./reference/**/*",
       "./scripts/**/*",
       "./services/**/*",

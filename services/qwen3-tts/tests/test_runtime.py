@@ -126,3 +126,18 @@ class ResolveDtypeTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ModelSnapshotTest(unittest.TestCase):
+    def test_resolves_one_pinned_snapshot_with_the_offline_flag(self) -> None:
+        from unittest.mock import patch
+        runtime = make_runtime(device="cpu", dtype="auto")
+        with patch("huggingface_hub.constants.HF_HUB_OFFLINE", True), patch(
+            "huggingface_hub.snapshot_download", return_value="/cached/pinned-snapshot"
+        ) as download:
+            self.assertEqual(runtime._model_directory(Path("/cache/hub")), "/cached/pinned-snapshot")
+        self.assertEqual(download.call_args.kwargs["repo_id"], "test-model")
+        self.assertEqual(download.call_args.kwargs["revision"], "test-revision")
+        self.assertEqual(download.call_args.kwargs["cache_dir"], "/cache/hub")
+        self.assertTrue(download.call_args.kwargs["local_files_only"])
+        self.assertIn("speech_tokenizer/*", download.call_args.kwargs["allow_patterns"])

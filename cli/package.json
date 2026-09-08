@@ -1,0 +1,55 @@
+{
+  "name": "kana-alya",
+  "version": "0.2.0",
+  "description": "Local visual-novel interface and launcher for an existing Hermes Agent",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/misaalya/kana-hermes.git"
+  },
+  "homepage": "https://github.com/misaalya/kana-hermes#readme",
+  "bugs": {
+    "url": "https://github.com/misaalya/kana-hermes/issues"
+  },
+  "keywords": [
+    "hermes-agent",
+    "live2d",
+    "local-first",
+    "vtuber"
+  ],
+  "bin": {
+    "kana": "bin/kana.mjs",
+    "kana-alya": "bin/kana.mjs"
+  },
+  "files": [
+    ".npm-package",
+    "bin",
+    "config",
+    "README.md",
+    "CHANGELOG.md",
+    "PLAN.md",
+    "LICENSE",
+    "docs"
+  ],
+  "engines": {
+    "node": ">=22.13"
+  },
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "libc": [
+    "glibc"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "tag": "latest"
+  },
+  "dependencies": {},
+  "scripts": {
+    "prepack": "node ../scripts/prepare-npm-package.mjs --build",
+    "prepublishOnly": "node ../scripts/assert-npm-release.mjs"
+  }
+}

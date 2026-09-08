@@ -1,4 +1,4 @@
-# Kana dogfood and beta gate
+# Kana dogfood and field-validation evidence
 
 Dogfood is release evidence, not a checkbox to fill retrospectively. Keep the
 tracked structure in `dogfood/journal.json`; do not put prompts, conversation
@@ -35,9 +35,9 @@ a real earlier observation. An existing day is never overwritten unless
 `--replace` is supplied deliberately. Record an incident honestly with
 `--data-loss` or `--credential-exposure`; never omit it to make the gate pass.
 
-Seven distinct dates spanning at least seven calendar days are required. A day
-with data loss or credential exposure fails the beta gate even if the issue was
-not entered separately.
+Seven distinct dates spanning at least seven calendar days are required for a
+complete field-validation report. A day with data loss or credential exposure
+fails that report even if the issue was not entered separately.
 
 ## Matrix evidence
 
@@ -53,7 +53,7 @@ After completing a matrix case, update it without manually editing JSON:
 npm run dogfood:matrix -- \
   --id hermes-only \
   --status pass \
-  --evidence "Kana 0.1.0-alpha, Hermes 0.20.1, one prompt/one reply, 2026-08-23"
+  --evidence "Kana 0.2.0, Hermes 0.20.1, one prompt/one reply, 2026-09-08"
 ```
 
 The recorder rejects unknown IDs and obvious credential-shaped evidence. It
@@ -78,8 +78,9 @@ Issue entries use this shape:
 ```
 
 Allowed severity is `P0` through `P3`; status is `open`, `fixed`, `verified`,
-or `wontfix`. Beta is blocked by any open or merely fixed P0/P1. A fix must be
-verified in the affected environment before it stops blocking the gate.
+or `wontfix`. A complete field-validation report is blocked by any open or
+merely fixed P0/P1. A fix must be verified in the affected environment before
+it stops blocking the report.
 
 Run the deterministic gate report at any time:
 

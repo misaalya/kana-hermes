@@ -1,3 +1,4 @@
+import { readJsonObject, RequestBodyError } from "@/lib/server/request-body";
 import { hermesRpc } from "@/lib/server/hermes-bridge";
 import { isSessionValid } from "@/lib/server/auth/session";
 
@@ -54,13 +55,12 @@ export async function POST(request: Request): Promise<Response> {
   }
   let body: { method?: unknown; params?: unknown };
   try {
-    const raw = await request.text();
-    if (raw.length > MAX_BODY_BYTES) {
-      return Response.json({ error: "Request body is too large." }, { status: 413, headers: NO_STORE });
-    }
-    body = JSON.parse(raw) as { method?: unknown; params?: unknown };
-  } catch {
-    return Response.json({ error: "A JSON request body is required." }, { status: 400, headers: NO_STORE });
+    body = await readJsonObject(request, MAX_BODY_BYTES);
+  } catch (error) {
+    return Response.json(
+      { error: error instanceof RequestBodyError ? error.message : "A JSON object is required." },
+      { status: error instanceof RequestBodyError ? error.status : 400, headers: NO_STORE },
+    );
   }
   const method = body.method;
   if (typeof method !== "string" || !ALLOWED_METHODS.has(method)) {

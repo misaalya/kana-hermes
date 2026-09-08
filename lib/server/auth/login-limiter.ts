@@ -11,6 +11,7 @@ const FAIL_WINDOW_MS = 60 * 60 * 1000; // 1h since last fail → auto reset
 type Attempt = { fails: number; lockUntil: number; lockLevel: number; lastFailAt: number };
 
 const attempts = new Map<string, Attempt>();
+let passwordCheckInFlight = false;
 
 function getEntry(key: string): Attempt | null {
   const entry = attempts.get(key);
@@ -27,6 +28,25 @@ function getEntry(key: string): Attempt | null {
 }
 
 export type LockState = { locked: false } | { locked: true; retryAfter: number };
+
+/** Reserve before awaiting bcrypt so a concurrent burst cannot bypass lockout. */
+export function beginLoginAttempt():
+  | { locked: true; retryAfter: number }
+  | { locked: false; release: () => void } {
+  const lock = checkLock();
+  if (lock.locked) return lock;
+  if (passwordCheckInFlight) return { locked: true, retryAfter: 1 };
+  passwordCheckInFlight = true;
+  let released = false;
+  return {
+    locked: false,
+    release: () => {
+      if (released) return;
+      released = true;
+      passwordCheckInFlight = false;
+    },
+  };
+}
 
 export function checkLock(key = "local"): LockState {
   const entry = getEntry(key);
