@@ -16,13 +16,12 @@ const envelope = {
 
 describe("Kana response parsing", () => {
   it("parses the exact protocol envelope", () => {
-    assert.deepEqual(parseKanaResponse(JSON.stringify(envelope), "id"), envelope);
+    assert.deepEqual(parseKanaResponse(JSON.stringify(envelope)), envelope);
   });
 
   it("extracts a valid envelope after accidental prose", () => {
     const response = parseKanaResponse(
       `Ini seharusnya tidak ikut tampil.\n\n${JSON.stringify(envelope)}`,
-      "id",
     );
     assert.equal(response.subtitle.text, "Bedanya sederhana.");
     assert.equal(response.speech_ja, "違いは単純です。");
@@ -37,7 +36,7 @@ describe("Kana response parsing", () => {
       },
       "emotion": "neutral"
     }`;
-    const response = parseKanaResponse(raw, "id");
+    const response = parseKanaResponse(raw);
     assert.equal(
       response.subtitle.text,
       'Perintah underscore akan menghasilkan "unknown command" atau dianggap skill.',
@@ -47,7 +46,7 @@ describe("Kana response parsing", () => {
 
   it("never turns malformed JSON-looking output into a visible raw envelope", () => {
     assert.throws(
-      () => parseKanaResponse('{"speech_ja": nope}', "id"),
+      () => parseKanaResponse('{"speech_ja": nope}'),
       (error: unknown) =>
         error instanceof KanaProtocolError &&
         /malformed Kana response envelope/.test(error.message),
@@ -55,7 +54,7 @@ describe("Kana response parsing", () => {
   });
 
   it("keeps the plain-text fallback for genuine non-envelope replies", () => {
-    const response = parseKanaResponse("Jawaban Hermes biasa.", "id");
+    const response = parseKanaResponse("Jawaban Hermes biasa.");
     assert.equal(response.subtitle.text, "Jawaban Hermes biasa.");
     assert.equal(response.emotion, "neutral");
   });

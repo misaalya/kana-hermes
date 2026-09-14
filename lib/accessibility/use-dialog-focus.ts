@@ -46,10 +46,18 @@ export function useDialogFocus(onEscape?: () => void) {
     }
     const first = focusable[0];
     const last = focusable.at(-1)!;
-    if (event.shiftKey && document.activeElement === first) {
+    const current = document.activeElement;
+    // Focus can rest on an element outside the Tab order (a tabIndex=-1 step
+    // heading, or the dialog itself). Wrap based on its DOM position so Tab
+    // never leaves the dialog from there either.
+    const precedes = (element: Element) =>
+      current instanceof Node && Boolean(element.compareDocumentPosition(current) & Node.DOCUMENT_POSITION_FOLLOWING);
+    const follows = (element: Element) =>
+      current instanceof Node && Boolean(element.compareDocumentPosition(current) & Node.DOCUMENT_POSITION_PRECEDING);
+    if (event.shiftKey && (current === first || !focusable.some(precedes))) {
       event.preventDefault();
       last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
+    } else if (!event.shiftKey && (current === last || !focusable.some(follows))) {
       event.preventDefault();
       first.focus();
     }

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { UiLocale } from "@/lib/ui/copy";
 import { getCopy } from "@/lib/ui/copy";
 import type { TtsProviderDescriptor } from "@/lib/voice/types";
-import { btnGhost, btnSecondary } from "./ui";
+import { settingsButton, settingsButtonDanger, SettingsRow, StatusPill } from "./settings-layout";
 
 export type TtsRuntimeStatus = {
   state: "stopped" | "starting" | "running" | "stopping" | "failed" | "external";
@@ -24,15 +24,6 @@ type TtsControlPanelProps = {
   onInspect(): Promise<TtsRuntimeStatus>;
   onStart(options: { restart?: boolean }): Promise<TtsRuntimeStatus>;
   onStop(): Promise<TtsRuntimeStatus>;
-};
-
-const STATE_STYLE: Record<string, string> = {
-  running: "border-accent/50 text-accent-strong",
-  external: "border-accent/40 text-accent-strong",
-  starting: "border-accent/40 text-accent-strong animate-kana-pulse",
-  stopping: "border-line-strong text-muted",
-  failed: "border-danger/50 text-danger",
-  stopped: "border-line-strong text-muted",
 };
 
 // Human-facing control for the managed Qwen3-TTS service. The service starts
@@ -94,57 +85,51 @@ export function TtsControlPanel({ locale, onInspect, onStart, onStop }: TtsContr
     [copy.controlFailed, onStart, onStop],
   );
 
+  const controllable = status?.controllable !== false;
+  const state = status?.state ?? "";
+  const tone = state === "running" || state === "external"
+    ? "ok"
+    : state === "starting" || state === "stopping"
+      ? "busy"
+      : state === "failed"
+        ? "error"
+        : "idle";
+  const provider = `${status?.provider?.name ?? copy.ttsSubtitle}${status?.model ? ` · ${status.model}` : ""}`;
+  const message = notice ?? status?.message ?? "";
+
   return (
     <section aria-label={copy.ttsAria}>
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <div>
-          <p className="text-xs font-bold text-ink">{copy.ttsTitle}</p>
-          <p className="text-[10px] text-faint">
-            {status?.provider?.name ?? copy.ttsSubtitle}
-            {status?.model ? ` · ${status.model}` : ""}
-          </p>
-        </div>
-        <span
-          className={`border px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase ${STATE_STYLE[status?.state ?? ""] ?? "border-line-strong text-muted"}`}
-        >
-          {stateLabel}
-        </span>
-      </div>
-
-      <p className="mb-2 text-[11px] leading-relaxed text-faint">
-        {status?.controllable === false ? status.message : copy.ttsAutoNote}
-      </p>
-
-      {status?.state === "starting" && status?.controllable !== false ? (
-        <p className="text-[11px] leading-relaxed text-muted">{copy.ttsFirstStart}</p>
-      ) : null}
-
-      <div className="flex flex-wrap items-center gap-2">
-        {status?.controllable !== false && ["running", "external"].includes(status?.state ?? "") && status?.managed ? (
+      <SettingsRow
+        label={copy.ttsTitle}
+        description={
           <>
-            <button type="button" className={btnSecondary} disabled={busy} onClick={() => void run("restart")}>
+            {provider}
+            <span className="mt-1 block">{controllable ? copy.ttsAutoNote : null}</span>
+            {state === "starting" && controllable ? <span className="mt-1 block">{copy.ttsFirstStart}</span> : null}
+            {message ? <span className="mt-1 block text-ink-dim">{message}</span> : null}
+          </>
+        }
+      >
+        {stateLabel ? <StatusPill tone={tone}>{stateLabel}</StatusPill> : null}
+        {controllable && ["running", "external"].includes(state) && status?.managed ? (
+          <>
+            <button type="button" className={settingsButton} disabled={busy} onClick={() => void run("restart")}>
               {copy.restart}
             </button>
-            <button
-              type="button"
-              className={`${btnSecondary} hover:border-danger hover:text-danger`}
-              disabled={busy || status.state === "external"}
-              onClick={() => void run("stop")}
-            >
+            <button type="button" className={settingsButtonDanger} disabled={busy || state === "external"} onClick={() => void run("stop")}>
               {copy.stop}
             </button>
           </>
         ) : null}
-        {status?.controllable !== false && !["running", "external", "starting"].includes(status?.state ?? "") && (
-          <button type="button" className={btnSecondary} disabled={busy} onClick={() => void run("start")}>
+        {controllable && !["running", "external", "starting"].includes(state) ? (
+          <button type="button" className={settingsButton} disabled={busy} onClick={() => void run("start")}>
             {busy ? copy.starting : copy.start}
           </button>
-        )}
-        <button type="button" className={btnGhost} disabled={busy} onClick={() => void onInspect().then(setStatus)}>
+        ) : null}
+        <button type="button" className={settingsButton} disabled={busy} onClick={() => void onInspect().then(setStatus)}>
           {copy.refresh}
         </button>
-      </div>
-      <p className="mt-2 min-h-4 text-[11px] text-muted">{notice ?? status?.message ?? ""}</p>
+      </SettingsRow>
     </section>
   );
 }

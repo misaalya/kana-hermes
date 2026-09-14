@@ -1,4 +1,3 @@
-import { DEFAULT_SUBTITLE_LANGUAGE } from "@/lib/presentation/languages";
 import { isUiLocale } from "@/lib/ui/copy";
 import {
   DEFAULT_HARU_BINDINGS,
@@ -50,7 +49,6 @@ type StoredPreferences = Partial<
 export const DEFAULT_PREFERENCES: KanaPreferences = {
   onboardingCompleted: false,
   uiLocale: "id",
-  subtitleLanguage: DEFAULT_SUBTITLE_LANGUAGE,
   agentMode: "hermes",
   voiceEnabled: true,
   voiceMode: "configured",
@@ -85,8 +83,12 @@ export function normalizeKanaPreferences(
     && (preferences.stageBackground !== "custom" || Boolean(customBackgroundId))
     ? preferences.stageBackground
     : "plain";
+  // Subtitles follow the language the user writes in; drop the retired
+  // per-browser subtitle language setting from older stored preferences.
+  const { subtitleLanguage: _retired, ...current } = preferences as KanaPreferences & { subtitleLanguage?: unknown };
+  void _retired;
   return {
-    ...preferences,
+    ...current,
     // Runtime guard: stored or restored values can never re-enable another
     // mode — Kana always talks to Hermes and Live2D; the TTS provider is
     // selected server-side so its credentials never enter browser storage.

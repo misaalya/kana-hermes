@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { getCopy, type UiLocale } from "@/lib/ui/copy";
+import { isBraveBrowser } from "@/lib/voice/brave-browser";
 import { MicrophoneIcon } from "./icons";
 
 type Recognition = {
@@ -20,9 +21,8 @@ type SpeechWindow = Window & {
   webkitSpeechRecognition?: new () => Recognition;
 };
 
-export function ComposerDictation({ locale, language, disabled, onText, onActive, onNotice }: {
+export function ComposerDictation({ locale, disabled, onText, onActive, onNotice }: {
   locale: UiLocale;
-  language: string;
   disabled: boolean;
   onText(text: string): void;
   onActive(active: boolean): void;
@@ -54,7 +54,7 @@ export function ComposerDictation({ locale, language, disabled, onText, onActive
     }
   }, [disabled]);
 
-  const toggle = () => {
+  const toggle = async () => {
     if (recognition.current) {
       recognition.current.stop();
       timers.current.push(setTimeout(() => {
@@ -72,9 +72,16 @@ export function ComposerDictation({ locale, language, disabled, onText, onActive
       onNotice(text.dictationUnsupported);
       return;
     }
+    if (await isBraveBrowser()) {
+      onNotice(text.dictationBrave);
+      return;
+    }
+    if (recognition.current) return;
     const current = new Constructor();
     recognition.current = current;
-    current.lang = language || copy.dateLocale;
+    // Subtitles follow what the user writes, so dictation listens in the
+    // interface language; the user can always type in another language.
+    current.lang = copy.dateLocale;
     current.continuous = false;
     current.interimResults = true;
     let receivedText = false;
@@ -98,7 +105,9 @@ export function ComposerDictation({ locale, language, disabled, onText, onActive
         ? text.dictationPermission
         : error === "network"
           ? text.dictationNetwork
-          : text.dictationFailed(error);
+          : error === "no-speech"
+            ? text.noSpeech
+            : text.dictationFailed(error);
       callbacks.current.onNotice(message);
       finish();
     };
@@ -129,5 +138,5 @@ export function ComposerDictation({ locale, language, disabled, onText, onActive
   const label = active ? text.stopDictation : text.startDictation;
   return <button type="button" aria-label={label} title={label} aria-pressed={active} disabled={disabled}
     className={`kana-focus inline-flex size-10 shrink-0 items-center justify-center rounded-lg hover:bg-white/12 disabled:opacity-40 ${active ? "bg-red-500/35 animate-pulse" : ""}`}
-    onClick={toggle}><MicrophoneIcon className="size-[18px]" /></button>;
+    onClick={() => void toggle()}><MicrophoneIcon className="size-[18px]" /></button>;
 }

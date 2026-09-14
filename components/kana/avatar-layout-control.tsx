@@ -28,7 +28,10 @@ export function AvatarLayoutControl({
   useEffect(() => {
     if (!open) return;
     const closeFromOutside = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
+      const target = event.target as Element | null;
+      // The stage surface is part of the editing session, not "outside".
+      if (target?.closest?.("[data-avatar-layout-surface]")) return;
+      if (!rootRef.current?.contains(target)) {
         onOpenChange(false);
       }
     };
@@ -60,13 +63,14 @@ export function AvatarLayoutControl({
       {open ? (
         <div
           id="kana-avatar-layout-panel"
-          className="fixed right-4 top-[76px] z-30 max-sm:right-3 max-sm:top-[64px]"
+          className="fixed right-4 top-[68px] z-30 max-sm:inset-x-3 max-sm:bottom-3 max-sm:top-auto"
         >
           <AvatarLayoutPanel
             layout={layout}
             copy={copy.settings}
             onChange={onChange}
             onReset={onReset}
+            onClose={() => onOpenChange(false)}
           />
         </div>
       ) : null}

@@ -167,7 +167,7 @@ async function connectedClient(handler: RpcHandler): Promise<HermesAgentClient> 
 }
 
 async function openSession(client: HermesAgentClient): Promise<void> {
-  await client.openSession({ title: "Test", subtitleLanguage: "en" });
+  await client.openSession({ title: "Test" });
 }
 
 describe("HermesAgentClient (relay transport)", () => {
@@ -191,7 +191,7 @@ describe("HermesAgentClient (relay transport)", () => {
       return {};
     });
     await openSession(client);
-    await client.sendMessage({ text: "Read this", subtitleLanguage: "en", attachments: [{ name: "hello world.txt", dataUrl: "data:text/plain;base64,aGk=" }] });
+    await client.sendMessage({ text: "Read this", attachments: [{ name: "hello world.txt", dataUrl: "data:text/plain;base64,aGk=" }] });
     const upload = FakeRelay.requests.find((request) => request.method === "file.attach")!;
     assert.equal(upload.params.session_id, "runtime-1");
     assert.equal(upload.params.name, "hello world.txt");
@@ -215,7 +215,7 @@ describe("HermesAgentClient (relay transport)", () => {
       return {};
     });
     await openSession(client);
-    const input = { text: "Read this", subtitleLanguage: "en", attachments: [{ name: "test.txt", dataUrl: "data:text/plain;base64,aGk=" }] };
+    const input = { text: "Read this", attachments: [{ name: "test.txt", dataUrl: "data:text/plain;base64,aGk=" }] };
     await assert.rejects(client.sendMessage(input), /Upload unavailable/);
     cancelCase = true;
     const started = new Promise<void>((resolve) => { uploading = resolve; });
@@ -286,7 +286,6 @@ describe("HermesAgentClient (relay transport)", () => {
 
     const session = await client.openSession({
       title: "Kana audit",
-      subtitleLanguage: "id",
       cwd: "/tmp/project",
     });
 
@@ -371,15 +370,15 @@ describe("HermesAgentClient (relay transport)", () => {
     await openSession(client);
 
     assert.deepEqual(
-      await client.executeCommand({ command: "/alias-name value", subtitleLanguage: "en" }),
+      await client.executeCommand({ command: "/alias-name value" }),
       { type: "output", output: "resolved" },
     );
     assert.deepEqual(
-      await client.executeCommand({ command: "/undo", subtitleLanguage: "en" }),
+      await client.executeCommand({ command: "/undo" }),
       { type: "prefill", message: "previous prompt", notice: "Undone" },
     );
     assert.deepEqual(
-      await client.executeCommand({ command: "/plugin-x", subtitleLanguage: "en" }),
+      await client.executeCommand({ command: "/plugin-x" }),
       { type: "output", output: "plugin fallback" },
     );
   });
@@ -401,10 +400,10 @@ describe("HermesAgentClient (relay transport)", () => {
     });
     await openSession(client);
 
-    await client.sendMessage({ text: "first", subtitleLanguage: "en" });
+    await client.sendMessage({ text: "first" });
     assert.equal(promptCount, 1);
     assert.deepEqual(
-      await client.executeCommand({ command: "/goal build it", subtitleLanguage: "en" }),
+      await client.executeCommand({ command: "/goal build it" }),
       { type: "output", output: "Goal set" },
     );
     latestStream().emitEvent("message.complete", {
@@ -414,7 +413,7 @@ describe("HermesAgentClient (relay transport)", () => {
     await tick();
     assert.equal(promptCount, 2);
 
-    await client.executeCommand({ command: "/goal continue", subtitleLanguage: "en" });
+    await client.executeCommand({ command: "/goal continue" });
     latestStream().emitEvent("message.complete", { status: "interrupted" });
     await tick();
     assert.equal(promptCount, 3);
@@ -449,23 +448,22 @@ describe("HermesAgentClient (relay transport)", () => {
     });
     await openSession(client);
 
-    await client.executeCommand({ command: "/approve always all", subtitleLanguage: "en" });
-    await client.executeCommand({ command: "/title Renamed", subtitleLanguage: "en" });
+    await client.executeCommand({ command: "/approve always all" });
+    await client.executeCommand({ command: "/title Renamed" });
     const branch = await client.executeCommand({
       command: "/branch Branch",
-      subtitleLanguage: "en",
     });
     assert.equal(branch.type, "session");
     assert.equal(
       (
-        await client.executeCommand({ command: "/save", subtitleLanguage: "en" })
+        await client.executeCommand({ command: "/save" })
       ).type,
       "output",
     );
-    await client.executeCommand({ command: "/status", subtitleLanguage: "en" });
-    await client.executeCommand({ command: "/compress focus", subtitleLanguage: "en" });
-    await client.executeCommand({ command: "/steer correct this", subtitleLanguage: "en" });
-    await client.executeCommand({ command: "/handoff telegram", subtitleLanguage: "en" });
+    await client.executeCommand({ command: "/status" });
+    await client.executeCommand({ command: "/compress focus" });
+    await client.executeCommand({ command: "/steer correct this" });
+    await client.executeCommand({ command: "/handoff telegram" });
     await client.respondToInput({
       kind: "clarification",
       requestId: "clarify-1",
@@ -540,7 +538,6 @@ describe("HermesAgentClient (relay transport)", () => {
     assert.equal(FakeEventSource.instances.length, 2);
     const resumed = await client.openSession({
       persistentSessionId: "stored-1",
-      subtitleLanguage: "en",
     });
     assert.equal(resumed.sessionId, "runtime-2");
     assert.ok(FakeRelay.requests.some((request) => request.method === "session.resume"));
@@ -557,7 +554,7 @@ describe("HermesAgentClient (relay transport)", () => {
     });
     await openSession(client);
     client.subscribe((event) => events.push(event));
-    await client.sendMessage({ text: "test", subtitleLanguage: "en" });
+    await client.sendMessage({ text: "test" });
 
     latestStream().emitEvent("tool.complete", {
       tool_id: "late-tool",
@@ -633,12 +630,11 @@ describe("HermesAgentClient (relay transport)", () => {
     await openSession(client);
     client.subscribe((event) => events.push(event));
 
-    await client.sendMessage({ text: "Continue", subtitleLanguage: "en" });
+    await client.sendMessage({ text: "Continue" });
     latestStream().unexpectedClose();
     await client.connect();
     await client.openSession({
       persistentSessionId: "stored-1",
-      subtitleLanguage: "en",
     });
 
     assert.ok(events.some((event) => event.type === "assistant.message"));
@@ -679,7 +675,6 @@ describe("HermesAgentClient (relay transport)", () => {
 
     await client.openSession({
       persistentSessionId: "stored-1",
-      subtitleLanguage: "en",
     });
 
     const restored = events.find((event) => event.type === "history.restored");
@@ -758,7 +753,6 @@ describe("HermesAgentClient (relay transport)", () => {
     await assert.rejects(
       client.openSession({
         persistentSessionId: "deleted-session",
-        subtitleLanguage: "en",
       }),
       /will not silently replace the missing history/i,
     );
@@ -775,11 +769,9 @@ describe("HermesAgentClient (relay transport)", () => {
 
     const voice = await client.executeCommand({
       command: "/voice",
-      subtitleLanguage: "en",
     });
     const topic = await client.executeCommand({
       command: "/topic",
-      subtitleLanguage: "en",
     });
     assert.equal(voice.type, "output");
     assert.match(voice.output, /Kana Settings/);
@@ -888,7 +880,7 @@ describe("HermesAgentClient (relay transport)", () => {
     assert.equal(events.some((event) => event.type === "input.requested"), false);
 
     // While opening, the not-yet-known session id must still be accepted.
-    const opening = client.openSession({ title: "Mine", subtitleLanguage: "en" });
+    const opening = client.openSession({ title: "Mine" });
     await tick();
     latestStream().emitEvent("approval.request", approval, "runtime-mine");
     assert.equal(events.filter((event) => event.type === "input.requested").length, 1);

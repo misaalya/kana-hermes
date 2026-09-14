@@ -9,6 +9,7 @@ import type {
   Live2DRuntimeAdapter,
 } from "./live2d-avatar-provider";
 import { normalizeCubismCoreUrl, normalizeLive2DModelUrl } from "./defaults";
+import { assertSupportedMoc3 } from "./live2d/moc3-version";
 import { fitLive2DModel, type Live2DModelBounds } from "./live2d/fit-model";
 import {
   normalizeLive2DModelLayout,
@@ -64,6 +65,53 @@ export function prioritizeLive2DSettingsFile(files: File[]): File[] {
  * the directory picker reports `Kana/Kana.moc3`. Rooting both sides keeps the
  * library's validation and object-URL lookup consistent in production builds.
  */
+function filePath(file: File): string {
+  return (file.webkitRelativePath || file.name).replace(/\\/g, "/");
+}
+
+/** First bytes of the moc3 referenced by an imported package, if present. */
+export async function readPackageMoc3Header(files: File[]): Promise<ArrayBuffer | null> {
+  const settingsFile = files.find((file) => filePath(file).endsWith(".model3.json"));
+  let moc: File | undefined;
+  if (settingsFile) {
+    try {
+      const reference = (JSON.parse(await settingsFile.text()) as {
+        FileReferences?: { Moc?: unknown };
+      }).FileReferences?.Moc;
+      if (typeof reference === "string" && reference.trim()) {
+        const base = filePath(settingsFile).split("/").slice(0, -1);
+        const segments = [...base];
+        for (const part of reference.trim().replace(/\\/g, "/").split("/")) {
+          if (!part || part === ".") continue;
+          if (part === "..") segments.pop();
+          else segments.push(part);
+        }
+        const resolved = segments.join("/");
+        moc = files.find((file) => filePath(file) === resolved);
+      }
+    } catch {
+      // Unreadable settings are reported by the runtime itself.
+    }
+  }
+  moc ??= files.filter((file) => filePath(file).endsWith(".moc3")).at(0);
+  return moc ? moc.slice(0, 8).arrayBuffer() : null;
+}
+
+/** First bytes of the moc3 referenced by a hosted model3.json. */
+async function readHostedMoc3Header(modelUrl: string): Promise<ArrayBuffer | null> {
+  const settings = await fetch(modelUrl, { credentials: "omit" });
+  if (!settings.ok) return null;
+  const reference = ((await settings.json()) as { FileReferences?: { Moc?: unknown } })
+    .FileReferences?.Moc;
+  if (typeof reference !== "string" || !reference.trim()) return null;
+  const moc = await fetch(new URL(reference.trim(), modelUrl), {
+    credentials: "omit",
+    headers: { Range: "bytes=0-7" },
+  });
+  if (!moc.ok) return null;
+  return (await moc.arrayBuffer()).slice(0, 8);
+}
+
 export function prepareLive2DPackageFiles(files: File[]): File[] {
   return prioritizeLive2DSettingsFile(files).map((file) => {
     const currentPath = (file.webkitRelativePath || file.name)
@@ -125,11 +173,15 @@ type KanaLive2DInternalModel = {
   coreModel: MotionUpdateCoreModel & {
     /** Cubism SDK's loaded parameter IDs; used only for compatibility detection. */
     _parameterIds?: unknown[];
+    /** Final drawable opacity after parts, poses, and motions are applied. */
+    getDrawableOpacity?(drawableIndex: number): number;
     getModel?(): { parameters?: { ids?: unknown[] } };
   };
   /** Cubism vertices converted into the model's logical canvas coordinates. */
   getDrawableIDs?(): string[];
   getDrawableVertices?(drawIndex: string | number): number[];
+  /** model3.json HitAreas keyed by name, each pointing at a drawable. */
+  hitAreas?: Record<string, { index: number }>;
   /** Optional model3.json layout transform applied before rendering. */
   localTransform?: {
     a: number;
@@ -335,12 +387,27 @@ function flushRetiredModels(runtime: CanvasRuntime): void {
  * applying PixelsPerUnit and the canvas origin, so this remains independent
  * of texture resolution and works for imported model3.json packages.
  */
-function measureDrawableBounds(model: KanaLive2DModel): Live2DModelBounds | null {
-  const internal = model.internalModel;
-  const ids = internal.getDrawableIDs?.();
-  const getVertices = internal.getDrawableVertices;
-  if (!ids?.length || !getVertices) return null;
+/** Hit area names that mark a model's head across common authoring conventions. */
+const HEAD_HIT_AREA = /^(head|face|atama|kao)$|頭|顔/i;
+/** Drawables fainter than this are hidden variants (alternate arms, effects). */
+const VISIBLE_OPACITY = 0.01;
+/**
+ * Updates to run before measuring. Freshly loaded meshes are undeformed and
+ * every alternate part is still opaque; a few updates apply deformers, poses,
+ * and part opacity so the bounds match what is actually drawn.
+ */
+const MEASURE_WARMUP_UPDATES = 3;
 
+/** Share of the model height, from the top, treated as the head band. */
+const CROWN_BAND = 0.18;
+
+function drawableBox(
+  internal: KanaLive2DInternalModel,
+  indices: Iterable<string | number>,
+  maximumY = Number.POSITIVE_INFINITY,
+): Live2DModelBounds | null {
+  const getVertices = internal.getDrawableVertices;
+  if (!getVertices) return null;
   const transform = internal.localTransform;
   const a = Number.isFinite(transform?.a) ? transform!.a : 1;
   const b = Number.isFinite(transform?.b) ? transform!.b : 0;
@@ -353,19 +420,20 @@ function measureDrawableBounds(model: KanaLive2DModel): Live2DModelBounds | null
   let minY = Number.POSITIVE_INFINITY;
   let maxX = Number.NEGATIVE_INFINITY;
   let maxY = Number.NEGATIVE_INFINITY;
-  for (const id of ids) {
+  for (const index of indices) {
     let vertices: number[];
     try {
-      vertices = getVertices.call(internal, id);
+      vertices = getVertices.call(internal, index);
     } catch {
       continue;
     }
-    for (let index = 0; index + 1 < vertices.length; index += 2) {
-      const sourceX = vertices[index];
-      const sourceY = vertices[index + 1];
+    for (let offset = 0; offset + 1 < vertices.length; offset += 2) {
+      const sourceX = vertices[offset];
+      const sourceY = vertices[offset + 1];
       if (!Number.isFinite(sourceX) || !Number.isFinite(sourceY)) continue;
       const x = a * sourceX + c * sourceY + tx;
       const y = b * sourceX + d * sourceY + ty;
+      if (y > maximumY) continue;
       minX = Math.min(minX, x);
       minY = Math.min(minY, y);
       maxX = Math.max(maxX, x);
@@ -386,6 +454,56 @@ function measureDrawableBounds(model: KanaLive2DModel): Live2DModelBounds | null
     return null;
   }
   return { x: minX, y: minY, width, height };
+}
+
+/** Visible drawable bounds and the head hit area, in model canvas units. */
+function measureModelGeometry(model: KanaLive2DModel): {
+  bounds: Live2DModelBounds;
+  head: Live2DModelBounds | null;
+  crown: Live2DModelBounds | null;
+} | null {
+  const internal = model.internalModel;
+  const ids = internal.getDrawableIDs?.();
+  if (!ids?.length || !internal.getDrawableVertices) return null;
+
+  for (let step = 0; step < MEASURE_WARMUP_UPDATES; step += 1) {
+    try {
+      model.update(16);
+    } catch {
+      break;
+    }
+  }
+
+  const opacity = internal.coreModel.getDrawableOpacity;
+  const visible = ids
+    .map((_, index) => index)
+    .filter((index) => {
+      if (!opacity) return true;
+      try {
+        return opacity.call(internal.coreModel, index) > VISIBLE_OPACITY;
+      } catch {
+        return true;
+      }
+    });
+  const drawn = visible.length ? visible : ids;
+  const bounds = drawableBox(internal, drawn) ?? drawableBox(internal, ids);
+  if (!bounds) return null;
+
+  const headEntry = Object.entries(internal.hitAreas ?? {})
+    .find(([name]) => HEAD_HIT_AREA.test(name.trim()));
+  const head = headEntry && Number.isInteger(headEntry[1]?.index) && headEntry[1].index >= 0
+    ? drawableBox(internal, [headEntry[1].index])
+    : null;
+  const crown = drawableBox(internal, drawn, bounds.y + bounds.height * CROWN_BAND);
+  return { bounds, head, crown };
+}
+
+/** Reads a registered `<length>` custom property that CSS resolved to pixels. */
+function readPixelProperty(element: Element, name: string): number {
+  const value = getComputedStyle(element).getPropertyValue(name).trim();
+  if (!value.endsWith("px")) return 0;
+  const pixels = Number.parseFloat(value);
+  return Number.isFinite(pixels) && pixels > 0 ? pixels : 0;
 }
 
 function retireCurrentModel(runtime: CanvasRuntime): void {
@@ -503,6 +621,10 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
 
     let source: string | File[];
     if (modelFiles?.length) {
+      // Imports are validated, but packages saved before that check existed
+      // are verified here so an unsupported moc3 fails with a clear reason.
+      const header = await readPackageMoc3Header(modelFiles);
+      if (header) assertSupportedMoc3(header);
       source = prepareLive2DPackageFiles(
         await withRecoveredLive2DPresets(modelFiles),
       );
@@ -513,9 +635,21 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
       source = normalizeLive2DModelUrl(modelUrl);
     }
 
-    const raw = await Live2DModel.from(source as never, {
-      autoInteract: false,
-    });
+    let raw: unknown;
+    try {
+      raw = await Live2DModel.from(source as never, {
+        autoInteract: false,
+      });
+    } catch (error) {
+      // The Core rejects a newer moc3 with only a console log, so the SDK
+      // reports "Unknown error". Diagnose hosted models once the load fails
+      // rather than paying an extra request on every successful load.
+      if (typeof source === "string") {
+        const header = await readHostedMoc3Header(source).catch(() => null);
+        if (header) assertSupportedMoc3(header);
+      }
+      throw error;
+    }
     const model = raw as unknown as KanaLive2DModel;
 
     // One control point: the app ticker drives both rendering and Cubism
@@ -530,31 +664,37 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
     const host = canvas.parentElement;
     if (!host) throw new Error("The Live2D canvas has no layout host.");
 
-    // --- Model-bounds-aware fit --------------------------------------------
-    // getLocalBounds() is computed after pixi-live2d-display has interpreted
-    // Cubism's canvas size and pixels-per-unit metadata. It is therefore a
-    // safer normalization source than assuming every package has Haru's
-    // proportions or that texture dimensions equal its model canvas.
-    const measuredBounds = measureDrawableBounds(model) ?? model.getLocalBounds();
-    const initialBounds =
-      Number.isFinite(measuredBounds.width) && measuredBounds.width > 0 &&
-      Number.isFinite(measuredBounds.height) && measuredBounds.height > 0
-        ? {
-            // Pixi's getLocalBounds() intentionally ignores the display
-            // object's own transform, including the pivot installed by the
-            // Live2D anchor. Convert the measured Cubism canvas into the
-            // model's anchored coordinate space before centering it.
-            x: measuredBounds.x - model.pivot.x,
-            y: measuredBounds.y - model.pivot.y,
-            width: measuredBounds.width,
-            height: measuredBounds.height,
-          }
-        : {
-            x: -model.width / 2,
-            y: -model.height / 2,
-            width: model.width,
-            height: model.height,
-          };
+    // --- Model-geometry-aware framing -------------------------------------
+    // Vertices are read after a short warm-up so deformers, poses, and part
+    // opacity apply; hidden variants and effects would otherwise inflate the
+    // bounds. Pixi's getLocalBounds() ignores the anchor pivot, so every box is
+    // converted into the model's anchored coordinate space before framing.
+    const measured = measureModelGeometry(model);
+    const toAnchored = (box: Live2DModelBounds): Live2DModelBounds => ({
+      x: box.x - model.pivot.x,
+      y: box.y - model.pivot.y,
+      width: box.width,
+      height: box.height,
+    });
+    const fallbackBounds = model.getLocalBounds();
+    const geometry = measured
+      ? {
+          bounds: toAnchored(measured.bounds),
+          head: measured.head ? toAnchored(measured.head) : null,
+          crown: measured.crown ? toAnchored(measured.crown) : null,
+        }
+      : {
+          bounds: Number.isFinite(fallbackBounds.width) && fallbackBounds.width > 0 &&
+            Number.isFinite(fallbackBounds.height) && fallbackBounds.height > 0
+            ? toAnchored(fallbackBounds)
+            : {
+                x: -model.width / 2,
+                y: -model.height / 2,
+                width: model.width,
+                height: model.height,
+              },
+          head: null,
+        };
     let activeLayout = normalizeLive2DModelLayout(layout);
     let appliedMaskSize = -1;
 
@@ -563,8 +703,12 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
       const fit = fitLive2DModel(
         bounds.width,
         bounds.height,
-        initialBounds,
+        geometry,
         activeLayout,
+        {
+          top: readPixelProperty(host, "--kana-avatar-safe-top"),
+          bottom: readPixelProperty(host, "--kana-avatar-safe-bottom"),
+        },
       );
       model.scale.set(fit.scale, fit.scale);
       model.x = fit.x;

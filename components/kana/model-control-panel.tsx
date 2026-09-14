@@ -121,7 +121,7 @@ export function ModelControlPanel({ locale, onList, onSelect }: ModelControlPane
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="min-w-0">
           <span className={fieldLabel}>{copy.modelProvider}</span>
-          <select className={`${inputBase} w-full`} value={provider} onChange={(event) => chooseProvider(event.target.value)} disabled={state === "saving"}>
+          <select className={`${inputBase} w-full truncate pr-8`} value={provider} onChange={(event) => chooseProvider(event.target.value)} disabled={state === "saving"}>
             {catalog.providers.map((item) => (
               <option key={item.slug} value={item.slug}>{item.name}</option>
             ))}
@@ -129,7 +129,7 @@ export function ModelControlPanel({ locale, onList, onSelect }: ModelControlPane
         </label>
         <label className="min-w-0">
           <span className={fieldLabel}>{copy.modelName}</span>
-          <select className={`${inputBase} w-full`} value={model} onChange={(event) => { setModel(event.target.value); setNotice(""); setConfirmationPending(false); }} disabled={state === "saving"}>
+          <select className={`${inputBase} w-full truncate pr-8`} value={model} onChange={(event) => { setModel(event.target.value); setNotice(""); setConfirmationPending(false); }} disabled={state === "saving"}>
             {(selectedProvider?.models ?? []).map((item) => (
               <option key={item} value={item}>{item}</option>
             ))}

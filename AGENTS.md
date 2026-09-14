@@ -59,9 +59,10 @@ capability.
   (`KANA_DATA_DIR` → XDG → HOME). Never introduce a new `$CWD`-relative
   storage location.
 - Do not hardcode a single Live2D model or third-party copyrighted character.
-- Do not hardcode Indonesian as the subtitle language.
-- Do not retranslate old conversation history when the current subtitle
-  language changes.
+- Do not hardcode a subtitle language or reintroduce a subtitle language
+  setting: Hermes subtitles in the language the user writes in.
+- Do not retranslate old conversation history when the user switches
+  language.
 - Do not add a dependency until the existing project and browser APIs have been
   checked for an equivalent capability.
 - Kana has no second mock agent or conversation-store provider; agent and
@@ -241,9 +242,12 @@ Language rules:
 
 - Hermes reasoning, tool names, tool arguments, and internal metadata: English.
 - `speech_ja`: always natural conversational Japanese.
-- `subtitle.text`: the user's selected language for that new response.
+- `subtitle.text`: the language of the user's latest message; when that
+  message has no clear language (a command, a name, code), the language of
+  the user's earlier messages. Kana has no subtitle language setting and
+  sends none in `kana_request` (response protocol version 2).
 - `subtitle.language`: the language actually used in `subtitle.text`.
-- Changing the preference affects future messages only.
+- Writing in another language affects future replies only.
 
 Every stored assistant message preserves the exact `speech_ja`, subtitle text,
 subtitle language, emotion, and timestamp that were displayed. Rendering

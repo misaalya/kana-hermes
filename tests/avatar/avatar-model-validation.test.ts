@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { validateAvatarModelFiles } from "@/lib/avatar/indexed-db-avatar-model-store";
+import { UnsupportedMoc3VersionError } from "@/lib/avatar/live2d/moc3-version";
 import {
   disableLive2DMotionAudio,
   prepareLive2DPackageFiles,
+  readPackageMoc3Header,
   prioritizeLive2DSettingsFile,
   selectLive2DMouthParameterId,
 } from "@/lib/avatar/pixi-live2d-runtime-adapter";
@@ -28,6 +30,11 @@ function modelFile(path: string, content: BlobPart = "asset"): File {
     value: path,
   });
   return file;
+}
+
+/** A moc3 header with the given format version byte. */
+function mocBytes(version: number): Uint8Array<ArrayBuffer> {
+  return new Uint8Array([0x4d, 0x4f, 0x43, 0x33, version, 0, 0, 0, 1, 2, 3]);
 }
 
 function settings(overrides: Record<string, unknown> = {}): string {
@@ -58,7 +65,7 @@ describe("Live2D package validation", () => {
   it("accepts a complete package and reports its local size", async () => {
     const files = [
       modelFile("Kana/Kana.model3.json", settings()),
-      modelFile("Kana/Kana.moc3"),
+      modelFile("Kana/Kana.moc3", mocBytes(5)),
       modelFile("Kana/textures/texture_00.png"),
       modelFile("Kana/Kana.physics3.json", "{}"),
       modelFile("Kana/expressions/happy.exp3.json", "{}"),
@@ -71,6 +78,42 @@ describe("Live2D package validation", () => {
       result.sizeBytes,
       files.reduce((total, file) => total + file.size, 0),
     );
+  });
+
+  it("rejects a moc3 newer than the Cubism Core supports before storing it", async () => {
+    const files = [
+      modelFile("Kana/Kana.model3.json", settings({ Expressions: undefined, Motions: undefined, Physics: undefined })),
+      modelFile("Kana/Kana.moc3", mocBytes(6)),
+      modelFile("Kana/textures/texture_00.png"),
+    ];
+    await assert.rejects(validateAvatarModelFiles(files), (error: unknown) => {
+      assert.ok(error instanceof UnsupportedMoc3VersionError);
+      assert.equal(error.version, 6);
+      assert.equal(error.latestSupported, 5);
+      assert.match(error.message, /moc3 format version 6/);
+      return true;
+    });
+  });
+
+  it("rejects a .moc3 reference that is not a moc3 file", async () => {
+    const files = [
+      modelFile("Kana/Kana.model3.json", settings({ Expressions: undefined, Motions: undefined, Physics: undefined })),
+      modelFile("Kana/Kana.moc3", "not a moc"),
+      modelFile("Kana/textures/texture_00.png"),
+    ];
+    await assert.rejects(validateAvatarModelFiles(files), /not a valid moc3 file/);
+  });
+
+  it("reads the moc3 header referenced by an imported package", async () => {
+    const files = [
+      modelFile("Kana/Kana.model3.json", settings({ Moc: "runtime/Kana.moc3" })),
+      modelFile("Kana/other.moc3", mocBytes(1)),
+      modelFile("Kana/runtime/Kana.moc3", mocBytes(6)),
+    ];
+    const header = await readPackageMoc3Header(files);
+    assert.ok(header);
+    assert.equal(new Uint8Array(header)[4], 6);
+    assert.equal(header.byteLength, 8);
   });
 
   it("lists every missing asset before IndexedDB is changed", async () => {

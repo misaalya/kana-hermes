@@ -154,7 +154,9 @@ export async function runServer({ serving, host, port, open, dataRoot }) {
   child.stdout?.on("data", (chunk) => (ready ? process.stdout.write(style.dim(chunk.toString())) : output.append(chunk)));
   child.stderr?.on("data", (chunk) => (ready ? process.stderr.write(chunk) : output.append(chunk)));
 
+  let stopRequested = false;
   const stop = (signal) => {
+    stopRequested = true;
     if (child.exitCode === null) child.kill(signal);
   };
   process.once("SIGINT", () => stop("SIGINT"));
@@ -202,7 +204,23 @@ export async function runServer({ serving, host, port, open, dataRoot }) {
     if (open) openBrowser(url);
   }
 
-  const code = await new Promise((resolve) => child.once("exit", (exitCode, signal) => resolve(exitCode ?? (signal ? 0 : 1))));
+  const { exitCode, signal } = await new Promise((resolve) =>
+    child.once("exit", (exitCode, signal) => resolve({ exitCode, signal })),
+  );
+  // Ctrl+C reaches the whole terminal process group, so the server may exit
+  // from the same SIGINT before this process handles it; 130/143 are the
+  // conventional exit codes for SIGINT/SIGTERM.
+  const stoppedOnRequest =
+    stopRequested ||
+    signal === "SIGINT" ||
+    signal === "SIGTERM" ||
+    exitCode === 130 ||
+    exitCode === 143;
+  if (stoppedOnRequest) {
+    if (!serving) print(style.dim("  Kana stopped."));
+    return 0;
+  }
+  const code = exitCode ?? 1;
   if (code !== 0) printError(`${style.red(symbols.error)} The web server stopped unexpectedly (code ${code}).`);
   return code;
 }

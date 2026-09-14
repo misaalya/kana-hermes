@@ -1,7 +1,6 @@
 import type {
   Emotion,
   Subtitle,
-  SubtitleLanguage,
 } from "@/lib/presentation/types";
 
 export type KanaMessage = {
@@ -36,7 +35,6 @@ export type Conversation = {
   id: string;
   title: string;
   messages: KanaMessage[];
-  subtitleLanguageAtCreation: SubtitleLanguage;
   agent?: ConversationAgentLink;
   createdAt: number;
   updatedAt: number;
@@ -44,7 +42,6 @@ export type Conversation = {
 
 export type CreateConversationInput = {
   title?: string;
-  subtitleLanguage: SubtitleLanguage;
 };
 
 export interface ConversationStore {
@@ -71,7 +68,6 @@ export function createConversation(
     id: createId("conversation"),
     title: input.title?.trim() || "New conversation",
     messages: [],
-    subtitleLanguageAtCreation: input.subtitleLanguage,
     createdAt: now,
     updatedAt: now,
   };
