@@ -23,6 +23,13 @@ export type ConversationAgentLink = {
   status?: "linked" | "missing";
   relationship?: "primary" | "branch";
   parentConversationId?: string;
+  /**
+   * False while the Hermes session exists only in the gateway's memory:
+   * Hermes writes its database row on the first prompt, so a session that
+   * never received one vanishes when Hermes restarts. Absent means durable
+   * (resumed, adopted from the Hermes directory, or stored by older builds).
+   */
+  durable?: boolean;
 };
 
 export type Conversation = {

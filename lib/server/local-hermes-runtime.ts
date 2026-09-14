@@ -1,10 +1,19 @@
 import { randomBytes } from "node:crypto";
-import { spawn, execSync, type ChildProcess } from "node:child_process";
-import { access, readFile, stat } from "node:fs/promises";
-import { constants } from "node:fs";
-import { homedir, platform } from "node:os";
+import { spawn, type ChildProcess } from "node:child_process";
+import { stat } from "node:fs/promises";
+import { homedir } from "node:os";
 import path from "node:path";
+import {
+  findHermesExecutable,
+  HERMES_DEFAULT_PORT,
+  HERMES_TOKEN_ENV,
+  hermesCandidateInputFromEnv,
+  readHermesProcessToken,
+  scanHermesServeProcesses,
+} from "@/shared/hermes-discovery.mjs";
 import { readKanaUserConfig } from "./user-config";
+
+export { hermesExecutableCandidates } from "@/shared/hermes-discovery.mjs";
 
 // Server-side custody of the Hermes dashboard session token.
 //
@@ -32,10 +41,13 @@ type ManagedRuntime = {
   lastMessage: string;
 };
 
-const DEFAULT_HERMES_PORT = 9119;
+const PROBE_TIMEOUT_MS = 750;
+const READY_TIMEOUT_MS = 30_000;
+const READY_POLL_MS = 250;
+const STOP_GRACE_MS = 8_000;
 
 function configuredHermesPort(): number {
-  return readKanaUserConfig().hermes?.port ?? DEFAULT_HERMES_PORT;
+  return readKanaUserConfig().hermes?.port ?? HERMES_DEFAULT_PORT;
 }
 
 const runtimeKey = Symbol.for("kana.localHermesRuntime");
@@ -72,142 +84,26 @@ export function managedRuntimePort(): number {
   return runtime().port;
 }
 
-export type HermesExecutableCandidateInput = {
-  explicit?: string | null;
-  configured?: string | null;
-  pathValue?: string | null;
-  home?: string | null;
-  hermesHome?: string | null;
-  installDirectory?: string | null;
-  prefix?: string | null;
-  localAppData?: string | null;
-  userProfile?: string | null;
-  operatingSystem?: NodeJS.Platform;
-};
-
-/** Ordered, absolute candidates shared by source, deployment, and npm starts. */
-export function hermesExecutableCandidates(
-  input: HermesExecutableCandidateInput,
-): string[] {
-  const operatingSystem = input.operatingSystem ?? platform();
-  const windows = operatingSystem === "win32";
-  const executableName = windows ? "hermes.exe" : "hermes";
-  const home = input.home?.trim() || null;
-  const hermesHome = input.hermesHome?.trim()
-    || (home ? path.join(home, ".hermes") : null);
-  const installDirectory = input.installDirectory?.trim() || null;
-  const candidates: Array<string | null | undefined> = [
-    input.explicit?.trim(),
-    input.configured?.trim(),
-    ...(input.pathValue || "")
-      .split(path.delimiter)
-      .filter(Boolean)
-      .map((directory) => path.join(directory, executableName)),
-    hermesHome ? path.join(hermesHome, "bin", executableName) : null,
-    hermesHome ? path.join(hermesHome, "venv", "bin", executableName) : null,
-    hermesHome
-      ? path.join(hermesHome, "hermes-agent", "venv", "bin", executableName)
-      : null,
-    installDirectory
-      ? path.join(
-          /* turbopackIgnore: true */ installDirectory,
-          "venv",
-          "bin",
-          executableName,
-        )
-      : null,
-    installDirectory
-      ? path.join(/* turbopackIgnore: true */ installDirectory, executableName)
-      : null,
-    home ? path.join(home, ".local", "bin", executableName) : null,
-    input.prefix?.trim()
-      ? path.join(input.prefix.trim(), "bin", executableName)
-      : null,
-    windows && input.localAppData?.trim()
-      ? path.join(input.localAppData.trim(), "hermes", "bin", executableName)
-      : null,
-    windows && input.userProfile?.trim()
-      ? path.join(input.userProfile.trim(), ".local", "bin", executableName)
-      : null,
-    windows ? null : "/usr/local/bin/hermes",
-    windows ? null : "/usr/bin/hermes",
-  ];
-  return [...new Set(
-    candidates
-      .filter((value): value is string => Boolean(value))
-      .map((value) => path.resolve(value)),
-  )];
-}
-
 async function resolveHermesExecutable(): Promise<string | null> {
   const fromEnvironment = process.env.KANA_HERMES_BIN?.trim();
   if (fromEnvironment && !path.isAbsolute(fromEnvironment)) {
     throw new Error("KANA_HERMES_BIN must be an absolute path.");
   }
-  const configured = readKanaUserConfig().hermes?.executable;
-  const candidates = hermesExecutableCandidates({
-    explicit: fromEnvironment,
-    configured,
-    pathValue: process.env.PATH,
-    home: process.env.HOME?.trim() || homedir(),
-    hermesHome: process.env.HERMES_HOME,
-    installDirectory: process.env.HERMES_INSTALL_DIR,
-    prefix: process.env.PREFIX,
-    localAppData: process.env.LOCALAPPDATA,
-    userProfile: process.env.USERPROFILE,
-  });
-  for (const candidate of candidates) {
-    try {
-      await access(candidate, constants.X_OK);
-      return candidate;
-    } catch {
-      // Continue through known user-local and system locations.
-    }
-  }
-  return null;
-}
-
-async function scanRunningHermesProcesses(): Promise<Array<{ pid: number; port: number }>> {
-  try {
-    const output = execSync("pgrep -af 'hermes serve'", {
-      encoding: "utf8",
-      timeout: 2_000,
-    });
-    const results: Array<{ pid: number; port: number }> = [];
-    for (const line of output.trim().split("\n")) {
-      if (!line.trim()) continue;
-      const match = line.match(/^(\d+)\s+.+--port\s+(\d+)/);
-      if (match) {
-        const pid = Number(match[1]);
-        const port = Number(match[2]);
-        if (pid > 0 && port >= 1024 && port <= 65535 && !results.some((r) => r.port === port)) {
-          results.push({ pid, port });
-        }
-      }
-    }
-    return results;
-  } catch {
-    return [];
-  }
-}
-
-async function readProcessToken(pid: number): Promise<string | null> {
-  try {
-    const env = await readFile(`/proc/${pid}/environ`, "utf8");
-    for (const entry of env.split("\0")) {
-      if (entry.startsWith("HERMES_DASHBOARD_SESSION_TOKEN=")) {
-        const value = entry.slice("HERMES_DASHBOARD_SESSION_TOKEN=".length);
-        return value.length > 0 ? value : null;
-      }
-    }
-  } catch {}
-  return null;
+  return findHermesExecutable(
+    hermesCandidateInputFromEnv(process.env, {
+      configured: readKanaUserConfig().hermes?.executable,
+      home: homedir(),
+    }),
+  );
 }
 
 /** Best-effort: find the session token of a `hermes serve` on a given port. */
 async function discoverProcessTokenByPort(port: number): Promise<string | null> {
-  for (const proc of await scanRunningHermesProcesses()) {
-    if (proc.port === port) return readProcessToken(proc.pid);
+  for (const proc of await scanHermesServeProcesses()) {
+    if (proc.port === port) {
+      const token = await readHermesProcessToken(proc.pid);
+      if (token) return token;
+    }
   }
   return null;
 }
@@ -220,7 +116,7 @@ function endpoint(port: number): string {
   return `ws://127.0.0.1:${port}/api/ws`;
 }
 
-async function probe(port: number, timeoutMs = 750): Promise<boolean> {
+async function probe(port: number, timeoutMs = PROBE_TIMEOUT_MS): Promise<boolean> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -287,12 +183,12 @@ export async function inspectLocalHermesRuntime(
   // Auto-discovery: scan running processes and capture their tokens
   // server-side. This catches non-default ports and removes manual token
   // entry entirely — the browser connects through the Kana relay instead.
-  const processes = await scanRunningHermesProcesses();
+  const processes = await scanHermesServeProcesses();
   for (const proc of processes) {
     if (proc.port === current.port && (await probe(proc.port))) {
       current.state = "running";
       current.child = null;
-      current.token = (await readProcessToken(proc.pid)) ?? current.token;
+      current.token = (await readHermesProcessToken(proc.pid)) ?? current.token;
       current.lastMessage = `Hermes already running on port ${proc.port}.`;
       return publicStatus(current, true);
     }
@@ -302,7 +198,7 @@ export async function inspectLocalHermesRuntime(
       current.port = proc.port;
       current.state = "running";
       current.child = null;
-      current.token = (await readProcessToken(proc.pid)) ?? current.token;
+      current.token = (await readHermesProcessToken(proc.pid)) ?? current.token;
       current.lastMessage = `A Hermes gateway was found on port ${proc.port}.`;
       return publicStatus(current, true);
     }
@@ -310,7 +206,7 @@ export async function inspectLocalHermesRuntime(
 
   // Fallback: probe candidate ports.
   const candidates: number[] = [];
-  for (const port of [preferredPort, configuredPort, current.port, DEFAULT_HERMES_PORT]) {
+  for (const port of [preferredPort, configuredPort, current.port, HERMES_DEFAULT_PORT]) {
     if (
       typeof port === "number" &&
       Number.isInteger(port) &&
@@ -349,23 +245,22 @@ export async function inspectLocalHermesRuntime(
 }
 
 async function waitUntilReady(current: ManagedRuntime): Promise<void> {
-  const deadline = Date.now() + 30_000;
+  const deadline = Date.now() + READY_TIMEOUT_MS;
   while (Date.now() < deadline) {
     if (current.child?.exitCode !== null) {
       throw new Error(current.lastMessage || "Hermes exited before becoming ready.");
     }
     if (await probe(current.port, 1_000)) return;
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await new Promise((resolve) => setTimeout(resolve, READY_POLL_MS));
   }
-  throw new Error("Hermes did not become ready within 30 seconds.");
+  throw new Error(`Hermes did not become ready within ${READY_TIMEOUT_MS / 1000} seconds.`);
 }
 
 export async function startLocalHermesRuntime(options: {
-  port: number;
-  cwd?: string;
-}): Promise<LocalHermesRuntimeStatus> {
-  const configuredPort = configuredHermesPort();
-  const port = options.port === DEFAULT_HERMES_PORT ? configuredPort : options.port;
+  /** Omit to use hermes.port from config.json (or Hermes's default). */
+  port?: number;
+} = {}): Promise<LocalHermesRuntimeStatus> {
+  const port = options.port ?? configuredHermesPort();
   if (!Number.isInteger(port) || port < 1024 || port > 65_535) {
     throw new Error("Hermes port must be an integer between 1024 and 65535.");
   }
@@ -388,11 +283,11 @@ export async function startLocalHermesRuntime(options: {
       "Hermes executable was not found automatically. Run `kana doctor`, then set hermes.executable in Kana's config.json if needed.",
     );
   }
+  // The working folder is server configuration only; browsers cannot choose it.
   let workingDirectory: string | undefined;
   const configuredWorkingDirectory = readKanaUserConfig().hermes?.workingDirectory;
-  const requestedWorkingDirectory = options.cwd?.trim() || configuredWorkingDirectory;
-  if (requestedWorkingDirectory) {
-    workingDirectory = path.resolve(requestedWorkingDirectory);
+  if (configuredWorkingDirectory) {
+    workingDirectory = path.resolve(configuredWorkingDirectory);
     const details = await stat(workingDirectory);
     if (!details.isDirectory()) throw new Error("Hermes working folder is not a directory.");
   }
@@ -413,7 +308,7 @@ export async function startLocalHermesRuntime(options: {
       cwd: workingDirectory,
       env: {
         ...process.env,
-        HERMES_DASHBOARD_SESSION_TOKEN: token,
+        [HERMES_TOKEN_ENV]: token,
       },
       stdio: ["ignore", "pipe", "pipe"],
     },
@@ -471,7 +366,7 @@ export async function stopLocalHermesRuntime(): Promise<LocalHermesRuntimeStatus
   child.kill("SIGTERM");
   await Promise.race([
     new Promise<void>((resolve) => child.once("exit", () => resolve())),
-    new Promise<void>((resolve) => setTimeout(resolve, 8_000)),
+    new Promise<void>((resolve) => setTimeout(resolve, STOP_GRACE_MS)),
   ]);
   if (child.exitCode === null) child.kill("SIGKILL");
   current.child = null;
@@ -479,4 +374,19 @@ export async function stopLocalHermesRuntime(): Promise<LocalHermesRuntimeStatus
   current.state = "stopped";
   current.lastMessage = "Hermes stopped.";
   return publicStatus(current, true);
+}
+
+/**
+ * Re-discover the gateway after a failed connection. A Hermes that Kana did
+ * not start may have been restarted with a new token (or on another port)
+ * since it was adopted; a child Kana manages keeps its own minted token.
+ */
+export async function refreshHermesRuntimeTarget(): Promise<{ port: number; token: string | null }> {
+  const current = runtime();
+  if (current.child && current.child.exitCode === null) {
+    return { port: current.port, token: current.token };
+  }
+  current.token = null;
+  await inspectLocalHermesRuntime();
+  return { port: current.port, token: current.token };
 }

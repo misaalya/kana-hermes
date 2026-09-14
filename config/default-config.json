@@ -1,7 +1,4 @@
 {
-  "deployment": {
-    "mode": "local"
-  },
   "tts": {
     "provider": "qwen3-local",
     "timeoutSeconds": 900,

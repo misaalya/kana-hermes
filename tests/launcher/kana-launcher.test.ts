@@ -12,6 +12,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { describe, it } from "node:test";
 import defaultConfig from "../../config/default-config.json";
 
@@ -77,7 +78,8 @@ describe("npm launcher", () => {
       });
 
       assert.equal(result.status, 0, result.stderr);
-      assert.match(result.stdout, /^Kana doctor/m);
+      assert.match(result.stdout, /Kana doctor/);
+      assert.match(result.stdout, /Access password\s+not set/);
       assert.doesNotMatch(result.stdout, /optional voice setup/i);
       assert.equal(
         existsSync(path.join(home, ".config", "kana", "launcher.json")),
@@ -103,7 +105,9 @@ describe("npm launcher", () => {
       });
 
       assert.equal(result.status, 0, result.stderr);
-      assert.match(result.stdout, new RegExp(`Hermes: ${hermes}`));
+      // Paths under the user's home are shown with "~".
+      assert.ok(hermes.startsWith(home));
+      assert.match(result.stdout, new RegExp(`Hermes\\s+~${hermes.slice(home.length).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
     });
   });
 
@@ -119,5 +123,55 @@ describe("npm launcher", () => {
       assert.match(result.stderr, /between 1024 and 65535/);
       assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /optional voice setup/i);
     });
+  });
+
+  it("requires a password before starting and never falls back to a default", () => {
+    withFreshHome((environment) => {
+      const result = spawnSync(process.execPath, [launcher, "serve", "--port", "3999"], {
+        cwd: root,
+        env: environment,
+        encoding: "utf8",
+        input: "",
+      });
+      assert.notEqual(result.status, 0);
+      const output = `${result.stdout}\n${result.stderr}`;
+      // A checkout without a standalone build stops earlier with a build hint.
+      assert.match(output, /No access password is set|npm run package:local/);
+      assert.doesNotMatch(output, /chankana123/);
+    });
+  });
+
+  it("sets the password non-interactively from stdin in the shared record format", () => {
+    withFreshHome((environment, home) => {
+      const tooShort = spawnSync(process.execPath, [launcher, "password", "--stdin"], {
+        cwd: root, env: environment, encoding: "utf8", input: "short\n",
+      });
+      assert.notEqual(tooShort.status, 0);
+      assert.match(tooShort.stderr, /at least 8/);
+
+      const saved = spawnSync(process.execPath, [launcher, "password", "--stdin"], {
+        cwd: root, env: environment, encoding: "utf8", input: "launcher-secret\n",
+      });
+      assert.equal(saved.status, 0, saved.stderr);
+      assert.doesNotMatch(`${saved.stdout}${saved.stderr}`, /ExperimentalWarning/);
+
+      const database = new DatabaseSync(path.join(home, ".local", "share", "kana", "appstate.db"), { readOnly: true });
+      const row = database.prepare("SELECT value FROM app_state WHERE key = 'auth.password'").get() as { value: string };
+      database.close();
+      const record = JSON.parse(row.value) as { passwordHash: string; sessionVersion: string };
+      assert.match(record.passwordHash, /^scrypt\$/);
+      assert.ok(record.sessionVersion.length > 0);
+
+      const doctor = spawnSync(process.execPath, [launcher, "doctor"], { cwd: root, env: environment, encoding: "utf8" });
+      assert.match(doctor.stdout, /Access password\s+set/);
+    });
+  });
+
+  it("rejects unknown commands and options with a usage hint", () => {
+    for (const args of [["bogus"], ["--bogus"]]) {
+      const result = spawnSync(process.execPath, [launcher, ...args], { cwd: root, encoding: "utf8" });
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /kana --help/);
+    }
   });
 });

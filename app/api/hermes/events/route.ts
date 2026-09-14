@@ -1,5 +1,6 @@
 import { createHermesEventStream } from "@/lib/server/hermes-event-stream";
 import { subscribeHermesEvents, ensureHermesConnection } from "@/lib/server/hermes-bridge";
+import { withSession } from "@/lib/server/api-response";
 import { isSessionValid } from "@/lib/server/auth/session";
 
 export const runtime = "nodejs";
@@ -10,11 +11,7 @@ export const dynamic = "force-dynamic";
 // the bridge. SSE (not WS) is enough here: every client->Hermes message goes
 // through POST /api/hermes/rpc, so the downstream channel is one-way.
 
-export async function GET(request: Request): Promise<Response> {
-  if (!(await isSessionValid(request))) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
+export const GET = withSession(async (request) => {
   const stream = createHermesEventStream(request.signal, {
     connect: ensureHermesConnection,
     subscribe: subscribeHermesEvents,
@@ -29,4 +26,4 @@ export async function GET(request: Request): Promise<Response> {
       "X-Accel-Buffering": "no",
     },
   });
-}
+});

@@ -7,6 +7,7 @@ import {
   QWEN3_TTS_API_VERSION,
   QWEN3_TTS_SERVICE_NAME,
 } from "@/lib/voice/qwen3-tts-contract";
+import { findExecutableSync } from "@/shared/executables.mjs";
 import { resolveKanaDataDir } from "./data-dir";
 import {
   defaultQwen3LocalConfig,
@@ -132,35 +133,7 @@ function publicStatus(current: ManagedRuntime): LocalQwen3TtsRuntimeStatus {
 export function resolveUvExecutable(
   environment: NodeJS.ProcessEnv = process.env,
 ): string | null {
-  const configured = qwenConfig().uvExecutable;
-  const home = environment.HOME?.trim();
-  const prefix = environment.PREFIX?.trim();
-  const candidates = [
-    configured,
-    ...(environment.PATH ?? "")
-      .split(path.delimiter)
-      .filter(Boolean)
-      .map((directory) => path.join(directory, "uv")),
-    ...(home
-      ? [
-          path.join(home, ".local", "bin", "uv"),
-          path.join(home, ".cargo", "bin", "uv"),
-        ]
-      : []),
-    ...(prefix ? [path.join(prefix, "bin", "uv")] : []),
-    "/usr/local/bin/uv",
-    "/usr/bin/uv",
-  ].filter((candidate): candidate is string => Boolean(candidate));
-  for (const candidate of new Set(candidates)) {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports -- sync check at spawn time
-      require("node:fs").accessSync(candidate, constants.X_OK);
-      return candidate;
-    } catch {
-      // keep scanning
-    }
-  }
-  return null;
+  return findExecutableSync("uv", { configured: qwenConfig().uvExecutable, env: environment });
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

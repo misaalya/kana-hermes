@@ -1,50 +1,63 @@
-import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import bcrypt from "bcryptjs";
 import { adoptLegacyKanaFile, resolveKanaDataDir } from "@/lib/server/data-dir";
 import {
+  appStateDatabase,
   getAppStateEntry,
   setAppState,
 } from "@/lib/server/app-state-store";
+import {
+  newPasswordRecord,
+  PASSWORD_STATE_KEY,
+} from "@/shared/app-state-db.mjs";
+import {
+  hashPassword,
+  isScryptHash,
+  passwordPolicyError,
+  verifyScryptHash,
+} from "@/shared/password.mjs";
 
-// Single shared access password — deliberately no user management. Fresh
-// installs use one documented default so both the prebuilt npm runtime and a
-// source checkout have the same first-login flow. Following 9Router's storage
-// pattern, a bcrypt hash written by the authenticated change-password route is
-// kept in Kana's primary SQLite state database and takes precedence.
+// Single shared access password — deliberately no user management and no
+// built-in default. A fresh installation has NO password and refuses every
+// login until the owner sets one on the server itself (`kana password`, or the
+// first-run prompt of `kana`/`kana serve`). Setting it over the web would let
+// whoever reaches a new VPS first claim it.
+//
+// The record lives in appstate.db (shared/app-state-db.mjs) so the launcher
+// and this server read and write the same format. New hashes use scrypt;
+// bcrypt hashes from earlier releases still verify and are upgraded in place.
 
-export const DEFAULT_ACCESS_PASSWORD = "chankana123";
-const PASSWORD_STATE_KEY = "auth.password";
+type PasswordRecord = { passwordHash: string; sessionVersion?: string };
+type PasswordState =
+  | { status: "unset" }
+  | ({ status: "stored" } & PasswordRecord)
+  | { status: "invalid" };
 
 function legacyAuthFile(): string {
   adoptLegacyKanaFile("auth.json");
   return path.join(resolveKanaDataDir(), "auth.json");
 }
 
-type PasswordStore = { passwordHash: string; sessionVersion?: string };
-type PasswordState =
-  | { status: "default" }
-  | ({ status: "stored" } & PasswordStore)
-  | { status: "invalid" };
-
-function parseStore(value: unknown): PasswordStore | null {
+function parseRecord(value: unknown): PasswordRecord | null {
   if (!value || typeof value !== "object") return null;
-  const parsed = value as Partial<PasswordStore>;
-  if (typeof parsed.passwordHash === "string" && parsed.passwordHash.length > 0) {
-    if (parsed.sessionVersion !== undefined &&
-        (typeof parsed.sessionVersion !== "string" || !parsed.sessionVersion)) return null;
-    return { passwordHash: parsed.passwordHash, sessionVersion: parsed.sessionVersion };
+  const parsed = value as Partial<PasswordRecord>;
+  if (typeof parsed.passwordHash !== "string" || parsed.passwordHash.length === 0) return null;
+  if (
+    parsed.sessionVersion !== undefined &&
+    (typeof parsed.sessionVersion !== "string" || !parsed.sessionVersion)
+  ) {
+    return null;
   }
-  return null;
+  return { passwordHash: parsed.passwordHash, sessionVersion: parsed.sessionVersion };
 }
 
 function migrateLegacyStore(): PasswordState {
   const file = legacyAuthFile();
-  if (!existsSync(file)) return { status: "default" };
+  if (!existsSync(file)) return { status: "unset" };
 
   try {
-    const parsed = parseStore(JSON.parse(readFileSync(file, "utf8")));
+    const parsed = parseRecord(JSON.parse(readFileSync(file, "utf8")));
     if (!parsed) return { status: "invalid" };
 
     // Persist first, remove second. A crash can leave the source file behind,
@@ -68,46 +81,71 @@ function readPasswordState(): PasswordState {
   const entry = getAppStateEntry<unknown>(PASSWORD_STATE_KEY);
   if (entry.status === "invalid") return { status: "invalid" };
   if (entry.status === "missing") return migrateLegacyStore();
-
-  const parsed = parseStore(entry.value);
-  return parsed
-    ? { status: "stored", ...parsed }
-    : { status: "invalid" };
+  const parsed = parseRecord(entry.value);
+  return parsed ? { status: "stored", ...parsed } : { status: "invalid" };
 }
 
-export function isUsingDefaultPassword(): boolean {
-  return readPasswordState().status === "default";
+/** True once the owner has set a password. A corrupt record also counts, so it fails closed. */
+export function isAccessPasswordConfigured(): boolean {
+  return readPasswordState().status !== "unset";
 }
 
 /** Stored with the password hash so a password change revokes sessions atomically. */
 export function accessSessionVersion(): string | null {
   const state = readPasswordState();
-  if (state.status === "invalid") return null;
-  return state.status === "stored" ? state.sessionVersion ?? "initial" : "initial";
+  return state.status === "stored" ? state.sessionVersion ?? "initial" : null;
 }
 
-function safeEqual(a: string, b: string): boolean {
-  const left = createHash("sha256").update(a).digest();
-  const right = createHash("sha256").update(b).digest();
-  return timingSafeEqual(left, right);
+const LEGACY_BCRYPT_PATTERN = /^\$2[aby]\$\d{2}\$/;
+
+async function verifyAgainstRecord(password: string, record: PasswordRecord): Promise<boolean> {
+  if (isScryptHash(record.passwordHash)) {
+    return verifyScryptHash(password, record.passwordHash);
+  }
+  if (!LEGACY_BCRYPT_PATTERN.test(record.passwordHash)) return false;
+  // bcrypt ignores bytes after the first 72; never treat a longer candidate
+  // as matching a prefix.
+  if (Buffer.byteLength(password, "utf8") > 72) return false;
+  const valid = await bcrypt.compare(password, record.passwordHash);
+  if (valid) await upgradeLegacyHash(password, record);
+  return valid;
+}
+
+// Replace a verified bcrypt hash with scrypt, keeping the session version so
+// nobody is signed out. Skipped if the record changed during verification.
+async function upgradeLegacyHash(password: string, record: PasswordRecord): Promise<void> {
+  try {
+    if (passwordPolicyError(password)) return;
+    const passwordHash = await hashPassword(password);
+    const database = appStateDatabase();
+    database.exec("BEGIN IMMEDIATE;");
+    try {
+      const current = readPasswordState();
+      if (current.status === "stored" && current.passwordHash === record.passwordHash) {
+        setAppState(PASSWORD_STATE_KEY, { ...record, passwordHash });
+      }
+      database.exec("COMMIT;");
+    } catch (error) {
+      database.exec("ROLLBACK;");
+      throw error;
+    }
+  } catch (error) {
+    console.warn(
+      `[kana] Could not upgrade the legacy password hash: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }
 
 export async function verifyAccessPassword(password: string): Promise<boolean> {
   if (typeof password !== "string" || password.length === 0) return false;
   const state = readPasswordState();
-  if (state.status === "stored") return bcrypt.compare(password, state.passwordHash);
-  if (state.status === "invalid") return false;
-  return safeEqual(password, DEFAULT_ACCESS_PASSWORD);
+  if (state.status !== "stored") return false;
+  return verifyAgainstRecord(password, state);
 }
 
 export async function changeAccessPassword(newPassword: string): Promise<void> {
-  if (typeof newPassword !== "string" || newPassword.length < 8) {
-    throw new Error("The new password must contain at least 8 characters.");
-  }
-  // bcrypt silently ignores bytes after the first 72, including UTF-8 bytes.
-  if (Buffer.byteLength(newPassword, "utf8") > 72) {
-    throw new Error("The new password must contain at most 72 UTF-8 bytes.");
-  }
-  const passwordHash = await bcrypt.hash(newPassword, 10);
-  setAppState(PASSWORD_STATE_KEY, { passwordHash, sessionVersion: randomUUID() });
+  const policy = passwordPolicyError(newPassword);
+  if (policy) throw new Error(policy);
+  const passwordHash = await hashPassword(newPassword);
+  setAppState(PASSWORD_STATE_KEY, newPasswordRecord(passwordHash));
 }

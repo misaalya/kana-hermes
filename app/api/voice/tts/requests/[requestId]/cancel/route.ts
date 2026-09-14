@@ -2,7 +2,7 @@ import { cancelTtsRequest } from "@/lib/server/tts-provider/active-requests";
 import {
   TtsProviderError,
 } from "@/lib/server/tts-provider";
-import { requireSession } from "@/lib/server/tts-relay";
+import { NO_STORE, withSession } from "@/lib/server/api-response";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,12 +11,10 @@ export const dynamic = "force-dynamic";
 // Cancellation never reads the newly selected provider or starts a service.
 const UPSTREAM_TIMEOUT_MS = 10_000;
 
-export async function POST(
+export const POST = withSession(async (
   request: Request,
   context: { params: Promise<{ requestId: string }> },
-): Promise<Response> {
-  const unauthorized = await requireSession(request);
-  if (unauthorized) return unauthorized;
+): Promise<Response> => {
   const { requestId } = await context.params;
   try {
     const cancelled = await cancelTtsRequest(requestId, AbortSignal.any([
@@ -27,7 +25,7 @@ export async function POST(
       request_id: requestId,
       cancelled,
       ...(!cancelled ? { detail: "No active provider request was found." } : {}),
-    });
+    }, { headers: NO_STORE });
   } catch (error) {
     return Response.json(
       {
@@ -36,7 +34,7 @@ export async function POST(
         detail:
           error instanceof Error ? error.message : "Cancel relay failed.",
       },
-      { status: error instanceof TtsProviderError ? error.status : 502 },
+      { status: error instanceof TtsProviderError ? error.status : 502, headers: NO_STORE },
     );
   }
-}
+});

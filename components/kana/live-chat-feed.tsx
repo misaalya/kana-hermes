@@ -28,11 +28,12 @@ export const LiveChatFeed = memo(function LiveChatFeed({
   locale,
 }: LiveChatFeedProps) {
   const copy = getCopy(locale);
+  const dateLocale = copy.dateLocale;
   const dateFormatter = useMemo(
-    () => new Intl.DateTimeFormat(locale === "id" ? "id-ID" : "en-US", {
+    () => new Intl.DateTimeFormat(dateLocale, {
       hour: "2-digit", minute: "2-digit",
     }),
-    [locale],
+    [dateLocale],
   );
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [pinnedToBottom, setPinnedToBottom] = useState(true);

@@ -1,8 +1,12 @@
 export type AuthStatus = {
   authEnabled: boolean;
   authenticated: boolean;
-  usingDefaultPassword: boolean;
-  defaultPassword: string | null;
+  /** False until the owner runs `kana password` on the server. */
+  passwordConfigured: boolean;
+  deploymentMode: "local" | "deployment";
+  /** Present only for an authenticated session. */
+  deploymentModeSource?: "environment" | "config" | "default";
+  configError?: string | null;
 };
 
 export async function fetchAuthStatus(): Promise<AuthStatus> {

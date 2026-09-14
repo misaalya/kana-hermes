@@ -7,45 +7,18 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
+import {
+  KANA_DATA_DIR_ENV,
+  resolveKanaDataDirFrom,
+} from "@/shared/data-dir.mjs";
 
 // Single authoritative Kana data directory (appstate.db, jwt-secret, and
-// activities.db). Precedence:
-//   1. KANA_DATA_DIR environment variable
-//   2. XDG data home ($XDG_DATA_HOME/kana, absolute values only)
-//   3. $HOME/.local/share/kana
-// The current working directory is never used in production; a dev-only
-// fallback keeps ad-hoc experiments working when no home is resolvable.
+// activities.db). The precedence rules live in shared/data-dir.mjs so the
+// `kana` launcher and this server always resolve the same root. The current
+// working directory is never used in production; a dev-only fallback keeps
+// ad-hoc experiments working when no home is resolvable.
 
-export const KANA_DATA_DIR_ENV = "KANA_DATA_DIR";
-
-export type KanaDataDirInput = {
-  readonly kanaDataDir?: string | null;
-  readonly xdgDataHome?: string | null;
-  readonly home?: string | null;
-};
-
-export function resolveKanaDataDirFrom(input: KanaDataDirInput): string {
-  const explicit = input.kanaDataDir?.trim();
-  if (explicit) {
-    if (!path.isAbsolute(explicit)) {
-      throw new Error(`${KANA_DATA_DIR_ENV} must be an absolute path.`);
-    }
-    return path.normalize(explicit);
-  }
-
-  // XDG Base Directory spec: relative $XDG_DATA_HOME values must be ignored.
-  const xdgDataHome = input.xdgDataHome?.trim();
-  if (xdgDataHome && path.isAbsolute(xdgDataHome)) {
-    return path.join(xdgDataHome, "kana");
-  }
-
-  const home = input.home?.trim();
-  if (home) return path.join(home, ".local", "share", "kana");
-
-  throw new Error(
-    `Kana cannot resolve its data directory: neither ${KANA_DATA_DIR_ENV} nor a home directory is available. Set ${KANA_DATA_DIR_ENV} to an absolute writable path (for example ${KANA_DATA_DIR_ENV}=/var/lib/kana).`,
-  );
-}
+export { KANA_DATA_DIR_ENV, resolveKanaDataDirFrom };
 
 function safeHomeDirectory(): string | null {
   try {
@@ -76,12 +49,7 @@ export function resolveKanaDataDir(env: NodeJS.ProcessEnv = process.env): string
 // are adopted once into the resolved directory.
 function legacyKanaDataDirs(env: NodeJS.ProcessEnv): string[] {
   const dirs = [path.join(process.cwd(), "data")];
-  let home: string | null = null;
-  try {
-    home = env.HOME?.trim() || safeHomeDirectory();
-  } catch {
-    home = null;
-  }
+  const home = env.HOME?.trim() || safeHomeDirectory();
   if (home) dirs.push(path.join(home, ".kana"));
   return dirs;
 }
@@ -101,6 +69,9 @@ function moveFile(from: string, to: string): void {
   }
 }
 
+// A WAL-mode SQLite database is only complete together with its journal files.
+const SQLITE_COMPANION_SUFFIXES = ["-wal", "-shm"];
+
 export function migrateLegacyKanaFile(
   fileName: string,
   targetDir: string,
@@ -112,8 +83,16 @@ export function migrateLegacyKanaFile(
     if (legacyDir === targetDir) continue;
     const candidate = path.join(legacyDir, fileName);
     if (!existsSync(candidate)) continue;
-    mkdirSync(targetDir, { recursive: true });
+    mkdirSync(targetDir, { recursive: true, mode: 0o700 });
     moveFile(candidate, target);
+    if (fileName.endsWith(".db")) {
+      for (const suffix of SQLITE_COMPANION_SUFFIXES) {
+        const companion = `${candidate}${suffix}`;
+        if (existsSync(companion) && !existsSync(`${target}${suffix}`)) {
+          moveFile(companion, `${target}${suffix}`);
+        }
+      }
+    }
     console.info(`[kana] Migrated ${fileName} from ${legacyDir} into ${targetDir}.`);
     return true;
   }

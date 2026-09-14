@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { access, cp, mkdir, readFile, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { cleanStandalone } from "./clean-standalone.mjs";
+import { copyRuntimeAssets } from "./runtime-assets.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const cli = path.join(root, "cli");
@@ -29,6 +30,13 @@ await cleanStandalone(runtime);
 // local state. Scrub the copied runtime defensively instead of trusting the
 // cleanliness of a maintainer's .next directory.
 for (const localDirectory of [
+  // Standalone-only additions from `npm run package:local`.
+  "bin",
+  "config",
+  "shared",
+  "tools",
+  "docs",
+  "dogfood",
   ".codegraph",
   ".git",
   ".hermes",
@@ -51,35 +59,12 @@ for (const entry of await readdir(runtime)) {
     await rm(path.join(runtime, entry), { recursive: true, force: true });
   }
 }
-await mkdir(path.join(runtime, ".next"), { recursive: true });
-await cp(path.join(root, ".next", "static"), path.join(runtime, ".next", "static"), {
-  recursive: true,
-  force: true,
-});
-await cp(path.join(root, "public"), path.join(runtime, "public"), {
-  recursive: true,
-  force: true,
-});
-await cp(
-  path.join(root, "services", "qwen3-tts"),
-  path.join(runtime, "services", "qwen3-tts"),
-  {
-    recursive: true,
-    filter: (source) => {
-      const parts = source.split(path.sep);
-      return !parts.includes(".venv") && !parts.includes("__pycache__");
-    },
-  },
-);
-// Shipped default voice reference (registered into the library at runtime).
-await cp(path.join(root, "assets", "voices"), path.join(runtime, "assets", "voices"), {
-  recursive: true,
-  force: true,
-});
+// The npm package keeps its launcher at the package root, not in the runtime.
+await copyRuntimeAssets(root, runtime, { launcher: false });
 process.stdout.write(`Prepared npm runtime at ${runtime}\n`);
 
 // One launcher/config source; generated distribution copies are never edited.
-for (const name of ["bin", "config", "docs", "README.md", "CHANGELOG.md", "PLAN.md", "LICENSE"]) {
+for (const name of ["bin", "config", "shared", "docs", "README.md", "CHANGELOG.md", "PLAN.md", "LICENSE"]) {
   await rm(path.join(cli, name), { recursive: true, force: true });
   await cp(path.join(root, name), path.join(cli, name), { recursive: true });
 }

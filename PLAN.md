@@ -11,7 +11,22 @@ user), sehingga bug akibat perbedaan mesin harus minimal. Keluhan utama:
 resume sering mengembalikan transcript kosong/error, caching sisa bermasalah,
 dan pemanfaatan React (state management) masih lemah.
 
-Terakhir diperbarui: 2026-09-08.
+Terakhir diperbarui: 2026-09-09.
+
+### Promptbar — 2026-09-09
+
+- [x] Toolbar dua baris: unggah/hapus file, dikte browser, model Hermes,
+  dan tombol panah kirim/Stop; tema Kana tetap dipertahankan.
+- [x] Relay lampiran terautentikasi meneruskan byte ke `file.attach`;
+  referensi file dikirim setelah semua unggahan selesai. Kegagalan/Stop
+  sebelum submit mempertahankan draft tanpa menggandakan pesan pengguna.
+- [x] Pilihan model menggunakan panel dan controller Hermes yang sama dengan
+  settings; tidak menambahkan model atau agent kedua.
+- [x] Dikte masuk ke draft, memakai mikrofon browser pengguna termasuk saat
+  server di VPS. Web Speech memerlukan browser yang mendukung dan mungkin
+  internet; bukan STT offline universal. TTS tetap melalui provider server.
+- [x] Dokumentasikan batas ukuran, HTTPS, izin mikrofon, dan nginx di
+  `docs/COMPOSER.md`; periksa toolbar di desktop/mobile.
 
 ### Audit TTS dan distribusi — 2026-09-08
 
@@ -316,10 +331,10 @@ Bug utama pemilik. Dua perubahan saling melengkapi:
   `.gitignore` (atau tetap tracked tapi tanpa nilai).
 
 ### C2 — Default authentication `[S]` `P0`
-- Fresh npm/source/dev installations always enable authentication with the
-  displayed `chankana123` password. An optional user-owned bcrypt hash in
-  `appstate.db` takes precedence after a password change; legacy `auth.json`
-  hashes migrate once without resetting the password.
+- ~~Displayed `chankana123` default password~~ (superseded 2026-09-14): there
+  is no default password. `kana password` / the first-run launcher prompt sets
+  an scrypt hash in `appstate.db`; legacy bcrypt and `auth.json` hashes still
+  verify and upgrade in place. Logins return 503 until a password exists.
 
 ### C3 — Cookie hardening `[S]` `P1`
 - Cookie: dokumen/contoh nginx wajib `X-Forwarded-Proto`; rekomendasikan

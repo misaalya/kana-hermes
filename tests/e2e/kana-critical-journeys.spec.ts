@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { E2E_ACCESS_PASSWORD } from "./access-password";
 
 /** Deterministic stand-in for Kana's current HTTP-RPC + SSE Hermes relay. */
 async function installFakeHermes(page: Page): Promise<void> {
@@ -319,7 +320,7 @@ test.beforeEach(async ({ page }) => {
   );
   // The dev server may sit behind the local access-password gate.
   await page.request.post("/api/auth/login", {
-    data: { password: "chankana123" },
+    data: { password: E2E_ACCESS_PASSWORD },
   });
   // Most journeys exercise the established workspace. Keep the install-level
   // wizard from racing those interactions; the dedicated onboarding journey
@@ -359,17 +360,27 @@ async function openHistory(page: Page): Promise<void> {
   await openHistory.click();
 }
 
-test("shows and accepts the built-in password on a fresh installation", async ({
+test("never reveals a password and signs in with the operator-set one", async ({
   page,
   context,
 }) => {
   await context.clearCookies();
   await page.goto("/login");
-  await expect(page.getByText("Default password", { exact: true })).toBeVisible();
-  await expect(page.getByText("chankana123", { exact: true })).toBeVisible();
-  await page.getByLabel("Password").fill("chankana123");
-  await page.getByRole("button", { name: "Enter Kana" }).click();
+  const status = await page.request.get("/api/auth/status");
+  const body = (await status.json()) as Record<string, unknown>;
+  expect(body.passwordConfigured).toBe(true);
+  expect(body).not.toHaveProperty("defaultPassword");
+  await expect(page.getByText("chankana123")).toHaveCount(0);
+  await page.getByLabel(/^(?:Password|Kata sandi)$/).fill(E2E_ACCESS_PASSWORD);
+  await page.getByRole("button", { name: /^(?:Enter Kana|Masuk ke Kana)$/ }).click();
   await expect(page.getByRole("textbox", { name: "Message Kana" })).toBeVisible();
+});
+
+test("rejects cross-origin state-changing requests before authentication", async ({ page }) => {
+  const forged = await page.request.post("/api/auth/logout", {
+    headers: { Origin: "http://localhost:5173" },
+  });
+  expect(forged.status()).toBe(403);
 });
 
 test("renders text replies without entering the TTS pipeline when voice is off", async ({
@@ -501,6 +512,73 @@ test("adjusts the active avatar from the workspace instead of settings", async (
   await page.getByRole("button", { name: "Open settings" }).click();
   await page.getByRole("button", { name: /^Avatar(?: Avatar and stage)?$/ }).click();
   await expect(page.getByRole("slider", { name: /X position/ })).toHaveCount(0);
+});
+
+test("composer uploads files, preserves failed drafts, and removes attachments", async ({ page }) => {
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
+  const picker = page.getByLabel("Choose files", { exact: true });
+  let fail = true;
+  const uploaded: Record<string, unknown>[] = [];
+  await page.route("**/api/hermes/attachments", async (route) => {
+    uploaded.push(route.request().postDataJSON());
+    await route.fulfill({ status: fail ? 502 : 200, contentType: "application/json", body: JSON.stringify(fail ? { error: "Upload unavailable" } : { result: { attached: true, ref_text: '@file:"attachments/project notes.txt"' } }) });
+  });
+  await composer.fill("Please read these notes");
+  await picker.setInputFiles({ name: "project notes.txt", mimeType: "text/plain", buffer: Buffer.from("hello from browser") });
+  await expect(page.getByRole("button", { name: "Remove project notes.txt" })).toBeVisible();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Upload unavailable" })).toBeVisible();
+  await expect(composer).toHaveValue("Please read these notes");
+  await expect(page.getByRole("button", { name: "Remove project notes.txt" })).toBeVisible();
+  fail = false;
+  const prompt = page.waitForRequest((request) => request.url().endsWith("/api/hermes/rpc") && request.postDataJSON()?.method === "prompt.submit");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  expect((await prompt).postDataJSON().params.text).toContain('@file:"attachments/project notes.txt"');
+  await expect(composer).toHaveValue("");
+  await expect(page.getByRole("button", { name: "Remove project notes.txt" })).toHaveCount(0);
+  expect(uploaded.at(-1)?.dataUrl).toBe(`data:application/octet-stream;base64,${Buffer.from("hello from browser").toString("base64")}`);
+  await picker.setInputFiles({ name: "remove.txt", mimeType: "text/plain", buffer: Buffer.from("remove me") });
+  await page.getByRole("button", { name: "Remove remove.txt" }).click();
+  await expect(page.getByRole("list", { name: "Attachments" })).toHaveCount(0);
+});
+
+test("composer selects the Hermes model and returns keyboard focus", async ({ page }) => {
+  const trigger = page.getByRole("button", { name: "Choose model", exact: true });
+  await trigger.click();
+  const dialog = page.getByRole("dialog", { name: "Choose model", exact: true });
+  await dialog.getByRole("combobox", { name: "Provider", exact: true }).selectOption("openrouter");
+  await dialog.getByRole("combobox", { name: "Model", exact: true }).selectOption("deepseek/deepseek-v4");
+  await dialog.getByRole("button", { name: "Use this model" }).click();
+  await expect(trigger).toContainText("deepseek-v4");
+  await page.keyboard.press("Escape");
+  await expect(dialog).not.toBeVisible();
+  await expect(trigger).toBeFocused();
+  await page.screenshot({ path: `test-results/composer-${test.info().project.name}.png` });
+});
+
+test("composer dictation appends only final speech to the editable draft", async ({ page }) => {
+  await page.evaluate(() => {
+    class FakeSpeech {
+      onresult?: (event: unknown) => void;
+      onend?: () => void;
+      start() {
+        setTimeout(() => {
+          this.onresult?.({ resultIndex: 0, results: [{ isFinal: false, 0: { transcript: "unfinished" } }] });
+          this.onresult?.({ resultIndex: 0, results: [{ isFinal: true, 0: { transcript: "spoken words" } }] });
+          this.onend?.();
+        }, 20);
+      }
+      stop() { this.onend?.(); }
+      abort() {}
+    }
+    Object.assign(window, { SpeechRecognition: FakeSpeech });
+  });
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
+  await composer.fill("My draft");
+  await page.getByRole("button", { name: "Voice input", exact: true }).click();
+  await expect(composer).toHaveValue("My draft spoken words");
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+  await expect(page.getByRole("status").filter({ hasText: "Dictation complete" })).toBeVisible();
 });
 
 test("changes the active Hermes model with an explicit provider", async ({ page }) => {

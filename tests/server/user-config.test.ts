@@ -6,6 +6,7 @@ import { after, describe, it } from "node:test";
 import {
   DEFAULT_KANA_USER_CONFIG,
   ensureKanaUserConfigFile,
+  inspectKanaUserConfig,
   kanaUserConfigPath,
   readKanaUserConfig,
   resolveKanaDeploymentMode,
@@ -216,12 +217,38 @@ describe("advanced user configuration", () => {
     assert.deepEqual(resolveKanaDeploymentMode(), {
       mode: "deployment",
       source: "environment",
+      error: null,
     });
     delete process.env.KANA_DEPLOYMENT_MODE;
     assert.deepEqual(resolveKanaDeploymentMode(), {
       mode: "local",
       source: "config",
+      error: null,
     });
+  });
+
+  it("reports an invalid file as status instead of throwing on status surfaces", () => {
+    writeFileSync(kanaUserConfigPath(), "{ not json");
+    const inspection = inspectKanaUserConfig();
+    assert.deepEqual(inspection.config, {});
+    assert.match(inspection.error ?? "", /could not read/);
+    assert.throws(() => readKanaUserConfig(), /could not read/);
+
+    const mode = resolveKanaDeploymentMode();
+    assert.equal(mode.mode, "local");
+    assert.match(mode.error ?? "", /could not read/);
+
+    process.env.KANA_DEPLOYMENT_MODE = "cloud";
+    assert.match(resolveKanaDeploymentMode().error ?? "", /KANA_DEPLOYMENT_MODE/);
+    delete process.env.KANA_DEPLOYMENT_MODE;
+  });
+
+  it("caches the parsed file until it changes on disk", () => {
+    writeFileSync(kanaUserConfigPath(), JSON.stringify({ hermes: { port: 9200 } }));
+    const first = readKanaUserConfig();
+    assert.equal(readKanaUserConfig(), first, "an unchanged file is not re-parsed");
+    writeFileSync(kanaUserConfigPath(), JSON.stringify({ hermes: { port: 9300 } }));
+    assert.equal(readKanaUserConfig().hermes?.port, 9300);
   });
 });
 

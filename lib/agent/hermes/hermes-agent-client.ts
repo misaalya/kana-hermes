@@ -1,4 +1,5 @@
 import { classifyHermesTool } from "@/lib/agent/tool-kind";
+import { AttachmentUploadError, MAX_ATTACHMENTS, MAX_ATTACHMENT_TOTAL_BYTES, validateAttachment } from "@/lib/agent/attachments";
 import type {
   AgentClient,
   AgentCommandInput,
@@ -147,6 +148,7 @@ export class HermesAgentClient implements AgentClient {
   private readonly listeners = new Set<(event: AgentEvent) => void>();
   private state: AgentConnectionState = "disconnected";
   private eventSource: EventSource | null = null;
+  private openingSessions = 0;
   private connectPromise: Promise<void> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempt = 0;
@@ -162,6 +164,7 @@ export class HermesAgentClient implements AgentClient {
   private needsResumeSeed = false;
   private intentionallyClosing = false;
   private running = false;
+  private attachmentUpload: AbortController | null = null;
   private recoveringTurn = false;
   private readonly queuedPrompts: Array<{
     message: string;
@@ -295,6 +298,7 @@ export class HermesAgentClient implements AgentClient {
   }
 
   async disconnect(): Promise<void> {
+    this.attachmentUpload?.abort();
     this.intentionallyClosing = true;
     this.cancelReconnect();
     this.session = null;
@@ -310,6 +314,16 @@ export class HermesAgentClient implements AgentClient {
   }
 
   async openSession(options: AgentSessionOptions): Promise<AgentSession> {
+    this.openingSessions += 1;
+    try {
+      return await this.openSessionOnce(options);
+    } finally {
+      this.openingSessions -= 1;
+    }
+  }
+
+  private async openSessionOnce(options: AgentSessionOptions): Promise<AgentSession> {
+    this.attachmentUpload?.abort();
     if (this.state !== "connected") {
       await this.connect();
     }
@@ -412,7 +426,47 @@ export class HermesAgentClient implements AgentClient {
       throw new Error("Open a Hermes session before sending a message.");
     }
 
-    await this.submitPrompt(input.text, input.subtitleLanguage);
+    if (this.attachmentUpload) throw new Error("An attachment upload is already in progress.");
+    const attachments = (input.attachments ?? []).map(validateAttachment);
+    if (attachments.length > MAX_ATTACHMENTS || attachments.reduce((sum, file) => sum + file.dataUrl.split(",")[1].length * 3 / 4, 0) > MAX_ATTACHMENT_TOTAL_BYTES + 2 * MAX_ATTACHMENTS) {
+      throw new Error("Choose up to 5 files, at most 20 MiB combined.");
+    }
+    if (!attachments.length) {
+      await this.submitPrompt(input.text, input.subtitleLanguage);
+      return;
+    }
+    const session = this.session;
+    const controller = new AbortController();
+    this.attachmentUpload = controller;
+    const refs: string[] = [];
+    let submittingPrompt = false;
+    try {
+      for (const file of attachments) {
+        controller.signal.throwIfAborted();
+        const response = await fetch("/api/hermes/attachments", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: session.sessionId, ...file }),
+          credentials: "same-origin",
+          cache: "no-store",
+          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(120_000)]),
+        });
+        const value = await response.json() as { result?: { attached?: boolean; ref_text?: string }; error?: string };
+        if (!response.ok || value.error || !value.result?.attached || !value.result.ref_text?.startsWith("@file:")) {
+          throw new Error(value.error || `Could not attach ${file.name}. Update Hermes if file.attach is unavailable.`);
+        }
+        refs.push(value.result.ref_text);
+      }
+      controller.signal.throwIfAborted();
+      if (this.session !== session) throw new Error("The conversation changed during upload. Please send again.");
+      submittingPrompt = true;
+      await this.submitPrompt(input.text, input.subtitleLanguage, refs);
+    } catch (error) {
+      if (!submittingPrompt) throw new AttachmentUploadError(error);
+      throw error;
+    } finally {
+      if (this.attachmentUpload === controller) this.attachmentUpload = null;
+    }
   }
 
   /**
@@ -677,6 +731,7 @@ export class HermesAgentClient implements AgentClient {
   }
 
   async abort(): Promise<void> {
+    this.attachmentUpload?.abort();
     if (!this.session || this.state !== "connected") return;
     await this.request("session.interrupt", {
       session_id: this.session.sessionId,
@@ -992,6 +1047,7 @@ export class HermesAgentClient implements AgentClient {
   private async submitPrompt(
     message: string,
     subtitleLanguage: string,
+    attachmentRefs: string[] = [],
   ): Promise<void> {
     if (!this.session) {
       throw new Error("Open a Hermes session before sending a message.");
@@ -1012,7 +1068,9 @@ export class HermesAgentClient implements AgentClient {
     try {
       await this.request("prompt.submit", {
         session_id: this.session.sessionId,
-        text,
+        // References stay outside JSON so quoted filenames survive Hermes's
+        // context-reference parser without JSON backslash escaping.
+        text: attachmentRefs.length ? `${text}\n\n${attachmentRefs.join("\n")}` : text,
       });
     } catch (error) {
       this.running = false;
@@ -1046,10 +1104,15 @@ export class HermesAgentClient implements AgentClient {
   }
 
   private handleGatewayEvent(event: HermesGatewayEvent): void {
+    // The relay shares one gateway connection between browser tabs, so a
+    // session-scoped event may belong to another tab. Without an open session
+    // only accept them while this client is opening one: Hermes emits the new
+    // session's first session.info before session.create returns its id.
     if (
       event.session_id &&
-      this.session &&
-      event.session_id !== this.session.sessionId
+      (this.session
+        ? event.session_id !== this.session.sessionId
+        : this.openingSessions === 0)
     ) {
       return;
     }

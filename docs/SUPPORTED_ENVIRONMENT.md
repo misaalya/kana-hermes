@@ -57,6 +57,36 @@ are reported explicitly with a text fallback. No mock voice or agent is used.
   two custom Live2D packages, and real Qwen p50/p95 still need target-host
   field validation before broader platform support is claimed.
 
+## Hermes auto-detection on Linux
+
+Kana finds Hermes in two ways, both implemented once in
+`shared/hermes-discovery.mjs` and used by the launcher and the server:
+
+1. **Executable**: `KANA_HERMES_BIN`, `hermes.executable` in `config.json`,
+   every `PATH` directory, then the layouts Hermes's official installer and
+   common package managers create — `~/.local/bin` (installer user layout,
+   pipx, uv tool), `$XDG_BIN_HOME`, `$HERMES_INSTALL_DIR`,
+   `~/.hermes/hermes-agent/venv/bin`, `/usr/local/bin` and
+   `/usr/local/lib/hermes-agent/venv/bin` (installer root layout),
+   `$PREFIX/bin` (Termux), Nix profiles (`~/.nix-profile/bin`,
+   `/nix/var/nix/profiles/default/bin`, `/run/current-system/sw/bin`), and
+   Homebrew on Linux. This works identically on Debian/Ubuntu, Fedora/RHEL,
+   Arch, openSUSE, and NixOS. systemd services receive a minimal `PATH`, which
+   is why the fixed locations matter.
+2. **Running gateway**: `/proc/<pid>/cmdline` is parsed the way Hermes itself
+   recognises `hermes serve` (including `python -m hermes_cli.main serve`,
+   `--port=N`, and Hermes's default port 9119 when `--port` is omitted). No
+   `pgrep`/procps is needed, so minimal containers work too. Desktop's
+   ephemeral `--port 0` servers and non-loopback binds are ignored.
+
+The gateway token is read from `/proc/<pid>/environ`, which Linux exposes only
+to the **same user** (or root). Kana must therefore run under the account that
+owns Hermes. A gateway started by hand without `HERMES_DASHBOARD_SESSION_TOKEN`
+has a random in-memory token that no other process can learn; let Kana start
+Hermes instead. If an adopted gateway restarts with a new token or port, Kana
+re-discovers it on the next failed connection. `kana doctor` shows what was
+found, including whether each running gateway's token is readable.
+
 ## VPS deploy checklist
 
 Kana's server-side files (`appstate.db` containing the auth hash, `jwt-secret`,
@@ -66,11 +96,12 @@ legacy roots (`./data`, `~/.kana`) and the former standalone `auth.json` store
 are migrated automatically on first use. Never run Kana in production without
 an explicit data directory.
 
-1. Create a non-root user and its data directory:
+1. Run Kana under the Linux account that owns Hermes (see above), and give it
+   a persistent data directory:
 
    ```bash
-   sudo useradd --system --create-home --home-dir /var/lib/kana kana || true
-   sudo chown kana:kana /var/lib/kana
+   sudo mkdir -p /var/lib/kana
+   sudo chown "$USER": /var/lib/kana
    ```
 
 2. Configure the deployment mode and persistent data root (systemd
@@ -84,13 +115,22 @@ an explicit data directory.
    ```
 
    `KANA_JWT_SECRET` is optional. When omitted, Kana generates an owner-only
-   secret atomically under `KANA_DATA_DIR` on the first readiness request and
-   reuses it across restarts. An explicit value must contain at least 32
-   characters and is useful only when multiple Kana server instances must
-   share sessions. Keep the data directory persistent across redeploys.
+   secret atomically under `KANA_DATA_DIR` and reuses it across restarts. An
+   explicit value must contain at least 32 characters. Keep the data directory
+   persistent across redeploys.
 
-3. Deploy the complete contents of `.next/standalone` to `/opt/kana`, then
-   use this systemd unit example:
+3. Deploy the complete contents of `.next/standalone` (after
+   `npm run package:local`) to `/opt/kana`. Set the access password once as
+   the service account — Kana refuses to start without one and has no default:
+
+   ```bash
+   KANA_DATA_DIR=/var/lib/kana node /opt/kana/bin/kana.mjs password
+   ```
+
+   With the npm package use `KANA_DATA_DIR=/var/lib/kana kana password`.
+   For automation, pipe it: `printf '%s\n' "$PASSWORD" | kana password --stdin`.
+
+   Then use this systemd unit example (replace `your-user`):
 
    ```ini
    [Unit]
@@ -98,45 +138,47 @@ an explicit data directory.
    After=network-online.target
 
    [Service]
-   User=kana
-   Group=kana
-   WorkingDirectory=/var/lib/kana
-   Environment=HOME=/var/lib/kana
+   User=your-user
+   Group=your-user
+   WorkingDirectory=/opt/kana
    Environment=KANA_DATA_DIR=/var/lib/kana
-   Environment=KANA_DEPLOYMENT_MODE=deployment
    Environment=AUTH_COOKIE_SECURE=true
-   Environment=HOSTNAME=127.0.0.1
-   Environment=PORT=3000
-   ExecStart=/usr/bin/node /opt/kana/server.js
+   ExecStart=/usr/bin/node /opt/kana/bin/kana.mjs serve --port 3000
    Restart=on-failure
 
    [Install]
    WantedBy=multi-user.target
    ```
 
-   The npm launcher (`kana`) resolves and forwards `KANA_DATA_DIR` and an
-   explicit `HOME` into the spawned Next server automatically; under systemd,
-   set both explicitly as shown. If installed from npm on the VPS, replace
-   `ExecStart` with the absolute installed `kana` path and `serve --port 3000`.
-   See [the installation choices](INSTALLATION.md). Run one process per data
-   root; clustered workers do not share Hermes sockets or cancellation state.
+   `kana serve` forces deployment mode, binds `127.0.0.1`, forwards
+   `KANA_DATA_DIR`, and passes the Hermes executable it found to the server.
+   systemd sets `HOME` for `User=` services. If installed from npm on the VPS,
+   replace `ExecStart` with the absolute installed `kana` path and
+   `serve --port 3000`. See [the installation choices](INSTALLATION.md). Run
+   one process per data root; clustered workers do not share Hermes sockets or
+   cancellation state.
 
-4. Nginx must preserve the public request metadata and give both the Hermes
-   event stream and speech synthesis enough time to complete. The speech route
-   may legitimately stay open while a remote provider generates audio:
+4. Nginx must preserve the public request metadata and give long requests
+   enough time. The values below match Kana's code: the largest request body
+   is 14 MiB (`lib/limits.ts`; Next truncates anything longer), long Hermes
+   RPCs such as `/compress` may take 180 s, and speech may take up to
+   `tts.timeoutSeconds` (default 900 s):
 
    ```nginx
    location / {
+       client_max_body_size 14m;
+       proxy_read_timeout 200s;
+       proxy_send_timeout 200s;
        proxy_pass http://127.0.0.1:3000;
        proxy_http_version 1.1;
-       proxy_set_header Host $host;
+       proxy_set_header Host $http_host;
        proxy_set_header X-Forwarded-Proto $scheme;
    }
 
    location = /api/hermes/events {
        proxy_pass http://127.0.0.1:3000;
        proxy_http_version 1.1;
-       proxy_set_header Host $host;
+       proxy_set_header Host $http_host;
        proxy_set_header X-Forwarded-Proto $scheme;
        proxy_buffering off;
        proxy_read_timeout 1h;
@@ -145,7 +187,7 @@ an explicit data directory.
    location = /api/voice/tts/speech {
        proxy_pass http://127.0.0.1:3000;
        proxy_http_version 1.1;
-       proxy_set_header Host $host;
+       proxy_set_header Host $http_host;
        proxy_set_header X-Forwarded-Proto $scheme;
        proxy_buffering off;
        proxy_read_timeout 910s;
@@ -153,13 +195,13 @@ an explicit data directory.
    }
    ```
 
-   Keep this timeout above `tts.timeoutSeconds` in config (default 900).
+   Keep the speech timeout above `tts.timeoutSeconds`. `Host $http_host` (which keeps a
+   non-default port, unlike `$host`) is required by the cross-site request guard (see [SECURITY.md](SECURITY.md#reverse-proxy-vps)).
    Terminate HTTPS at Nginx. Do not expose Kana only as a public `http://IP`
    origin: browser autoplay behavior is less reliable there and installable
-   web-app features require a secure context. See docs/SECURITY.md for the full
-   trust model.
+   web-app features require a secure context.
 
 5. First-request sanity check: `/api/auth/status` reports
-   `"authEnabled": true`, `"usingDefaultPassword": true`, and the login UI
-   shows `chankana123`. After an optional password change,
-   `usingDefaultPassword` becomes `false`.
+   `"authEnabled": true` and `"passwordConfigured": true`, and
+   `kana doctor` (or `node /opt/kana/bin/kana.mjs doctor`) run as the service
+   account shows Hermes and the password as set.

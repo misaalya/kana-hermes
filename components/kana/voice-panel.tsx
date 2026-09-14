@@ -5,9 +5,11 @@ import {
   deleteKanaVoice,
   listKanaVoices,
   uploadKanaVoice,
+  VoiceLibraryError,
   type LibraryVoice,
 } from "@/lib/runtime/voice-library-client";
-import { convertToWav } from "@/lib/voice/audio-to-wav";
+import { AudioConversionError, convertToWav } from "@/lib/voice/audio-to-wav";
+import { MAX_VOICE_REFERENCE_BYTES } from "@/lib/limits";
 import { btnGhost, btnPrimary, btnSecondary, inputBase } from "./ui";
 import { getCopy, type Copy, type UiLocale } from "@/lib/ui/copy";
 import type { VoiceProviderStatus } from "@/lib/voice/types";
@@ -17,6 +19,8 @@ type VoicePanelProps = {
   onVoiceSelect(serviceVoiceId: string): void;
   locale: UiLocale;
 };
+
+const MAX_VOICE_REFERENCE_MIB = MAX_VOICE_REFERENCE_BYTES / (1024 * 1024);
 
 type EngineState =
   | "ready"
@@ -166,6 +170,17 @@ export function VoicePanel({
     return () => clearInterval(timer);
   }, [hasPending, refresh]);
 
+  const voiceErrorMessage = (error: unknown, fallback: string): string => {
+    if (error instanceof AudioConversionError) {
+      return error.code === "unsupported" ? copy.audioUnsupported : copy.audioUnreadable;
+    }
+    if (error instanceof VoiceLibraryError) {
+      if (error.code === "voice_too_large") return copy.tooLarge(MAX_VOICE_REFERENCE_MIB);
+      if (error.code === "default_voice_protected") return copy.defaultProtected;
+    }
+    return error instanceof Error ? error.message : fallback;
+  };
+
   const upload = async () => {
     if (!cloneAudio || !cloneName.trim() || !cloneConsent) {
       setNotice(copy.validation);
@@ -179,7 +194,13 @@ export function VoicePanel({
       if (result.voice.registered && result.voice.serviceVoiceId) {
         onVoiceSelect(result.voice.serviceVoiceId);
       }
-      setNotice(result.warning ?? copy.added(result.voice.name));
+      setNotice(
+        result.pending === "registration_failed"
+          ? copy.registrationFailed
+          : result.pending
+            ? engineLines[result.pending]
+            : copy.added(result.voice.name),
+      );
       setCloneName("");
       setCloneAudio(null);
       setCloneConsent(false);
@@ -187,7 +208,7 @@ export function VoicePanel({
       if (audioInputRef.current) audioInputRef.current.value = "";
       await refresh();
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : copy.addFailed);
+      setNotice(voiceErrorMessage(error, copy.addFailed));
     } finally {
       setBusy(false);
     }
@@ -199,7 +220,7 @@ export function VoicePanel({
       await deleteKanaVoice(id);
       await refresh();
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : copy.removeFailed);
+      setNotice(voiceErrorMessage(error, copy.removeFailed));
     } finally {
       setBusy(false);
     }

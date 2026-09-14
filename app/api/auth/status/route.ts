@@ -1,30 +1,31 @@
-import {
-  DEFAULT_ACCESS_PASSWORD,
-  isUsingDefaultPassword,
-} from "@/lib/server/auth/password-store";
+import { NO_STORE } from "@/lib/server/api-response";
+import { isAccessPasswordConfigured } from "@/lib/server/auth/password-store";
 import { ensureSessionSecret, isSessionValid } from "@/lib/server/auth/session";
 import { resolveKanaDeploymentMode } from "@/lib/server/user-config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// Public: the launcher's readiness probe and the login page's first request.
+// It must keep answering even when config.json is invalid, and it never
+// reveals anything secret — only whether a password has been set up.
 export async function GET(request: Request): Promise<Response> {
-  // This route is the launcher's readiness probe. Bootstrap the per-install
-  // signing secret here as a server-side fallback for direct/self-hosted starts.
+  // Bootstrap the per-install signing secret here as a server-side fallback
+  // for direct/self-hosted starts.
   ensureSessionSecret();
+  const authenticated = await isSessionValid(request);
   const deployment = resolveKanaDeploymentMode();
-  const usingDefaultPassword = isUsingDefaultPassword();
   return Response.json(
     {
-      deploymentMode: deployment.mode,
-      deploymentModeSource: deployment.source,
       authEnabled: true,
-      authenticated: await isSessionValid(request),
-      usingDefaultPassword,
-      // The built-in password is intentionally public and shown by the login
-      // UI. Stop returning it as soon as a user-owned hash exists.
-      defaultPassword: usingDefaultPassword ? DEFAULT_ACCESS_PASSWORD : null,
+      authenticated,
+      passwordConfigured: isAccessPasswordConfigured(),
+      deploymentMode: deployment.mode,
+      // Configuration details are for the signed-in owner only.
+      ...(authenticated
+        ? { deploymentModeSource: deployment.source, configError: deployment.error }
+        : {}),
     },
-    { headers: { "Cache-Control": "no-store" } },
+    { headers: NO_STORE },
   );
 }

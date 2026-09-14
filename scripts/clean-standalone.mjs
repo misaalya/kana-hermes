@@ -5,7 +5,7 @@ import path from "node:path";
 // are configured. Both distribution paths enforce the same runtime boundary.
 const runtimeEntries = new Set([
   ".next", "node_modules", "server.js", "package.json", "lib", "bin",
-  "config", "assets", "public", "services", "tools", "docs", "dogfood",
+  "config", "shared", "assets", "public", "services", "tools", "docs", "dogfood",
   "README.md", "CHANGELOG.md", "PLAN.md", "LICENSE",
 ]);
 
@@ -22,6 +22,10 @@ export async function cleanStandalone(directory) {
       const target = path.join(directory, entry.name);
       if (entry.isDirectory()) await removeSource(target);
       else if (/\.tsx?$/.test(entry.name)) await rm(target);
+    }
+    // Drop directories left empty so no hollow source tree ships.
+    if ((await readdir(directory).catch(() => ["keep"])).length === 0) {
+      await rm(directory, { recursive: true, force: true });
     }
   }
   await removeSource(path.join(directory, "lib"));

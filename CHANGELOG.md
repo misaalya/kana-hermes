@@ -1,5 +1,35 @@
 # Changelog
 
+## Unreleased
+
+### Security
+
+- **Breaking:** no default access password. Kana refuses logins until the
+  owner runs `kana password` (or answers the first-run prompt of `kana` /
+  `kana serve`). Installations that relied on the old built-in password must
+  set one after upgrading; stored bcrypt hashes keep working and are upgraded
+  to scrypt on the next login.
+- Cross-site request guard: state-changing requests must come from Kana's own
+  origin.
+- Login lockout no longer lets anyone lock out every user: previously signed-in
+  browsers keep their own bucket (device cookie); no IP-based buckets.
+- Logout revokes the session token server-side.
+
+### Changed
+
+- Redesigned launcher output and help; new `kana password` command. A
+  checkout runs `npm run package:local`, then `node bin/kana.mjs`; standalone
+  deployments ship the launcher next to `server.js`.
+- Hermes discovery reads `/proc` directly (no `pgrep`), recognises every
+  `hermes serve` shape Hermes itself does, covers pipx/uv/Nix/Homebrew/root
+  installer layouts, and re-discovers an adopted gateway whose token changed.
+- `config.json` is cached per file change; an invalid file is reported in
+  Settings instead of breaking the login and readiness probe.
+- Request-size limits live in one module; voice references above Next's proxy
+  buffer were previously truncated silently.
+- Packaging copies services and assets from `git ls-files`; publishing refuses
+  a dirty tree and runs lint, typecheck, and unit tests.
+
 ## 0.2.0 — 2026-09-08
 
 ### Added

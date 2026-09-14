@@ -1,7 +1,8 @@
-import { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
 import { resolveKanaDataDir } from "@/lib/server/data-dir";
+import { appStateDatabase, onAppStateDatabaseReset } from "@/lib/server/app-state-store";
 
 /**
  * Persistent voice-clone library for Kana.
@@ -25,34 +26,28 @@ export type VoiceCloneRow = {
   created_at: number;
 };
 
-const globalKey = Symbol.for("kana.voiceStore");
-type StoreGlobal = typeof globalThis & {
-  [globalKey]?: DatabaseSync;
-};
+let schemaReady: DatabaseSync | null = null;
+onAppStateDatabaseReset(() => {
+  schemaReady = null;
+});
 
-function dbPath(): string {
-  return path.join(resolveKanaDataDir(), "appstate.db");
-}
-
+// The voice library lives in appstate.db next to install-level state, so it
+// shares that store's single handle (owner-only file, WAL, legacy adoption).
 function db(): DatabaseSync {
-  const shared = globalThis as StoreGlobal;
-  shared[globalKey] ??= openDb();
-  return shared[globalKey];
-}
-
-function openDb(): DatabaseSync {
-  const database = new DatabaseSync(dbPath());
-  database.exec("PRAGMA journal_mode = WAL;");
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS voice_clones (
-      id               TEXT PRIMARY KEY,
-      name             TEXT NOT NULL,
-      file_path        TEXT NOT NULL,
-      service_voice_id TEXT,
-      is_default       INTEGER NOT NULL DEFAULT 0,
-      created_at       INTEGER NOT NULL
-    );
-  `);
+  const database = appStateDatabase();
+  if (schemaReady !== database) {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS voice_clones (
+        id               TEXT PRIMARY KEY,
+        name             TEXT NOT NULL,
+        file_path        TEXT NOT NULL,
+        service_voice_id TEXT,
+        is_default       INTEGER NOT NULL DEFAULT 0,
+        created_at       INTEGER NOT NULL
+      );
+    `);
+    schemaReady = database;
+  }
   return database;
 }
 

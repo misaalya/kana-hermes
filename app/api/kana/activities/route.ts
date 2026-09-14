@@ -1,16 +1,11 @@
-import { readJsonObject, RequestBodyError } from "@/lib/server/request-body";
+import { jsonError, NO_STORE, withSession } from "@/lib/server/api-response";
+import { readJsonObject } from "@/lib/server/request-body";
 import { listTurnActivities, saveTurnActivities } from "@/lib/server/activity-store";
-import { isSessionValid } from "@/lib/server/auth/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const NO_STORE = { "Cache-Control": "no-store" };
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
-
-async function requestAuthorized(request: Request): Promise<boolean> {
-  return isSessionValid(request);
-}
 
 function parseKey(value: unknown): string | null {
   const key = typeof value === "string" ? value.trim() : "";
@@ -24,10 +19,7 @@ function parseKey(value: unknown): string | null {
  * [{ turnAnchorMs, turnIndex, activities }, ...] — turnIndex is null for
  * legacy v1 rows that predate ordinal anchoring.
  */
-export async function GET(request: Request): Promise<Response> {
-  if (!(await requestAuthorized(request))) {
-    return Response.json({ error: "Unauthorized" }, { status: 401, headers: NO_STORE });
-  }
+export const GET = withSession(async (request) => {
   const url = new URL(request.url);
   const sessionKey = parseKey(url.searchParams.get("session"));
   if (!sessionKey) {
@@ -41,7 +33,7 @@ export async function GET(request: Request): Promise<Response> {
     }),
   );
   return Response.json({ turns }, { headers: NO_STORE });
-}
+});
 
 /**
  * PUT /api/kana/activities
@@ -50,10 +42,7 @@ export async function GET(request: Request): Promise<Response> {
  * the snapshot is keyed by (session, turnIndex) so live and reconstructed
  * writes converge on one row; without it the anchor stays the identity.
  */
-export async function PUT(request: Request): Promise<Response> {
-  if (!(await requestAuthorized(request))) {
-    return Response.json({ error: "Unauthorized" }, { status: 401, headers: NO_STORE });
-  }
+export const PUT = withSession(async (request) => {
   let body: {
     session?: unknown;
     turnAnchorMs?: unknown;
@@ -63,10 +52,7 @@ export async function PUT(request: Request): Promise<Response> {
   try {
     body = await readJsonObject(request, MAX_BODY_BYTES);
   } catch (error) {
-    return Response.json(
-      { error: error instanceof RequestBodyError ? error.message : "A JSON object is required." },
-      { status: error instanceof RequestBodyError ? error.status : 400, headers: NO_STORE },
-    );
+    return jsonError(error);
   }
   const sessionKey = parseKey(body.session);
   const anchor = body.turnAnchorMs;
@@ -92,4 +78,4 @@ export async function PUT(request: Request): Promise<Response> {
   }
   saveTurnActivities(sessionKey, anchor, body.activities, turnIndex);
   return Response.json({ ok: true }, { headers: NO_STORE });
-}
+});

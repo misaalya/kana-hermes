@@ -41,6 +41,18 @@ export function SendIcon(props: IconProps) {
   return <Icon {...props}><path d="m22 2-7 20-4-9-9-4Z" /><path d="M22 2 11 13" /></Icon>;
 }
 
+export function ArrowUpIcon(props: IconProps) {
+  return <Icon {...props}><path d="M12 19V5m-6 6 6-6 6 6" /></Icon>;
+}
+
+export function PlusIcon(props: IconProps) {
+  return <Icon {...props}><path d="M12 5v14M5 12h14" /></Icon>;
+}
+
+export function MicrophoneIcon(props: IconProps) {
+  return <Icon {...props}><rect x="9" y="2" width="6" height="12" rx="3" /><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8" /></Icon>;
+}
+
 export function CloseIcon(props: IconProps) {
   return <Icon {...props}><path d="m6 6 12 12M18 6 6 18" /></Icon>;
 }
