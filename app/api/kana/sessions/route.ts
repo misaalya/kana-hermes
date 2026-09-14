@@ -1,11 +1,10 @@
+import { jsonError, NO_STORE, withSession } from "@/lib/server/api-response";
 import { hermesRpc } from "@/lib/server/hermes-bridge";
-import { inspectLocalHermesRuntime } from "@/lib/server/local-hermes-runtime";
-import { isSessionValid } from "@/lib/server/auth/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const NO_STORE = { "Cache-Control": "no-store" };
+const SESSION_LIST_LIMIT = 100;
 
 type HermesSessionRow = {
   id: string;
@@ -25,38 +24,25 @@ type HermesSessionRow = {
  * directory: a conversation created in another browser shows up here even
  * though this browser has no local IndexedDB record for it yet.
  */
-export async function GET(request: Request): Promise<Response> {
-  if (await isSessionValid(request)) {
-    try {
-      // Attach to an externally started `hermes serve` if Kana has not
-      // spawned one itself; discovery reads the gateway's port and session
-      // token from the local process table.
-      await inspectLocalHermesRuntime();
-      const result = (await hermesRpc("session.list", { limit: 100 })) as {
-        sessions?: HermesSessionRow[];
-      };
-      const sessions = (result.sessions ?? [])
-        .filter((row) => (row.source ?? "").toLowerCase() === "kana")
-        .map((row) => ({
-          hermesSessionKey: row.id,
-          title: row.title || "Untitled",
-          preview: row.preview || "",
-          messageCount: row.message_count ?? 0,
-          startedAt: row.started_at ?? 0,
-          lastActive: row.last_active ?? row.started_at ?? 0,
-        }));
-      return Response.json({ sessions }, { headers: NO_STORE });
-    } catch (error) {
-      return Response.json(
-        {
-          error:
-            error instanceof Error
-              ? error.message
-              : "Could not list Hermes sessions.",
-        },
-        { status: 502, headers: NO_STORE },
-      );
-    }
+export const GET = withSession(async () => {
+  try {
+    // The bridge discovers or re-discovers an externally started
+    // `hermes serve` itself when it has no working connection.
+    const result = (await hermesRpc("session.list", { limit: SESSION_LIST_LIMIT })) as {
+      sessions?: HermesSessionRow[];
+    };
+    const sessions = (result.sessions ?? [])
+      .filter((row) => (row.source ?? "").toLowerCase() === "kana")
+      .map((row) => ({
+        hermesSessionKey: row.id,
+        title: row.title || "Untitled",
+        preview: row.preview || "",
+        messageCount: row.message_count ?? 0,
+        startedAt: row.started_at ?? 0,
+        lastActive: row.last_active ?? row.started_at ?? 0,
+      }));
+    return Response.json({ sessions }, { headers: NO_STORE });
+  } catch (error) {
+    return jsonError(error, 502);
   }
-  return Response.json({ error: "Unauthorized" }, { status: 401, headers: NO_STORE });
-}
+});

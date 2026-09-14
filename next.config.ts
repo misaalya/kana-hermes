@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { MAX_REQUEST_BODY_BYTES } from "./lib/limits";
 
 const isDevelopment = process.env.NODE_ENV === "development";
 const distDir = process.env.KANA_NEXT_DIST_DIR?.trim() || ".next";
@@ -22,7 +23,16 @@ const contentSecurityPolicy = [
 const nextConfig: NextConfig = {
   distDir,
   output: "standalone",
-  allowedDevOrigins: ["127.0.0.1", "localhost", "95.111.198.170"],
+  // Extra hosts allowed to reach `next dev` (e.g. a LAN or VPS address) come
+  // from the environment, never from source control.
+  allowedDevOrigins: [
+    "127.0.0.1",
+    "localhost",
+    ...(process.env.KANA_DEV_ALLOWED_ORIGINS ?? "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean),
+  ],
   // Hide the Next.js dev route indicator so it never covers UI text or
   // screenshots during development. Errors are still surfaced normally.
   devIndicators: false,
@@ -31,6 +41,9 @@ const nextConfig: NextConfig = {
   },
   serverExternalPackages: ["pixi.js"],
   experimental: {
+    // Next buffers at most this much of a body for the proxy and silently
+    // truncates the rest, so it must cover every route limit (lib/limits.ts).
+    proxyClientMaxBodySize: MAX_REQUEST_BODY_BYTES,
     serverSourceMaps: false,
   },
   // Runtime assets from services/ and assets/ are copied deliberately by the
@@ -72,7 +85,7 @@ const nextConfig: NextConfig = {
           { key: "X-Frame-Options", value: "DENY" },
           {
             key: "Permissions-Policy",
-            value: "camera=(), geolocation=(), microphone=()",
+            value: "camera=(), geolocation=(), microphone=(self)",
           },
         ],
       },

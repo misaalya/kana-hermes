@@ -1,58 +1,80 @@
-import { readJsonObject, RequestBodyError } from "@/lib/server/request-body";
-import { beginLoginAttempt, checkLock, recordFail, recordSuccess } from "@/lib/server/auth/login-limiter";
-import { accessSessionVersion, verifyAccessPassword } from "@/lib/server/auth/password-store";
-import { createSessionToken, sessionCookie } from "@/lib/server/auth/session";
+import { jsonError, NO_STORE } from "@/lib/server/api-response";
+import { readJsonObject } from "@/lib/server/request-body";
+import {
+  beginLoginAttempt,
+  checkLock,
+  recordFail,
+  recordSuccess,
+  type LoginBucket,
+} from "@/lib/server/auth/login-limiter";
+import {
+  accessSessionVersion,
+  isAccessPasswordConfigured,
+  verifyAccessPassword,
+} from "@/lib/server/auth/password-store";
+import {
+  createLoginDeviceToken,
+  createSessionToken,
+  loginDeviceCookie,
+  loginDeviceIdFromRequest,
+  sessionCookie,
+} from "@/lib/server/auth/session";
 
 export const runtime = "nodejs";
 
-const NO_STORE = { "Cache-Control": "no-store" };
+const MAX_LOGIN_BODY_BYTES = 4096;
+
+function lockedResponse(retryAfter: number, message: string): Response {
+  return Response.json(
+    { error: message, retryAfter },
+    { status: 429, headers: { ...NO_STORE, "Retry-After": String(retryAfter) } },
+  );
+}
 
 // Single shared access password with progressive lockout. There are no user
-// accounts to enumerate.
+// accounts to enumerate. See login-limiter.ts for the bucket model.
 export async function POST(request: Request): Promise<Response> {
-  const lock = checkLock();
-  if (lock.locked) {
+  if (!isAccessPasswordConfigured()) {
     return Response.json(
       {
-        error: `Too many failed attempts. Try again in ${lock.retryAfter}s.`,
-        retryAfter: lock.retryAfter,
+        error: "No access password has been set. Run `kana password` on the server first.",
+        code: "password_not_configured",
       },
-      { status: 429, headers: { ...NO_STORE, "Retry-After": String(lock.retryAfter) } },
+      { status: 503, headers: NO_STORE },
     );
+  }
+
+  const deviceId = await loginDeviceIdFromRequest(request);
+  const bucket: LoginBucket = deviceId ? { kind: "device", deviceId } : { kind: "unknown" };
+
+  const lock = checkLock(bucket);
+  if (lock.locked) {
+    return lockedResponse(lock.retryAfter, `Too many failed attempts. Try again in ${lock.retryAfter}s.`);
   }
 
   let password: unknown;
   try {
-    ({ password } = await readJsonObject(request, 4096));
+    ({ password } = await readJsonObject(request, MAX_LOGIN_BODY_BYTES));
   } catch (error) {
-    return Response.json(
-      { error: error instanceof RequestBodyError ? error.message : "A JSON object is required." },
-      { status: error instanceof RequestBodyError ? error.status : 400, headers: NO_STORE },
-    );
+    return jsonError(error);
   }
   if (typeof password !== "string" || password.length === 0) {
-    return Response.json({ error: "Password is required." }, { status: 400 });
+    return Response.json({ error: "Password is required." }, { status: 400, headers: NO_STORE });
   }
 
-  const attempt = beginLoginAttempt();
+  const attempt = beginLoginAttempt(bucket);
   if (attempt.locked) {
-    return Response.json(
-      { error: "Login is temporarily limited. Please retry shortly.", retryAfter: attempt.retryAfter },
-      { status: 429, headers: { ...NO_STORE, "Retry-After": String(attempt.retryAfter) } },
-    );
+    return lockedResponse(attempt.retryAfter, "Login is temporarily limited. Please retry shortly.");
   }
   try {
     const verifiedVersion = accessSessionVersion();
     if (!(await verifyAccessPassword(password))) {
-      const { remainingBeforeLock } = recordFail();
-      const postLock = checkLock();
+      const { remainingBeforeLock } = recordFail(bucket);
+      const postLock = checkLock(bucket);
       if (postLock.locked) {
-        return Response.json(
-          {
-            error: `Too many failed attempts. Try again in ${postLock.retryAfter}s.`,
-            retryAfter: postLock.retryAfter,
-          },
-          { status: 429, headers: { ...NO_STORE, "Retry-After": String(postLock.retryAfter) } },
+        return lockedResponse(
+          postLock.retryAfter,
+          `Too many failed attempts. Try again in ${postLock.retryAfter}s.`,
         );
       }
       return Response.json(
@@ -73,12 +95,12 @@ export async function POST(request: Request): Promise<Response> {
         { status: 401, headers: NO_STORE },
       );
     }
-    recordSuccess();
-    const token = await createSessionToken(verifiedVersion);
-    return Response.json(
-      { ok: true },
-      { status: 200, headers: { "Set-Cookie": sessionCookie(token, request), ...NO_STORE } },
-    );
+    recordSuccess(bucket);
+    const headers = new Headers(NO_STORE);
+    headers.append("Set-Cookie", sessionCookie(await createSessionToken(verifiedVersion), request));
+    // Promote this browser to a known device (or refresh its cookie lifetime).
+    headers.append("Set-Cookie", loginDeviceCookie(await createLoginDeviceToken(verifiedVersion), request));
+    return Response.json({ ok: true }, { status: 200, headers });
   } finally {
     attempt.release();
   }

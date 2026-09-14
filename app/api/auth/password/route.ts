@@ -1,27 +1,26 @@
-import { readJsonObject, RequestBodyError } from "@/lib/server/request-body";
+import { jsonError, NO_STORE, withSession } from "@/lib/server/api-response";
+import { readJsonObject } from "@/lib/server/request-body";
 import { verifyAccessPassword, changeAccessPassword } from "@/lib/server/auth/password-store";
-import { createSessionToken, isSessionValid, sessionCookie } from "@/lib/server/auth/session";
+import {
+  createLoginDeviceToken,
+  createSessionToken,
+  loginDeviceCookie,
+  sessionCookie,
+} from "@/lib/server/auth/session";
 
 export const runtime = "nodejs";
 
-const NO_STORE = { "Cache-Control": "no-store" };
+const MAX_BODY_BYTES = 4096;
 
 // Change the shared access password. Requires an authenticated session and a
-// correct current password (re-auth for sensitive actions), then persists a
-// bcrypt hash that takes precedence over the built-in first-login password.
-export async function POST(request: Request): Promise<Response> {
-  if (!(await isSessionValid(request))) {
-    return Response.json({ error: "Unauthorized" }, { status: 401, headers: NO_STORE });
-  }
-
-  let body: { currentPassword?: unknown; newPassword?: unknown };
+// correct current password (re-auth for sensitive actions). The initial
+// password is never set here; see `kana password`.
+export const POST = withSession(async (request) => {
+  let body: Record<string, unknown>;
   try {
-    body = await readJsonObject(request, 4096);
+    body = await readJsonObject(request, MAX_BODY_BYTES);
   } catch (error) {
-    return Response.json(
-      { error: error instanceof RequestBodyError ? error.message : "A JSON object is required." },
-      { status: error instanceof RequestBodyError ? error.status : 400, headers: NO_STORE },
-    );
+    return jsonError(error);
   }
 
   const { currentPassword, newPassword } = body;
@@ -39,16 +38,13 @@ export async function POST(request: Request): Promise<Response> {
   try {
     await changeAccessPassword(newPassword);
   } catch (error) {
-    return Response.json(
-      { error: error instanceof Error ? error.message : "Could not change the password." },
-      { status: 400, headers: NO_STORE },
-    );
+    return jsonError(error);
   }
 
-  // The password update revokes previous tokens; issue a replacement for this browser.
-  const token = await createSessionToken();
-  return Response.json(
-    { ok: true },
-    { status: 200, headers: { "Set-Cookie": sessionCookie(token, request), ...NO_STORE } },
-  );
-}
+  // The password update revokes previous sessions and demotes every login
+  // device; issue replacements so this browser stays signed in and known.
+  const headers = new Headers(NO_STORE);
+  headers.append("Set-Cookie", sessionCookie(await createSessionToken(), request));
+  headers.append("Set-Cookie", loginDeviceCookie(await createLoginDeviceToken(), request));
+  return Response.json({ ok: true }, { status: 200, headers });
+});

@@ -1,9 +1,11 @@
+import { withSession } from "@/lib/server/api-response";
+import { getConfiguredTtsProvider } from "@/lib/server/tts-provider";
 import {
   probeOnlyPortOr503,
-  requireSession,
+  providerConflict,
+  relayUpstream,
   ttsServiceUrl,
 } from "@/lib/server/tts-relay";
-import { getConfiguredTtsProvider } from "@/lib/server/tts-provider";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,37 +15,16 @@ export const dynamic = "force-dynamic";
 // explicit control routes or ensure-on-use speech.
 const UPSTREAM_TIMEOUT_MS = 5_000;
 
-export async function GET(request: Request): Promise<Response> {
-  const unauthorized = await requireSession(request);
-  if (unauthorized) return unauthorized;
-  const provider = getConfiguredTtsProvider();
-  if (provider.descriptor.type !== "qwen3-local") {
-    return Response.json(
-      { error: "Setup information is only available for local Qwen3-TTS." },
-      { status: 409 },
-    );
+export const GET = withSession(async () => {
+  if (getConfiguredTtsProvider().descriptor.type !== "qwen3-local") {
+    return providerConflict("Setup information is only available for local Qwen3-TTS.");
   }
   const ensured = await probeOnlyPortOr503();
   if (!ensured.ok) return ensured.response;
-  try {
-    const upstream = await fetch(ttsServiceUrl(ensured.port, "/v1/setup"), {
-      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
-      headers: { Accept: "application/json" },
-      cache: "no-store",
-    });
-    // 404 from upstream means the setup endpoint isn't available — relay it.
-    const body = await upstream.text();
-    return new Response(body, {
-      status: upstream.status,
-      headers: {
-        "Content-Type": upstream.headers.get("Content-Type") ?? "application/json",
-        "Cache-Control": "no-store",
-      },
-    });
-  } catch (error) {
-    return Response.json(
-      { error: error instanceof Error ? error.message : "Setup check failed." },
-      { status: 502 },
-    );
-  }
-}
+  // A 404 from upstream means the setup endpoint isn't available — relay it.
+  return relayUpstream(ttsServiceUrl(ensured.port, "/v1/setup"), {
+    headers: { Accept: "application/json" },
+    timeoutMs: UPSTREAM_TIMEOUT_MS,
+    failure: "Setup check failed",
+  });
+});

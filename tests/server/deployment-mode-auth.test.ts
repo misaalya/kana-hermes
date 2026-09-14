@@ -3,7 +3,9 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, describe, it } from "node:test";
-import { requireSession } from "@/lib/server/tts-relay";
+import { withSession } from "@/lib/server/api-response";
+
+const requireSession = withSession(async () => new Response("ok"));
 
 const root = mkdtempSync(path.join(tmpdir(), "kana-deployment-auth-test-"));
 const previous = {

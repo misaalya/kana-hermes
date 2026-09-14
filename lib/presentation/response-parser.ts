@@ -224,10 +224,12 @@ export function parseKanaResponse(
   // Graceful degradation: when Hermes answers in plain text instead of the
   // Kana JSON envelope (the persona contract is advisory to the model), wrap
   // it so the user still sees the answer instead of a silent failure.
+  // The language is only known when the caller asked for one; restored
+  // history uses BCP 47 "und" rather than inventing a language.
   if (!trimmed.startsWith("{") && !trimmed.startsWith("```")) {
     return {
       speech_ja: trimmed,
-      subtitle: { text: trimmed, language: expectedSubtitleLanguage ?? "en" },
+      subtitle: { text: trimmed, language: expectedSubtitleLanguage ?? "und" },
       emotion: "neutral",
     };
   }

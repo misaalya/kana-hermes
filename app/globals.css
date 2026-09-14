@@ -278,6 +278,10 @@ button,
   color: rgb(255 255 255 / 45%);
 }
 
+.kana-composer .kana-model-dialog button {
+  color: var(--ink);
+}
+
 .kana-message-assistant {
   border-color: transparent;
   background: var(--chat-bubble);

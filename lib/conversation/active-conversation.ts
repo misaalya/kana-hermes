@@ -24,16 +24,26 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/**
+ * The Hermes session a conversation can resume, or undefined while its
+ * session has never been written to Hermes's database (see
+ * ConversationAgentLink.durable). Such a conversation is still "fresh": a
+ * refresh keeps the user on it and the next prompt opens a new session.
+ */
+export function resumableSessionId(conversation: Conversation): string | undefined {
+  const agent = conversation.agent;
+  return agent && agent.durable !== false ? agent.persistentSessionId : undefined;
+}
+
 export function pointerFromConversation(conversation: Conversation): ActiveConversationPointer {
+  const persistentSessionId = resumableSessionId(conversation);
   return {
     version: 1,
     conversationId: conversation.id,
     title: conversation.title,
     subtitleLanguageAtCreation: conversation.subtitleLanguageAtCreation,
     createdAt: conversation.createdAt,
-    ...(conversation.agent?.persistentSessionId
-      ? { persistentSessionId: conversation.agent.persistentSessionId }
-      : {}),
+    ...(persistentSessionId ? { persistentSessionId } : {}),
   };
 }
 

@@ -1,11 +1,10 @@
-import { readJsonObject, RequestBodyError } from "@/lib/server/request-body";
+import { jsonError, NO_STORE, withSession } from "@/lib/server/api-response";
+import { readJsonObject } from "@/lib/server/request-body";
 import { hermesRpc } from "@/lib/server/hermes-bridge";
-import { isSessionValid } from "@/lib/server/auth/session";
+import { LONG_HERMES_RPC_TIMEOUT_MS } from "@/lib/limits";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const NO_STORE = { "Cache-Control": "no-store" };
 
 // Relay a single JSON-RPC request from the browser to the managed Hermes
 // gateway. The browser authenticates with its Kana session cookie; the Hermes
@@ -45,22 +44,12 @@ const LONG_RUNNING_METHODS = new Set(["session.compress", "model.options"]);
 
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 
-async function requestAuthorized(request: Request): Promise<boolean> {
-  return isSessionValid(request);
-}
-
-export async function POST(request: Request): Promise<Response> {
-  if (!(await requestAuthorized(request))) {
-    return Response.json({ error: "Unauthorized" }, { status: 401, headers: NO_STORE });
-  }
+export const POST = withSession(async (request) => {
   let body: { method?: unknown; params?: unknown };
   try {
     body = await readJsonObject(request, MAX_BODY_BYTES);
   } catch (error) {
-    return Response.json(
-      { error: error instanceof RequestBodyError ? error.message : "A JSON object is required." },
-      { status: error instanceof RequestBodyError ? error.status : 400, headers: NO_STORE },
-    );
+    return jsonError(error);
   }
   const method = body.method;
   if (typeof method !== "string" || !ALLOWED_METHODS.has(method)) {
@@ -93,14 +82,11 @@ export async function POST(request: Request): Promise<Response> {
       confirm_expensive_model: params.confirm_expensive_model === true,
     };
   }
-  const timeoutMs = LONG_RUNNING_METHODS.has(method) ? 180_000 : undefined;
+  const timeoutMs = LONG_RUNNING_METHODS.has(method) ? LONG_HERMES_RPC_TIMEOUT_MS : undefined;
   try {
     const result = await hermesRpc(method, params, timeoutMs);
     return Response.json({ result }, { headers: NO_STORE });
   } catch (error) {
-    return Response.json(
-      { error: error instanceof Error ? error.message : "Hermes relay failed." },
-      { status: 502, headers: NO_STORE },
-    );
+    return jsonError(error, 502);
   }
-}
+});

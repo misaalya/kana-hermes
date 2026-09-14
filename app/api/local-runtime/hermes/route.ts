@@ -1,60 +1,56 @@
+import { jsonError, NO_STORE, withSession } from "@/lib/server/api-response";
+import { readJsonObject } from "@/lib/server/request-body";
 import {
   inspectLocalHermesRuntime,
   startLocalHermesRuntime,
   stopLocalHermesRuntime,
 } from "@/lib/server/local-hermes-runtime";
-import { isSessionValid } from "@/lib/server/auth/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // Process control for the managed `hermes serve` always requires a valid Kana
-// session. This lets an authenticated owner inspect/restart Hermes without
-// opening the route to unauthenticated traffic.
-//
-// The Hermes session token is NOT part of this API. Kana's server mints and
-// holds it; the browser connects through the server-side relay instead.
+// session. The Hermes session token is NOT part of this API: Kana's server
+// mints and holds it, and the browser connects through the server relay.
+// The working folder and executable are server configuration (config.json);
+// a browser can choose only the action and, optionally, the port.
 
-async function requestAuthorized(request: Request): Promise<boolean> {
-  return isSessionValid(request);
+const MAX_BODY_BYTES = 1024;
+
+function optionalPort(value: unknown): number | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1024 || value > 65_535) {
+    throw new Error("Hermes port must be an integer between 1024 and 65535.");
+  }
+  return value;
 }
 
-export async function GET(request: Request): Promise<Response> {
-  if (!(await requestAuthorized(request))) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
+export const GET = withSession(async (request) => {
   const preferredPort = Number(new URL(request.url).searchParams.get("port") ?? "");
-  return Response.json(await inspectLocalHermesRuntime(Number.isInteger(preferredPort) && preferredPort > 0 ? preferredPort : undefined), {
-    headers: { "Cache-Control": "no-store" },
-  });
-}
+  return Response.json(
+    await inspectLocalHermesRuntime(
+      Number.isInteger(preferredPort) && preferredPort > 0 ? preferredPort : undefined,
+    ),
+    { headers: NO_STORE },
+  );
+});
 
-export async function POST(request: Request): Promise<Response> {
-  if (!(await requestAuthorized(request))) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
+export const POST = withSession(async (request) => {
   try {
-    const value = (await request.json()) as {
-      action?: unknown;
-      port?: unknown;
-      cwd?: unknown;
-    };
+    const value = await readJsonObject(request, MAX_BODY_BYTES);
     if (value.action === "stop") {
-      return Response.json(await stopLocalHermesRuntime());
+      return Response.json(await stopLocalHermesRuntime(), { headers: NO_STORE });
     }
     if (value.action !== "start" && value.action !== "restart") {
-      return Response.json({ error: "Action must be start, restart, or stop." }, { status: 400 });
+      return Response.json(
+        { error: "Action must be start, restart, or stop." },
+        { status: 400, headers: NO_STORE },
+      );
     }
+    const port = optionalPort(value.port);
     if (value.action === "restart") await stopLocalHermesRuntime();
-    const status = await startLocalHermesRuntime({
-      port: typeof value.port === "number" ? value.port : 9119,
-      cwd: typeof value.cwd === "string" ? value.cwd : undefined,
-    });
-    return Response.json(status);
+    return Response.json(await startLocalHermesRuntime({ port }), { headers: NO_STORE });
   } catch (error) {
-    return Response.json(
-      { error: error instanceof Error ? error.message : "Hermes control failed." },
-      { status: 400 },
-    );
+    return jsonError(error);
   }
-}
+});

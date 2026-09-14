@@ -1,6 +1,7 @@
+import { NO_STORE, withSession } from "@/lib/server/api-response";
 import { inspectLocalQwen3TtsRuntime } from "@/lib/server/local-qwen3-tts-runtime";
 import { getConfiguredTtsProvider } from "@/lib/server/tts-provider";
-import { requireSession, ttsServiceUrl } from "@/lib/server/tts-relay";
+import { providerConflict, relayUpstream, ttsServiceUrl } from "@/lib/server/tts-relay";
 import {
   QWEN3_TTS_API_VERSION,
   QWEN3_TTS_SERVICE_NAME,
@@ -10,15 +11,12 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // Relay GET /v1/health as a PROBE ONLY: this route never spawns the Python
-// service, so polling it cannot trigger a 120-second cold start against 5s
-// client timeouts. When no service answers, an explicit relay envelope tells
-// the browser whether the runtime is stopped or loading its model.
+// service, so polling it cannot trigger a cold start against short client
+// timeouts. When no service answers, an explicit relay envelope tells the
+// browser whether the runtime is stopped or loading its model.
 const UPSTREAM_TIMEOUT_MS = 5_000;
 
-function relayNotice(
-  relayStatus: "stopped" | "loading",
-  message?: string,
-): Response {
+function relayNotice(relayStatus: "stopped" | "loading", message?: string): Response {
   return Response.json(
     {
       service: QWEN3_TTS_SERVICE_NAME,
@@ -26,49 +24,22 @@ function relayNotice(
       relay_status: relayStatus,
       ...(message ? { message } : {}),
     },
-    { headers: { "Cache-Control": "no-store" } },
+    { headers: NO_STORE },
   );
 }
 
-export async function GET(request: Request): Promise<Response> {
-  const unauthorized = await requireSession(request);
-  if (unauthorized) return unauthorized;
+export const GET = withSession(async () => {
   const provider = getConfiguredTtsProvider();
   if (provider.descriptor.type !== "qwen3-local") {
-    return Response.json(
-      {
-        error: "This Qwen3-TTS health endpoint is unavailable for the configured provider.",
-        provider: provider.descriptor,
-      },
-      { status: 409, headers: { "Cache-Control": "no-store" } },
-    );
+    return providerConflict("This Qwen3-TTS health endpoint is unavailable for the configured provider.");
   }
   const status = await inspectLocalQwen3TtsRuntime();
   if (status.state === "running" || status.state === "external") {
-    try {
-      const upstream = await fetch(ttsServiceUrl(status.port, "/v1/health"), {
-        signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
-        headers: { Accept: "application/json" },
-        cache: "no-store",
-      });
-      const body = await upstream.text();
-      return new Response(body, {
-        status: upstream.status,
-        headers: {
-          "Content-Type":
-            upstream.headers.get("Content-Type") ?? "application/json",
-          "Cache-Control": "no-store",
-        },
-      });
-    } catch (error) {
-      return Response.json(
-        { error: error instanceof Error ? error.message : "Health check failed." },
-        { status: 502 },
-      );
-    }
+    return relayUpstream(ttsServiceUrl(status.port, "/v1/health"), {
+      headers: { Accept: "application/json" },
+      timeoutMs: UPSTREAM_TIMEOUT_MS,
+      failure: "Health check failed",
+    });
   }
-  if (status.state === "starting") {
-    return relayNotice("loading", status.message);
-  }
-  return relayNotice("stopped", status.message);
-}
+  return relayNotice(status.state === "starting" ? "loading" : "stopped", status.message);
+});

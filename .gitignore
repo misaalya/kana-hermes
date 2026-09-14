@@ -43,8 +43,9 @@ yarn-error.log*
 # vercel
 .vercel
 
-# Python service (not part of the Next.js app)
-/services/
+# Python service runtime artifacts (the service source itself is tracked)
+/services/**/.venv/
+/services/**/.pytest_cache/
 
 # typescript
 *.tsbuildinfo
@@ -73,6 +74,7 @@ reference/
 /cli/.npm-package/
 /cli/bin/
 /cli/config/
+/cli/shared/
 /cli/docs/
 /cli/README.md
 /cli/CHANGELOG.md

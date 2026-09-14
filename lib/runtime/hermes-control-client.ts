@@ -28,7 +28,6 @@ export async function inspectHermesRuntime(preferredPort?: number): Promise<Herm
 export async function controlHermesRuntime(options: {
   action: "start" | "restart" | "stop";
   port?: number;
-  cwd?: string;
 }): Promise<HermesRuntimeStatus> {
   return runtimeResponse(
     await fetch("/api/local-runtime/hermes", {

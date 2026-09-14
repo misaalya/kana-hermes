@@ -1,7 +1,7 @@
 import { memo } from "react";
 import type { AvatarSnapshot } from "@/lib/avatar/types";
 import type { StageBackground } from "@/lib/preferences/types";
-import type { UiLocale } from "@/lib/ui/copy";
+import { getCopy, type UiLocale } from "@/lib/ui/copy";
 
 type AvatarStageProps = {
   avatar: AvatarSnapshot;
@@ -21,12 +21,13 @@ export const AvatarStage = memo(function AvatarStage({
   onCanvasReady,
 }: AvatarStageProps) {
   const isLive2D = avatar.renderMode === "live2d";
+  const copy = getCopy(locale).avatarStage;
 
   return (
     <section
       className="kana-stage-pattern absolute inset-0 overflow-hidden"
       data-background={background}
-      aria-label={locale === "id" ? "Panggung avatar Kana" : "Kana avatar stage"}
+      aria-label={copy.label}
     >
       <div
         className="kana-stage-backdrop absolute inset-0"
@@ -50,8 +51,8 @@ export const AvatarStage = memo(function AvatarStage({
           {!isLive2D ? (
             <div className="absolute inset-0 z-[2] flex flex-col items-center justify-center text-center" aria-hidden="true">
               <div>
-                <p className="text-sm font-bold text-ink-dim">{locale === "id" ? "Kana sedang bersiap" : "Kana is getting ready"}</p>
-                <p className="mt-1 text-[11px] text-muted">{locale === "id" ? "Menunggu avatar Live2D" : "Waiting for Live2D avatar"}</p>
+                <p className="text-sm font-bold text-ink-dim">{copy.preparing}</p>
+                <p className="mt-1 text-[11px] text-muted">{copy.waitingForLive2D}</p>
               </div>
             </div>
           ) : null}

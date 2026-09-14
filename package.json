@@ -27,11 +27,10 @@
     "package:local": "npm run build && node scripts/package-standalone.mjs",
     "package:npm": "npm run build && node scripts/prepare-npm-package.mjs && npm pack ./cli --dry-run --ignore-scripts",
     "start": "next start",
-    "start:standalone": "HOSTNAME=127.0.0.1 PORT=3000 node .next/standalone/server.js",
     "config": "node bin/kana.mjs config",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test tests/**/*.test.ts",
+    "test": "node --import tsx --test \"tests/**/*.test.ts\"",
     "test:package:npm": "npm run package:npm && node scripts/npm-package-smoke.mjs",
     "test:e2e": "playwright test",
     "test:live2d:official": "playwright test --config playwright.live2d.config.ts",
@@ -52,8 +51,10 @@
     "tts:acceptance": "node scripts/qwen3-tts-acceptance.mjs",
     "tts:test": "uv run --project services/qwen3-tts python -m unittest discover -s services/qwen3-tts/tests",
     "package:cli": "npm run package:npm",
-    "publish:cli": "node scripts/assert-npm-release.mjs && npm publish ./cli",
-    "serve": "node bin/kana.mjs serve"
+    "publish:cli": "npm run lint && npm run typecheck && npm test && node scripts/assert-npm-release.mjs && npm publish ./cli",
+    "serve": "node bin/kana.mjs serve",
+    "password": "node bin/kana.mjs password",
+    "start:local": "node bin/kana.mjs"
   },
   "dependencies": {},
   "devDependencies": {
