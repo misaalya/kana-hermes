@@ -8,7 +8,7 @@ send an LLM prompt merely to verify connectivity.
 | --- | --- | --- |
 | First run | Preference migration tests | New browser profile shows four setup steps and an honest unavailable state until Hermes is connected |
 | Controlled conversation fixture | Playwright desktop/mobile | User message, tool activity, Japanese speech contract, and stored subtitle appear |
-| Subtitle change | Playwright desktop/mobile | Existing subtitle stays byte-for-byte unchanged after change and reload |
+| Subtitle language follows the user | Playwright desktop/mobile; persona unit test | New replies use the language the user wrote in; existing subtitles stay byte-for-byte unchanged after reload |
 | Conversation lifecycle | Playwright draft/search test | Create, reopen, rename, search, delete with confirmation; draft remains per conversation |
 | Slash commands | Playwright keyboard test; Hermes adapter tests | `/` catalog, argument completion, aliases, send/skill/prefill, and unavailable platform commands are honest |
 | Hermes connect | Adapter tests; `npm run test:hermes:live` | Correct token reaches `gateway.ready`; invalid token says authentication failed |

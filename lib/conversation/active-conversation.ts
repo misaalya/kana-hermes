@@ -1,4 +1,3 @@
-import type { SubtitleLanguage } from "@/lib/presentation/types";
 import type { Conversation } from "./types";
 
 const ACTIVE_CONVERSATION_KEY = "kana.active-conversation.v1";
@@ -7,7 +6,6 @@ export type ActiveConversationPointer = {
   version: 1;
   conversationId: string;
   title: string;
-  subtitleLanguageAtCreation: SubtitleLanguage;
   createdAt: number;
   persistentSessionId?: string;
 };
@@ -41,7 +39,6 @@ export function pointerFromConversation(conversation: Conversation): ActiveConve
     version: 1,
     conversationId: conversation.id,
     title: conversation.title,
-    subtitleLanguageAtCreation: conversation.subtitleLanguageAtCreation,
     createdAt: conversation.createdAt,
     ...(persistentSessionId ? { persistentSessionId } : {}),
   };
@@ -59,13 +56,19 @@ export function readActiveConversationPointer(
       value.version !== 1 ||
       typeof value.conversationId !== "string" ||
       typeof value.title !== "string" ||
-      typeof value.subtitleLanguageAtCreation !== "string" ||
       typeof value.createdAt !== "number" ||
       (value.persistentSessionId !== undefined && typeof value.persistentSessionId !== "string")
     ) {
       return null;
     }
-    return value as ActiveConversationPointer;
+    // Pointers written by older builds also carry subtitleLanguageAtCreation.
+    return {
+      version: 1,
+      conversationId: value.conversationId,
+      title: value.title,
+      createdAt: value.createdAt,
+      ...(typeof value.persistentSessionId === "string" ? { persistentSessionId: value.persistentSessionId } : {}),
+    };
   } catch {
     return null;
   }
@@ -103,7 +106,6 @@ export function freshConversationFromPointer(
     id: pointer.conversationId,
     title: pointer.title,
     messages: [],
-    subtitleLanguageAtCreation: pointer.subtitleLanguageAtCreation,
     createdAt: pointer.createdAt,
     updatedAt: pointer.createdAt,
   };
@@ -111,7 +113,6 @@ export function freshConversationFromPointer(
 
 export function conversationFromHermesEntry(
   entry: HermesConversationDirectoryEntry,
-  subtitleLanguage: SubtitleLanguage,
   id: string,
 ): Conversation {
   const createdAt = entry.startedAt > 0 ? entry.startedAt * 1000 : Date.now();
@@ -120,7 +121,6 @@ export function conversationFromHermesEntry(
     id,
     title: entry.title || "Untitled",
     messages: [],
-    subtitleLanguageAtCreation: subtitleLanguage,
     agent: {
       provider: "hermes",
       persistentSessionId: entry.hermesSessionKey,

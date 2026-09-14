@@ -971,7 +971,6 @@ export function useKanaController(appVersion: string) {
         openingConversationRef.current = conversation.id;
         await agent.openSession({
           title: conversation.title,
-          subtitleLanguage: preferencesRef.current.subtitleLanguage,
           // A session Hermes never stored cannot be resumed; open a new one.
           persistentSessionId: resumableSessionId(conversation),
           cwd: preferencesRef.current.hermes.cwd || undefined,
@@ -1007,8 +1006,6 @@ export function useKanaController(appVersion: string) {
           id: storedPointer.conversationId,
           title: storedPointer.title,
           messages: [],
-          subtitleLanguageAtCreation:
-            storedPointer.subtitleLanguageAtCreation,
           agent: {
             provider: "hermes",
             persistentSessionId: storedPointer.persistentSessionId,
@@ -1022,9 +1019,7 @@ export function useKanaController(appVersion: string) {
         // A brand-new browser still needs a local conversation before Hermes
         // is available. Previously activeConversationId stayed null here,
         // making the controlled message box discard every typed character.
-        const conversation = await conversationStore.create({
-          subtitleLanguage: storedPreferences.subtitleLanguage,
-        });
+        const conversation = await conversationStore.create({});
         storedPointer = pointerFromConversation(conversation);
         writeActiveConversationPointer(conversation);
         storedConversations = [conversation];
@@ -1127,10 +1122,7 @@ export function useKanaController(appVersion: string) {
       // queued and submitted automatically when the current turn completes,
       // instead of being silently dropped.
       if (busy && !commandName) {
-        agentRef.current?.enqueuePrompt(
-          cleanText,
-          preferencesRef.current.subtitleLanguage,
-        );
+        agentRef.current?.enqueuePrompt(cleanText);
         await saveConversation({
           ...conversation,
           messages: [
@@ -1159,7 +1151,6 @@ export function useKanaController(appVersion: string) {
         }
         const created = await conversationStore.create({
           title: commandArg || "New conversation",
-          subtitleLanguage: preferencesRef.current.subtitleLanguage,
         });
         const next = await saveConversation({
           ...created,
@@ -1238,10 +1229,7 @@ export function useKanaController(appVersion: string) {
       try {
         const agent = await ensureAgent(nextConversation);
         if (commandName) {
-          const result = await agent.executeCommand({
-            command: cleanText,
-            subtitleLanguage: preferencesRef.current.subtitleLanguage,
-          });
+          const result = await agent.executeCommand({ command: cleanText });
 
           if (result.type === "output") {
             if (
@@ -1274,7 +1262,6 @@ export function useKanaController(appVersion: string) {
           } else if (result.type === "session") {
             const branched = await conversationStore.create({
               title: result.title,
-              subtitleLanguage: preferencesRef.current.subtitleLanguage,
             });
             const savedBranch = await saveConversation({
               ...branched,
@@ -1328,7 +1315,6 @@ export function useKanaController(appVersion: string) {
         } else {
           await agent.sendMessage({
             text: displayText,
-            subtitleLanguage: preferencesRef.current.subtitleLanguage,
             attachments,
           });
         }
@@ -1506,9 +1492,7 @@ export function useKanaController(appVersion: string) {
       setError(null);
       return;
     }
-    const conversation = await conversationStore.create({
-      subtitleLanguage: preferencesRef.current.subtitleLanguage,
-    });
+    const conversation = await conversationStore.create({});
     commitConversations([...conversationsRef.current, conversation]);
     rememberConversation(conversation);
     openedConversationRef.current = null;
@@ -1535,7 +1519,6 @@ export function useKanaController(appVersion: string) {
       const saved = await persistConversation(
         conversationFromHermesEntry(
           entry,
-          preferencesRef.current.subtitleLanguage,
           createId("conversation"),
         ),
         false,
@@ -1609,9 +1592,7 @@ export function useKanaController(appVersion: string) {
       );
       if (!remaining.length) {
         remaining = [
-          await conversationStore.create({
-            subtitleLanguage: preferencesRef.current.subtitleLanguage,
-          }),
+          await conversationStore.create({}),
         ];
       }
       commitConversations(remaining);
@@ -1769,7 +1750,6 @@ export function useKanaController(appVersion: string) {
             conversation = await persistConversation(
               conversationFromHermesEntry(
                 entry,
-                preferencesRef.current.subtitleLanguage,
                 pointer?.persistentSessionId === entry.hermesSessionKey
                   ? pointer.conversationId
                   : createId("conversation"),
@@ -1785,8 +1765,6 @@ export function useKanaController(appVersion: string) {
               id: pointer.conversationId,
               title: pointer.title,
               messages: [],
-              subtitleLanguageAtCreation:
-                pointer.subtitleLanguageAtCreation,
               agent: {
                 provider: "hermes",
                 persistentSessionId: pointer.persistentSessionId,
@@ -1807,9 +1785,7 @@ export function useKanaController(appVersion: string) {
               conversation = fresh;
               await persistConversation(conversation, false);
             } else {
-              conversation = await conversationStore.create({
-                subtitleLanguage: preferencesRef.current.subtitleLanguage,
-              });
+              conversation = await conversationStore.create({});
             }
           }
           rememberConversation(conversation);
@@ -1829,7 +1805,6 @@ export function useKanaController(appVersion: string) {
         await persistConversation(
           conversationFromHermesEntry(
             entry,
-            preferencesRef.current.subtitleLanguage,
             createId("conversation"),
           ),
           false,

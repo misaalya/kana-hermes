@@ -1,4 +1,4 @@
-import type { KanaResponse, SubtitleLanguage } from "@/lib/presentation/types";
+import type { KanaResponse } from "@/lib/presentation/types";
 
 export type AgentConnectionState =
   | "idle"
@@ -164,14 +164,12 @@ export type AgentEvent =
 
 export type AgentSessionOptions = {
   title?: string;
-  subtitleLanguage: SubtitleLanguage;
   persistentSessionId?: string;
   cwd?: string;
 };
 
 export type AgentMessageInput = {
   text: string;
-  subtitleLanguage: SubtitleLanguage;
   attachments?: import("./attachments").AgentAttachment[];
 };
 
@@ -187,7 +185,6 @@ export type AgentCommandSuggestion = {
 
 export type AgentCommandInput = {
   command: string;
-  subtitleLanguage: SubtitleLanguage;
 };
 
 export type AgentCommandResult =
@@ -259,7 +256,7 @@ export interface AgentClient {
    * Queue a plain message while a turn is running; it is submitted
    * automatically when the current turn completes (Telegram-parity).
    */
-  enqueuePrompt(message: string, subtitleLanguage: string): void;
+  enqueuePrompt(message: string): void;
   /**
    * Fetch the persisted transcript of the currently open Hermes session.
    * Hermes resolves `session.history` only by RUNTIME session id, so this

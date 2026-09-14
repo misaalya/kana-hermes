@@ -9,7 +9,14 @@ import {
 } from "@/lib/runtime/auth-client";
 import { getCopy, type UiLocale } from "@/lib/ui/copy";
 import { passwordPolicyError } from "@/shared/password-policy.mjs";
-import { btnDangerGhost, btnSecondary, fieldLabel, inputBase } from "./ui";
+import {
+  settingsButton,
+  settingsButtonDanger,
+  SettingsGroup,
+  settingsInput,
+  SettingsRow,
+  SettingsRows,
+} from "./settings-layout";
 
 // Settings → System/Privacy: access password, logout, and the server config
 // location and validity.
@@ -69,35 +76,30 @@ export function SecuritySection({ locale }: { locale: UiLocale }) {
   };
 
   return (
-    <div className="grid gap-3">
-      <label className="grid gap-1.5">
-        <span className={fieldLabel}>{copy.currentPassword}</span>
-        <input type="password" autoComplete="current-password" className={inputBase}
-          value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} />
-      </label>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="grid gap-1.5">
-          <span className={fieldLabel}>{copy.newPassword}</span>
-          <input type="password" autoComplete="new-password" className={inputBase}
-            value={newPassword} onChange={(event) => setNewPassword(event.target.value)} />
-        </label>
-        <label className="grid gap-1.5">
-          <span className={fieldLabel}>{copy.confirmPassword}</span>
-          <input type="password" autoComplete="new-password" className={inputBase}
-            value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} />
-        </label>
-      </div>
-      {error ? <p className="text-[11px] font-semibold text-danger" role="alert">{error}</p> : null}
-      {success ? <p className="text-[11px] font-semibold text-accent-strong" role="status">{success}</p> : null}
-      <div className="flex flex-wrap items-center gap-2">
-        <button type="button" className={btnSecondary} disabled={busy || !currentPassword || !newPassword || !confirmPassword} onClick={() => void submit()}>
-          {busy ? copy.updating : copy.updatePassword}
-        </button>
-        <button type="button" className={btnDangerGhost} onClick={() => void logoutAccessSession()}>
+    <SettingsRows>
+      <SettingsRow label={copy.updatePassword} description={copy.passwordPolicy} stacked>
+        <div className="grid max-w-md gap-2.5">
+          <input type="password" autoComplete="current-password" className={settingsInput} placeholder={copy.currentPassword}
+            aria-label={copy.currentPassword} value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} />
+          <input type="password" autoComplete="new-password" className={settingsInput} placeholder={copy.newPassword}
+            aria-label={copy.newPassword} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} />
+          <input type="password" autoComplete="new-password" className={settingsInput} placeholder={copy.confirmPassword}
+            aria-label={copy.confirmPassword} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} />
+          {error ? <p className="text-[11px] font-semibold text-danger" role="alert">{error}</p> : null}
+          {success ? <p className="text-[11px] font-semibold text-accent-strong" role="status">{success}</p> : null}
+          <div>
+            <button type="button" className={settingsButton} disabled={busy || !currentPassword || !newPassword || !confirmPassword} onClick={() => void submit()}>
+              {busy ? copy.updating : copy.updatePassword}
+            </button>
+          </div>
+        </div>
+      </SettingsRow>
+      <SettingsRow label={copy.logout} description={copy.logoutDescription}>
+        <button type="button" className={settingsButtonDanger} onClick={() => void logoutAccessSession()}>
           {copy.logout}
         </button>
-      </div>
-    </div>
+      </SettingsRow>
+    </SettingsRows>
   );
 }
 
@@ -131,38 +133,31 @@ export function AdvancedConfigCard({ locale }: { locale: UiLocale }) {
   }, []);
 
   return (
-    <details className="rounded-2xl border border-line bg-surface">
-      <summary className="kana-details-summary kana-focus cursor-pointer px-4 py-4 text-xs font-bold text-ink">
-        {copy.advancedTitle}
-        <span className="ml-2 font-normal text-muted">{copy.advancedSuffix}</span>
-      </summary>
-      <div className="border-t border-line px-4 py-4">
-        <p className="text-[11px] leading-relaxed text-muted">
-          {copy.advancedBody}
-        </p>
-        <code className="mt-3 block overflow-x-auto rounded-xl border border-line bg-surface-strong px-3 py-2.5 text-[11px] text-accent-strong">
-          {configPath}
-        </code>
-        {configError ? (
-          <p className="mt-3 text-[11px] leading-relaxed text-danger" role="alert">
-            {copy.advancedConfigError} {configError}
-          </p>
-        ) : null}
-        <p className="mt-3 text-[10px] font-bold text-ink">{copy.advancedMode}</p>
-        <p className="mt-1 text-[10px] leading-relaxed text-muted">
-          {deploymentMode === "deployment"
-            ? copy.advancedModeDeployment
-            : copy.advancedModeLocal}
-        </p>
-        <p className="mt-1 text-[10px] leading-relaxed text-faint">
-          {deploymentModeSource === "environment"
+    <SettingsGroup title={copy.advancedTitle} description={copy.advancedBody}>
+      <SettingsRows>
+        <SettingsRow label="config.json" description={copy.advancedRestart} stacked>
+          <code className="block overflow-x-auto rounded-lg border border-line bg-surface-strong/60 px-3 py-2 text-[11.5px] text-ink-dim">
+            {configPath}
+          </code>
+          {configError ? (
+            <p className="mt-2 text-[11.5px] leading-relaxed text-danger" role="alert">
+              {copy.advancedConfigError} {configError}
+            </p>
+          ) : null}
+        </SettingsRow>
+        <SettingsRow
+          label={copy.advancedMode}
+          description={deploymentModeSource === "environment"
             ? copy.advancedModeSourceEnvironment
             : deploymentModeSource === "config"
               ? copy.advancedModeSourceConfig
               : copy.advancedModeSourceDefault}
-        </p>
-        <p className="mt-2 text-[10px] text-faint">{copy.advancedRestart}</p>
-      </div>
-    </details>
+        >
+          <span className="text-xs font-semibold text-ink-dim">
+            {deploymentMode === "deployment" ? copy.advancedModeDeployment : copy.advancedModeLocal}
+          </span>
+        </SettingsRow>
+      </SettingsRows>
+    </SettingsGroup>
   );
 }

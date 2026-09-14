@@ -6,6 +6,8 @@ package. Inference stays outside the Next.js process. The versioned API is:
 - `GET /v1/health`
 - `GET /v1/setup`
 - `GET /v1/voices`
+- `POST /v1/voices/clone`
+- `DELETE /v1/voices/{voice_id}` (cloned profiles only)
 - `POST /v1/speech`
 - `POST /v1/requests/{request_id}/cancel`
 

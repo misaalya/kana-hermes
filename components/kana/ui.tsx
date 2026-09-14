@@ -18,7 +18,7 @@ export const inputBase =
 export const bentoCard = "rounded-2xl border-2 border-line bg-surface p-4";
 
 export const chipBase =
-  "kana-focus inline-flex min-h-9 items-center rounded-xl border px-3 text-xs font-semibold transition-colors";
+  "kana-focus inline-flex min-h-9 items-center rounded-xl border-2 px-3 text-xs font-semibold transition-colors";
 
 export const fieldLabel = "text-[11px] font-bold tracking-wide text-muted";
 

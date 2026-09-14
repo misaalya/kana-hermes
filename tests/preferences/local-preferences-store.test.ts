@@ -64,7 +64,8 @@ describe("LocalPreferencesStore", () => {
 
     const loaded = store.load();
 
-    assert.equal(loaded.subtitleLanguage, "id");
+    // The retired subtitle language setting is dropped on migration.
+    assert.equal("subtitleLanguage" in loaded, false);
     assert.equal(loaded.hermes.cwd, "/tmp/kana");
     assert.equal(persistent.getItem("kana.preferences.v2"), null);
     const persisted = persistent.getItem("kana.preferences.v5") ?? "";
@@ -88,10 +89,10 @@ describe("LocalPreferencesStore", () => {
 
     store.save({
       ...DEFAULT_PREFERENCES,
-      stageBackground: "pattern-swirls",
+      stageBackground: "pattern-seigaiha",
     });
 
-    assert.equal(store.load().stageBackground, "pattern-swirls");
+    assert.equal(store.load().stageBackground, "pattern-seigaiha");
   });
 
   it("persists and sanitizes a layout independently for each Live2D model", () => {
@@ -167,7 +168,7 @@ describe("LocalPreferencesStore", () => {
 
     const loaded = store.load();
 
-    assert.equal(loaded.subtitleLanguage, "ja");
+    assert.equal("subtitleLanguage" in loaded, false);
     assert.equal(loaded.qwen3Tts.deliveryMode, "complete");
     assert.equal(persistent.getItem("kana.preferences.v4"), null);
     assert.ok(persistent.getItem("kana.preferences.v5"));

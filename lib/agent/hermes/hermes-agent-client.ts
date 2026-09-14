@@ -22,7 +22,6 @@ import {
   buildKanaSystemPrompt,
   buildKanaUserPrompt,
 } from "@/lib/presentation/persona";
-import type { SubtitleLanguage } from "@/lib/presentation/types";
 import {
   KanaProtocolError,
   parseKanaResponse,
@@ -155,10 +154,6 @@ export class HermesAgentClient implements AgentClient {
   private connectedOnce = false;
   private session: AgentSession | null = null;
   private sessionOptions: AgentSessionOptions | null = null;
-  private expectedSubtitleLanguage = "en";
-  // Language captured at openSession time; the one-shot resume seed needs it
-  // because submitPrompt's own language argument applies to that turn only.
-  private sessionSubtitleLanguage: SubtitleLanguage = "en";
   // One-shot flag: restate the response contract on the first prompt after
   // resuming a session (resumed history carries no system seed).
   private needsResumeSeed = false;
@@ -166,10 +161,7 @@ export class HermesAgentClient implements AgentClient {
   private running = false;
   private attachmentUpload: AbortController | null = null;
   private recoveringTurn = false;
-  private readonly queuedPrompts: Array<{
-    message: string;
-    subtitleLanguage: string;
-  }> = [];
+  private readonly queuedPrompts: Array<{ message: string }> = [];
 
   constructor(private readonly options: HermesRelayOptions = {}) {}
 
@@ -327,8 +319,6 @@ export class HermesAgentClient implements AgentClient {
     if (this.state !== "connected") {
       await this.connect();
     }
-    this.expectedSubtitleLanguage = options.subtitleLanguage;
-
     let response: HermesSessionResponse;
     if (options.persistentSessionId) {
       try {
@@ -363,13 +353,12 @@ export class HermesAgentClient implements AgentClient {
         messages: [
           {
             role: "system",
-            content: buildKanaSystemPrompt(options.subtitleLanguage),
+            content: buildKanaSystemPrompt(),
           },
         ],
       });
       this.needsResumeSeed = false;
     }
-    this.sessionSubtitleLanguage = options.subtitleLanguage;
 
     const persistentSessionId =
       response.stored_session_id ??
@@ -386,7 +375,6 @@ export class HermesAgentClient implements AgentClient {
     this.sessionOptions = {
       ...options,
       persistentSessionId,
-      subtitleLanguage: options.subtitleLanguage,
     };
     this.emit({ type: "session.opened", ...this.session });
     if (options.persistentSessionId) {
@@ -432,7 +420,7 @@ export class HermesAgentClient implements AgentClient {
       throw new Error("Choose up to 5 files, at most 20 MiB combined.");
     }
     if (!attachments.length) {
-      await this.submitPrompt(input.text, input.subtitleLanguage);
+      await this.submitPrompt(input.text);
       return;
     }
     const session = this.session;
@@ -460,7 +448,7 @@ export class HermesAgentClient implements AgentClient {
       controller.signal.throwIfAborted();
       if (this.session !== session) throw new Error("The conversation changed during upload. Please send again.");
       submittingPrompt = true;
-      await this.submitPrompt(input.text, input.subtitleLanguage, refs);
+      await this.submitPrompt(input.text, refs);
     } catch (error) {
       if (!submittingPrompt) throw new AttachmentUploadError(error);
       throw error;
@@ -474,11 +462,11 @@ export class HermesAgentClient implements AgentClient {
    * automatically when the current turn completes — matching the Telegram /
    * TUI behavior where a follow-up message lands after the active loop.
    */
-  enqueuePrompt(message: string, subtitleLanguage: string): void {
+  enqueuePrompt(message: string): void {
     if (!this.session) {
       throw new Error("Open a Hermes session before queueing a message.");
     }
-    this.queuedPrompts.push({ message, subtitleLanguage });
+    this.queuedPrompts.push({ message });
   }
 
   async fetchHistory(): Promise<{
@@ -1018,10 +1006,7 @@ export class HermesAgentClient implements AgentClient {
         throw new Error("Hermes returned a command without a message payload.");
       }
       if (this.running) {
-        this.queuedPrompts.push({
-          message: dispatch.message,
-          subtitleLanguage: input.subtitleLanguage,
-        });
+        this.queuedPrompts.push({ message: dispatch.message });
         return {
           type: "output",
           output:
@@ -1029,7 +1014,7 @@ export class HermesAgentClient implements AgentClient {
             "Hermes command prompt queued for the next turn.",
         };
       }
-      await this.submitPrompt(dispatch.message, input.subtitleLanguage);
+      await this.submitPrompt(dispatch.message);
       return {
         type: "submitted",
         notice: "notice" in dispatch ? dispatch.notice : undefined,
@@ -1046,22 +1031,20 @@ export class HermesAgentClient implements AgentClient {
 
   private async submitPrompt(
     message: string,
-    subtitleLanguage: string,
     attachmentRefs: string[] = [],
   ): Promise<void> {
     if (!this.session) {
       throw new Error("Open a Hermes session before sending a message.");
     }
-    this.expectedSubtitleLanguage = subtitleLanguage;
     // One-shot: the first prompt after resuming carries the response contract,
     // because resumed history is restored by Hermes without any system seed.
     const text = this.needsResumeSeed
       ? [
-          buildKanaResumeSeedPrefix(this.sessionSubtitleLanguage),
+          buildKanaResumeSeedPrefix(),
           "",
-          buildKanaUserPrompt(message, subtitleLanguage),
+          buildKanaUserPrompt(message),
         ].join("\n\n")
-      : buildKanaUserPrompt(message, subtitleLanguage);
+      : buildKanaUserPrompt(message);
     this.needsResumeSeed = false;
     this.running = true;
     this.emit({ type: "agent.started" });
@@ -1244,10 +1227,7 @@ export class HermesAgentClient implements AgentClient {
     }
 
     try {
-      const response = parseKanaResponse(
-        rawResponse,
-        this.expectedSubtitleLanguage,
-      );
+      const response = parseKanaResponse(rawResponse);
       this.running = false;
       this.emit({ type: "assistant.message", response, rawResponse });
       this.emit({ type: "agent.finished" });
@@ -1269,7 +1249,7 @@ export class HermesAgentClient implements AgentClient {
     const queued = this.queuedPrompts.shift();
     if (!queued || !this.session || this.state !== "connected") return;
     queueMicrotask(() => {
-      void this.submitPrompt(queued.message, queued.subtitleLanguage).catch((error) => {
+      void this.submitPrompt(queued.message).catch((error) => {
         this.emit({
           type: "agent.error",
           message:
@@ -1308,10 +1288,7 @@ export class HermesAgentClient implements AgentClient {
         const rawResponse = assistant?.text?.trim() || "";
         if (rawResponse) {
           try {
-            const parsed = parseKanaResponse(
-              rawResponse,
-              this.expectedSubtitleLanguage,
-            );
+            const parsed = parseKanaResponse(rawResponse);
             this.emit({ type: "assistant.message", response: parsed, rawResponse });
             this.emit({ type: "agent.finished" });
           } catch {
@@ -1375,10 +1352,7 @@ export class HermesAgentClient implements AgentClient {
     const resume = this.sessionOptions
       ? { ...this.sessionOptions }
       : this.session
-        ? {
-            subtitleLanguage: this.expectedSubtitleLanguage,
-            persistentSessionId: this.session.persistentSessionId,
-          }
+        ? { persistentSessionId: this.session.persistentSessionId }
         : null;
 
     try {

@@ -9,6 +9,7 @@ import {
   discoverLive2DModelCapabilities,
   type Live2DModelCapabilities,
 } from "./live2d-model-capabilities";
+import { assertSupportedMoc3 } from "./live2d/moc3-version";
 
 type StoredAvatarFile = {
   name: string;
@@ -158,6 +159,14 @@ export async function validateAvatarModelFiles(files: File[]): Promise<{
       `The Live2D folder is incomplete. Missing: ${missing.join(", ")}`,
     );
   }
+
+  // Reject a moc3 the Cubism Core cannot revive before anything is stored.
+  const mocPath = resolveReference(
+    modelSettings[0],
+    String((parsed as { FileReferences: { Moc: string } }).FileReferences.Moc).trim(),
+  );
+  const mocFile = files[paths.indexOf(mocPath)];
+  assertSupportedMoc3(await mocFile.slice(0, 8).arrayBuffer());
 
   return {
     modelSettingsPath: modelSettings[0],

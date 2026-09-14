@@ -17,11 +17,11 @@ export const STAGE_BACKGROUND_OPTIONS: Array<{
 }> = [
   { value: "plain", previewClass: "kana-background-preview-plain" },
   { value: "room", previewClass: "kana-background-preview-room" },
-  { value: "pattern-sparkles", previewClass: "kana-background-preview-pattern-sparkles" },
-  { value: "pattern-twinkle", previewClass: "kana-background-preview-pattern-twinkle" },
-  { value: "pattern-gingham", previewClass: "kana-background-preview-pattern-gingham" },
-  { value: "pattern-stars", previewClass: "kana-background-preview-pattern-stars" },
-  { value: "pattern-swirls", previewClass: "kana-background-preview-pattern-swirls" },
+  { value: "pattern-sakura", previewClass: "kana-background-preview-pattern kana-pattern-sakura" },
+  { value: "pattern-sparkle", previewClass: "kana-background-preview-pattern kana-pattern-sparkle" },
+  { value: "pattern-clouds", previewClass: "kana-background-preview-pattern kana-pattern-clouds" },
+  { value: "pattern-seigaiha", previewClass: "kana-background-preview-pattern kana-pattern-seigaiha" },
+  { value: "pattern-ribbon", previewClass: "kana-background-preview-pattern kana-pattern-ribbon" },
 ];
 
 export function StageBackgroundChoice({
@@ -44,8 +44,8 @@ export function StageBackgroundChoice({
   copy: Copy["settings"];
 }) {
   return (
-    <div className={`relative min-w-0 shrink-0 basis-full snap-start overflow-hidden rounded-2xl border-2 transition-colors sm:basis-[calc((100%_-_1.5rem)/3)] ${
-      active ? "border-accent bg-surface-strong" : "border-line bg-raised hover:border-line-strong"
+    <div className={`relative min-w-0 shrink-0 basis-full snap-start overflow-hidden rounded-xl border transition-colors sm:basis-[calc((100%_-_1.5rem)/3)] ${
+      active ? "border-accent ring-1 ring-inset ring-accent" : "border-line-strong hover:border-ink/30"
     }`}>
       <button
         type="button"
@@ -56,7 +56,7 @@ export function StageBackgroundChoice({
         onClick={onSelect}
       >
         <span
-          className={`block aspect-[16/9] border-b-2 border-line ${previewClass ?? "bg-bg"}`}
+          className={`block aspect-[16/9] border-b border-line ${previewClass ?? "bg-bg"}`}
           style={previewUrl ? {
             backgroundImage: `url("${previewUrl}")`,
             backgroundPosition: "center",
@@ -76,7 +76,7 @@ export function StageBackgroundChoice({
       {onRemove ? (
         <button
           type="button"
-          className="kana-focus absolute top-2 right-2 flex size-8 items-center justify-center rounded-xl border-2 border-line-strong bg-raised/95 text-muted transition-colors hover:border-danger hover:text-danger"
+          className="kana-focus absolute top-2 right-2 flex size-8 items-center justify-center rounded-lg border border-line-strong bg-raised/95 text-muted transition-colors hover:border-danger hover:text-danger"
           aria-label={copy.removeLabel(label)}
           onClick={onRemove}
         >

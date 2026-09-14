@@ -34,7 +34,6 @@ import {
   inspectTtsRuntime,
   controlTtsRuntime,
 } from "@/lib/runtime/tts-control-client";
-import { SubtitleLanguagePicker } from "./subtitle-language-picker";
 import { AdvancedConfigCard, SecuritySection } from "./settings-access-section";
 import {
   STAGE_BACKGROUND_OPTIONS,
@@ -42,17 +41,25 @@ import {
   StoredStageBackgroundChoice,
 } from "./settings-stage-background";
 import {
+  CheckIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   CloseIcon,
+  LanguageIcon,
+  LockIcon,
+  PersonIcon,
+  PlugIcon,
+  SparkIcon,
+  SpeakerIcon,
 } from "./icons";
+import { btnDangerGhost, btnGhost, Toggle } from "./ui";
 import {
-  btnDangerGhost,
-  btnGhost,
-  btnSecondary,
-  sectionEyebrow,
-  Toggle,
-} from "./ui";
+  settingsButton,
+  SettingsGroup,
+  SettingsRow,
+  SettingsRows,
+  SettingsSegmented,
+} from "./settings-layout";
 
 type SettingsDialogProps = {
   preferences: KanaPreferences;
@@ -81,33 +88,20 @@ type SettingsSection = "experience" | "voice" | "avatar" | "model" | "system" | 
 
 const NAV_IDS: SettingsSection[] = ["experience", "voice", "avatar", "model", "system", "privacy"];
 
+const SECTION_ICONS: Record<SettingsSection, (props: { className?: string }) => React.ReactElement> = {
+  experience: LanguageIcon,
+  voice: SpeakerIcon,
+  avatar: PersonIcon,
+  model: SparkIcon,
+  system: PlugIcon,
+  privacy: LockIcon,
+};
+
 type SettingsNavItem = {
   id: SettingsSection;
   label: string;
   hint: string;
 };
-
-function SettingCard({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="rounded-2xl border-2 border-line bg-surface p-4 sm:p-5">
-      <div className="mb-4">
-        <h3 className="text-sm font-bold text-ink">{title}</h3>
-        {description ? (
-          <p className="mt-1 text-[11px] leading-relaxed text-muted">{description}</p>
-        ) : null}
-      </div>
-      {children}
-    </section>
-  );
-}
 
 export function SettingsDialog({
   preferences,
@@ -416,7 +410,6 @@ export function SettingsDialog({
     }
   };
 
-  const currentNav = navItems.find((item) => item.id === section) ?? navItems[0];
   const activeOfficialAvatar = OFFICIAL_LIVE2D_SAMPLES.find(
     (sample) => !draft.live2d.modelId && draft.live2d.modelUrl === sample.modelUrl,
   );
@@ -450,115 +443,112 @@ export function SettingsDialog({
     });
   };
 
+  const saveStatus = saveState === "error"
+    ? <span className="text-[11px] font-semibold text-danger" role="status">{settingsCopy.saveError}</span>
+    : (
+      <span className="flex items-center gap-1.5 text-[11px] text-faint" role="status" aria-live="polite">
+        {saveState === "saving" ? (
+          <span className="size-1.5 animate-kana-pulse rounded-full bg-accent" aria-hidden="true" />
+        ) : (
+          <CheckIcon className="size-3" />
+        )}
+        {saveState === "saving" ? settingsCopy.savingChanges : settingsCopy.saved}
+      </span>
+    );
+  const closeButton = (
+    <button
+      type="button"
+      className="kana-focus grid size-8 shrink-0 place-items-center rounded-lg text-muted transition-colors hover:bg-surface-strong hover:text-ink"
+      onClick={onClose}
+      aria-label={settingsCopy.close}
+    >
+      <CloseIcon className="size-4" />
+    </button>
+  );
+  const carouselButton =
+    "kana-focus grid size-8 place-items-center rounded-lg border border-line-strong text-ink-dim transition-colors hover:bg-surface-strong hover:text-ink";
+  const choiceCard = (active: boolean) =>
+    `kana-focus flex min-h-16 items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${
+      active ? "border-accent bg-accent/8" : "border-line-strong hover:bg-surface-strong/60"
+    }`;
+
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-[var(--backdrop)] p-3 backdrop-blur-md sm:p-5" role="dialog" aria-modal="true" aria-label={settingsCopy.title}>
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-[var(--backdrop)] p-5 backdrop-blur-sm max-md:p-0" role="dialog" aria-modal="true" aria-label={settingsCopy.title}>
       <div
-        className="mx-auto grid h-[min(900px,calc(100dvh-2rem))] w-full max-w-6xl grid-cols-[260px_minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-[24px] border-2 border-line-strong bg-raised max-md:grid-cols-1 max-md:grid-rows-[auto_auto_minmax(0,1fr)]"
+        className="relative grid h-[min(760px,calc(100dvh-2.5rem))] w-full max-w-[980px] grid-cols-[228px_minmax(0,1fr)] overflow-hidden rounded-2xl border border-line-strong bg-raised kana-settings-shell max-md:h-dvh max-md:max-w-none max-md:grid-cols-1 max-md:grid-rows-[auto_minmax(0,1fr)] max-md:rounded-none max-md:border-0"
         ref={dialogRef as React.Ref<HTMLDivElement>}
         onKeyDown={onDialogKeyDown}
       >
-        <aside className="row-span-2 flex min-h-0 flex-col border-r-2 border-line bg-raised px-3 py-5 max-md:row-span-1 max-md:row-start-1 max-md:border-b-2 max-md:border-r-0 max-md:px-3 max-md:py-3">
-          <div className="mb-8 min-h-11 px-3 max-md:mb-3">
-            <div>
-              <h2 className="text-lg font-bold text-ink">{settingsCopy.title}</h2>
-              <p className="mt-1 text-[10px] text-muted">{settingsCopy.subtitle}</p>
-            </div>
+        <aside className="flex min-h-0 flex-col border-r border-line bg-surface-strong/35 px-3 pb-4 pt-5 max-md:border-b max-md:border-r-0 max-md:bg-raised max-md:px-0 max-md:pb-0 max-md:pt-2">
+          <div className="mb-4 flex items-center justify-between gap-3 px-3 max-md:mb-1 max-md:px-4">
+            <h2 className="text-[15px] font-bold text-ink">{settingsCopy.title}</h2>
+            <div className="md:hidden">{closeButton}</div>
           </div>
-          <p className="mb-2 px-3 text-[9px] font-bold tracking-[0.16em] text-faint uppercase max-md:hidden">{settingsCopy.personal}</p>
-          <nav className="space-y-0.5 max-md:flex max-md:gap-1 max-md:space-y-0 max-md:overflow-x-auto" aria-label={settingsCopy.sectionsAria}>
+          {saveState === "error" ? <div className="px-4 pb-2 md:hidden">{saveStatus}</div> : null}
+          <nav className="kana-settings-nav flex flex-col gap-px max-md:flex-row max-md:gap-1 max-md:overflow-x-auto max-md:px-3 max-md:pb-2" aria-label={settingsCopy.sectionsAria}>
             {navItems.map((item) => {
               const active = item.id === section;
+              const NavIcon = SECTION_ICONS[item.id];
               return (
-                <div key={item.id}>
-                  {item.id === "model" ? (
-                    <p className="mb-2 mt-6 px-3 text-[9px] font-bold tracking-[0.16em] text-faint uppercase max-md:hidden">{settingsCopy.system}</p>
+                <div key={item.id} className="max-md:shrink-0">
+                  {item.id === "experience" || item.id === "model" ? (
+                    <p className={`mb-1 px-3 text-[11px] text-faint max-md:hidden ${item.id === "model" ? "mt-5" : ""}`}>
+                      {item.id === "model" ? settingsCopy.system : settingsCopy.personal}
+                    </p>
                   ) : null}
                   <button
                     type="button"
                     onClick={() => setSection(item.id)}
-                    className={`kana-settings-nav-item kana-focus flex w-full items-center px-3 py-2.5 text-left transition-colors max-md:w-auto max-md:shrink-0 max-md:px-3 ${active ? "is-active" : ""}`}
+                    aria-current={active ? "page" : undefined}
+                    className={`kana-settings-nav-item kana-focus flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] transition-colors max-md:w-auto max-md:whitespace-nowrap max-md:py-1.5 ${active ? "is-active" : ""}`}
                   >
-                    <span>
-                      <span className="block text-xs font-bold">{item.label}</span>
-                      <span className="mt-0.5 block text-[9px] text-faint max-md:hidden">{item.hint}</span>
-                    </span>
+                    <NavIcon className="size-4 shrink-0" />
+                    {item.label}
                   </button>
                 </div>
               );
             })}
           </nav>
+          <div className="mt-auto px-3 pt-4 max-md:hidden">{saveStatus}</div>
         </aside>
 
-        <header className="col-start-2 row-start-1 flex items-center justify-between border-b-2 border-line px-6 py-4 max-md:col-start-1 max-md:row-start-2 max-md:px-4">
-          <div>
-            <p className={sectionEyebrow}>{currentNav.hint}</p>
-            <h2 className="mt-0.5 text-lg font-bold text-ink">{currentNav.label}</h2>
-          </div>
-          <div className="flex items-center gap-3">
-            {saveState === "error" ? (
-              <span className="text-[9px] font-semibold text-danger" role="status">{settingsCopy.saveError}</span>
-            ) : null}
-            <button type="button" className="kana-focus grid size-10 place-items-center rounded-xl border-2 border-line-strong bg-surface text-muted transition-colors hover:border-accent hover:text-ink" onClick={onClose} aria-label={settingsCopy.close}>
-              <CloseIcon className="size-4" />
-            </button>
-          </div>
-        </header>
+        <div className="absolute right-3 top-3 z-10 max-md:hidden">{closeButton}</div>
 
-        <main className="col-start-2 row-start-2 min-h-0 overflow-y-auto bg-bg p-4 sm:p-6 max-md:col-start-1 max-md:row-start-3">
-          <div className="mx-auto max-w-3xl space-y-4">
+        <main className="min-h-0 overflow-y-auto px-10 pb-12 pt-9 max-md:px-4 max-md:pb-8 max-md:pt-4">
+          <div className="mx-auto max-w-[660px]">
             {section === "experience" ? (
-              <>
-                <SettingCard title={settingsCopy.interfaceTitle} description={settingsCopy.interfaceDescription}>
-                  <div className="grid grid-cols-2 gap-2">
-                    {([
-                      ["id", "Bahasa Indonesia"],
-                      ["en", "English"],
-                    ] as const).map(([value, label]) => (
-                      <button
-                        key={value}
-                        type="button"
-                        className={`kana-focus rounded-xl border-2 px-3 py-3 text-left text-xs font-bold transition-colors ${
-                          draft.uiLocale === value
-                            ? "border-accent/45 bg-accent/12 text-accent-strong"
-                            : "border-line bg-surface-strong text-ink-dim hover:border-line-strong"
-                        }`}
-                        onClick={() => setDraft((current) => ({ ...current, uiLocale: value }))}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                </SettingCard>
-                <SettingCard title={settingsCopy.subtitleTitle} description={settingsCopy.subtitleDescription}>
-                  <SubtitleLanguagePicker
-                    locale={draft.uiLocale}
-                    value={draft.subtitleLanguage}
-                    onChange={(subtitleLanguage) => setDraft((current) => ({ ...current, subtitleLanguage }))}
-                  />
-                </SettingCard>
-                <div className="rounded-xl border-2 border-accent/25 bg-surface px-4 py-3">
-                  <p className="text-[11px] leading-relaxed text-ink-dim">
-                    {settingsCopy.historicalSubtitles}
-                  </p>
-                </div>
-              </>
+              <SettingsGroup title={settingsCopy.sections.experience.hint}>
+                <SettingsRows>
+                  <SettingsRow label={settingsCopy.interfaceTitle} description={settingsCopy.interfaceDescription}>
+                    <SettingsSegmented
+                      label={settingsCopy.interfaceTitle}
+                      value={draft.uiLocale}
+                      options={[
+                        { value: "id", label: "Bahasa Indonesia" },
+                        { value: "en", label: "English" },
+                      ]}
+                      onChange={(uiLocale) => setDraft((current) => ({ ...current, uiLocale }))}
+                    />
+                  </SettingsRow>
+                  <SettingsRow label={settingsCopy.subtitleTitle} description={settingsCopy.subtitleDescription} />
+                </SettingsRows>
+              </SettingsGroup>
             ) : null}
 
             {section === "voice" ? (
-              <section className="overflow-hidden rounded-2xl border-2 border-line bg-surface">
-                <header className="flex items-center justify-between gap-4 px-4 py-4 sm:px-5">
-                    <div>
-                      <p className="text-sm font-bold text-ink">{settingsCopy.voiceTitle}</p>
-                      <p className="mt-1 text-[11px] leading-relaxed text-muted">
-                        {draft.voiceEnabled
-                          ? settingsCopy.voiceOn
-                          : settingsCopy.voiceOff}
-                      </p>
-                    </div>
-                    <Toggle checked={draft.voiceEnabled} label={settingsCopy.voiceToggle} onChange={() => setDraft((current) => ({ ...current, voiceEnabled: !current.voiceEnabled }))} />
-                </header>
+              <>
+                <SettingsGroup title={settingsCopy.sections.voice.label}>
+                  <SettingsRows>
+                    <SettingsRow
+                      label={settingsCopy.voiceTitle}
+                      description={draft.voiceEnabled ? settingsCopy.voiceOn : settingsCopy.voiceOff}
+                    >
+                      <Toggle checked={draft.voiceEnabled} label={settingsCopy.voiceToggle} onChange={() => setDraft((current) => ({ ...current, voiceEnabled: !current.voiceEnabled }))} />
+                    </SettingsRow>
+                  </SettingsRows>
+                </SettingsGroup>
                 {draft.voiceEnabled ? (
-                  <div className="border-t-2 border-line bg-raised p-4 sm:p-5">
+                  <SettingsGroup>
                     <VoicePanel
                       locale={draft.uiLocale}
                       selectedVoiceId={draft.qwen3Tts.voiceId}
@@ -567,33 +557,23 @@ export function SettingsDialog({
                         qwen3Tts: { ...current.qwen3Tts, voiceId },
                       }))}
                     />
-                  </div>
+                  </SettingsGroup>
                 ) : null}
-              </section>
+              </>
             ) : null}
 
             {section === "avatar" ? (
               <>
-                <SettingCard title={settingsCopy.stageTitle} description={settingsCopy.stageDescription}>
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <p className="text-[10px] font-semibold text-muted">
+                <SettingsGroup title={settingsCopy.stageTitle} description={settingsCopy.stageDescription}>
+                  <div className="mb-2 mt-3 flex items-center justify-between gap-3">
+                    <p className="text-[11px] text-muted">
                       {settingsCopy.backgrounds(STAGE_BACKGROUND_OPTIONS.length + stageBackgrounds.length)}
                     </p>
-                    <div className="flex items-center gap-2" aria-label={settingsCopy.carouselControls}>
-                      <button
-                        type="button"
-                        className="kana-focus flex size-9 items-center justify-center rounded-xl border-2 border-line bg-surface-strong text-ink-dim transition-colors hover:border-accent hover:text-accent"
-                        aria-label={settingsCopy.previousBackgrounds}
-                        onClick={() => scrollBackgroundCarousel(-1)}
-                      >
+                    <div className="flex items-center gap-1.5" aria-label={settingsCopy.carouselControls}>
+                      <button type="button" className={carouselButton} aria-label={settingsCopy.previousBackgrounds} onClick={() => scrollBackgroundCarousel(-1)}>
                         <ChevronLeftIcon className="size-4" />
                       </button>
-                      <button
-                        type="button"
-                        className="kana-focus flex size-9 items-center justify-center rounded-xl border-2 border-line bg-surface-strong text-ink-dim transition-colors hover:border-accent hover:text-accent"
-                        aria-label={settingsCopy.nextBackgrounds}
-                        onClick={() => scrollBackgroundCarousel(1)}
-                      >
+                      <button type="button" className={carouselButton} aria-label={settingsCopy.nextBackgrounds} onClick={() => scrollBackgroundCarousel(1)}>
                         <ChevronRightIcon className="size-4" />
                       </button>
                     </div>
@@ -638,231 +618,191 @@ export function SettingsDialog({
                       />
                     ))}
                   </div>
-                  <div className="mt-3 flex flex-col gap-3 rounded-xl border-2 border-dashed border-line-strong bg-raised px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="text-xs font-bold text-ink">{settingsCopy.customBackgroundTitle}</p>
-                      <p className="mt-0.5 text-[9px] leading-relaxed text-muted">
-                        {settingsCopy.customBackgroundHint}
-                      </p>
-                    </div>
-                    <input
-                      ref={backgroundInputRef}
-                      type="file"
-                      className="sr-only"
-                      accept=".png,.jpg,.jpeg,.webp,.gif,.avif,.bmp,image/png,image/jpeg,image/webp,image/gif,image/avif,image/bmp"
-                      onChange={(event) => {
-                        const file = event.currentTarget.files?.[0];
-                        if (file) void importStageBackground(file);
-                      }}
-                    />
-                    <button
-                      type="button"
-                      className={btnSecondary}
-                      disabled={backgroundBusy}
-                      onClick={() => backgroundInputRef.current?.click()}
-                    >
-                      {backgroundBusy ? settingsCopy.adding : settingsCopy.uploadImage}
-                    </button>
+                  <input
+                    ref={backgroundInputRef}
+                    type="file"
+                    className="sr-only"
+                    accept=".png,.jpg,.jpeg,.webp,.gif,.avif,.bmp,image/png,image/jpeg,image/webp,image/gif,image/avif,image/bmp"
+                    onChange={(event) => {
+                      const file = event.currentTarget.files?.[0];
+                      if (file) void importStageBackground(file);
+                    }}
+                  />
+                  <div className="mt-3">
+                    <SettingsRows>
+                      <SettingsRow label={settingsCopy.customBackgroundTitle} description={settingsCopy.customBackgroundHint}>
+                        <button
+                          type="button"
+                          className={settingsButton}
+                          disabled={backgroundBusy}
+                          onClick={() => backgroundInputRef.current?.click()}
+                        >
+                          {backgroundBusy ? settingsCopy.adding : settingsCopy.uploadImage}
+                        </button>
+                      </SettingsRow>
+                    </SettingsRows>
                   </div>
                   {backgroundNotice ? (
-                    <p className="mt-2 text-[10px] font-semibold text-muted" role="status">
-                      {backgroundNotice}
-                    </p>
+                    <p className="text-[11px] text-muted" role="status">{backgroundNotice}</p>
                   ) : null}
-                </SettingCard>
+                </SettingsGroup>
 
-              <section className="overflow-hidden rounded-2xl border-2 border-line bg-surface">
-                <header className="border-b-2 border-line px-4 py-4 sm:px-5">
-                  <p className="text-sm font-bold text-ink">{settingsCopy.avatarLibrary}</p>
-                  <p className="mt-1 text-[11px] leading-relaxed text-muted">
-                    {settingsCopy.avatarLibraryBody}
-                  </p>
-                </header>
-
-                <div className="border-b-2 border-line bg-surface-strong px-4 py-3 sm:px-5">
-                  <p className="text-[9px] font-bold tracking-[0.14em] text-muted uppercase">{settingsCopy.currentAvatar}</p>
-                  <div className="mt-1 flex items-center justify-between gap-4">
-                    <p className="truncate text-base font-bold text-ink">{activeAvatarName}</p>
-                    <span className="shrink-0 text-[10px] font-semibold text-accent">
-                      {draft.live2d.modelId ? settingsCopy.yourAvatar : settingsCopy.included}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="p-4 sm:p-5">
-                  <p className="mb-2 text-[10px] font-bold text-ink-dim">{settingsCopy.includedAvatars}</p>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {OFFICIAL_LIVE2D_SAMPLES.map((sample, index) => {
-                      const active = !draft.live2d.modelId && draft.live2d.modelUrl === sample.modelUrl;
-                      return (
+                <SettingsGroup title={settingsCopy.avatarLibrary} description={settingsCopy.avatarLibraryBody}>
+                  <SettingsRows>
+                    <SettingsRow label={settingsCopy.currentAvatar} description={draft.live2d.modelId ? settingsCopy.yourAvatar : settingsCopy.included}>
+                      <span className="max-w-56 truncate text-[13px] font-semibold text-ink">{activeAvatarName}</span>
+                    </SettingsRow>
+                    <SettingsRow label={settingsCopy.includedAvatars} stacked>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {OFFICIAL_LIVE2D_SAMPLES.map((sample, index) => {
+                          const active = !draft.live2d.modelId && draft.live2d.modelUrl === sample.modelUrl;
+                          return (
+                            <button
+                              key={sample.id}
+                              type="button"
+                              className={choiceCard(active)}
+                              onClick={() => void selectOfficialAvatar(index)}
+                            >
+                              <span className="min-w-0">
+                                <span className="block text-[13px] font-semibold text-ink">{sample.name}</span>
+                                <span className="mt-0.5 block text-[11px] text-muted">{settingsCopy.live2dSample}</span>
+                              </span>
+                              {active ? <CheckIcon className="size-4 shrink-0 text-accent-strong" /> : (
+                                <span className="text-[11px] text-faint">{settingsCopy.choose}</span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </SettingsRow>
+                    <SettingsRow label={settingsCopy.yourAvatars} description={settingsCopy.storedBrowserOnly} stacked>
+                      <input
+                        ref={avatarInputRef}
+                        type="file"
+                        multiple
+                        className="sr-only"
+                        onChange={(event) => void importAvatar(Array.from(event.target.files ?? []))}
+                        {...({ webkitdirectory: "", directory: "" } as React.InputHTMLAttributes<HTMLInputElement>)}
+                      />
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {avatarModels.map((model) => {
+                          const active = draft.live2d.modelId === model.id;
+                          return (
+                            <div key={model.id} className={`overflow-hidden rounded-xl border ${active ? "border-accent bg-accent/8" : "border-line-strong"}`}>
+                              <button type="button" className="kana-focus flex w-full min-w-0 items-center justify-between gap-3 px-4 py-3 text-left" disabled={avatarBusy} onClick={() => void selectImported(model)}>
+                                <span className="min-w-0">
+                                  <span className="block truncate text-[13px] font-semibold text-ink">{model.name}</span>
+                                  <span className="mt-0.5 block text-[11px] text-muted">
+                                    {(model.sizeBytes / 1024 / 1024).toFixed(1)} MB
+                                  </span>
+                                </span>
+                                {active ? <CheckIcon className="size-4 shrink-0 text-accent-strong" /> : (
+                                  <span className="text-[11px] text-faint">{settingsCopy.choose}</span>
+                                )}
+                              </button>
+                              <div className="flex justify-end gap-1 border-t border-line px-2 py-1">
+                                <button type="button" className={btnGhost} onClick={() => void renameImported(model)}>{settingsCopy.rename}</button>
+                                <button type="button" className={btnDangerGhost} onClick={() => void deleteImported(model)}>{settingsCopy.remove}</button>
+                              </div>
+                            </div>
+                          );
+                        })}
                         <button
-                          key={sample.id}
                           type="button"
-                          className={`kana-focus flex min-h-20 items-center justify-between gap-3 rounded-xl border-2 px-4 py-3 text-left transition-colors ${
-                            active
-                              ? "border-accent bg-surface-strong"
-                              : "border-line bg-surface-strong hover:border-line-strong"
-                          }`}
-                          onClick={() => void selectOfficialAvatar(index)}
+                          className="kana-focus min-h-16 rounded-xl border border-dashed border-line-strong px-4 py-3 text-left transition-colors hover:bg-surface-strong/60"
+                          disabled={avatarBusy}
+                          onClick={() => avatarInputRef.current?.click()}
                         >
-                          <span className="min-w-0">
-                            <span className="block text-xs font-bold text-ink">{sample.name}</span>
-                            <span className="mt-0.5 block text-[9px] text-muted">{settingsCopy.live2dSample}</span>
+                          <span className="block text-[13px] font-semibold text-ink">
+                            {avatarBusy ? settingsCopy.preparingAvatar : settingsCopy.importLive2d}
                           </span>
-                          <span className={`text-[10px] font-bold ${active ? "text-accent" : "text-faint"}`}>
-                            {active ? settingsCopy.selected : settingsCopy.choose}
+                          <span className="mt-0.5 block text-[11px] leading-relaxed text-muted">
+                            {settingsCopy.importLive2dHint}
                           </span>
                         </button>
-                      );
-                    })}
-                  </div>
+                      </div>
+                      {avatarNotice ? <p className="mt-3 text-[11px] leading-relaxed text-muted" role="status">{avatarNotice}</p> : null}
+                    </SettingsRow>
+                  </SettingsRows>
+                  <details className="mt-1 text-[11px] leading-relaxed text-faint">
+                    <summary className="kana-details-summary kana-focus cursor-pointer text-muted hover:text-ink">
+                      {settingsCopy.includedAvatarAbout}
+                    </summary>
+                    <p className="mt-2">{LIVE2D_SAMPLE_COPYRIGHT_NOTICE}</p>
+                  </details>
+                </SettingsGroup>
 
-                  <div className="mb-2 mt-5">
-                    <p className="text-[10px] font-bold text-ink-dim">{settingsCopy.yourAvatars}</p>
-                    <p className="mt-0.5 text-[9px] text-muted">{settingsCopy.storedBrowserOnly}</p>
-                  </div>
-                  <input
-                    ref={avatarInputRef}
-                    type="file"
-                    multiple
-                    className="sr-only"
-                    onChange={(event) => void importAvatar(Array.from(event.target.files ?? []))}
-                    {...({ webkitdirectory: "", directory: "" } as React.InputHTMLAttributes<HTMLInputElement>)}
-                  />
-
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {avatarModels.map((model) => {
-                      const active = draft.live2d.modelId === model.id;
-                      return (
-                        <div key={model.id} className={`grid min-h-24 grid-rows-[1fr_auto] overflow-hidden rounded-xl border-2 ${
-                          active ? "border-accent bg-surface-strong" : "border-line bg-surface-strong"
-                        }`}>
-                          <button type="button" className="kana-focus flex min-w-0 items-center justify-between gap-3 px-4 py-3 text-left" disabled={avatarBusy} onClick={() => void selectImported(model)}>
-                            <span className="min-w-0">
-                              <span className="block truncate text-xs font-bold text-ink">{model.name}</span>
-                              <span className="mt-0.5 block text-[9px] text-muted">
-                                {(model.sizeBytes / 1024 / 1024).toFixed(1)} MB
-                              </span>
-                            </span>
-                            <span className={`text-[10px] font-bold ${active ? "text-accent" : "text-faint"}`}>
-                              {active ? settingsCopy.selected : settingsCopy.choose}
-                            </span>
-                          </button>
-                          <div className="flex justify-end border-t-2 border-line px-2 py-1">
-                            <button type="button" className={btnGhost} onClick={() => void renameImported(model)}>{settingsCopy.rename}</button>
-                            <button type="button" className={btnDangerGhost} onClick={() => void deleteImported(model)}>{settingsCopy.remove}</button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                    <button
-                      type="button"
-                      className="kana-focus min-h-24 rounded-xl border-2 border-dashed border-line-strong bg-surface px-4 py-3 text-left transition-colors hover:border-accent"
-                      disabled={avatarBusy}
-                      onClick={() => avatarInputRef.current?.click()}
-                    >
-                      <span className="block text-xs font-bold text-ink">
-                        {avatarBusy ? settingsCopy.preparingAvatar : settingsCopy.importLive2d}
-                      </span>
-                      <span className="mt-1 block text-[9px] leading-relaxed text-muted">
-                        {settingsCopy.importLive2dHint}
-                      </span>
-                    </button>
-                  </div>
-
-                  {avatarNotice ? <p className="mt-3 text-[11px] leading-relaxed text-muted" role="status">{avatarNotice}</p> : null}
-                </div>
-
-                <details className="border-t-2 border-line px-4 py-3 text-[9px] leading-relaxed text-faint sm:px-5">
-                  <summary className="kana-details-summary kana-focus cursor-pointer font-semibold text-muted">
-                    {settingsCopy.includedAvatarAbout}
-                  </summary>
-                  <p className="mt-2">{LIVE2D_SAMPLE_COPYRIGHT_NOTICE}</p>
-                </details>
-              </section>
-
-              {draft.live2d.modelId ? (
-                avatarCapabilitiesLoading ? (
-                  <section className="rounded-2xl border-2 border-line bg-surface px-5 py-5">
-                    <p className="text-[11px] font-semibold text-muted" role="status">
-                      {settingsCopy.avatarBehaviorLoading}
-                    </p>
-                  </section>
-                ) : avatarCapabilitiesError || !avatarCapabilities ? (
-                  <section className="rounded-2xl border-2 border-line bg-surface px-5 py-5">
-                    <p className="text-[11px] font-semibold text-danger" role="status">
-                      {settingsCopy.avatarBehaviorFailed}
-                    </p>
-                  </section>
+                {draft.live2d.modelId ? (
+                  avatarCapabilitiesLoading ? (
+                    <SettingsGroup title={settingsCopy.avatarBehaviorTitle}>
+                      <p className="text-[11px] text-muted" role="status">{settingsCopy.avatarBehaviorLoading}</p>
+                    </SettingsGroup>
+                  ) : avatarCapabilitiesError || !avatarCapabilities ? (
+                    <SettingsGroup title={settingsCopy.avatarBehaviorTitle}>
+                      <p className="text-[11px] text-danger" role="status">{settingsCopy.avatarBehaviorFailed}</p>
+                    </SettingsGroup>
+                  ) : (
+                    <SettingsGroup>
+                      <AvatarExpressionPanel
+                        bindings={activeAvatarBindings}
+                        capabilities={avatarCapabilities}
+                        copy={settingsCopy}
+                        onChange={updateActiveAvatarBindings}
+                        onPreview={(emotion) => onPreviewAvatarEmotion(draft, emotion)}
+                        onPreviewTalking={() => onPreviewAvatarTalking(draft)}
+                      />
+                    </SettingsGroup>
+                  )
                 ) : (
-                  <AvatarExpressionPanel
-                    bindings={activeAvatarBindings}
-                    capabilities={avatarCapabilities}
-                    copy={settingsCopy}
-                    onChange={updateActiveAvatarBindings}
-                    onPreview={(emotion) => onPreviewAvatarEmotion(draft, emotion)}
-                    onPreviewTalking={() => onPreviewAvatarTalking(draft)}
-                  />
-                )
-              ) : (
-                <section className="rounded-2xl border-2 border-line bg-surface px-5 py-4">
-                  <h3 className="text-sm font-bold text-ink">{settingsCopy.avatarBehaviorTitle}</h3>
-                  <p className="mt-1 text-[11px] leading-relaxed text-muted">
-                    {settingsCopy.avatarBehaviorBuiltin}
-                  </p>
-                </section>
-              )}
-              </>
-            ) : null}
-
-            {section === "system" ? (
-              <>
-                <SettingCard title={settingsCopy.hermesTitle} description={settingsCopy.hermesDescription}>
-                  <HermesControlPanel
-                    locale={draft.uiLocale}
-                    onInspect={() => onInspectHermesControl()}
-                    onStart={onStartHermesControl}
-                    onStop={onStopHermesControl}
-                  />
-                </SettingCard>
-                <SettingCard title={settingsCopy.voiceEngineTitle} description={settingsCopy.voiceEngineDescription}>
-                  <TtsControlPanel
-                    locale={draft.uiLocale}
-                    onInspect={inspectTtsRuntime}
-                    onStart={({ restart }) => controlTtsRuntime({ action: restart ? "restart" : "start" })}
-                    onStop={() => controlTtsRuntime({ action: "stop" })}
-                  />
-                </SettingCard>
-                <AdvancedConfigCard locale={draft.uiLocale} />
+                  <SettingsGroup title={settingsCopy.avatarBehaviorTitle} description={settingsCopy.avatarBehaviorBuiltin} />
+                )}
               </>
             ) : null}
 
             {section === "model" ? (
-              <SettingCard title={settingsCopy.modelTitle} description={settingsCopy.modelDescription}>
-                <ModelControlPanel
-                  locale={draft.uiLocale}
-                  onList={onListAgentModels}
-                  onSelect={onSelectAgentModel}
-                />
-              </SettingCard>
+              <SettingsGroup title={settingsCopy.modelTitle} description={settingsCopy.modelDescription}>
+                <div className="mt-2">
+                  <ModelControlPanel
+                    locale={draft.uiLocale}
+                    onList={onListAgentModels}
+                    onSelect={onSelectAgentModel}
+                  />
+                </div>
+              </SettingsGroup>
+            ) : null}
+
+            {section === "system" ? (
+              <>
+                <SettingsGroup title={settingsCopy.sections.system.hint}>
+                  <SettingsRows>
+                    <HermesControlPanel
+                      locale={draft.uiLocale}
+                      onInspect={() => onInspectHermesControl()}
+                      onStart={onStartHermesControl}
+                      onStop={onStopHermesControl}
+                    />
+                    <TtsControlPanel
+                      locale={draft.uiLocale}
+                      onInspect={inspectTtsRuntime}
+                      onStart={({ restart }) => controlTtsRuntime({ action: restart ? "restart" : "start" })}
+                      onStop={() => controlTtsRuntime({ action: "stop" })}
+                    />
+                  </SettingsRows>
+                </SettingsGroup>
+                <AdvancedConfigCard locale={draft.uiLocale} />
+              </>
             ) : null}
 
             {section === "privacy" ? (
               <>
-                <SettingCard title={settingsCopy.accessTitle} description={settingsCopy.accessDescription}>
+                <SettingsGroup title={settingsCopy.accessTitle} description={settingsCopy.accessDescription}>
                   <SecuritySection locale={draft.uiLocale} />
-                </SettingCard>
-                <div className="rounded-xl border border-line bg-surface p-4">
-                  <p className="text-xs font-bold text-ink">{settingsCopy.privateTitle}</p>
-                  <p className="mt-1 text-[11px] leading-relaxed text-muted">
-                    {settingsCopy.privateBody}
-                  </p>
-                  </div>
+                </SettingsGroup>
+                <SettingsGroup title={settingsCopy.privateTitle} description={settingsCopy.privateBody} />
               </>
             ) : null}
           </div>
         </main>
-
       </div>
     </div>
   );

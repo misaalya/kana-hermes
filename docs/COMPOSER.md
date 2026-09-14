@@ -33,7 +33,7 @@ allowance; the authenticated route enforces the smaller decoded-file limit.
 
 ## Voice input
 
-Click the microphone and speak in the selected subtitle language. Final recognized
+Click the microphone and speak in the interface language (Settings → Experience). Final recognized
 speech is appended to the current draft; interim recognition appears as a status.
 Review or edit the text and click Send. Kana never automatically submits dictated
 text. Click the microphone again to stop; a capture ends after at most 60 seconds.
@@ -42,7 +42,8 @@ Switching conversations or leaving the composer releases recognition resources.
 Dictation uses the browser's **Web Speech API**, independently of Japanese TTS.
 It requires microphone permission, HTTPS (or localhost), and a browser/service
 that supports speech recognition, such as Google Chrome. It is not available in
-every browser or Chromium build; recognition may use the browser vendor's online
+every browser or Chromium build (Firefox has no recognition; Brave exposes the API
+but cannot reach a recognition service, so Kana reports it as unsupported); recognition may use the browser vendor's online
 service and is **not guaranteed offline**. Unsupported browsers, denied permission,
 network failures and no speech produce a visible status instead of silently doing
 nothing. See [MDN's SpeechRecognition documentation](https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition).

@@ -37,7 +37,7 @@ export function ComposerModelChoice({ locale, sessionKey, connected, disabled, o
   return <>
     <button type="button" aria-label={label} title={model || label} disabled={disabled || !connected}
       aria-haspopup="dialog" aria-expanded={open}
-      className="kana-focus ml-auto flex min-h-10 min-w-0 max-w-[min(55%,260px)] items-center gap-1 rounded-lg px-2 text-[11px] hover:bg-white/12 disabled:opacity-40"
+      className="kana-focus ml-auto flex min-h-10 min-w-0 max-w-[min(55%,260px)] items-center gap-1 rounded-lg px-2 text-[13px] hover:bg-white/12 disabled:opacity-40"
       onClick={() => setOpen(true)}>
       <span className="truncate">{connected && model ? model.split("/").pop() : label}</span><span aria-hidden="true">⌄</span>
     </button>

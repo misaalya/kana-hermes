@@ -49,12 +49,22 @@ export const AvatarStage = memo(function AvatarStage({
           />
 
           {!isLive2D ? (
-            <div className="absolute inset-0 z-[2] flex flex-col items-center justify-center text-center" aria-hidden="true">
-              <div>
-                <p className="text-sm font-bold text-ink-dim">{copy.preparing}</p>
-                <p className="mt-1 text-[11px] text-muted">{copy.waitingForLive2D}</p>
+            avatar.loadError ? (
+              <div className="absolute inset-0 z-[2] flex items-center justify-center px-6 text-center" role="status">
+                <div className="max-w-sm">
+                  <p className="text-sm font-bold text-ink">{copy.loadFailed}</p>
+                  <p className="mt-1.5 text-[12px] leading-relaxed text-muted">{avatar.loadError}</p>
+                  <p className="mt-2 text-[11px] text-faint">{copy.loadFailedHint}</p>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="absolute inset-0 z-[2] flex flex-col items-center justify-center text-center" aria-hidden="true">
+                <div>
+                  <p className="text-sm font-bold text-ink-dim">{copy.preparing}</p>
+                  <p className="mt-1 text-[11px] text-muted">{copy.waitingForLive2D}</p>
+                </div>
+              </div>
+            )
           ) : null}
         </div>
       </div>

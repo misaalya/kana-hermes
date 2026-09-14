@@ -12,6 +12,8 @@ export type AvatarModelSource = {
 export type AvatarSnapshot = {
   loaded: boolean;
   renderMode: "mock" | "live2d";
+  /** Why the last Live2D load failed; cleared when a model loads. */
+  loadError?: string;
   emotion: Emotion;
   emotionIntensity: number;
   motion?: string;

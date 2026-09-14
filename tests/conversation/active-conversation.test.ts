@@ -52,7 +52,6 @@ test("selected Hermes session survives independently from interaction order", ()
     conversationId: "conversation-b",
     persistentSessionId: "session-b",
     title: "Session B",
-    subtitleLanguageAtCreation: "id",
     createdAt: 200_000,
   };
 
@@ -60,7 +59,7 @@ test("selected Hermes session survives independently from interaction order", ()
 
   const conversations = directory
     .map((entry) =>
-      conversationFromHermesEntry(entry, "id", `conversation-${entry.hermesSessionKey}`),
+      conversationFromHermesEntry(entry, `conversation-${entry.hermesSessionKey}`),
     )
     .sort((a, b) => b.updatedAt - a.updatedAt);
 
@@ -74,7 +73,6 @@ test("active pointer round-trips without storing a Hermes credential", () => {
     id: "conversation-b",
     title: "Session B",
     messages: [],
-    subtitleLanguageAtCreation: "en",
     agent: {
       provider: "hermes",
       persistentSessionId: "session-b",
@@ -91,11 +89,28 @@ test("active pointer round-trips without storing a Hermes credential", () => {
     version: 1,
     conversationId: "conversation-b",
     title: "Session B",
-    subtitleLanguageAtCreation: "en",
     createdAt: 10,
     persistentSessionId: "session-b",
   });
   assert.equal(storage.values.has(ACTIVE_CONVERSATION_KEY), true);
+});
+
+test("pointers from builds with a subtitle language setting still restore", () => {
+  const storage = memoryStorage();
+  storage.setItem(ACTIVE_CONVERSATION_KEY, JSON.stringify({
+    version: 1,
+    conversationId: "legacy",
+    title: "Legacy",
+    subtitleLanguageAtCreation: "id",
+    createdAt: 5,
+  }));
+
+  assert.deepEqual(readActiveConversationPointer(storage), {
+    version: 1,
+    conversationId: "legacy",
+    title: "Legacy",
+    createdAt: 5,
+  });
 });
 
 test("an unlinked fresh conversation is reconstructed after refresh", () => {
@@ -103,7 +118,6 @@ test("an unlinked fresh conversation is reconstructed after refresh", () => {
     version: 1,
     conversationId: "fresh-conversation",
     title: "New conversation",
-    subtitleLanguageAtCreation: "id",
     createdAt: 123,
   };
 
@@ -111,7 +125,6 @@ test("an unlinked fresh conversation is reconstructed after refresh", () => {
     id: "fresh-conversation",
     title: "New conversation",
     messages: [],
-    subtitleLanguageAtCreation: "id",
     createdAt: 123,
     updatedAt: 123,
   });
@@ -123,7 +136,6 @@ test("a session Hermes has not stored yet keeps the refresh on the same fresh co
     id: "fresh-conversation",
     title: "New conversation",
     messages: [],
-    subtitleLanguageAtCreation: "id",
     // session.create linked it, but no prompt has reached Hermes yet.
     agent: {
       provider: "hermes",
@@ -153,7 +165,7 @@ test("a session Hermes has not stored yet keeps the refresh on the same fresh co
 
 test("links without a durability flag (older builds, Hermes directory) stay resumable", () => {
   assert.equal(
-    resumableSessionId(conversationFromHermesEntry(directory[0]!, "id", "adopted")),
+    resumableSessionId(conversationFromHermesEntry(directory[0]!, "adopted")),
     "session-a",
   );
 });
