@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   deleteVoiceClone,
   getVoiceClone,
@@ -5,7 +6,7 @@ import {
   saveVoiceReferenceFile,
 } from "@/lib/server/voice-store";
 import { getQwen3TtsServiceReadiness } from "@/lib/server/local-qwen3-tts-runtime";
-import { isSessionValid } from "@/lib/server/auth/session";
+import { NO_STORE, withSession } from "@/lib/server/api-response";
 import {
   DEFAULT_VOICE_NAME,
   ensureDefaultVoice,
@@ -13,32 +14,35 @@ import {
   registerVoiceClone,
 } from "@/lib/server/voice-library";
 import { getConfiguredTtsProvider } from "@/lib/server/tts-provider";
+import { MAX_VOICE_REFERENCE_BYTES, MAX_VOICE_REQUEST_BYTES } from "@/lib/limits";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const NO_STORE = { "Cache-Control": "no-store" };
-const MAX_REFERENCE_BYTES = 20 * 1024 * 1024;
+const MAX_VOICE_NAME_LENGTH = 80;
+const SERVICE_DELETE_TIMEOUT_MS = 15_000;
 
-async function requestAuthorized(request: Request): Promise<boolean> {
-  return isSessionValid(request);
+// Responses carry stable `code` / `pending` values; the browser localizes them.
+function voiceError(status: number, code: string, error: string): Response {
+  return Response.json({ error, code }, { status, headers: NO_STORE });
 }
 
-const PENDING_REASON_MESSAGE: Record<string, string> = {
-  loading: "Mesin suara sedang menyiapkan model — suara akan terdaftar otomatis begitu siap.",
-  stopped: "Mesin suara belum menyala — suara akan terdaftar otomatis saat pertama dibutuhkan.",
-  error: "Mesin suara gagal dimuat. Perbaiki lewat Pengaturan → mesin suara, lalu tekan Refresh.",
-};
+function providerWithoutLibrary(): Response | null {
+  const provider = getConfiguredTtsProvider();
+  if (provider.descriptor.capabilities.voiceLibrary) return null;
+  return voiceError(
+    409,
+    "provider_without_library",
+    `${provider.descriptor.name} uses the voice configured in config.json.`,
+  );
+}
 
 /**
  * GET /api/kana/voices — persistent voice library (SQLite + data/voices)
  * plus current engine readiness. Default-voice registration is kicked off
  * fire-and-forget and throttled server-side; this never blocks on spawn.
  */
-export async function GET(request: Request): Promise<Response> {
-  if (!(await requestAuthorized(request))) {
-    return Response.json({ error: "Unauthorized" }, { status: 401, headers: NO_STORE });
-  }
+export const GET = withSession(async () => {
   const provider = getConfiguredTtsProvider();
   if (!provider.descriptor.capabilities.voiceLibrary) {
     const providerStatus = await provider.inspect();
@@ -64,50 +68,45 @@ export async function GET(request: Request): Promise<Response> {
     },
     { headers: NO_STORE },
   );
-}
+});
 
 /**
  * POST /api/kana/voices — persist the reference audio first (it always
  * survives), then register with the service only when it is already READY.
  * This endpoint never waits for a spawn/model-load.
  */
-export async function POST(request: Request): Promise<Response> {
-  if (!(await requestAuthorized(request))) {
-    return Response.json({ error: "Unauthorized" }, { status: 401, headers: NO_STORE });
-  }
-  const provider = getConfiguredTtsProvider();
-  if (!provider.descriptor.capabilities.voiceLibrary) {
-    return Response.json(
-      { error: `${provider.descriptor.name} uses the voice configured in config.json.` },
-      { status: 409, headers: NO_STORE },
-    );
+export const POST = withSession(async (request) => {
+  const unsupported = providerWithoutLibrary();
+  if (unsupported) return unsupported;
+
+  // Reject before buffering: Next truncates oversized bodies instead of failing.
+  const declaredLength = Number(request.headers.get("content-length") ?? "0");
+  if (declaredLength > MAX_VOICE_REQUEST_BYTES) {
+    return voiceError(413, "voice_too_large", "Reference audio is too large.");
   }
   let form: FormData;
   try {
     form = await request.formData();
   } catch {
-    return Response.json({ error: "Multipart form data is required." }, { status: 400, headers: NO_STORE });
+    return voiceError(400, "invalid_form", "Multipart form data is required.");
   }
   const name = String(form.get("name") ?? "").trim();
   const audio = form.get("audio");
   const consent = form.get("consent") === "1" || form.get("consent") === "true";
-  if (!name || name.length > 80) {
-    return Response.json({ error: "A voice name (1–80 chars) is required." }, { status: 400, headers: NO_STORE });
+  if (!name || name.length > MAX_VOICE_NAME_LENGTH) {
+    return voiceError(400, "name_required", `A voice name (1–${MAX_VOICE_NAME_LENGTH} chars) is required.`);
   }
   if (!(audio instanceof File) || audio.size === 0) {
-    return Response.json({ error: "A reference audio file is required." }, { status: 400, headers: NO_STORE });
+    return voiceError(400, "audio_required", "A reference audio file is required.");
   }
-  if (audio.size > MAX_REFERENCE_BYTES) {
-    return Response.json({ error: "Reference audio must be 20 MB or smaller." }, { status: 400, headers: NO_STORE });
+  if (audio.size > MAX_VOICE_REFERENCE_BYTES) {
+    return voiceError(413, "voice_too_large", "Reference audio is too large.");
   }
   if (!consent) {
-    return Response.json(
-      { error: "Consent confirmation is required to clone a voice." },
-      { status: 400, headers: NO_STORE },
-    );
+    return voiceError(400, "consent_required", "Consent confirmation is required to clone a voice.");
   }
 
-  const id = `kc-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  const id = `kc-${randomUUID()}`;
   const extension = audio.name.includes(".") ? audio.name.split(".").pop() ?? "bin" : "bin";
   const bytes = new Uint8Array(await audio.arrayBuffer());
   const filePath = saveVoiceReferenceFile(id, extension, bytes);
@@ -117,43 +116,30 @@ export async function POST(request: Request): Promise<Response> {
   const updated = getVoiceClone(id);
   if (!serviceVoiceId || !updated?.service_voice_id) {
     const readiness = await getQwen3TtsServiceReadiness();
-    const warning = readiness.ready
-      ? "Pendaftaran ke mesin suara gagal. Coba Refresh nanti."
-      : PENDING_REASON_MESSAGE[readiness.reason];
     return Response.json(
       {
         voice: { id: row.id, name: row.name, registered: false, serviceVoiceId: null, isDefault: false },
-        warning,
+        pending: readiness.ready ? "registration_failed" : readiness.reason,
       },
       { status: 202, headers: NO_STORE },
     );
   }
   return Response.json(
-    {
-      voice: { id, name, registered: true, serviceVoiceId: updated.service_voice_id, isDefault: false },
-    },
+    { voice: { id, name, registered: true, serviceVoiceId: updated.service_voice_id, isDefault: false } },
     { headers: NO_STORE },
   );
-}
+});
 
 /** DELETE /api/kana/voices?id=… — remove a library entry (default is protected). */
-export async function DELETE(request: Request): Promise<Response> {
-  if (!(await requestAuthorized(request))) {
-    return Response.json({ error: "Unauthorized" }, { status: 401, headers: NO_STORE });
-  }
-  const provider = getConfiguredTtsProvider();
-  if (!provider.descriptor.capabilities.voiceLibrary) {
-    return Response.json(
-      { error: `${provider.descriptor.name} has no Kana-managed voice library.` },
-      { status: 409, headers: NO_STORE },
-    );
-  }
+export const DELETE = withSession(async (request) => {
+  const unsupported = providerWithoutLibrary();
+  if (unsupported) return unsupported;
   const id = new URL(request.url).searchParams.get("id");
-  if (!id) return Response.json({ error: "Missing voice id." }, { status: 400, headers: NO_STORE });
+  if (!id) return voiceError(400, "id_required", "Missing voice id.");
   const row = getVoiceClone(id);
-  if (!row) return Response.json({ error: "Voice not found." }, { status: 404, headers: NO_STORE });
+  if (!row) return voiceError(404, "not_found", "Voice not found.");
   if (row.is_default === 1 || row.name === DEFAULT_VOICE_NAME) {
-    return Response.json({ error: "Suara bawaan tidak bisa dihapus." }, { status: 403, headers: NO_STORE });
+    return voiceError(403, "default_voice_protected", "The bundled voice cannot be removed.");
   }
   deleteVoiceClone(id);
   if (row.service_voice_id) {
@@ -162,7 +148,7 @@ export async function DELETE(request: Request): Promise<Response> {
       if (readiness.ready) {
         await fetch(`http://127.0.0.1:${readiness.port}/v1/voices/${encodeURIComponent(row.service_voice_id)}`, {
           method: "DELETE",
-          signal: AbortSignal.timeout(15_000),
+          signal: AbortSignal.timeout(SERVICE_DELETE_TIMEOUT_MS),
         });
       }
     } catch {
@@ -170,4 +156,4 @@ export async function DELETE(request: Request): Promise<Response> {
     }
   }
   return Response.json({ ok: true }, { headers: NO_STORE });
-}
+});

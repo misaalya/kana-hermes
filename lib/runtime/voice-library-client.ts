@@ -32,7 +32,18 @@ export async function listKanaVoices(): Promise<VoiceLibrarySnapshot> {
   return (await response.json()) as VoiceLibrarySnapshot;
 }
 
-export type UploadedVoice = { voice: LibraryVoice; warning?: string };
+/** Why a saved voice is not usable yet; the UI localizes it. */
+export type VoicePendingReason = "loading" | "stopped" | "error" | "registration_failed";
+
+export type UploadedVoice = { voice: LibraryVoice; pending?: VoicePendingReason };
+
+/** A voice-library failure with an optional stable code for localization. */
+export class VoiceLibraryError extends Error {
+  constructor(message: string, readonly code?: string) {
+    super(message);
+    this.name = "VoiceLibraryError";
+  }
+}
 
 export async function uploadKanaVoice(
   name: string,
@@ -48,8 +59,8 @@ export async function uploadKanaVoice(
     credentials: "same-origin",
     body: form,
   });
-  const value = (await response.json()) as UploadedVoice & { error?: string };
-  if (!response.ok) throw new Error(value.error || "Voice clone failed.");
+  const value = (await response.json().catch(() => ({}))) as UploadedVoice & { error?: string; code?: string };
+  if (!response.ok) throw new VoiceLibraryError(value.error || "Voice clone failed.", value.code);
   return value;
 }
 
@@ -59,7 +70,7 @@ export async function deleteKanaVoice(id: string): Promise<void> {
     credentials: "same-origin",
   });
   if (!response.ok) {
-    const value = (await response.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(value?.error || "Could not delete the voice.");
+    const value = (await response.json().catch(() => null)) as { error?: string; code?: string } | null;
+    throw new VoiceLibraryError(value?.error || "Could not delete the voice.", value?.code);
   }
 }

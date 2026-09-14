@@ -5,6 +5,7 @@ import path from "node:path";
 import { after, it } from "node:test";
 import { POST as speech } from "@/app/api/voice/tts/speech/route";
 import { createSessionToken } from "@/lib/server/auth/session";
+import { changeAccessPassword } from "@/lib/server/auth/password-store";
 import { __setTestTtsPort } from "@/lib/server/local-qwen3-tts-runtime";
 
 const root = mkdtempSync(path.join(tmpdir(), "kana-tts-routing-"));
@@ -19,6 +20,7 @@ after(() => {
 });
 
 it("routes both provider choices from server config despite stale browser voice and inactive config", async () => {
+  await changeAccessPassword("tts-routing-secret");
   const token = await createSessionToken();
   const calls: string[] = [];
   const audio = new Uint8Array([82, 73, 70, 70, 1, 2, 3, 4]);

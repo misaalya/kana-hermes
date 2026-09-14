@@ -9,6 +9,8 @@ Kana adds:
   copying any game's artwork, characters, or proprietary assets;
 - a Japanese-speaking presentation persona and structured response protocol;
 - user-selectable subtitle languages for future responses;
+- a two-row composer with file attachments, browser voice dictation, a live
+  Hermes model chooser, and send/stop controls (see [composer usage](docs/COMPOSER.md));
 - Hermes-backed conversation history that preserves the exact subtitle text and language originally displayed, with browser-local drafts and presentation preferences;
 - replaceable TTS and avatar providers while Hermes remains the only agent;
 - a responsive Live2D canvas with two official free sample avatars and
@@ -56,8 +58,13 @@ The published package contains a thin launcher plus the traced standalone web
 runtime, so it does not compile Kana on the user's machine. Running `kana`
 binds the app to `127.0.0.1`, opens the browser, preserves Kana's in-app
 personalization wizard, and automatically tries to connect to or start the
-installed Hermes service. It never asks for a Hermes token in the browser and
-does not block first start with a terminal setup prompt.
+installed Hermes service. It never asks for a Hermes token in the browser.
+
+Kana has **no default password**. The first `kana` (or `kana serve`) start in a
+terminal asks you to create one before the server starts; `kana password`
+changes it later. Because Hermes can run tools on the machine, the first
+password is never set over the web, where anybody reaching a new VPS first
+could claim it.
 
 The global npm install itself deliberately does not write user configuration:
 it may be executed with `sudo`, which would create root-owned files in the
@@ -65,18 +72,16 @@ wrong home directory. The first `kana` launch performs an idempotent bootstrap
 under the actual account running Kana. It creates an owner-only `config.json`,
 generates and persists a cryptographically random JWT signing secret, and lets
 the server create its databases as they are first needed. Existing files are
-never overwritten. A fresh installation opens the login screen and shows the
-built-in password `chankana123`. Changing it later in Settings is optional; a
-user-chosen bcrypt hash is stored in the installation's `appstate.db` and
-takes precedence when present.
+never overwritten. Only an scrypt hash of your password is stored, in the
+installation's `appstate.db`; it can also be changed from Settings.
 
 Hermes discovery checks, in order, an explicit environment/JSON override,
-every directory in `PATH`, Hermes-managed homes and virtual environments,
-`~/.local/bin`, Termux's prefix, and standard system locations. Kana also
-adopts a compatible running `hermes serve` when its server-side session token
-can be recovered. If all automatic checks fail, `kana doctor` prints the
-resolved config path; set the absolute `hermes.executable` there and restart
-Kana.
+every directory in `PATH`, and the locations used by Hermes's installer, pipx,
+uv, Nix, Homebrew on Linux, and Termux. Kana also adopts a running
+`hermes serve` owned by the same user when its session token can be read. See
+[Hermes auto-detection on Linux](docs/SUPPORTED_ENVIRONMENT.md#hermes-auto-detection-on-linux).
+If all automatic checks fail, `kana doctor` shows what was found; set the
+absolute `hermes.executable` in `config.json` and restart Kana.
 
 The current prebuilt target is Linux x64 with glibc and Node.js 22.13 or newer.
 The package declares those limits so npm rejects unsupported systems instead
@@ -92,11 +97,12 @@ server manages the selected provider from its central `config.json`.
 Other commands:
 
 ```bash
+kana password     # create or change the access password (--stdin for scripts)
 kana setup        # configure or reconfigure optional Qwen3-TTS voice
 kana config       # open/print the editable advanced JSON path
-kana doctor       # check Hermes/uv availability and data locations
+kana doctor       # check Hermes, password, voice, and data locations
 kana --port 4000  # choose the local web port
-kana serve       # foreground server; no browser, deployment mode
+kana serve        # foreground server; no browser, deployment mode
 ```
 
 Kana's server may start, restart, and stop the official `hermes serve` gateway
@@ -120,26 +126,22 @@ git clone https://github.com/misaalya/kana-hermes.git
 cd kana-hermes
 npm ci
 npm run package:local
-
-HOSTNAME=127.0.0.1 PORT=3000 node .next/standalone/server.js
+npm run password          # once: create the access password
+node bin/kana.mjs         # starts the standalone build and opens the browser
 ```
 
 For a VPS or reverse-proxy deployment, create an explicit persistent data
 directory owned by the account that will run Kana. Put its `config.json`
-there, select `deployment` mode, and run the standalone server on loopback.
-The first login uses the same displayed default password as the npm package:
+there, set the access password once, and run the standalone server on
+loopback through its bundled launcher:
 
 ```bash
 git pull
 npm ci
-KANA_DATA_DIR=/var/lib/kana npm run config
 npm run package:local
 
-KANA_DATA_DIR=/var/lib/kana \
-KANA_DEPLOYMENT_MODE=deployment \
-HOSTNAME=127.0.0.1 \
-PORT=3000 \
-node .next/standalone/server.js
+KANA_DATA_DIR=/var/lib/kana node .next/standalone/bin/kana.mjs password
+KANA_DATA_DIR=/var/lib/kana node .next/standalone/bin/kana.mjs serve --port 3000
 ```
 
 Run that command through a service manager such as systemd and terminate
@@ -152,10 +154,11 @@ complete service and Nginx configuration.
 
 `npm run config` creates or opens the owner-only
 `$KANA_DATA_DIR/config.json`; Kana generates its persistent JWT secret under
-that data root on first use. The source build and `npm run dev` both use
-`chankana123` until a password is changed in Settings. Existing config,
-password hashes, and secrets are not overwritten. Older `auth.json` password
-stores are migrated into `appstate.db` automatically on first use.
+that data root on first use. `npm run dev` uses the same data root, so run
+`npm run password` once before signing in there. Existing config, password
+hashes, and secrets are not overwritten. Older `auth.json` and bcrypt password
+stores are migrated automatically; installations that only ever used the old
+built-in password must run `kana password` once after upgrading.
 
 ### Run locally for development only
 

@@ -8,6 +8,16 @@ import { ConversationSidebar } from "./conversation-sidebar";
 import { LiveChatFeed } from "./live-chat-feed";
 import { SettingsDialog } from "./settings-dialog";
 import { SlashCommandMenu } from "./slash-command-menu";
+import { ComposerDictation } from "./composer-dictation";
+import { ComposerModelChoice } from "./composer-model-choice";
+import {
+  AttachmentUploadError,
+  MAX_ATTACHMENT_BYTES,
+  MAX_ATTACHMENT_TOTAL_BYTES,
+  MAX_ATTACHMENTS,
+  readAttachment,
+  type AgentAttachment,
+} from "@/lib/agent/attachments";
 import { OnboardingWizard, type DependencyFindings } from "./onboarding-dialog";
 import { useKanaController } from "@/lib/state/use-kana-controller";
 import { useTheme } from "@/lib/state/use-theme";
@@ -18,6 +28,8 @@ import {
   markOnboardingComplete,
 } from "@/lib/runtime/setup-client";
 import { getCopy, type Copy } from "@/lib/ui/copy";
+
+const MIB = 1024 * 1024;
 import type { KanaPreferences } from "@/lib/preferences/types";
 import { IndexedDbStageBackgroundStore } from "@/lib/background/indexed-db-stage-background-store";
 import {
@@ -34,7 +46,8 @@ import {
   ChevronRightIcon,
   HistoryIcon,
   MoonIcon,
-  SendIcon,
+  ArrowUpIcon,
+  PlusIcon,
   SettingsIcon,
   SunIcon,
 } from "./icons";
@@ -60,6 +73,12 @@ export function KanaApp({ appVersion }: KanaAppProps) {
   const copy = getCopy(kana.preferences.uiLocale);
   const workspaceCopy = copy.workspace;
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [fileDrafts, setFileDrafts] = useState<Record<string, File[]>>({});
+  const [composerNotice, setComposerNotice] = useState("");
+  const [dictating, setDictating] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [avatarLayoutOpen, setAvatarLayoutOpen] = useState(false);
@@ -213,6 +232,14 @@ export function KanaApp({ appVersion }: KanaAppProps) {
 
   const activeConversationId = kana.activeConversation?.id;
   const message = activeConversationId ? drafts[activeConversationId] ?? "" : "";
+  const files = activeConversationId ? fileDrafts[activeConversationId] ?? [] : [];
+  const setFiles = (next: File[]) => {
+    if (activeConversationId) setFileDrafts((current) => ({ ...current, [activeConversationId]: next }));
+  };
+  const appendDictation = (text: string) => {
+    if (activeConversationId) setDrafts((current) => ({ ...current, [activeConversationId]: [current[activeConversationId]?.trimEnd(), text].filter(Boolean).join(" ") }));
+  };
+  useEffect(() => { queueMicrotask(() => setComposerNotice("")); }, [activeConversationId]);
   const setMessage = useCallback((value: string) => {
     setDrafts((current) => {
       if (!activeConversationId) return current;
@@ -257,9 +284,7 @@ export function KanaApp({ appVersion }: KanaAppProps) {
     setHermesRuntimeBusy(true);
     setHermesRuntimeNotice(null);
     try {
-      const status = await kana.startHermesControl({
-        port: hermesRuntime?.port ?? 9119,
-      });
+      const status = await kana.startHermesControl({ port: hermesRuntime?.port });
       setHermesRuntime(status);
       setHermesRuntimeNotice(status.message);
       await kana.connectAgent();
@@ -433,17 +458,51 @@ export function KanaApp({ appVersion }: KanaAppProps) {
   }, [deleteConversation]);
 
   const submitMessage = async () => {
-    const text = message.trim();
-    if (!text) return;
+    const text = message.trim() || (files.length ? copy.composer.reviewAttachments : "");
+    if (!text || submittingRef.current || dictating) return;
+    if (files.length && (kana.busy || commandName)) {
+      setComposerNotice(copy.composer.filesNeedRegularMessage);
+      return;
+    }
     // Prime Web Audio while Send/Enter still owns a browser user gesture.
     // The actual WAV arrives after Hermes + Qwen finish, too late to unlock
     // autoplay on stricter mobile browsers.
     if (kana.preferences.voiceEnabled) kana.unlockVoice();
     const confirmation = destructiveCommandPrompt(text, workspaceCopy);
     if (confirmation && !window.confirm(confirmation)) return;
-    setMessage("");
-    const prefill = await kana.sendMessage(text);
-    if (prefill) setMessage(prefill);
+    submittingRef.current = true;
+    setSubmitting(true);
+    setComposerNotice("");
+    try {
+      let attachments: AgentAttachment[];
+      try {
+        attachments = await Promise.all(files.map(readAttachment));
+      } catch (error) {
+        // Nothing reached the controller: keep the draft and the files.
+        setComposerNotice(error instanceof Error ? error.message : copy.status.sendFailed);
+        return;
+      }
+      try {
+        const prefill = await kana.sendMessage(text, attachments);
+        setMessage(prefill || "");
+        setFiles([]);
+      } catch (error) {
+        if (error instanceof AttachmentUploadError) {
+          // No prompt was submitted and the controller removed the user
+          // message, so the draft stays for a retry.
+          setComposerNotice(error.message);
+        } else {
+          // The user message is already in the conversation and the error
+          // banner reports the failure; clear the draft so a retry cannot
+          // duplicate the message.
+          setMessage("");
+          setFiles([]);
+        }
+      }
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
+    }
   };
 
   if (!kana.ready) {
@@ -582,7 +641,7 @@ export function KanaApp({ appVersion }: KanaAppProps) {
             <div role="alert" className="mb-2 flex items-start gap-2 rounded-lg border border-red-300/40 bg-red-500/10 px-3 py-2 text-xs">
               <p className="min-w-0 flex-1 break-words">{kana.error}</p>
               <button type="button" onClick={kana.clearError} className="kana-focus min-h-8 shrink-0 px-2"
-                aria-label={kana.preferences.uiLocale === "id" ? "Tutup pesan kesalahan" : "Dismiss error"}>
+                aria-label={copy.composer.dismissError}>
                 ×
               </button>
             </div>
@@ -596,15 +655,24 @@ export function KanaApp({ appVersion }: KanaAppProps) {
               onSelect={selectCommand}
               locale={kana.preferences.uiLocale}
             />
-            <div className="kana-composer flex items-end gap-2">
+            <div className="kana-composer flex flex-col">
+              {files.length ? <ul aria-label={copy.composer.attachments} className="flex max-h-24 flex-wrap gap-1.5 overflow-y-auto py-1">
+                {files.map((file, index) => <li key={`${file.name}-${index}`} className="flex max-w-full items-center gap-1 rounded-lg bg-white/12 pl-2 text-[11px]">
+                  <span className="truncate" title={file.name}>{file.name}</span>
+                  <span className="shrink-0 opacity-70">{Math.ceil(file.size / 1024)} KB</span>
+                  <button type="button" className="kana-focus size-8 shrink-0 rounded-lg hover:bg-white/12" disabled={submitting}
+                    aria-label={copy.composer.remove(file.name)} onClick={() => setFiles(files.filter((_, selected) => selected !== index))}>×</button>
+                </li>)}
+              </ul> : null}
               <textarea
                 id="kana-message"
                 ref={inputRef}
                 value={message}
                 rows={1}
+                readOnly={submitting}
                 placeholder={workspaceCopy.messagePlaceholder}
                 aria-label={workspaceCopy.messageAria}
-                className="max-h-28 min-h-11 flex-1 resize-none bg-transparent px-0 py-3 text-[13px] leading-snug focus:outline-none"
+                className="max-h-28 min-h-11 w-full resize-none bg-transparent px-1 py-3 text-[13px] leading-snug focus:outline-none"
                 onChange={(event) => setMessage(event.target.value)}
                 onKeyDown={(event) => {
                   if (kana.commandSuggestions.length > 0) {
@@ -637,27 +705,50 @@ export function KanaApp({ appVersion }: KanaAppProps) {
                   }
                 }}
               />
+              {composerNotice ? <p role="status" className="mb-1 px-1 text-[11px] leading-relaxed">{composerNotice}</p> : null}
+              <div className="flex items-center gap-1">
+              <input ref={fileInputRef} type="file" multiple className="hidden" aria-label={copy.composer.chooseFiles}
+                onChange={(event) => {
+                  const selected = [...files, ...Array.from(event.target.files ?? [])];
+                  event.target.value = "";
+                  if (selected.length > MAX_ATTACHMENTS || selected.some((file) => !file.size || file.size > MAX_ATTACHMENT_BYTES) || selected.reduce((sum, file) => sum + file.size, 0) > MAX_ATTACHMENT_TOTAL_BYTES) {
+                    setComposerNotice(copy.composer.attachmentLimits(MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES / MIB, MAX_ATTACHMENT_TOTAL_BYTES / MIB));
+                    return;
+                  }
+                  setFiles(selected);
+                  setComposerNotice("");
+                  inputRef.current?.focus();
+                }} />
+              <button type="button" aria-label={copy.composer.attachFiles}
+                title={copy.composer.attachFiles}
+                disabled={submitting || !activeConversationId} className="kana-focus inline-flex size-10 shrink-0 items-center justify-center rounded-lg hover:bg-white/12 disabled:opacity-40"
+                onClick={() => fileInputRef.current?.click()}><PlusIcon className="size-5" /></button>
+              <ComposerDictation key={activeConversationId} locale={kana.preferences.uiLocale} language={kana.preferences.subtitleLanguage}
+                disabled={submitting || kana.busy || voiceActive || !activeConversationId} onText={appendDictation} onActive={setDictating} onNotice={setComposerNotice} />
+              <ComposerModelChoice key={`model-${activeConversationId}`} locale={kana.preferences.uiLocale} sessionKey={activeConversationId}
+                connected={kana.connectionState === "connected"} disabled={kana.busy || submitting}
+                onList={kana.listAgentModels} onSelect={kana.selectAgentModel} />
               {kana.busy || voiceActive ? (
                 <button
                   type="button"
                   aria-label={workspaceCopy.stop}
-                  className="kana-focus mb-1 inline-flex min-h-9 shrink-0 items-center rounded-lg px-3 text-[11px] transition-colors hover:bg-white/12"
+                  className="kana-focus inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-white/20 hover:bg-white/30"
                   onClick={() => void kana.abort()}
                 >
-                  {workspaceCopy.stop}
+                  <span aria-hidden="true" className="size-3 rounded-xs bg-current" />
                 </button>
               ) : (
                 <button
                   type="button"
                   aria-label={workspaceCopy.send}
-                  disabled={!message.trim() || (kana.busy && !canSubmitWhileBusy)}
-                  className="kana-focus mb-1 inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[11px] transition-colors hover:bg-white/12 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                  disabled={(!message.trim() && !files.length) || submitting || dictating || (kana.busy && !canSubmitWhileBusy)}
+                  className="kana-focus inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#28658c] transition-colors hover:bg-[#1e5072] disabled:cursor-not-allowed disabled:opacity-40"
                   onClick={() => void submitMessage()}
                 >
-                  <span>{workspaceCopy.send}</span>
-                  <SendIcon className="size-3.5" />
+                  <ArrowUpIcon className="size-5" />
                 </button>
               )}
+              </div>
             </div>
           </div>
         </div>

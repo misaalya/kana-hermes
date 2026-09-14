@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { chromium, devices, expect, test } from "@playwright/test";
+import { E2E_ACCESS_PASSWORD } from "./access-password";
 
 const baseURL = "http://127.0.0.1:3101";
 
@@ -31,7 +32,7 @@ test("is installable on mobile and restores the local shell while offline", asyn
   try {
     const page = context.pages()[0] ?? (await context.newPage());
     const login = await context.request.post(`${baseURL}/api/auth/login`, {
-      data: { password: "chankana123" },
+      data: { password: E2E_ACCESS_PASSWORD },
     });
     expect(login.ok()).toBe(true);
     await page.goto("/");

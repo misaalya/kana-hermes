@@ -189,7 +189,9 @@ environment-variable override and takes precedence over the JSON value.
   Qwen process controls in this mode. Local mode also requires authentication.
 
 `KANA_DEPLOYMENT_MODE=local|deployment` remains an operator-level deployment
-override. `KANA_DATA_DIR` selects the single data root, and
+override. `KANA_TRUSTED_ORIGINS` (comma-separated origins) is only needed when
+a reverse proxy rewrites `Host` without forwarding `X-Forwarded-Host`.
+`KANA_DEV_ALLOWED_ORIGINS` lists extra hosts allowed to reach `next dev`. `KANA_DATA_DIR` selects the single data root, and
 `KANA_HERMES_BIN` can override Hermes discovery. TTS provider and Qwen runtime
 settings intentionally have no environment-variable override; edit this JSON
 instead. Provider selection is resolved per request, but restart Kana after

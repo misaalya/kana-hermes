@@ -1,10 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type {
-  KanaPreferences,
-  StageBackground,
-} from "@/lib/preferences/types";
+import type { KanaPreferences } from "@/lib/preferences/types";
 import type { AvatarModelSummary } from "@/lib/avatar/indexed-db-avatar-model-store";
 import type { Live2DModelBindings } from "@/lib/avatar/live2d-avatar-provider";
 import {
@@ -26,14 +23,8 @@ import {
   LIVE2D_SAMPLE_COPYRIGHT_NOTICE,
   OFFICIAL_LIVE2D_SAMPLES,
 } from "@/lib/avatar/defaults";
-import {
-  changeAccessPassword,
-  fetchAuthStatus,
-  logoutAccessSession,
-  type AuthStatus,
-} from "@/lib/runtime/auth-client";
 import { useDialogFocus } from "@/lib/accessibility/use-dialog-focus";
-import { getCopy, type Copy, type UiLocale } from "@/lib/ui/copy";
+import { getCopy } from "@/lib/ui/copy";
 import { HermesControlPanel } from "./hermes-control-panel";
 import { TtsControlPanel } from "./tts-control-panel";
 import { VoicePanel } from "./voice-panel";
@@ -44,6 +35,12 @@ import {
   controlTtsRuntime,
 } from "@/lib/runtime/tts-control-client";
 import { SubtitleLanguagePicker } from "./subtitle-language-picker";
+import { AdvancedConfigCard, SecuritySection } from "./settings-access-section";
+import {
+  STAGE_BACKGROUND_OPTIONS,
+  StageBackgroundChoice,
+  StoredStageBackgroundChoice,
+} from "./settings-stage-background";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -53,8 +50,6 @@ import {
   btnDangerGhost,
   btnGhost,
   btnSecondary,
-  fieldLabel,
-  inputBase,
   sectionEyebrow,
   Toggle,
 } from "./ui";
@@ -73,7 +68,7 @@ type SettingsDialogProps = {
   onLoadStageBackground(id: string): Promise<StageBackgroundAsset | null>;
   onDeleteStageBackground(id: string): Promise<void>;
   onInspectHermesControl(preferredPort?: number): Promise<HermesRuntimeStatus>;
-  onStartHermesControl(options: { port: number; cwd?: string; restart?: boolean }): Promise<HermesRuntimeStatus>;
+  onStartHermesControl(options: { port?: number; restart?: boolean }): Promise<HermesRuntimeStatus>;
   onStopHermesControl(): Promise<HermesRuntimeStatus>;
   onListAgentModels(refresh?: boolean): Promise<AgentModelCatalog>;
   onSelectAgentModel(provider: string, model: string, confirm?: boolean): Promise<AgentModelSwitchResult>;
@@ -86,130 +81,11 @@ type SettingsSection = "experience" | "voice" | "avatar" | "model" | "system" | 
 
 const NAV_IDS: SettingsSection[] = ["experience", "voice", "avatar", "model", "system", "privacy"];
 
-const STAGE_BACKGROUND_OPTIONS: Array<{
-  value: StageBackground;
-  previewClass: string;
-}> = [
-  { value: "plain", previewClass: "kana-background-preview-plain" },
-  { value: "room", previewClass: "kana-background-preview-room" },
-  { value: "pattern-sparkles", previewClass: "kana-background-preview-pattern-sparkles" },
-  { value: "pattern-twinkle", previewClass: "kana-background-preview-pattern-twinkle" },
-  { value: "pattern-gingham", previewClass: "kana-background-preview-pattern-gingham" },
-  { value: "pattern-stars", previewClass: "kana-background-preview-pattern-stars" },
-  { value: "pattern-swirls", previewClass: "kana-background-preview-pattern-swirls" },
-];
-
 type SettingsNavItem = {
   id: SettingsSection;
   label: string;
   hint: string;
 };
-
-function StageBackgroundChoice({
-  active,
-  hint,
-  label,
-  onRemove,
-  onSelect,
-  previewClass,
-  previewUrl,
-  copy,
-}: {
-  active: boolean;
-  hint: string;
-  label: string;
-  onRemove?: () => void;
-  onSelect(): void;
-  previewClass?: string;
-  previewUrl?: string;
-  copy: Copy["settings"];
-}) {
-  return (
-    <div className={`relative min-w-0 shrink-0 basis-full snap-start overflow-hidden rounded-2xl border-2 transition-colors sm:basis-[calc((100%_-_1.5rem)/3)] ${
-      active ? "border-accent bg-surface-strong" : "border-line bg-raised hover:border-line-strong"
-    }`}>
-      <button
-        type="button"
-        role="radio"
-        aria-checked={active}
-        aria-label={`${label}. ${hint}`}
-        className="kana-focus block w-full text-left"
-        onClick={onSelect}
-      >
-        <span
-          className={`block aspect-[16/9] border-b-2 border-line ${previewClass ?? "bg-bg"}`}
-          style={previewUrl ? {
-            backgroundImage: `url("${previewUrl}")`,
-            backgroundPosition: "center",
-            backgroundSize: "cover",
-          } : undefined}
-        />
-        <span className="flex items-center justify-between gap-2 px-3 py-3">
-          <span className="min-w-0">
-            <span className="block truncate text-xs font-bold text-ink">{label}</span>
-            <span className="mt-0.5 block truncate text-[9px] text-muted">{hint}</span>
-          </span>
-          <span className={`shrink-0 text-[10px] font-bold ${active ? "text-accent" : "text-faint"}`}>
-            {active ? copy.selected : copy.choose}
-          </span>
-        </span>
-      </button>
-      {onRemove ? (
-        <button
-          type="button"
-          className="kana-focus absolute top-2 right-2 flex size-8 items-center justify-center rounded-xl border-2 border-line-strong bg-raised/95 text-muted transition-colors hover:border-danger hover:text-danger"
-          aria-label={copy.removeLabel(label)}
-          onClick={onRemove}
-        >
-          <CloseIcon className="size-3.5" />
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
-function StoredStageBackgroundChoice({
-  active,
-  background,
-  onLoad,
-  onRemove,
-  onSelect,
-  copy,
-}: {
-  active: boolean;
-  background: StageBackgroundSummary;
-  onLoad(id: string): Promise<StageBackgroundAsset | null>;
-  onRemove(): void;
-  onSelect(): void;
-  copy: Copy["settings"];
-}) {
-  const [previewUrl, setPreviewUrl] = useState<string>();
-  useEffect(() => {
-    let activeLoad = true;
-    let objectUrl: string | undefined;
-    void onLoad(background.id).then((asset) => {
-      if (!activeLoad || !asset) return;
-      objectUrl = URL.createObjectURL(asset.content);
-      setPreviewUrl(objectUrl);
-    }).catch(() => undefined);
-    return () => {
-      activeLoad = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [background.id, onLoad]);
-
-  return (
-    <StageBackgroundChoice
-      active={active}
-      label={background.name}
-      hint={copy.localBackground}
-      previewUrl={previewUrl}
-      onSelect={onSelect}
-      onRemove={onRemove}
-      copy={copy}
-    />
-  );
-}
 
 function SettingCard({
   title,
@@ -230,163 +106,6 @@ function SettingCard({
       </div>
       {children}
     </section>
-  );
-}
-
-function SecuritySection({ locale }: { locale: UiLocale }) {
-  const copy = getCopy(locale).settings;
-  const [status, setStatus] = useState<AuthStatus | null>(null);
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    fetchAuthStatus()
-      .then((next) => { if (active) setStatus(next); })
-      .catch(() => {
-        if (active) {
-          setStatus({
-            authEnabled: true,
-            authenticated: false,
-            usingDefaultPassword: false,
-            defaultPassword: null,
-          });
-        }
-      });
-    return () => { active = false; };
-  }, []);
-
-  if (!status) return <p className="text-[11px] text-muted">{copy.checkingAccess}</p>;
-
-  const submit = async () => {
-    setError(null);
-    setSuccess(null);
-    if (newPassword.length < 8) {
-      setError(copy.passwordTooShort);
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setError(copy.passwordMismatch);
-      return;
-    }
-    setBusy(true);
-    try {
-      await changeAccessPassword(currentPassword, newPassword);
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-      setStatus({ ...status, usingDefaultPassword: false, defaultPassword: null });
-      setSuccess(copy.passwordUpdated);
-    } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : copy.passwordFailed);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="grid gap-3">
-      {status.usingDefaultPassword && status.defaultPassword ? (
-        <div className="rounded-xl border border-line bg-surface-strong p-3">
-          <p className="text-xs font-bold text-ink">{copy.defaultPasswordTitle}</p>
-          <p className="mt-1 text-[11px] leading-relaxed text-muted">
-            {copy.defaultPasswordBody}
-          </p>
-          <code className="mt-2 block text-sm font-bold text-ink">
-            {status.defaultPassword}
-          </code>
-        </div>
-      ) : null}
-      <label className="grid gap-1.5">
-        <span className={fieldLabel}>{copy.currentPassword}</span>
-        <input type="password" autoComplete="current-password" className={inputBase}
-          value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} />
-      </label>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="grid gap-1.5">
-          <span className={fieldLabel}>{copy.newPassword}</span>
-          <input type="password" autoComplete="new-password" className={inputBase}
-            value={newPassword} onChange={(event) => setNewPassword(event.target.value)} />
-        </label>
-        <label className="grid gap-1.5">
-          <span className={fieldLabel}>{copy.confirmPassword}</span>
-          <input type="password" autoComplete="new-password" className={inputBase}
-            value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} />
-        </label>
-      </div>
-      {error ? <p className="text-[11px] font-semibold text-danger" role="alert">{error}</p> : null}
-      {success ? <p className="text-[11px] font-semibold text-accent-strong" role="status">{success}</p> : null}
-      <div className="flex flex-wrap items-center gap-2">
-        <button type="button" className={btnSecondary} disabled={busy || !currentPassword || !newPassword || !confirmPassword} onClick={() => void submit()}>
-          {busy ? copy.updating : copy.updatePassword}
-        </button>
-        <button type="button" className={btnDangerGhost} onClick={() => void logoutAccessSession()}>
-          {copy.logout}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function AdvancedConfigCard({ locale }: { locale: UiLocale }) {
-  const copy = getCopy(locale).settings;
-  const [configPath, setConfigPath] = useState("$KANA_DATA_DIR/config.json");
-  const [deploymentMode, setDeploymentMode] = useState<"local" | "deployment">("local");
-  const [deploymentModeSource, setDeploymentModeSource] = useState<
-    "environment" | "config" | "default"
-  >("default");
-  useEffect(() => {
-    let active = true;
-    void fetch("/api/kana/config", { credentials: "same-origin", cache: "no-store" })
-      .then((response) => response.ok ? response.json() : null)
-      .then((value: {
-        path?: string;
-        deploymentMode?: "local" | "deployment";
-        deploymentModeSource?: "environment" | "config" | "default";
-      } | null) => {
-        if (active && value?.path) setConfigPath(value.path);
-        if (active && value?.deploymentMode) setDeploymentMode(value.deploymentMode);
-        if (active && value?.deploymentModeSource) {
-          setDeploymentModeSource(value.deploymentModeSource);
-        }
-      })
-      .catch(() => undefined);
-    return () => { active = false; };
-  }, []);
-
-  return (
-    <details className="rounded-2xl border border-line bg-surface">
-      <summary className="kana-details-summary kana-focus cursor-pointer px-4 py-4 text-xs font-bold text-ink">
-        {copy.advancedTitle}
-        <span className="ml-2 font-normal text-muted">{copy.advancedSuffix}</span>
-      </summary>
-      <div className="border-t border-line px-4 py-4">
-        <p className="text-[11px] leading-relaxed text-muted">
-          {copy.advancedBody}
-        </p>
-        <code className="mt-3 block overflow-x-auto rounded-xl border border-line bg-surface-strong px-3 py-2.5 text-[11px] text-accent-strong">
-          {configPath}
-        </code>
-        <p className="mt-3 text-[10px] font-bold text-ink">{copy.advancedMode}</p>
-        <p className="mt-1 text-[10px] leading-relaxed text-muted">
-          {deploymentMode === "deployment"
-            ? copy.advancedModeDeployment
-            : copy.advancedModeLocal}
-        </p>
-        <p className="mt-1 text-[10px] leading-relaxed text-faint">
-          {deploymentModeSource === "environment"
-            ? copy.advancedModeSourceEnvironment
-            : deploymentModeSource === "config"
-              ? copy.advancedModeSourceConfig
-              : copy.advancedModeSourceDefault}
-        </p>
-        <p className="mt-2 text-[10px] text-faint">{copy.advancedRestart}</p>
-      </div>
-    </details>
   );
 }
 
@@ -416,6 +135,7 @@ export function SettingsDialog({
   const [draft, setDraft] = useState(() => structuredClone(preferences));
   const copy = getCopy(draft.uiLocale);
   const settingsCopy = copy.settings;
+  const notices = copy.settingsNotices;
   const navItems: SettingsNavItem[] = NAV_IDS.map((id) => ({
     id,
     ...settingsCopy.sections[id],
@@ -488,9 +208,9 @@ export function SettingsDialog({
     let active = true;
     void onListAvatarModels()
       .then((models) => { if (active) setAvatarModels(models); })
-      .catch((error) => { if (active) setAvatarNotice(error instanceof Error ? error.message : draft.uiLocale === "id" ? "Avatar tidak dapat dimuat." : "Could not load avatars."); });
+      .catch((error) => { if (active) setAvatarNotice(error instanceof Error ? error.message : notices.avatarsLoadFailed); });
     return () => { active = false; };
-  }, [draft.uiLocale, onListAvatarModels, section]);
+  }, [notices.avatarsLoadFailed, onListAvatarModels, section]);
 
   useEffect(() => {
     if (section !== "avatar" || !draft.live2d.modelId) return;
@@ -536,12 +256,12 @@ export function SettingsDialog({
           setBackgroundNotice(
             error instanceof Error
               ? error.message
-              : draft.uiLocale === "id" ? "Latar lokal tidak dapat dimuat." : "Could not load local backgrounds.",
+              : notices.backgroundsLoadFailed,
           );
         }
       });
     return () => { active = false; };
-  }, [draft.uiLocale, onListStageBackgrounds, section]);
+  }, [notices.backgroundsLoadFailed, onListStageBackgrounds, section]);
 
   const selectOfficialAvatar = async (index: number) => {
     const sample = OFFICIAL_LIVE2D_SAMPLES[index];
@@ -556,7 +276,7 @@ export function SettingsDialog({
       },
     };
     setDraft(next);
-    setAvatarNotice(draft.uiLocale === "id" ? `${sample.name} dipilih.` : `${sample.name} selected.`);
+    setAvatarNotice(notices.avatarSelected(sample.name));
   };
 
   const scrollBackgroundCarousel = (direction: -1 | 1) => {
@@ -583,10 +303,10 @@ export function SettingsDialog({
         stageBackground: "custom",
         customBackgroundId: imported.id,
       }));
-      setBackgroundNotice(draft.uiLocale === "id" ? `${imported.name} sekarang menjadi latar panggungmu.` : `${imported.name} is now your stage background.`);
+      setBackgroundNotice(notices.backgroundApplied(imported.name));
     } catch (error) {
       setBackgroundNotice(
-        error instanceof Error ? error.message : draft.uiLocale === "id" ? "Gambar ini tidak dapat diimpor." : "Could not import this image.",
+        error instanceof Error ? error.message : notices.backgroundImportFailed,
       );
     } finally {
       setBackgroundBusy(false);
@@ -608,10 +328,10 @@ export function SettingsDialog({
           customBackgroundId: undefined,
         }));
       }
-      setBackgroundNotice(draft.uiLocale === "id" ? `${background.name} dihapus dari perangkat ini.` : `${background.name} was removed from this device.`);
+      setBackgroundNotice(notices.backgroundRemoved(background.name));
     } catch (error) {
       setBackgroundNotice(
-        error instanceof Error ? error.message : draft.uiLocale === "id" ? "Latar ini tidak dapat dihapus." : "Could not remove this background.",
+        error instanceof Error ? error.message : notices.backgroundRemoveFailed,
       );
     } finally {
       setBackgroundBusy(false);
@@ -644,9 +364,9 @@ export function SettingsDialog({
         error: false,
       });
       setAvatarModels(await onListAvatarModels());
-      setAvatarNotice(draft.uiLocale === "id" ? `${imported.name} siap digunakan.` : `${imported.name} is ready to use.`);
+      setAvatarNotice(notices.avatarReady(imported.name));
     } catch (error) {
-      setAvatarNotice(error instanceof Error ? error.message : draft.uiLocale === "id" ? "Avatar ini tidak dapat diimpor." : "Could not import this avatar.");
+      setAvatarNotice(error instanceof Error ? error.message : notices.avatarImportFailed);
     } finally {
       setAvatarBusy(false);
       if (avatarInputRef.current) avatarInputRef.current.value = "";
@@ -665,9 +385,9 @@ export function SettingsDialog({
           modelName: model.name,
         },
       }));
-      setAvatarNotice(draft.uiLocale === "id" ? `${model.name} dipilih.` : `${model.name} selected.`);
+      setAvatarNotice(notices.avatarSelected(model.name));
     } catch (error) {
-      setAvatarNotice(error instanceof Error ? error.message : draft.uiLocale === "id" ? "Avatar ini tidak dapat digunakan." : "Could not use this avatar.");
+      setAvatarNotice(error instanceof Error ? error.message : notices.avatarUseFailed);
     } finally {
       setAvatarBusy(false);
     }
@@ -692,7 +412,7 @@ export function SettingsDialog({
       await onDeleteAvatarModel(model.id);
       setAvatarModels((current) => current.filter((item) => item.id !== model.id));
     } catch (error) {
-      setAvatarNotice(error instanceof Error ? error.message : draft.uiLocale === "id" ? "Avatar ini tidak dapat dihapus." : "Could not remove this avatar.");
+      setAvatarNotice(error instanceof Error ? error.message : notices.avatarRemoveFailed);
     }
   };
 

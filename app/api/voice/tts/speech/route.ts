@@ -1,3 +1,4 @@
+import { NO_STORE, withSession } from "@/lib/server/api-response";
 import { trackTtsRequest } from "@/lib/server/tts-provider/active-requests";
 import { readJsonObject, RequestBodyError } from "@/lib/server/request-body";
 import {
@@ -9,11 +10,15 @@ import {
   MAX_TTS_TEXT_CHARACTERS,
 } from "@/lib/server/tts-provider/types";
 import { EMOTIONS, type Emotion } from "@/lib/presentation/types";
-import { requireSession } from "@/lib/server/tts-relay";
 import { readKanaUserConfig } from "@/lib/server/user-config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const MAX_BODY_BYTES = 256 * 1024;
+const DEFAULT_TIMEOUT_SECONDS = 900;
+const MAX_LANGUAGE_LENGTH = 32;
+const MAX_VOICE_ID_LENGTH = 500;
 
 function parseEmotion(value: unknown): Emotion | undefined {
   return typeof value === "string" && (EMOTIONS as readonly string[]).includes(value)
@@ -21,9 +26,6 @@ function parseEmotion(value: unknown): Emotion | undefined {
     : undefined;
 }
 
-// Stable browser boundary: JSON in, raw audio bytes out. The selected
-// server-side provider owns synthesis and credentials; playback never needs
-// to know whether the bytes came from local Qwen or a remote compatible API.
 function safeRequestId(value: string | null): string | undefined {
   if (!value || value.length > 128 || !/^[A-Za-z0-9._:-]+$/.test(value)) {
     return undefined;
@@ -31,20 +33,59 @@ function safeRequestId(value: string | null): string | undefined {
   return value;
 }
 
-export async function POST(request: Request): Promise<Response> {
-  const unauthorized = await requireSession(request);
-  if (unauthorized) return unauthorized;
+/**
+ * Keep the request cancellable until the last audio byte is delivered: the
+ * tracker is released when the stream finishes or the browser cancels it,
+ * not when the response headers are sent.
+ */
+function releaseWhenDelivered(
+  body: ReadableStream<Uint8Array> | ArrayBuffer,
+  finish: () => void,
+): ReadableStream<Uint8Array> | ArrayBuffer {
+  if (body instanceof ArrayBuffer) {
+    finish();
+    return body;
+  }
+  const reader = body.getReader();
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+        if (done) {
+          finish();
+          controller.close();
+        } else {
+          controller.enqueue(value);
+        }
+      } catch (error) {
+        finish();
+        controller.error(error);
+      }
+    },
+    async cancel(reason) {
+      finish();
+      await reader.cancel(reason).catch(() => undefined);
+    },
+  });
+}
+
+function errorResponse(status: number, error: string): Response {
+  return Response.json({ error }, { status, headers: NO_STORE });
+}
+
+// Stable browser boundary: JSON in, raw audio bytes out. The selected
+// server-side provider owns synthesis and credentials; playback never needs
+// to know whether the bytes came from local Qwen or a remote compatible API.
+export const POST = withSession(async (request) => {
   let tracked: ReturnType<typeof trackTtsRequest> | undefined;
+  let delivering = false;
   try {
-    const value = await readJsonObject(request, 256 * 1024);
+    const value = await readJsonObject(request, MAX_BODY_BYTES);
     if (typeof value.text !== "string" || !value.text.trim()) {
-      return Response.json({ error: "Speech text is required." }, { status: 400 });
+      return errorResponse(400, "Speech text is required.");
     }
     if (value.text.length > MAX_TTS_TEXT_CHARACTERS) {
-      return Response.json(
-        { error: `Speech text must be ${MAX_TTS_TEXT_CHARACTERS} characters or fewer.` },
-        { status: 413, headers: { "Cache-Control": "no-store" } },
-      );
+      return errorResponse(413, `Speech text must be ${MAX_TTS_TEXT_CHARACTERS} characters or fewer.`);
     }
     const config = readKanaUserConfig().tts;
     const provider = getConfiguredTtsProvider(config);
@@ -53,11 +94,11 @@ export async function POST(request: Request): Promise<Response> {
     const generated = await provider.synthesize({
       text: value.text,
       language:
-        typeof value.language === "string" && value.language.length <= 32
+        typeof value.language === "string" && value.language.length <= MAX_LANGUAGE_LENGTH
           ? value.language
           : "ja",
       voiceId:
-        typeof value.voice_id === "string" && value.voice_id.length <= 500
+        typeof value.voice_id === "string" && value.voice_id.length <= MAX_VOICE_ID_LENGTH
           ? value.voice_id
           : undefined,
       emotion: parseEmotion(value.emotion),
@@ -65,45 +106,32 @@ export async function POST(request: Request): Promise<Response> {
     }, AbortSignal.any([
       request.signal,
       tracked.signal,
-      AbortSignal.timeout((config?.timeoutSeconds ?? 900) * 1000),
+      AbortSignal.timeout((config?.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS) * 1000),
     ]));
     const audio = await boundedAudioResult(generated);
-    return new Response(audio.body, {
+    delivering = true;
+    return new Response(releaseWhenDelivered(audio.body, tracked.finish), {
       headers: {
         "Content-Type": audio.contentType,
         ...(audio.contentLength ? { "Content-Length": audio.contentLength } : {}),
-        "Cache-Control": "no-store",
+        ...NO_STORE,
       },
     });
   } catch (error) {
     if (error instanceof TtsProviderError || error instanceof RequestBodyError) {
-      return Response.json(
-        { error: error.message },
-        { status: error.status, headers: { "Cache-Control": "no-store" } },
-      );
+      return errorResponse(error.status, error.message);
     }
     if (error instanceof DOMException && error.name === "AbortError") {
-      return Response.json(
-        { error: "TTS synthesis was cancelled." },
-        { status: 499, headers: { "Cache-Control": "no-store" } },
-      );
+      return errorResponse(499, "TTS synthesis was cancelled.");
     }
     if (error instanceof DOMException && error.name === "TimeoutError") {
-      return Response.json(
-        { error: "TTS synthesis timed out." },
-        { status: 504, headers: { "Cache-Control": "no-store" } },
-      );
+      return errorResponse(504, "TTS synthesis timed out.");
     }
-    return Response.json(
-      {
-        error:
-          error instanceof Error
-            ? `TTS synthesis failed: ${error.message}`
-            : "TTS synthesis failed.",
-      },
-      { status: 502, headers: { "Cache-Control": "no-store" } },
+    return errorResponse(
+      502,
+      error instanceof Error ? `TTS synthesis failed: ${error.message}` : "TTS synthesis failed.",
     );
   } finally {
-    tracked?.finish();
+    if (!delivering) tracked?.finish();
   }
-}
+});

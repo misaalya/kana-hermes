@@ -172,6 +172,7 @@ export type AgentSessionOptions = {
 export type AgentMessageInput = {
   text: string;
   subtitleLanguage: SubtitleLanguage;
+  attachments?: import("./attachments").AgentAttachment[];
 };
 
 export type AgentCommandSuggestion = {

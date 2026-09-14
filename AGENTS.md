@@ -136,17 +136,23 @@ RPC  POST /api/hermes/rpc    ->  allow-listed JSON-RPC forward
   under one data root resolved by `lib/server/data-dir.ts`
   (`KANA_DATA_DIR` → XDG → HOME; production fails loudly without it). Legacy
   files from `$HOME/.kana` / `$CWD/data` are adopted on first use.
-- Login is password-based with a deny-by-default proxy. Fresh npm and source
-  installations use the documented `chankana123` password shown on the login
-  screen; a user-owned bcrypt hash in the `auth.password` row of
-  `appstate.db` takes precedence after an optional password change. Legacy
-  `auth.json` hashes migrate into SQLite on first access. Every process-control
-  route requires a session.
+- Login is password-based with a deny-by-default proxy. There is NO default
+  password: logins are refused until the owner sets one on the server with
+  `kana password` (the first `kana`/`kana serve` start prompts for it). Never
+  add a web flow that sets the first password. The scrypt hash lives in the
+  `auth.password` row of `appstate.db` (format shared with the launcher via
+  `shared/app-state-db.mjs`); legacy bcrypt/`auth.json` hashes still verify and
+  are upgraded. Every process-control route requires a session.
+- The proxy rejects cross-site state-changing requests (Origin vs Host, see
+  `lib/server/request-origin.ts`). Login lockout is per signed device cookie
+  plus one shared bucket for unknown clients — never per IP.
+- Route handlers use `withSession`/`jsonError` from `lib/server/api-response.ts`
+  and bounded body readers; request-size limits live only in `lib/limits.ts`.
 - Password changes atomically rotate the session version stored with the hash.
   Prior tokens are rejected, including a login that was still checking the old
   password. Existing SSE streams revalidate authorization every 25 seconds.
-  Login admits one password check at a time; new passwords cannot exceed
-  bcrypt's 72-byte UTF-8 limit.
+  Login admits one password check per limiter bucket at a time; passwords are
+  8–256 characters without leading/trailing whitespace.
 - The Qwen3-TTS Python service is spawned/probed by the Node runtime and
   reached by the browser only through `/api/voice/tts/*` relay routes,
   including request cancellation.

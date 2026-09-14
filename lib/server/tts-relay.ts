@@ -1,21 +1,14 @@
+import { NO_STORE } from "@/lib/server/api-response";
 import {
   ensureQwen3TTSService,
   inspectLocalQwen3TtsRuntime,
 } from "@/lib/server/local-qwen3-tts-runtime";
+import type { ServerTtsProvider } from "@/lib/server/tts-provider/types";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
-// Shared plumbing for the /api/voice/tts/* relay routes: session auth (same
-// posture as the Hermes RPC relay) and a forward helper that targets the
-// discovered/adopted loopback TTS service. The browser never learns the TTS
-// base URL; this server process is the only client of the Python service.
-
-export async function requireSession(request: Request): Promise<Response | null> {
-  const { isSessionValid } = await import("@/lib/server/auth/session");
-  if (await isSessionValid(request)) return null;
-  return Response.json({ error: "Unauthorized" }, { status: 401 });
-}
+// Shared plumbing for the /api/voice/tts/* relay routes: target resolution for
+// the discovered/adopted loopback TTS service and response relaying. The
+// browser never learns the TTS base URL; this server process is the only
+// client of the Python service. Session checks use withSession.
 
 export function ttsServiceUrl(port: number, pathname: string): string {
   return `http://127.0.0.1:${port}${pathname}`;
@@ -34,7 +27,7 @@ export async function ensureOr503(): Promise<
         detail: result.status.message,
         state: result.status.state,
       },
-      { status: 503 },
+      { status: 503, headers: NO_STORE },
     ),
   };
 }
@@ -57,7 +50,56 @@ export async function probeOnlyPortOr503(): Promise<
         detail: status.message,
         state: status.state,
       },
-      { status: 503 },
+      { status: 503, headers: NO_STORE },
     ),
   };
+}
+
+/** Relay an upstream service response (status, body, content type) to the browser. */
+export async function relayUpstream(
+  url: string,
+  init: RequestInit & { timeoutMs: number; failure: string },
+): Promise<Response> {
+  const { timeoutMs, failure, ...requestInit } = init;
+  try {
+    const upstream = await fetch(url, {
+      cache: "no-store",
+      ...requestInit,
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    return new Response(await upstream.text(), {
+      status: upstream.status,
+      headers: {
+        "Content-Type": upstream.headers.get("Content-Type") ?? "application/json",
+        ...NO_STORE,
+      },
+    });
+  } catch (error) {
+    return Response.json(
+      { error: error instanceof Error ? `${failure}: ${error.message}` : `${failure}.` },
+      { status: 502, headers: NO_STORE },
+    );
+  }
+}
+
+/** Runtime-status shape for providers Kana does not run itself. */
+export async function uncontrolledProviderStatus(provider: ServerTtsProvider): Promise<Response> {
+  const status = await provider.inspect();
+  return Response.json(
+    {
+      state: status.state === "ready" ? "external" : "failed",
+      managed: false,
+      port: 0,
+      model: status.model,
+      device: status.device,
+      message: status.message ?? `${provider.descriptor.name} is configured.`,
+      provider: provider.descriptor,
+      controllable: false,
+    },
+    { headers: NO_STORE },
+  );
+}
+
+export function providerConflict(message: string): Response {
+  return Response.json({ error: message }, { status: 409, headers: NO_STORE });
 }

@@ -1,26 +1,69 @@
 // In-memory progressive lockout for the Kana access-password login.
-// Adapted from 9Router's login limiter; resets on process restart.
 //
-// Kana has no reverse-proxy IP stamping, so every caller shares a single
-// bucket — a spoofed X-Forwarded-For rotation cannot escape the lockout.
+// Buckets are NOT keyed by IP address: home connections behind CGNAT share one
+// public address with strangers, and forwarded-for headers are spoofable.
+// Instead the limiter follows OWASP's "device cookie" pattern:
+//
+// - A browser that has signed in successfully before carries a signed
+//   login-device cookie. Its attempts count only against its own bucket, so
+//   nobody else's failures can lock it out.
+// - Every other attempt (no or invalid device cookie) shares one "unknown
+//   clients" bucket. Guessing is still throttled globally, but a flood of
+//   wrong passwords only blocks unknown browsers — never the owner's devices.
+//
+// Each bucket also admits one password check at a time, so a concurrent burst
+// cannot run many hash comparisons before the first failure is recorded.
+// State resets when the server restarts.
 
-const MAX_FAILS_BEFORE_LOCK = 5;
-const LOCK_STEPS_MS = [30_000, 120_000, 600_000, 1_800_000]; // 30s, 2m, 10m, 30m
-const FAIL_WINDOW_MS = 60 * 60 * 1000; // 1h since last fail → auto reset
+export type LoginBucket = { kind: "device"; deviceId: string } | { kind: "unknown" };
+
+type LimiterPolicy = {
+  maxFailsBeforeLock: number;
+  lockStepsMs: readonly number[];
+  failWindowMs: number;
+};
+
+const POLICIES: Record<LoginBucket["kind"], LimiterPolicy> = {
+  // Unknown clients: strict, progressive, shared.
+  unknown: {
+    maxFailsBeforeLock: 5,
+    lockStepsMs: [30_000, 120_000, 600_000, 1_800_000],
+    failWindowMs: 60 * 60 * 1000,
+  },
+  // A known device mistyping its own password: forgiving and short.
+  device: {
+    maxFailsBeforeLock: 10,
+    lockStepsMs: [30_000, 120_000, 600_000],
+    failWindowMs: 60 * 60 * 1000,
+  },
+};
+
+// Known devices are bounded by the owner's real browsers (tokens cannot be
+// forged without the server secret), but keep a hard cap regardless.
+const MAX_TRACKED_BUCKETS = 1_000;
 
 type Attempt = { fails: number; lockUntil: number; lockLevel: number; lastFailAt: number };
 
 const attempts = new Map<string, Attempt>();
-let passwordCheckInFlight = false;
+const checksInFlight = new Set<string>();
 
-function getEntry(key: string): Attempt | null {
+function bucketKey(bucket: LoginBucket): string {
+  return bucket.kind === "device" ? `device:${bucket.deviceId}` : "unknown";
+}
+
+function policyFor(bucket: LoginBucket): LimiterPolicy {
+  return POLICIES[bucket.kind];
+}
+
+function getEntry(bucket: LoginBucket, now = Date.now()): Attempt | null {
+  const key = bucketKey(bucket);
   const entry = attempts.get(key);
   if (!entry) return null;
-  if (
-    entry.lastFailAt &&
-    Date.now() - entry.lastFailAt > FAIL_WINDOW_MS &&
-    (!entry.lockUntil || Date.now() >= entry.lockUntil)
-  ) {
+  const expired =
+    entry.lastFailAt > 0 &&
+    now - entry.lastFailAt > policyFor(bucket).failWindowMs &&
+    now >= entry.lockUntil;
+  if (expired) {
     attempts.delete(key);
     return null;
   }
@@ -29,49 +72,67 @@ function getEntry(key: string): Attempt | null {
 
 export type LockState = { locked: false } | { locked: true; retryAfter: number };
 
-/** Reserve before awaiting bcrypt so a concurrent burst cannot bypass lockout. */
-export function beginLoginAttempt():
-  | { locked: true; retryAfter: number }
-  | { locked: false; release: () => void } {
-  const lock = checkLock();
-  if (lock.locked) return lock;
-  if (passwordCheckInFlight) return { locked: true, retryAfter: 1 };
-  passwordCheckInFlight = true;
-  let released = false;
-  return {
-    locked: false,
-    release: () => {
-      if (released) return;
-      released = true;
-      passwordCheckInFlight = false;
-    },
-  };
-}
-
-export function checkLock(key = "local"): LockState {
-  const entry = getEntry(key);
+export function checkLock(bucket: LoginBucket = { kind: "unknown" }): LockState {
+  const entry = getEntry(bucket);
   if (!entry || !entry.lockUntil) return { locked: false };
   const remaining = entry.lockUntil - Date.now();
   if (remaining <= 0) return { locked: false };
   return { locked: true, retryAfter: Math.ceil(remaining / 1000) };
 }
 
+/** Reserve before awaiting the hash check so a concurrent burst cannot bypass lockout. */
+export function beginLoginAttempt(
+  bucket: LoginBucket = { kind: "unknown" },
+): { locked: true; retryAfter: number } | { locked: false; release: () => void } {
+  const lock = checkLock(bucket);
+  if (lock.locked) return lock;
+  const key = bucketKey(bucket);
+  if (checksInFlight.has(key)) return { locked: true, retryAfter: 1 };
+  checksInFlight.add(key);
+  let released = false;
+  return {
+    locked: false,
+    release: () => {
+      if (released) return;
+      released = true;
+      checksInFlight.delete(key);
+    },
+  };
+}
+
 export function recordFail(
-  key = "local",
+  bucket: LoginBucket = { kind: "unknown" },
 ): { remainingBeforeLock: number } {
-  const entry = getEntry(key) ?? { fails: 0, lockUntil: 0, lockLevel: 0, lastFailAt: 0 };
+  const policy = policyFor(bucket);
+  const key = bucketKey(bucket);
+  const entry = getEntry(bucket) ?? { fails: 0, lockUntil: 0, lockLevel: 0, lastFailAt: 0 };
   entry.fails += 1;
   entry.lastFailAt = Date.now();
-  if (entry.fails >= MAX_FAILS_BEFORE_LOCK) {
-    const step = LOCK_STEPS_MS[Math.min(entry.lockLevel, LOCK_STEPS_MS.length - 1)];
+  if (entry.fails >= policy.maxFailsBeforeLock) {
+    const step = policy.lockStepsMs[Math.min(entry.lockLevel, policy.lockStepsMs.length - 1)];
     entry.lockUntil = Date.now() + step;
     entry.lockLevel += 1;
     entry.fails = 0;
   }
+  if (!attempts.has(key) && attempts.size >= MAX_TRACKED_BUCKETS) {
+    // Drop the oldest tracked device; the shared unknown bucket is never evicted.
+    for (const candidate of attempts.keys()) {
+      if (candidate !== "unknown") {
+        attempts.delete(candidate);
+        break;
+      }
+    }
+  }
   attempts.set(key, entry);
-  return { remainingBeforeLock: Math.max(0, MAX_FAILS_BEFORE_LOCK - entry.fails) };
+  return { remainingBeforeLock: Math.max(0, policy.maxFailsBeforeLock - entry.fails) };
 }
 
-export function recordSuccess(key = "local"): void {
-  attempts.delete(key);
+export function recordSuccess(bucket: LoginBucket = { kind: "unknown" }): void {
+  attempts.delete(bucketKey(bucket));
+}
+
+/** Test seam. */
+export function resetLoginLimiterForTests(): void {
+  attempts.clear();
+  checksInFlight.clear();
 }

@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 import path from "node:path";
+import { withSeededPassword } from "./tests/e2e/access-password";
 
 const baseURL = "http://127.0.0.1:3102";
 
@@ -22,7 +23,7 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
   webServer: {
-    command: "npm run dev -- --hostname 127.0.0.1 --port 3102",
+    command: withSeededPassword("npm run dev -- --hostname 127.0.0.1 --port 3102"),
     url: baseURL,
     reuseExistingServer: false,
     timeout: 120_000,

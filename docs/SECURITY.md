@@ -29,9 +29,12 @@ treated as automatically trusted.
 | Remote models | HTTPS or localhost HTTP `.model3.json`, no embedded credentials; CSP permits data fetch but not remote scripts |
 | Folder import | Relative paths, duplicate paths, JSON, required assets, and folder escapes are validated before IndexedDB write |
 | Diagnostics | Endpoint queries and common token/password/secret forms are redacted; content and protected input are omitted |
-| Kana access | Every installation requires a signed Kana session. Fresh installs show the documented default password; a user-owned bcrypt hash takes precedence after an optional change |
-| Login bursts | One password verification is admitted at a time; overlapping attempts receive 429 without running bcrypt or bypassing progressive lockout |
-| JSON input | Login/password, Hermes RPC, activity writes, and speech requests count incoming UTF-8 bytes before decoding, cancel oversized bodies, and reject non-object JSON |
+| Kana access | Every installation requires a signed Kana session. There is no default password: login is refused until the owner runs `kana password` on the server, so nobody can claim a fresh VPS over the web |
+| Password storage | scrypt (node:crypto) in `appstate.db`; bcrypt hashes from older releases still verify and are upgraded to scrypt on the next successful login |
+| Login lockout | Not keyed by IP (CGNAT). Browsers that signed in before carry a signed device cookie with their own bucket; all other attempts share a strict progressive bucket, so guessing cannot lock the owner's devices out. One verification per bucket runs at a time |
+| Cross-site requests | The proxy rejects POST/PUT/PATCH/DELETE whose `Origin` does not match the request host (or `Sec-Fetch-Site` says cross-site). SameSite=Lax alone would allow other apps on the same host with a different port |
+| Logout | Revokes the presented session token server-side until its expiry, not just the cookie |
+| Request bodies | Every route reads a bounded body (see `lib/limits.ts`); oversized requests are cancelled before decoding. Next's proxy buffer and the Nginx `client_max_body_size` are derived from the same limit, because Next truncates longer bodies silently |
 | Event streams | Abort/cancel releases subscriptions and timers, slow readers are disconnected at a 16 MiB queue limit, and session validity is rechecked every 25 seconds |
 | Backup | Versioned and size-limited; parser validates records; tokens and imported avatar assets are excluded |
 | Offline cache | Service worker handles same-origin navigation/static assets only and explicitly ignores `/api` plus all cross-origin Hermes/Qwen/model traffic |
@@ -44,52 +47,65 @@ When Kana runs behind nginx on a VPS, configure the proxy headers explicitly:
 ```nginx
 location / {
     proxy_pass http://127.0.0.1:3000;
-    proxy_set_header Host $host;
+    proxy_set_header Host $http_host;
     proxy_set_header X-Forwarded-Proto $scheme;
 }
 ```
 
-Set `KANA_DEPLOYMENT_MODE=deployment`. A valid Kana session authorizes the
-same process controls for Hermes and Qwen.
+`Host $http_host` matters for the cross-site request guard: Kana compares the
+browser's `Origin` with the host the request was addressed to. Use
+`$http_host`, not `$host`: `$host` drops the port, so on a public port other
+than 80/443 (for example `listen 8443 ssl`) every sign-in and other write would
+be rejected as cross-site. A proxy that
+rewrites `Host` must forward the public one as `X-Forwarded-Host`, or list the
+public origin in `KANA_TRUSTED_ORIGINS` (comma-separated).
 
 Forwarding `X-Forwarded-Proto $scheme` keeps session cookies `Secure`
 automatically; if your proxy cannot forward it, set `AUTH_COOKIE_SECURE=true`.
+A valid Kana session authorizes the same process controls for Hermes and Qwen.
 
-## Default access password
+## Access password
 
-Authentication is always enabled. Fresh npm installs, source builds, and
-development servers use `chankana123`; the login screen displays it so the
-first run has no terminal configuration step. Changing it is optional. When a
-user changes it in Settings, Kana stores only a bcrypt hash in the
-`auth.password` row of `$KANA_DATA_DIR/appstate.db`, stops displaying the
-built-in password, and no longer accepts it. Upgrades from the older
-`auth.json` layout migrate that hash into SQLite before removing the legacy
-file.
+Authentication is always enabled and there is no built-in password. The first
+password is created on the machine running Kana:
 
-Password changes atomically store a new session version with the hash. Previous
-tokens no longer authorize requests; the browser making the change receives a
-replacement token, while other browsers must sign in again. Existing event
-streams stop on their next authorization heartbeat (within 25 seconds).
+- `kana` and `kana serve` ask for it on first start in an interactive terminal;
+- `kana password` sets or changes it at any time (`--stdin` for automation);
+- a source checkout uses `npm run password`, a standalone deployment
+  `node bin/kana.mjs password`.
+
+Until then the login page explains this and every login returns 503. Setting
+the first password over HTTP was deliberately not added: on a new VPS whoever
+reaches the page first would own the agent.
+
+Kana stores only an scrypt hash with a session version in the `auth.password`
+row of `$KANA_DATA_DIR/appstate.db`. Password changes (from Settings or the
+CLI) store a new session version, so previous tokens stop authorizing requests;
+the browser making a Settings change receives a replacement token. Existing
+event streams stop on their next authorization heartbeat (within 25 seconds).
 A login already verifying an old password cannot mint a token for the new
 version. Session verification requires HS256, issued-at/expiry claims, and an
-authenticated payload. New passwords are limited to 72 UTF-8 bytes to prevent
-bcrypt from silently ignoring a password suffix; existing hashes are preserved.
+authenticated payload. Passwords are 8–256 characters without leading or
+trailing whitespace; scrypt does not truncate them.
 
-The built-in value is public product behavior, not a private deployment
-secret. A public or shared installation should still use HTTPS and may replace
-the password from Settings, but Kana does not force that change.
+Lockout state lives in server memory and resets on restart. A brand-new
+browser that has never signed in shares the unknown-client bucket; during an
+active guessing attack it may have to wait, while previously used browsers are
+unaffected.
 
 ## CSP rationale
 
 The app remains statically renderable and uses a header CSP. Next/React require
-inline styles/scripts in this packaging mode; development additionally needs
-`unsafe-eval`. Remote JavaScript is allowed only from Live2D's official Core
-host. `connect-src` permits HTTPS model data plus loopback HTTP/WebSocket for
-Hermes and Qwen. Insecure arbitrary remote HTTP and remote WebSocket origins
-are not allowed.
+inline styles/scripts in this packaging mode (a nonce-based policy would force
+dynamic rendering and break the cached offline shell); development additionally
+needs `unsafe-eval`. Remote JavaScript is allowed only from Live2D's official
+Core host. The browser reaches Hermes and Qwen only through Kana's same-origin
+relay; `connect-src`/`img-src` still permit HTTPS and loopback HTTP because
+users may load Live2D models from a hosted URL or a local static server.
+Insecure arbitrary remote HTTP and remote WebSocket origins are not allowed.
 
 The policy intentionally does not use `upgrade-insecure-requests`, because it
-would break loopback `http://` Qwen and `ws://` Hermes services.
+would break loopback `http://` Live2D model hosting.
 
 ## Offline shell
 

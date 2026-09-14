@@ -14,7 +14,12 @@
 // - Hermes gates most RPCs to one active session per connection; Kana is a
 //   single-user surface, so one shared connection matches the product model.
 
-import { managedRuntimePort, managedRuntimeToken, inspectLocalHermesRuntime } from "./local-hermes-runtime";
+import {
+  inspectLocalHermesRuntime,
+  managedRuntimePort,
+  managedRuntimeToken,
+  refreshHermesRuntimeTarget,
+} from "./local-hermes-runtime";
 
 type BridgeState = {
   socket: WebSocket | null;
@@ -90,69 +95,81 @@ export function subscribeHermesEvents(listener: (frame: unknown) => void): () =>
   return () => state.listeners.delete(listener);
 }
 
+const MISSING_TOKEN_MESSAGE =
+  "Kana is not managing a Hermes gateway with a known session token. Start Hermes from Kana first.";
+
+function openSocket(state: BridgeState, port: number, token: string): Promise<WebSocket> {
+  const socket = new WebSocket(gatewayUrl(port, token));
+  (socket as unknown as { binaryType?: string }).binaryType = "arraybuffer";
+
+  const opened = new Promise<WebSocket>((resolve, reject) => {
+    const fail = (message: string) => {
+      clearTimeout(timer);
+      try { socket.close(); } catch {}
+      reject(new Error(message));
+    };
+    const timer = setTimeout(() => fail("Timed out connecting to the Hermes gateway."), CONNECT_TIMEOUT_MS);
+    socket.addEventListener("open", () => {
+      clearTimeout(timer);
+      resolve(socket);
+    }, { once: true });
+    // Hermes rejects a wrong token during the upgrade, which surfaces here as
+    // a generic error/close; the caller re-discovers and retries once.
+    socket.addEventListener("error", () => fail("Could not connect to the Hermes gateway."), { once: true });
+  });
+
+  socket.addEventListener("message", (event: MessageEvent) => {
+    const data = event.data;
+    if (typeof data === "string") {
+      if (data.length > MAX_FRAME_BYTES) return;
+      handleFrame(state, data);
+    } else if (data instanceof ArrayBuffer) {
+      if (data.byteLength > MAX_FRAME_BYTES) return;
+      handleFrame(state, new TextDecoder().decode(data));
+    }
+  });
+  socket.addEventListener("close", () => {
+    if (state.socket === socket) resetSocket(state);
+  });
+  socket.addEventListener("error", () => {
+    if (state.socket === socket) resetSocket(state);
+  });
+  return opened;
+}
+
+async function connectWithDiscovery(state: BridgeState): Promise<WebSocket> {
+  let port = managedRuntimePort();
+  let token = managedRuntimeToken();
+  if (!token) {
+    // Hermes may have been started outside Kana (e.g. manually via
+    // `hermes serve`). Discovery adopts its port + session token.
+    await inspectLocalHermesRuntime();
+    port = managedRuntimePort();
+    token = managedRuntimeToken();
+  }
+  if (!token) throw new Error(MISSING_TOKEN_MESSAGE);
+
+  try {
+    return await openSocket(state, port, token);
+  } catch (error) {
+    // An adopted Hermes may have restarted with a new token or port since it
+    // was discovered. Re-discover once instead of retrying a stale credential
+    // forever; give up if discovery yields the same target.
+    const next = await refreshHermesRuntimeTarget();
+    if (!next.token || (next.token === token && next.port === port)) throw error;
+    return openSocket(state, next.port, next.token);
+  }
+}
+
 export async function ensureHermesConnection(): Promise<WebSocket> {
   const state = bridge();
   if (state.socket && state.socket.readyState === WebSocket.OPEN) return state.socket;
   if (state.connectPromise) return state.connectPromise;
 
-  const port = managedRuntimePort();
-  let token = managedRuntimeToken();
-  if (!token) {
-    // Hermes may have been started outside Kana (e.g. manually via
-    // `hermes serve`). Discovery reads the running process table and adopts
-    // its port + session token so the bridge can attach without a restart.
-    await inspectLocalHermesRuntime();
-    token = managedRuntimeToken();
-  }
-  if (!token) {
-    throw new Error(
-      "Kana is not managing a Hermes gateway with a known session token. Start Hermes from Kana first.",
-    );
-  }
-
-  state.connectPromise = (async () => {
-    const socket = new WebSocket(gatewayUrl(port, token));
-    // Node's undici WebSocket accepts permessage-deflate off by default; set a
-    // sane receive cap so a hostile frame cannot balloon memory.
-    (socket as unknown as { binaryType?: string }).binaryType = "arraybuffer";
-
-    const opened = new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        reject(new Error("Timed out connecting to the Hermes gateway."));
-        try { socket.close(); } catch {}
-      }, CONNECT_TIMEOUT_MS);
-      socket.addEventListener("open", () => {
-        clearTimeout(timer);
-        resolve();
-      }, { once: true });
-      socket.addEventListener("error", () => {
-        clearTimeout(timer);
-        reject(new Error("Could not connect to the Hermes gateway."));
-      }, { once: true });
-    });
-
-    socket.addEventListener("message", (event: MessageEvent) => {
-      const data = event.data;
-      if (typeof data === "string") {
-        if (data.length > MAX_FRAME_BYTES) return;
-        handleFrame(state, data);
-      } else if (data instanceof ArrayBuffer) {
-        if (data.byteLength > MAX_FRAME_BYTES) return;
-        handleFrame(state, new TextDecoder().decode(data));
-      }
-    });
-    socket.addEventListener("close", () => {
-      if (state.socket === socket) resetSocket(state);
-    });
-    socket.addEventListener("error", () => {
-      if (state.socket === socket) resetSocket(state);
-    });
-
-    await opened;
+  state.connectPromise = connectWithDiscovery(state).then((socket) => {
     state.socket = socket;
     return socket;
-  })();
-
+  });
   try {
     return await state.connectPromise;
   } finally {

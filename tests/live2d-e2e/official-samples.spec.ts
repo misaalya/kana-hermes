@@ -6,6 +6,7 @@ import {
   OFFICIAL_HARU_MODEL_URL,
   OFFICIAL_MAO_MODEL_URL,
 } from "../../lib/avatar/defaults";
+import { E2E_ACCESS_PASSWORD } from "../e2e/access-password";
 
 test.setTimeout(240_000);
 
@@ -52,7 +53,7 @@ test("renders both official samples with model-specific bindings across reloads"
   }, HARU_PREFS);
 
   const login = await page.request.post("/api/auth/login", {
-    data: { password: "chankana123" },
+    data: { password: E2E_ACCESS_PASSWORD },
   });
   expect(login.ok()).toBe(true);
   await page.goto("/");

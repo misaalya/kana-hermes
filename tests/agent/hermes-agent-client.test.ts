@@ -98,7 +98,7 @@ function installBrowserGlobals(): void {
     writable: true,
     value: async (input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-      if (url !== "/api/hermes/rpc") {
+      if (url !== "/api/hermes/rpc" && url !== "/api/hermes/attachments") {
         return new Response("not found", { status: 404 });
       }
       const body = JSON.parse(String(init?.body ?? "{}")) as {
@@ -108,8 +108,8 @@ function installBrowserGlobals(): void {
       const request: RpcRequest = {
         jsonrpc: "2.0",
         id: `fake-${FakeRelay.requests.length + 1}`,
-        method: String(body.method ?? ""),
-        params: body.params ?? {},
+        method: url.endsWith("/attachments") ? "file.attach" : String(body.method ?? ""),
+        params: url.endsWith("/attachments") ? JSON.parse(String(init?.body)) : body.params ?? {},
       };
       FakeRelay.requests.push(request);
       try {
@@ -182,6 +182,50 @@ describe("HermesAgentClient (relay transport)", () => {
     await Promise.all(activeClients.map((client) => client.disconnect()));
     for (const stream of FakeEventSource.instances) stream.close();
     restoreBrowserGlobals();
+  });
+
+  it("uploads files before submitting their unescaped Hermes references", async () => {
+    const client = await connectedClient((request) => {
+      if (request.method === "session.create") return { session_id: "runtime-1", persistent_session_id: "stored-1" };
+      if (request.method === "file.attach") return { attached: true, ref_text: '@file:"attachments/hello world.txt"' };
+      return {};
+    });
+    await openSession(client);
+    await client.sendMessage({ text: "Read this", subtitleLanguage: "en", attachments: [{ name: "hello world.txt", dataUrl: "data:text/plain;base64,aGk=" }] });
+    const upload = FakeRelay.requests.find((request) => request.method === "file.attach")!;
+    assert.equal(upload.params.session_id, "runtime-1");
+    assert.equal(upload.params.name, "hello world.txt");
+    const prompt = FakeRelay.requests.find((request) => request.method === "prompt.submit")!;
+    assert.ok(String(prompt.params.text).endsWith('\n\n@file:"attachments/hello world.txt"'));
+    assert.ok(!String(prompt.params.text).includes("aGk="));
+    assert.ok(FakeRelay.requests.indexOf(upload) < FakeRelay.requests.indexOf(prompt));
+  });
+
+  it("does not submit a prompt when an upload fails or is stopped", async () => {
+    let uploading: (() => void) | undefined;
+    let release: (() => void) | undefined;
+    let cancelCase = false;
+    const client = await connectedClient(async (request) => {
+      if (request.method === "session.create") return { session_id: "runtime-1" };
+      if (request.method === "file.attach") {
+        if (!cancelCase) throw new Error("Upload unavailable");
+        await new Promise<void>((resolve) => { release = resolve; uploading?.(); });
+        return { attached: true, ref_text: "@file:attachments/test.txt" };
+      }
+      return {};
+    });
+    await openSession(client);
+    const input = { text: "Read this", subtitleLanguage: "en", attachments: [{ name: "test.txt", dataUrl: "data:text/plain;base64,aGk=" }] };
+    await assert.rejects(client.sendMessage(input), /Upload unavailable/);
+    cancelCase = true;
+    const started = new Promise<void>((resolve) => { uploading = resolve; });
+    const send = client.sendMessage(input);
+    const rejected = assert.rejects(send, { name: "AttachmentUploadError" });
+    await started;
+    await client.abort();
+    release?.();
+    await rejected;
+    assert.equal(FakeRelay.requests.filter((request) => request.method === "prompt.submit").length, 0);
   });
 
   it("lands a failed first connect in a terminal error state instead of staying connecting", async () => {
@@ -824,5 +868,34 @@ describe("HermesAgentClient (relay transport)", () => {
       FakeRelay.requests.findLast((request) => request.method === "approval.respond")?.params,
       { session_id: "runtime-1", choice: "session", all: false },
     );
+  });
+
+  it("ignores another tab's session events until this client opens its own session", async () => {
+    const events: AgentEvent[] = [];
+    let releaseCreate: () => void = () => {};
+    const createGate = new Promise<void>((resolve) => { releaseCreate = resolve; });
+    const client = await connectedClient(async (request) => {
+      if (request.method === "session.create") {
+        await createGate;
+        return { session_id: "runtime-mine", stored_session_id: "stored-mine" };
+      }
+      return {};
+    });
+    client.subscribe((event) => events.push(event));
+    const approval = { command: "rm -rf /tmp/x", description: "Other tab", choices: ["once", "deny"] };
+
+    latestStream().emitEvent("approval.request", approval, "runtime-other-tab");
+    assert.equal(events.some((event) => event.type === "input.requested"), false);
+
+    // While opening, the not-yet-known session id must still be accepted.
+    const opening = client.openSession({ title: "Mine", subtitleLanguage: "en" });
+    await tick();
+    latestStream().emitEvent("approval.request", approval, "runtime-mine");
+    assert.equal(events.filter((event) => event.type === "input.requested").length, 1);
+    releaseCreate();
+    await opening;
+
+    latestStream().emitEvent("approval.request", approval, "runtime-other-tab");
+    assert.equal(events.filter((event) => event.type === "input.requested").length, 1);
   });
 });

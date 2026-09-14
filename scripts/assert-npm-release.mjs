@@ -38,3 +38,23 @@ const app = JSON.parse(await readFile(new URL("../package.json", import.meta.url
 if (!app.private || app.version !== manifest.version) {
   throw new Error("The source app must stay private and its version must match cli/package.json.");
 }
+
+// Publish exactly what is committed: a dirty tree could ship unreviewed
+// launcher, service, or asset changes that no commit records.
+try {
+  const { execFileSync } = await import("node:child_process");
+  const dirty = execFileSync("git", ["status", "--porcelain", "--untracked-files=normal"], {
+    cwd: new URL("..", import.meta.url),
+    encoding: "utf8",
+  }).trim();
+  if (dirty) {
+    process.stderr.write(`Refusing to publish from a dirty working tree:\n${dirty}\n`);
+    process.exit(1);
+  }
+} catch (error) {
+  if (error?.code === "ENOENT") {
+    process.stderr.write("Refusing to publish: git is required to verify the working tree.\n");
+    process.exit(1);
+  }
+  throw error;
+}

@@ -3,18 +3,35 @@
 // record or download MP3/M4A. The browser decodes nearly everything, so we
 // convert any input to 16-bit PCM mono WAV before it leaves the page.
 
+import { MAX_VOICE_REFERENCE_BYTES } from "@/lib/limits";
+
 const MAX_REFERENCE_SECONDS = 30;
 
+export type AudioConversionErrorCode = "unsupported" | "unreadable";
+
+/** Carries a stable code so the UI can show a localized message. */
+export class AudioConversionError extends Error {
+  constructor(readonly code: AudioConversionErrorCode) {
+    super(code === "unsupported" ? "This browser cannot convert audio." : "The audio could not be decoded.");
+    this.name = "AudioConversionError";
+  }
+}
+
 export async function convertToWav(file: File): Promise<File> {
-  if (/\.wav$/i.test(file.name) && file.type !== "audio/mpeg") {
-    // Already a WAV container; pass through untouched.
+  if (
+    /\.wav$/i.test(file.name) &&
+    file.type !== "audio/mpeg" &&
+    file.size <= MAX_VOICE_REFERENCE_BYTES
+  ) {
+    // Already a WAV container that fits the upload limit; pass through untouched.
     return file;
   }
+  // Larger WAVs are re-encoded too: 30 s of 16-bit mono stays far below the limit.
   const AudioContextCtor =
     window.AudioContext ??
     (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!AudioContextCtor) {
-    throw new Error("Browser tidak mendukung konversi audio. Gunakan file WAV.");
+    throw new AudioConversionError("unsupported");
   }
   const context = new AudioContextCtor();
   try {
@@ -23,9 +40,7 @@ export async function convertToWav(file: File): Promise<File> {
     const baseName = file.name.replace(/\.[^.]+$/, "") || "voice";
     return new File([wav], `${baseName}.wav`, { type: "audio/wav" });
   } catch {
-    throw new Error(
-      "Audio tidak bisa dibaca browser. Gunakan WAV, atau format lain yang bisa diputar di sini.",
-    );
+    throw new AudioConversionError("unreadable");
   } finally {
     void context.close().catch(() => undefined);
   }

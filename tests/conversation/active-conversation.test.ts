@@ -6,6 +6,7 @@ import {
   freshConversationFromPointer,
   readActiveConversationPointer,
   rememberedHermesEntry,
+  resumableSessionId,
   writeActiveConversationPointer,
   type ActiveConversationPointer,
   type HermesConversationDirectoryEntry,
@@ -114,4 +115,45 @@ test("an unlinked fresh conversation is reconstructed after refresh", () => {
     createdAt: 123,
     updatedAt: 123,
   });
+});
+
+test("a session Hermes has not stored yet keeps the refresh on the same fresh conversation", () => {
+  const storage = memoryStorage();
+  const conversation: Conversation = {
+    id: "fresh-conversation",
+    title: "New conversation",
+    messages: [],
+    subtitleLanguageAtCreation: "id",
+    // session.create linked it, but no prompt has reached Hermes yet.
+    agent: {
+      provider: "hermes",
+      persistentSessionId: "in-memory-session",
+      durable: false,
+      status: "linked",
+      relationship: "primary",
+    },
+    createdAt: 123,
+    updatedAt: 123,
+  };
+
+  assert.equal(resumableSessionId(conversation), undefined);
+  writeActiveConversationPointer(conversation, storage);
+  const pointer = readActiveConversationPointer(storage);
+  assert.equal(pointer?.persistentSessionId, undefined);
+  // Refresh (even after a Hermes restart) lands on the same fresh conversation.
+  assert.equal(freshConversationFromPointer(pointer)?.id, "fresh-conversation");
+
+  // After the first prompt, the stored session becomes the refresh target.
+  const stored = { ...conversation, agent: { ...conversation.agent!, durable: true } };
+  assert.equal(resumableSessionId(stored), "in-memory-session");
+  writeActiveConversationPointer(stored, storage);
+  assert.equal(readActiveConversationPointer(storage)?.persistentSessionId, "in-memory-session");
+  assert.equal(freshConversationFromPointer(readActiveConversationPointer(storage)), null);
+});
+
+test("links without a durability flag (older builds, Hermes directory) stay resumable", () => {
+  assert.equal(
+    resumableSessionId(conversationFromHermesEntry(directory[0]!, "id", "adopted")),
+    "session-a",
+  );
 });

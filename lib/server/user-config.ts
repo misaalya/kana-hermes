@@ -2,6 +2,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
@@ -70,6 +71,8 @@ export type KanaDeploymentMode = "local" | "deployment";
 export type KanaDeploymentModeResolution = {
   mode: KanaDeploymentMode;
   source: "environment" | "config" | "default";
+  /** An invalid environment value or config.json problem, if any. */
+  error: string | null;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -219,15 +222,77 @@ export function ensureKanaUserConfigFile(): string {
   return filePath;
 }
 
+export type KanaUserConfigInspection = {
+  path: string;
+  config: KanaUserConfig;
+  /** Why config.json could not be used; the config is then empty (defaults). */
+  error: string | null;
+};
+
+type ConfigCache = { signature: string; inspection: KanaUserConfigInspection };
+const configCacheKey = Symbol.for("kana.userConfigCache");
+type ConfigCacheGlobal = typeof globalThis & { [configCacheKey]?: ConfigCache };
+
+function fileSignature(filePath: string): string | null {
+  try {
+    const details = statSync(filePath);
+    return `${filePath}:${details.ino}:${details.size}:${details.mtimeMs}:${details.ctimeMs}`;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+/**
+ * Read and validate config.json without throwing. The parsed result is cached
+ * per file identity (inode, size, mtime), so hot paths such as speech requests
+ * do not re-read the file, while an edit takes effect on the next request.
+ */
+export function inspectKanaUserConfig(): KanaUserConfigInspection {
+  const filePath = kanaUserConfigPath();
+  let signature: string | null;
+  try {
+    signature = fileSignature(filePath);
+  } catch (error) {
+    return {
+      path: filePath,
+      config: {},
+      error: `Kana could not read ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+  if (signature === null) return { path: filePath, config: {}, error: null };
+
+  const shared = globalThis as ConfigCacheGlobal;
+  const cached = shared[configCacheKey];
+  if (cached?.signature === signature) return cached.inspection;
+
+  let inspection: KanaUserConfigInspection;
+  try {
+    inspection = { path: filePath, config: parseKanaUserConfigFile(filePath), error: null };
+  } catch (error) {
+    inspection = {
+      path: filePath,
+      config: {},
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+  shared[configCacheKey] = { signature, inspection };
+  return inspection;
+}
+
 /**
  * Read the optional, server-owned advanced configuration. This file is the
  * single user-facing source for Hermes and TTS runtime configuration and is
- * never sent to the browser.
+ * never sent to the browser. Integrations call this and fail honestly on an
+ * invalid file; status surfaces use inspectKanaUserConfig() instead.
  */
 export function readKanaUserConfig(): KanaUserConfig {
-  const filePath = kanaUserConfigPath();
-  if (!existsSync(filePath)) return {};
+  const inspection = inspectKanaUserConfig();
+  if (inspection.error) throw new Error(inspection.error);
+  return inspection.config;
+}
 
+function parseKanaUserConfigFile(filePath: string): KanaUserConfig {
   let parsed: unknown;
   try {
     parsed = JSON.parse(readFileSync(filePath, "utf8"));
@@ -452,20 +517,24 @@ export function readKanaUserConfig(): KanaUserConfig {
 /**
  * Explicit operator intent wins over framework build mode. This matters when
  * `next dev` is intentionally placed behind Nginx on a VPS, or a production
- * standalone build is used only on localhost.
+ * standalone build is used only on localhost. Never throws: an invalid value
+ * falls back to "local" and is reported through `error`.
  */
 export function resolveKanaDeploymentMode(): KanaDeploymentModeResolution {
   const fromEnvironment = process.env.KANA_DEPLOYMENT_MODE?.trim().toLowerCase();
   if (fromEnvironment) {
     if (fromEnvironment !== "local" && fromEnvironment !== "deployment") {
-      throw new Error(
-        'KANA_DEPLOYMENT_MODE must be either "local" or "deployment".',
-      );
+      return {
+        mode: "local",
+        source: "default",
+        error: 'KANA_DEPLOYMENT_MODE must be either "local" or "deployment".',
+      };
     }
-    return { mode: fromEnvironment, source: "environment" };
+    return { mode: fromEnvironment, source: "environment", error: null };
   }
-  const fromConfig = readKanaUserConfig().deployment?.mode;
+  const inspection = inspectKanaUserConfig();
+  const fromConfig = inspection.config.deployment?.mode;
   return fromConfig
-    ? { mode: fromConfig, source: "config" }
-    : { mode: "local", source: "default" };
+    ? { mode: fromConfig, source: "config", error: inspection.error }
+    : { mode: "local", source: "default", error: inspection.error };
 }

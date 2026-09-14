@@ -53,7 +53,7 @@ try {
   const forbidden = [...paths].find((entry) =>
     /^\.npm-package\/runtime\/(?:app|components)\//.test(entry) ||
     /(^|\/)\.env(?:\.|$)/.test(entry) ||
-    /(^|\/)(?:\.git|\.hermes|\.omo|\.codegraph|data|test-results|auth-reference)(?:\/|$)/.test(entry)
+    /(^|\/)(?:\.git|\.hermes|\.omo|\.codegraph|data|test-results|auth-reference|__pycache__|\.venv)(?:\/|$)/.test(entry)
   );
   if (forbidden) {
     throw new Error(`npm package contains forbidden local content: ${forbidden}`);
@@ -124,19 +124,36 @@ process.once("SIGINT", stop);
   };
 
   const help = run(executable, ["--help"], root, environment);
-  if (!help.stdout.includes("Start Kana and open the browser")) {
+  if (!help.stdout.includes("Start Kana on this computer") || !help.stdout.includes("password")) {
     throw new Error("installed Kana launcher did not render its help output.");
   }
   const aliasHelp = run(aliasExecutable, ["--help"], root, environment);
-  if (!aliasHelp.stdout.includes("Start Kana and open the browser")) {
+  if (!aliasHelp.stdout.includes("Start Kana on this computer")) {
     throw new Error("installed kana-alya command alias did not render its help output.");
   }
   const doctor = run(executable, ["doctor"], root, environment);
   if (doctor.stdout.includes("first-run setup")) {
     throw new Error("kana doctor unexpectedly launched interactive setup.");
   }
-  if (!doctor.stdout.includes(`Hermes: ${fakeHermes}`)) {
+  const displayedHermes = `~${fakeHermes.slice(home.length)}`;
+  if (!new RegExp(`Hermes\\s+${displayedHermes.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`).test(doctor.stdout)) {
     throw new Error("kana doctor did not discover Hermes from the user's PATH.");
+  }
+
+  // A fresh installation has no password: a non-interactive start must refuse
+  // to run instead of falling back to any built-in credential.
+  const refused = spawnSync(executable, ["--no-open", "--port", String(await availablePort())], {
+    cwd: root, env: environment, encoding: "utf8", input: "",
+  });
+  if (refused.status === 0 || !`${refused.stdout}${refused.stderr}`.includes("No access password is set")) {
+    throw new Error("installed Kana started without an access password.");
+  }
+  const password = "npm-smoke-first-password";
+  const setPassword = spawnSync(executable, ["password", "--stdin"], {
+    cwd: root, env: environment, encoding: "utf8", input: `${password}\n`,
+  });
+  if (setPassword.status !== 0) {
+    throw new Error(`kana password --stdin failed: ${setPassword.stderr || setPassword.stdout}`);
   }
 
   const port = await availablePort();
@@ -151,28 +168,28 @@ process.once("SIGINT", stop);
   child.stdout.on("data", (chunk) => { output += chunk.toString(); });
   child.stderr.on("data", (chunk) => { output += chunk.toString(); });
   try {
-    await waitFor(() => output.includes(`Kana is ready at http://127.0.0.1:${port}`), 30_000);
-    if (output.includes("Kana first-run setup")) {
-      throw new Error("the installed launcher blocked first start with terminal setup.");
-    }
+    await waitFor(() => output.includes(`Ready at http://127.0.0.1:${port}`), 30_000);
     const status = await fetch(`http://127.0.0.1:${port}/api/auth/status`);
     if (!status.ok) throw new Error(`installed Kana health returned ${status.status}.`);
     const authState = await status.json();
     if (
       authState.authEnabled !== true
-      || authState.usingDefaultPassword !== true
-      || authState.defaultPassword !== "chankana123"
+      || authState.passwordConfigured !== true
+      || "defaultPassword" in authState
     ) {
-      throw new Error("fresh npm installation did not expose the default login flow.");
+      throw new Error("installed Kana did not report the operator-set password state.");
     }
     const login = await fetch(`http://127.0.0.1:${port}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password: "chankana123" }),
+      body: JSON.stringify({ password }),
     });
-    sessionCookie = login.headers.get("set-cookie")?.split(";", 1)[0];
+    sessionCookie = login.headers
+      .getSetCookie()
+      .map((header) => header.split(";", 1)[0])
+      .find((pair) => pair.startsWith("kana_session="));
     if (!login.ok || !sessionCookie) {
-      throw new Error("fresh npm installation rejected the documented default password.");
+      throw new Error("installed Kana rejected the password set with kana password.");
     }
     const setup = await fetch(`http://127.0.0.1:${port}/api/kana/setup`, {
       headers: { Cookie: sessionCookie },
@@ -186,8 +203,8 @@ process.once("SIGINT", stop);
     const jwtSecretFile = path.join(dataDirectory, "jwt-secret");
     const config = JSON.parse(await readFile(configFile, "utf8"));
     const jwtSecret = (await readFile(jwtSecretFile, "utf8")).trim();
-    if (config.deployment?.mode !== "local") {
-      throw new Error("first npm launch did not create the default local config.json.");
+    if (config.deployment !== undefined) {
+      throw new Error("first npm launch pinned a deployment mode in config.json.");
     }
     if (
       config.tts?.provider !== "qwen3-local"
@@ -210,7 +227,7 @@ process.once("SIGINT", stop);
       method: "POST",
       headers: { "Content-Type": "application/json", Cookie: sessionCookie },
       body: JSON.stringify({
-        currentPassword: "chankana123",
+        currentPassword: password,
         newPassword: "npm-smoke-password",
       }),
     });
@@ -223,12 +240,8 @@ process.once("SIGINT", stop);
       headers: { Cookie: sessionCookie },
     });
     const changedAuthState = await changedStatus.json();
-    if (
-      !changedStatus.ok
-      || changedAuthState.usingDefaultPassword !== false
-      || changedAuthState.defaultPassword !== null
-    ) {
-      throw new Error("custom password state was not reflected by the installed runtime.");
+    if (!changedStatus.ok || changedAuthState.authenticated !== true) {
+      throw new Error("the replacement session from a password change was not accepted.");
     }
 
     const appStateFile = path.join(dataDirectory, "appstate.db");
@@ -240,7 +253,7 @@ process.once("SIGINT", stop);
     const storedAuth = JSON.parse(authRow?.value ?? "null");
     if (
       typeof storedAuth?.passwordHash !== "string"
-      || !storedAuth.passwordHash.startsWith("$2")
+      || !storedAuth.passwordHash.startsWith("scrypt$")
     ) {
       throw new Error("custom password hash was not stored in appstate.db.");
     }
@@ -275,6 +288,14 @@ process.once("SIGINT", stop);
     if (foreignOrigin.status !== 401) {
       throw new Error("installed Kana accepted an API request without a login session.");
     }
+    const forged = await fetch(`http://127.0.0.1:${port}/api/local-runtime/hermes`, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain", Origin: "http://127.0.0.1:1", Cookie: sessionCookie },
+      body: JSON.stringify({ action: "stop" }),
+    });
+    if (forged.status !== 403) {
+      throw new Error("installed Kana accepted a cross-origin state-changing request.");
+    }
   } finally {
     try {
       await fetch(`http://127.0.0.1:${port}/api/local-runtime/hermes`, {
@@ -303,6 +324,13 @@ process.once("SIGINT", stop);
 require("node:fs").writeFileSync(process.env.KANA_SMOKE_BROWSER_MARKER, "opened");
 `, { mode: 0o755 });
   const serverPort = await availablePort();
+  const serverPasswordResult = spawnSync(executable, ["password", "--stdin"], {
+    cwd: temporary,
+    env: { ...environment, KANA_DATA_DIR: serverData },
+    encoding: "utf8",
+    input: "npm-smoke-server-password\n",
+  });
+  if (serverPasswordResult.status !== 0) throw new Error("kana password failed for the server data root");
   const server = spawn(executable, ["serve", "--port", String(serverPort)], {
     cwd: temporary,
     env: { ...environment, KANA_DATA_DIR: serverData, KANA_SMOKE_BROWSER_MARKER: browserMarker },
@@ -315,9 +343,12 @@ require("node:fs").writeFileSync(process.env.KANA_SMOKE_BROWSER_MARKER, "opened"
     await waitFor(() => serverOutput.includes("Kana is ready at"), 30_000);
     const login = await fetch(`http://127.0.0.1:${serverPort}/api/auth/login`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password: "chankana123" }),
+      body: JSON.stringify({ password: "npm-smoke-server-password" }),
     });
-    const cookie = login.headers.get("set-cookie")?.split(";", 1)[0];
+    const cookie = login.headers
+      .getSetCookie()
+      .map((header) => header.split(";", 1)[0])
+      .find((pair) => pair.startsWith("kana_session="));
     if (!login.ok || !cookie) throw new Error("kana serve login failed");
     const configResponse = await fetch(`http://127.0.0.1:${serverPort}/api/kana/config`, { headers: { Cookie: cookie } });
     const config = await configResponse.json();

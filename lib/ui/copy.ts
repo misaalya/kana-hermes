@@ -9,62 +9,101 @@ export type UiLocale = "id" | "en";
 
 export type Copy = {
   common: {
-    continueLabel: string;
     back: string;
+    continueLabel: string;
     done: string;
+    later: string;
+    start: string;
     saving: string;
-    retry: string;
     close: string;
+    selected: string;
+    on: string;
+    off: string;
   };
-  welcome: {
-    eyebrow: string;
-    title: string;
-    body: string;
-    diagramFrom: string;
-    diagramTo: string;
-  };
-  presentation: {
-    eyebrow: string;
-    title: string;
+  /** BCP 47 tag for dates, times, and browser speech recognition. */
+  dateLocale: string;
+  onboarding: {
+    checkup: string;
+    saveFailed: string;
+    welcomeEyebrow: string;
+    welcomeTitle: string;
+    welcomeBody: string;
+    welcomeDiagramYou: string;
+    welcomeDiagramBody: string;
+    languageEyebrow: string;
+    languageTitle: string;
+    languageBody: string;
+    interfaceLabel: string;
     subtitleLabel: string;
-    uiLanguageLabel: string;
-    voiceTitle: string;
-    voiceValue: string;
-    voiceHint: string;
-    avatarTitle: string;
-    avatarValue: string;
-    avatarHint: string;
-  };
-  deps: {
-    eyebrow: string;
-    title: string;
-    body: string;
-    hermesTitle: string;
+    characterEyebrow: string;
+    characterTitle: string;
+    characterBody: string;
+    voiceLabel: string;
+    almostThere: string;
+    needsHelpTitle: string;
+    readyTitle: string;
+    servicesBody: string;
     hermesRunning: string;
     hermesInstalled: string;
     hermesMissing: string;
-    voiceTitle: string;
-    voiceOk: string;
-    voiceLoading: string;
-    voiceStopped: string;
-    voiceError: string;
-    voiceOff: string;
-    voiceNotProbed: string;
+    voiceEngine: string;
+    voiceNotNeeded: string;
+    voiceReady: string;
+    voiceNeedsAttention: string;
+    voicePreparedOnUse: string;
+    openConnectionSettings: string;
   };
-  ready: {
-    eyebrow: string;
-    title: string;
-    body: string;
-    subtitlesLabel: string;
-    voiceLabel: string;
-    avatarLabel: string;
+  avatarStage: {
+    label: string;
+    preparing: string;
+    waitingForLive2D: string;
   };
-  repair: {
-    eyebrow: string;
-    title: string;
-    intro: string;
-    dismiss: string;
-    openSettings: string;
+  composer: {
+    reviewAttachments: string;
+    filesNeedRegularMessage: string;
+    dismissError: string;
+    attachments: string;
+    remove(name: string): string;
+    chooseFiles: string;
+    attachFiles: string;
+    attachmentLimits(maxFiles: number, maxFileMib: number, maxTotalMib: number): string;
+    chooseModel: string;
+    closeModelChooser: string;
+    dictationStopped: string;
+    listening: string;
+    listeningOnline: string;
+    dictationPermission: string;
+    dictationNetwork: string;
+    dictationUnsupported: string;
+    dictationFailed(error: string): string;
+    dictationComplete: string;
+    noSpeech: string;
+    microphoneFailed: string;
+    startDictation: string;
+    stopDictation: string;
+  };
+  settingsNotices: {
+    avatarsLoadFailed: string;
+    backgroundsLoadFailed: string;
+    avatarSelected(name: string): string;
+    backgroundApplied(name: string): string;
+    backgroundImportFailed: string;
+    backgroundRemoved(name: string): string;
+    backgroundRemoveFailed: string;
+    avatarReady(name: string): string;
+    avatarImportFailed: string;
+    avatarUseFailed: string;
+    avatarRemoveFailed: string;
+  };
+  agentStatus: {
+    inputKinds: Record<"approval" | "clarification" | "sudo" | "secret", string>;
+    inputNeeded(kind: string): string;
+    inputRequested(kind: string): string;
+    secureInputWaiting: string;
+    inputExpired(kind: string): string;
+    resumed(title: string): string;
+    branched(title: string): string;
+    sessionReopenFailed: string;
   };
   banner: {
     degraded: string;
@@ -222,6 +261,23 @@ export type Copy = {
     customAria: string;
     hint: string;
   };
+  login: {
+    eyebrow: string;
+    body: string;
+    password: string;
+    placeholder: string;
+    submit: string;
+    submitting: string;
+    footer: string;
+    failed: string;
+    unreachable: string;
+    setupTitle: string;
+    setupBody: string;
+    setupSource: string;
+    setupRefresh: string;
+    themeToggle(nextTheme: "dark" | "light"): string;
+    themeLabel(nextTheme: "dark" | "light"): string;
+  };
   settings: {
     title: string;
     subtitle: string;
@@ -346,13 +402,12 @@ export type Copy = {
     advancedModeSourceConfig: string;
     advancedModeSourceDefault: string;
     advancedRestart: string;
+    advancedConfigError: string;
     checkingAccess: string;
-    defaultPasswordTitle: string;
-    defaultPasswordBody: string;
     currentPassword: string;
     newPassword: string;
     confirmPassword: string;
-    passwordTooShort: string;
+    passwordPolicy: string;
     passwordMismatch: string;
     passwordUpdated: string;
     passwordFailed: string;
@@ -401,71 +456,117 @@ export type Copy = {
     added(name: string): string;
     addFailed: string;
     removeFailed: string;
+    registrationFailed: string;
+    tooLarge(maxMib: number): string;
+    defaultProtected: string;
+    audioUnsupported: string;
+    audioUnreadable: string;
   };
   status: Record<string, string>;
-  voiceOnOff(on: boolean): string;
-  subtitleNames: Record<string, string>;
-  localeNames: Record<UiLocale, string>;
 };
 
 const id: Copy = {
   common: {
-    continueLabel: "Lanjut",
     back: "Kembali",
+    continueLabel: "Lanjut",
     done: "Selesai",
+    later: "Nanti",
+    start: "Mulai",
     saving: "Menyimpan…",
-    retry: "Periksa ulang",
     close: "Tutup",
+    selected: "Dipilih",
+    on: "Aktif",
+    off: "Nonaktif",
   },
-  welcome: {
-    eyebrow: "Lapisan tampilan lokal",
-    title: "Selamat datang di Kana",
-    body: "Kana memberi Hermes Agent milikmu wajah: percakapan visual, suara Jepang, subtitle, dan avatar yang bisa diganti. Hermes tetap satu-satunya agen dan tetap memegang tools, memori, sesi, dan penalaran.",
-    diagramFrom: "Kana Web UI",
-    diagramTo: "Hermes-mu",
+  dateLocale: "id-ID",
+  onboarding: {
+    checkup: "Pemeriksaan",
+    saveFailed: "Pengaturan awal tidak dapat disimpan.",
+    welcomeEyebrow: "Selamat datang",
+    welcomeTitle: "Kenalan dulu dengan Kana",
+    welcomeBody: "Atur hal yang terasa personal saja. Detail teknis bisa Kana tangani sendiri dan selalu bisa diubah nanti.",
+    welcomeDiagramYou: "Kamu",
+    welcomeDiagramBody: "Satu agent yang sama, dengan pengalaman yang lebih hangat.",
+    languageEyebrow: "Bahasa",
+    languageTitle: "Buat percakapan terasa nyaman",
+    languageBody: "Kana selalu berbicara dalam bahasa Jepang. Kamu memilih bahasa tulisan untuk balasan baru.",
+    interfaceLabel: "Antarmuka",
+    subtitleLabel: "Subtitle",
+    characterEyebrow: "Karakter",
+    characterTitle: "Pilih tampilan dan suara",
+    characterBody: "Mulai dengan pilihan bawaan. Avatar Live2D dan sampel suaramu sendiri bisa ditambahkan dari Pengaturan.",
+    voiceLabel: "Suara Kana",
+    almostThere: "Hampir selesai",
+    needsHelpTitle: "Kana butuh sedikit bantuan",
+    readyTitle: "Kana siap menemanimu",
+    servicesBody: "Kami memeriksa dua layanan lokal yang membuat Kana bekerja.",
+    hermesRunning: "Terhubung dan siap.",
+    hermesInstalled: "Terpasang; Kana akan menyalakannya saat dibutuhkan.",
+    hermesMissing: "Hermes belum ditemukan di perangkat ini.",
+    voiceEngine: "Mesin suara",
+    voiceNotNeeded: "Tidak diperlukan karena suara dimatikan.",
+    voiceReady: "Siap berbicara.",
+    voiceNeedsAttention: "Perlu diperiksa dari Pengaturan.",
+    voicePreparedOnUse: "Akan disiapkan saat pertama digunakan.",
+    openConnectionSettings: "Buka pengaturan koneksi",
   },
-  presentation: {
-    eyebrow: "Tampilan",
-    title: "Atur cara Kana tampil",
-    subtitleLabel: "Bahasa subtitle untuk respons baru",
-    uiLanguageLabel: "Bahasa antarmuka Kana",
-    voiceTitle: "Suara Jepang",
-    voiceValue: "Qwen3-TTS lokal",
-    voiceHint: "Berjalan sebagai layanan lokal terpisah.",
-    avatarTitle: "Avatar",
-    avatarValue: "Contoh resmi Live2D",
-    avatarHint: "Bisa diganti model Cubism lain nanti.",
+  avatarStage: {
+    label: "Panggung avatar Kana",
+    preparing: "Kana sedang bersiap",
+    waitingForLive2D: "Menunggu avatar Live2D",
   },
-  deps: {
-    eyebrow: "Pemeriksaan sistem",
-    title: "Cek komponen pendukung",
-    body: "Kana hanya tampil — otaknya ada di layanan lokal ini. Semua boleh diperbaiki nanti lewat Pengaturan.",
-    hermesTitle: "Hermes (otak agen)",
-    hermesRunning: "Terhubung dan berjalan.",
-    hermesInstalled: "Terpasang di mesin ini. Akan dinyalakan otomatis saat dibutuhkan.",
-    hermesMissing: "Belum terpasang. Pasang Hermes, lalu buka Pengaturan → Hermes gateway.",
-    voiceTitle: "Mesin suara Qwen3-TTS",
-    voiceOk: "Siap. Suara bisa langsung dipakai.",
-    voiceLoading: "Sedang menyiapkan model (sekali di awal).",
-    voiceStopped: "Belum menyala. Otomatis menyala saat pertama kali dibutuhkan.",
-    voiceError: "Gagal menyala — kemungkinan cache model hilang atau rusak. Buka Pengaturan → Qwen3-TTS lalu jalankan ulang.",
-    voiceOff: "Dinonaktifkan di pengaturan. Aktifkan kapan saja.",
-    voiceNotProbed: "Belum diperiksa.",
+  composer: {
+    reviewAttachments: "Periksa file terlampir.",
+    filesNeedRegularMessage: "Kirim file bersama pesan biasa setelah respons selesai, bukan perintah slash.",
+    dismissError: "Tutup pesan kesalahan",
+    attachments: "Lampiran",
+    remove: (name) => `Hapus ${name}`,
+    chooseFiles: "Pilih file",
+    attachFiles: "Tambahkan file",
+    attachmentLimits: (maxFiles, maxFileMib, maxTotalMib) =>
+      `Maksimal ${maxFiles} file, ${maxFileMib} MiB per file, ${maxTotalMib} MiB total. File tidak boleh kosong.`,
+    chooseModel: "Pilih model",
+    closeModelChooser: "Tutup pilihan model",
+    dictationStopped: "Dikte dihentikan.",
+    listening: "Mendengarkan…",
+    listeningOnline: "Mendengarkan… layanan browser dapat menggunakan internet.",
+    dictationPermission: "Izinkan mikrofon dan layanan pengenalan suara di browser.",
+    dictationNetwork: "Layanan dikte browser tidak terhubung. Periksa internet lalu coba lagi.",
+    dictationUnsupported: "Dikte perlu HTTPS atau localhost dan browser yang mendukung pengenalan suara, seperti Google Chrome.",
+    dictationFailed: (error) => `Dikte gagal (${error}). Coba lagi atau ketik pesan.`,
+    dictationComplete: "Dikte selesai. Periksa teks lalu kirim.",
+    noSpeech: "Tidak ada ucapan terdeteksi. Coba lagi.",
+    microphoneFailed: "Mikrofon tidak bisa dimulai. Periksa izin browser.",
+    startDictation: "Dikte suara",
+    stopDictation: "Hentikan dikte",
   },
-  ready: {
-    eyebrow: "Ringkasan",
-    title: "Kana siap",
-    body: "Semua pengaturan tampilan bisa diubah lagi nanti. Kana tidak pernah mengubah instalasi Hermes-mu.",
-    subtitlesLabel: "Subtitle",
-    voiceLabel: "Suara",
-    avatarLabel: "Avatar",
+  settingsNotices: {
+    avatarsLoadFailed: "Avatar tidak dapat dimuat.",
+    backgroundsLoadFailed: "Latar lokal tidak dapat dimuat.",
+    avatarSelected: (name) => `${name} dipilih.`,
+    backgroundApplied: (name) => `${name} sekarang menjadi latar panggungmu.`,
+    backgroundImportFailed: "Gambar ini tidak dapat diimpor.",
+    backgroundRemoved: (name) => `${name} dihapus dari perangkat ini.`,
+    backgroundRemoveFailed: "Latar ini tidak dapat dihapus.",
+    avatarReady: (name) => `${name} siap digunakan.`,
+    avatarImportFailed: "Avatar ini tidak dapat diimpor.",
+    avatarUseFailed: "Avatar ini tidak dapat digunakan.",
+    avatarRemoveFailed: "Avatar ini tidak dapat dihapus.",
   },
-  repair: {
-    eyebrow: "Perawatan",
-    title: "Ada komponen yang butuh perhatian",
-    intro: "Beberapa bagian Kana tidak sehat saat ini. Kamu bisa memperbaikinya dari Pengaturan, atau menutup ini dan melanjutkan.",
-    dismiss: "Lanjutkan saja",
-    openSettings: "Buka Pengaturan",
+  agentStatus: {
+    inputKinds: {
+      approval: "persetujuan",
+      clarification: "klarifikasi",
+      sudo: "kata sandi sudo",
+      secret: "nilai rahasia",
+    },
+    inputNeeded: (kind) => `Hermes memerlukan ${kind}`,
+    inputRequested: (kind) => `Hermes meminta ${kind}`,
+    secureInputWaiting: "Input aman sedang menunggu di Kana.",
+    inputExpired: (kind) => `Permintaan ${kind} telah kedaluwarsa`,
+    resumed: (title) => `Melanjutkan ${title}`,
+    branched: (title) => `Membuat cabang ke ${title}`,
+    sessionReopenFailed: "Sesi Hermes untuk percakapan ini tidak dapat dibuka kembali.",
   },
   banner: {
     degraded: "Ada komponen Kana yang bermasalah.",
@@ -631,6 +732,23 @@ const id: Copy = {
     customAria: "Bahasa subtitle khusus",
     hint: "Hermes menulis subtitle dalam bahasa ini. Ucapan tetap dalam bahasa Jepang; riwayat tidak pernah diterjemahkan ulang.",
   },
+  login: {
+    eyebrow: "Selamat datang kembali",
+    body: "Masukkan kata sandi lokalmu untuk kembali ke Kana.",
+    password: "Kata sandi",
+    placeholder: "Masukkan kata sandi",
+    submit: "Masuk ke Kana",
+    submitting: "Masuk…",
+    footer: "Kata sandimu hanya tersimpan di instalasi Kana ini.",
+    failed: "Gagal masuk.",
+    unreachable: "Server login tidak dapat dihubungi.",
+    setupTitle: "Buat kata sandi dulu",
+    setupBody: "Kana belum punya kata sandi. Demi keamanan, kata sandi pertama hanya bisa dibuat dari terminal di mesin yang menjalankan Kana:",
+    setupSource: "Dari source checkout, jalankan `npm run password`. Setelah itu muat ulang halaman ini.",
+    setupRefresh: "Periksa lagi",
+    themeToggle: (next) => `Ganti ke tema ${next === "dark" ? "gelap" : "terang"}`,
+    themeLabel: (next) => (next === "dark" ? "Gelap" : "Terang"),
+  },
   settings: {
     title: "Pengaturan",
     subtitle: "Preferensi pribadi",
@@ -778,14 +896,13 @@ const id: Copy = {
     advancedModeSourceEnvironment: "Mode ini sedang ditentukan oleh KANA_DEPLOYMENT_MODE dan mengesampingkan file JSON.",
     advancedModeSourceConfig: "Mode ini dibaca dari file JSON di atas.",
     advancedModeSourceDefault: "Mode lokal bawaan digunakan karena belum ada pilihan eksplisit.",
-    advancedRestart: "Mulai ulang Kana setelah mengubah file ini.",
+    advancedRestart: "Perubahan TTS dan mode dibaca otomatis; port Hermes/Qwen berlaku setelah Kana dimulai ulang.",
+    advancedConfigError: "File ini tidak valid, jadi Kana memakai pengaturan bawaan:",
     checkingAccess: "Memeriksa perlindungan akses…",
-    defaultPasswordTitle: "Kata sandi bawaan",
-    defaultPasswordBody: "Kana menggunakan kata sandi bawaan ini. Kamu boleh tetap menggunakannya atau menggantinya kapan saja.",
     currentPassword: "Kata sandi saat ini",
     newPassword: "Kata sandi baru",
     confirmPassword: "Konfirmasi kata sandi",
-    passwordTooShort: "Gunakan minimal 8 karakter untuk kata sandi baru.",
+    passwordPolicy: "Gunakan 8–256 karakter, tanpa spasi di awal atau akhir.",
     passwordMismatch: "Kata sandi baru tidak cocok.",
     passwordUpdated: "Kata sandi diperbarui.",
     passwordFailed: "Kata sandi tidak dapat diubah.",
@@ -834,6 +951,11 @@ const id: Copy = {
     added: (name) => `Suara “${name}” siap digunakan.`,
     addFailed: "Suara tidak dapat ditambahkan.",
     removeFailed: "Suara tidak dapat dihapus.",
+    registrationFailed: "Suara tersimpan, tetapi belum terdaftar ke mesin suara. Kana akan mencobanya lagi.",
+    tooLarge: (maxMib) => `Sampel suara maksimal ${maxMib} MB.`,
+    defaultProtected: "Suara bawaan tidak bisa dihapus.",
+    audioUnsupported: "Browser tidak mendukung konversi audio. Gunakan file WAV.",
+    audioUnreadable: "Audio tidak bisa dibaca browser. Gunakan WAV, atau format lain yang bisa diputar di sini.",
   },
   status: {
     ready: "Siap kapan pun kamu siap",
@@ -859,73 +981,110 @@ const id: Copy = {
     preparingVoice: "Kana menyiapkan suara…",
     speaking: "Kana berbicara…",
   },
-  voiceOnOff: (on: boolean) => (on ? "Aktif" : "Nonaktif"),
-  subtitleNames: {
-    ja: "Jepang",
-    en: "Inggris",
-    id: "Indonesia",
-  },
-  localeNames: { id: "Indonesia", en: "English" },
 };
 
 const en: Copy = {
   common: {
-    continueLabel: "Continue",
     back: "Back",
+    continueLabel: "Continue",
     done: "Done",
+    later: "Later",
+    start: "Start",
     saving: "Saving…",
-    retry: "Recheck",
     close: "Close",
+    selected: "Selected",
+    on: "On",
+    off: "Off",
   },
-  welcome: {
-    eyebrow: "Local presentation layer",
-    title: "Welcome to Kana",
-    body: "Kana gives your existing Hermes Agent a face: a visual conversation, Japanese voice, subtitles, and a replaceable avatar. Hermes remains the only agent and keeps ownership of tools, memory, sessions, and reasoning.",
-    diagramFrom: "Kana Web UI",
-    diagramTo: "Your Hermes",
+  dateLocale: "en-US",
+  onboarding: {
+    checkup: "Checkup",
+    saveFailed: "Could not save setup.",
+    welcomeEyebrow: "Welcome",
+    welcomeTitle: "Meet Kana",
+    welcomeBody: "Choose only what feels personal. Kana handles the technical details, and everything can be changed later.",
+    welcomeDiagramYou: "You",
+    welcomeDiagramBody: "The same agent, with a warmer experience.",
+    languageEyebrow: "Language",
+    languageTitle: "Make conversation feel comfortable",
+    languageBody: "Kana always speaks Japanese. You choose the written language for new replies.",
+    interfaceLabel: "Interface",
+    subtitleLabel: "Subtitle",
+    characterEyebrow: "Character",
+    characterTitle: "Choose a look and voice",
+    characterBody: "Start with a default. Your own Live2D avatar and voice sample can be added from Settings.",
+    voiceLabel: "Kana's voice",
+    almostThere: "Almost there",
+    needsHelpTitle: "Kana needs a little help",
+    readyTitle: "Kana is ready for you",
+    servicesBody: "We checked the two local services that make Kana work.",
+    hermesRunning: "Connected and ready.",
+    hermesInstalled: "Installed; Kana will start it when needed.",
+    hermesMissing: "Hermes was not found on this device.",
+    voiceEngine: "Voice engine",
+    voiceNotNeeded: "Not needed while voice is off.",
+    voiceReady: "Ready to speak.",
+    voiceNeedsAttention: "Needs attention in Settings.",
+    voicePreparedOnUse: "Will be prepared on first use.",
+    openConnectionSettings: "Open connection settings",
   },
-  presentation: {
-    eyebrow: "Presentation",
-    title: "Choose how Kana looks",
-    subtitleLabel: "Subtitle language for new responses",
-    uiLanguageLabel: "Kana interface language",
-    voiceTitle: "Japanese voice",
-    voiceValue: "Local Qwen3-TTS",
-    voiceHint: "Runs as a separate local service.",
-    avatarTitle: "Avatar",
-    avatarValue: "Official Live2D sample",
-    avatarHint: "Import another Cubism model later.",
+  avatarStage: {
+    label: "Kana avatar stage",
+    preparing: "Kana is getting ready",
+    waitingForLive2D: "Waiting for Live2D avatar",
   },
-  deps: {
-    eyebrow: "System check",
-    title: "Check the supporting pieces",
-    body: "Kana is only the face — the brain lives in these local services. Everything can be fixed later from Settings.",
-    hermesTitle: "Hermes (the agent brain)",
-    hermesRunning: "Connected and running.",
-    hermesInstalled: "Installed on this machine. Starts automatically when needed.",
-    hermesMissing: "Not installed yet. Install Hermes, then open Settings → Hermes gateway.",
-    voiceTitle: "Qwen3-TTS voice engine",
-    voiceOk: "Ready. Voice can be used right away.",
-    voiceLoading: "Preparing the model (first time only).",
-    voiceStopped: "Not running. It starts automatically when first needed.",
-    voiceError: "Failed to start — the model cache may be missing or broken. Open Settings → Qwen3-TTS and restart it.",
-    voiceOff: "Disabled in settings. Turn it on anytime.",
-    voiceNotProbed: "Not checked yet.",
+  composer: {
+    reviewAttachments: "Review the attached files.",
+    filesNeedRegularMessage: "Send files with a regular message after the current reply finishes, without a slash command.",
+    dismissError: "Dismiss error",
+    attachments: "Attachments",
+    remove: (name) => `Remove ${name}`,
+    chooseFiles: "Choose files",
+    attachFiles: "Attach files",
+    attachmentLimits: (maxFiles, maxFileMib, maxTotalMib) =>
+      `Up to ${maxFiles} non-empty files, ${maxFileMib} MiB per file, ${maxTotalMib} MiB total.`,
+    chooseModel: "Choose model",
+    closeModelChooser: "Close model chooser",
+    dictationStopped: "Dictation stopped.",
+    listening: "Listening…",
+    listeningOnline: "Listening… the browser service may use the internet.",
+    dictationPermission: "Allow microphone and speech recognition access in your browser.",
+    dictationNetwork: "The browser's dictation service could not connect. Check your internet connection and retry.",
+    dictationUnsupported: "Dictation needs HTTPS or localhost and a browser with speech recognition, such as Google Chrome.",
+    dictationFailed: (error) => `Dictation failed (${error}). Retry or type your message.`,
+    dictationComplete: "Dictation complete. Review the text before sending.",
+    noSpeech: "No speech detected. Try again.",
+    microphoneFailed: "Could not start the microphone. Check browser permissions.",
+    startDictation: "Voice input",
+    stopDictation: "Stop dictation",
   },
-  ready: {
-    eyebrow: "Summary",
-    title: "Kana is ready",
-    body: "Every presentation setting can be changed later. Kana never modifies your Hermes installation.",
-    subtitlesLabel: "Subtitles",
-    voiceLabel: "Voice",
-    avatarLabel: "Avatar",
+  settingsNotices: {
+    avatarsLoadFailed: "Could not load avatars.",
+    backgroundsLoadFailed: "Could not load local backgrounds.",
+    avatarSelected: (name) => `${name} selected.`,
+    backgroundApplied: (name) => `${name} is now your stage background.`,
+    backgroundImportFailed: "Could not import this image.",
+    backgroundRemoved: (name) => `${name} was removed from this device.`,
+    backgroundRemoveFailed: "Could not remove this background.",
+    avatarReady: (name) => `${name} is ready to use.`,
+    avatarImportFailed: "Could not import this avatar.",
+    avatarUseFailed: "Could not use this avatar.",
+    avatarRemoveFailed: "Could not remove this avatar.",
   },
-  repair: {
-    eyebrow: "Maintenance",
-    title: "A component needs attention",
-    intro: "Some parts of Kana are unhealthy right now. You can fix them from Settings, or continue for now.",
-    dismiss: "Continue anyway",
-    openSettings: "Open Settings",
+  agentStatus: {
+    inputKinds: {
+      approval: "approval",
+      clarification: "clarification",
+      sudo: "sudo",
+      secret: "secret",
+    },
+    inputNeeded: (kind) => `Hermes needs ${kind}`,
+    inputRequested: (kind) => `Hermes requested ${kind}`,
+    secureInputWaiting: "Secure input is waiting in Kana.",
+    inputExpired: (kind) => `${kind} request expired`,
+    resumed: (title) => `Resumed ${title}`,
+    branched: (title) => `Branched to ${title}`,
+    sessionReopenFailed: "Could not reopen the Hermes session for this conversation.",
   },
   banner: {
     degraded: "A Kana component is having trouble.",
@@ -1091,6 +1250,23 @@ const en: Copy = {
     customAria: "Custom subtitle language",
     hint: "Hermes writes subtitles in this language. Speech stays Japanese; history is never retranslated.",
   },
+  login: {
+    eyebrow: "Welcome back",
+    body: "Enter your local password to return to your companion.",
+    password: "Password",
+    placeholder: "Enter your password",
+    submit: "Enter Kana",
+    submitting: "Entering…",
+    footer: "Your password stays on this Kana installation.",
+    failed: "Login failed.",
+    unreachable: "Could not reach the login server.",
+    setupTitle: "Set a password first",
+    setupBody: "Kana has no password yet. For safety, the first password can only be created from a terminal on the machine running Kana:",
+    setupSource: "From a source checkout, run `npm run password`. Then reload this page.",
+    setupRefresh: "Check again",
+    themeToggle: (next) => `Switch to ${next} theme`,
+    themeLabel: (next) => (next === "dark" ? "Dark" : "Light"),
+  },
   settings: {
     title: "Settings",
     subtitle: "Personal preferences",
@@ -1238,14 +1414,13 @@ const en: Copy = {
     advancedModeSourceEnvironment: "This mode is currently set by KANA_DEPLOYMENT_MODE and overrides the JSON file.",
     advancedModeSourceConfig: "This mode is read from the JSON file above.",
     advancedModeSourceDefault: "The local default is used because no explicit mode is configured.",
-    advancedRestart: "Restart Kana after changing this file.",
+    advancedRestart: "TTS and mode changes are picked up automatically; Hermes/Qwen port changes apply after restarting Kana.",
+    advancedConfigError: "This file is invalid, so Kana is using defaults:",
     checkingAccess: "Checking access protection…",
-    defaultPasswordTitle: "Default password",
-    defaultPasswordBody: "Kana is using this built-in password. You can keep it or change it at any time.",
     currentPassword: "Current password",
     newPassword: "New password",
     confirmPassword: "Confirm password",
-    passwordTooShort: "Use at least 8 characters for the new password.",
+    passwordPolicy: "Use 8–256 characters with no leading or trailing spaces.",
     passwordMismatch: "The new passwords do not match.",
     passwordUpdated: "Password updated.",
     passwordFailed: "Could not change the password.",
@@ -1294,6 +1469,11 @@ const en: Copy = {
     added: (name) => `Voice “${name}” is ready.`,
     addFailed: "The voice could not be added.",
     removeFailed: "The voice could not be removed.",
+    registrationFailed: "The voice was saved but is not registered with the voice engine yet. Kana will retry.",
+    tooLarge: (maxMib) => `Voice samples can be at most ${maxMib} MB.`,
+    defaultProtected: "The bundled voice cannot be removed.",
+    audioUnsupported: "This browser cannot convert audio. Use a WAV file.",
+    audioUnreadable: "The browser could not read this audio. Use WAV or another format it can play.",
   },
   status: {
     ready: "Ready when you are",
@@ -1319,13 +1499,6 @@ const en: Copy = {
     preparingVoice: "Kana is preparing voice…",
     speaking: "Kana is speaking…",
   },
-  voiceOnOff: (on: boolean) => (on ? "On" : "Off"),
-  subtitleNames: {
-    ja: "Japanese",
-    en: "English",
-    id: "Indonesian",
-  },
-  localeNames: { id: "Indonesia", en: "English" },
 };
 
 const dictionaries: Record<UiLocale, Copy> = { id, en };

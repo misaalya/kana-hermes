@@ -41,11 +41,12 @@ export const ConversationSidebar = memo(function ConversationSidebar({
   locale,
 }: ConversationSidebarProps) {
   const copy = getCopy(locale).history;
+  const dateLocale = getCopy(locale).dateLocale;
   const dateFormatter = useMemo(
-    () => new Intl.DateTimeFormat(locale === "id" ? "id-ID" : "en-US", {
+    () => new Intl.DateTimeFormat(dateLocale, {
       month: "short", day: "numeric",
     }),
-    [locale],
+    [dateLocale],
   );
   const localKeys = useMemo(
     () =>

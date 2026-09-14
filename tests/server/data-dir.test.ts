@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, describe, it } from "node:test";
@@ -110,6 +110,20 @@ describe("legacy data file migration", () => {
       migrateLegacyKanaFile("jwt-secret", targetDir, [legacyHomeKana]),
       false,
     );
+  });
+
+  it("moves a WAL-mode database together with its journal files", () => {
+    const legacy = path.join(root, "legacy-wal");
+    const target = path.join(root, "target-wal");
+    mkdirSync(legacy, { recursive: true });
+    for (const suffix of ["", "-wal", "-shm"]) {
+      writeFileSync(path.join(legacy, `appstate.db${suffix}`), suffix || "db");
+    }
+    assert.equal(migrateLegacyKanaFile("appstate.db", target, [legacy]), true);
+    for (const suffix of ["", "-wal", "-shm"]) {
+      assert.equal(existsSync(path.join(target, `appstate.db${suffix}`)), true);
+      assert.equal(existsSync(path.join(legacy, `appstate.db${suffix}`)), false);
+    }
   });
 
   it("reports no migration when no legacy file exists", () => {

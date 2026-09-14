@@ -21,6 +21,9 @@ npm install -g kana-alya
 kana
 ```
 
+The first start asks you to create the access password in the terminal; Kana
+has no default password. Change it later with `kana password` or in Settings.
+
 The package includes the built web runtime. It does not build the frontend,
 install Hermes, download a speech model, or create user-owned config during
 npm installation. The account running Kana owns its config and data.
@@ -29,8 +32,13 @@ For a server, run under the account that owns Hermes and the Kana data root:
 
 ```bash
 KANA_DATA_DIR=/var/lib/kana kana config
+KANA_DATA_DIR=/var/lib/kana kana password
 KANA_DATA_DIR=/var/lib/kana kana serve --port 3000
 ```
+
+A non-interactive `kana serve` (for example under systemd) refuses to start
+until a password exists. Run `kana password` once as the service account, or
+pipe it for automation: `printf '%s\n' "$PASSWORD" | kana password --stdin`.
 
 `kana serve` runs in the foreground, forces deployment mode, and never opens a
 browser. Its default bind address remains `127.0.0.1` for an HTTPS reverse
@@ -63,13 +71,13 @@ Deploy the **entire** `.next/standalone` directory, including hidden `.next`
 assets. On the server, use an absolute data root outside that directory:
 
 ```bash
-KANA_DATA_DIR=/var/lib/kana \
-KANA_DEPLOYMENT_MODE=deployment \
-HOSTNAME=127.0.0.1 PORT=3000 \
-node /opt/kana/server.js
+KANA_DATA_DIR=/var/lib/kana node /opt/kana/bin/kana.mjs password
+KANA_DATA_DIR=/var/lib/kana node /opt/kana/bin/kana.mjs serve --port 3000
 ```
 
-This assumes the contents of `.next/standalone` were copied to `/opt/kana`.
+This assumes the contents of `.next/standalone` were copied to `/opt/kana`;
+`package:local` places the launcher (`bin/`, `config/`, `shared/`) next to
+`server.js`.
 You do not need `npm install -g kana-alya` on this path. Do not deploy `next dev`.
 The same server config, authentication, relay and TTS implementation run in
 both distribution paths. Build for the target platform; the current npm
@@ -80,8 +88,9 @@ artifact targets Linux x64/glibc and Node.js 22.13+.
 Hermes and an optional local Qwen model run on the **Kana server machine**.
 Browser audio playback and Live2D run on the device opening the page.
 A VPS installation cannot discover Hermes installed only on your laptop.
-Install and configure the user's unmodified Hermes on the VPS under the
-service account. Existing Hermes installations remain independently managed.
+Install and configure the user's unmodified Hermes on the VPS and run Kana
+under the same account: Linux only lets that user read a running gateway's
+session token. Existing Hermes installations remain independently managed.
 
 `tts.provider` in server `config.json` chooses local Qwen or an external speech
 API. Both work with either installation method. External TTS needs no local
@@ -102,11 +111,16 @@ and [its separate CLI package](https://github.com/decolua/9router/blob/master/cl
 
 - Root `package.json`: private `kana-app`, source dependencies, tests and build.
 - `cli/package.json`: public `kana-alya` manifest; commands `kana` and `kana-alya`.
-- `bin/` and `config/`: authoritative launcher and starter config sources.
+- `bin/`, `config/`, `shared/`: authoritative launcher, starter config, and the
+  plain-ESM modules (data root, password hashing, appstate schema, Hermes
+  discovery) shared by the launcher and the server.
 - `npm run package:npm`: builds the app, assembles generated CLI files and
   inspects the npm artifact. `npm pack ./cli` also builds before packing.
-- `npm run publish:cli`: guarded publication of the CLI package. Keep the app
-  and CLI versions equal. Never publish the private source package.
+- `npm run publish:cli`: guarded publication of the CLI package. It runs lint,
+  typecheck, and unit tests, and refuses a dirty working tree. Keep the app and
+  CLI versions equal. Never publish the private source package. Service and
+  asset files are packed from `git ls-files`, so untracked local files are
+  never shipped.
 
 The separation is about delivery and launch behavior. It does not create a
 second app, a second configuration system, or a second Hermes agent.

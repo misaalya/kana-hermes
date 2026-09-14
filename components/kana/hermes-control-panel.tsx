@@ -9,11 +9,7 @@ import { btnGhost, btnSecondary } from "./ui";
 type HermesControlPanelProps = {
   locale: UiLocale;
   onInspect(preferredPort?: number): Promise<HermesRuntimeStatus>;
-  onStart(options: {
-    port: number;
-    cwd?: string;
-    restart?: boolean;
-  }): Promise<HermesRuntimeStatus>;
+  onStart(options: { port?: number; restart?: boolean }): Promise<HermesRuntimeStatus>;
   onStop(): Promise<HermesRuntimeStatus>;
 };
 
@@ -39,7 +35,6 @@ export function HermesControlPanel({
   const [status, setStatus] = useState<HermesRuntimeStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [port, setPort] = useState(9119);
   const stateLabel =
     status
       ? copy.states[status.state] ?? status.state
@@ -53,7 +48,6 @@ export function HermesControlPanel({
     try {
       const next = await onInspect();
       setStatus(next);
-      setPort(next.port || 9119);
     } catch (error) {
       setStatus(null);
       setNotice(error instanceof Error ? error.message : copy.checkFailed);
@@ -68,7 +62,6 @@ export function HermesControlPanel({
       .then((next) => {
         if (active) {
           setStatus(next);
-          setPort(next.port || 9119);
         }
       })
       .catch((error) => {
@@ -88,7 +81,8 @@ export function HermesControlPanel({
         action === "stop"
           ? await onStop()
           : await onStart({
-              port,
+              // Keep the port the server reported; otherwise it uses config.json.
+              port: status?.port || undefined,
               restart: action === "restart",
             });
       setStatus(next);
