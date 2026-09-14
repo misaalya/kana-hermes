@@ -1,4 +1,3 @@
-import type { SubtitleLanguage } from "@/lib/presentation/types";
 import type { Live2DModelBindings } from "@/lib/avatar/live2d-avatar-provider";
 import type { Live2DModelLayout } from "@/lib/avatar/model-layout";
 import type { VoiceDeliveryMode } from "@/lib/voice/speech-chunks";
@@ -10,11 +9,11 @@ export type AvatarMode = "live2d";
 const STAGE_BACKGROUNDS = [
   "plain",
   "room",
-  "pattern-sparkles",
-  "pattern-twinkle",
-  "pattern-gingham",
-  "pattern-stars",
-  "pattern-swirls",
+  "pattern-sakura",
+  "pattern-sparkle",
+  "pattern-clouds",
+  "pattern-seigaiha",
+  "pattern-ribbon",
   "custom",
 ] as const;
 export type StageBackground = (typeof STAGE_BACKGROUNDS)[number];
@@ -34,7 +33,6 @@ export type KanaPreferences = {
   onboardingCompleted: boolean;
   /** Interface copy language; dictionary lives in lib/ui/copy.ts. */
   uiLocale: "id" | "en";
-  subtitleLanguage: SubtitleLanguage;
   agentMode: AgentMode;
   voiceEnabled: boolean;
   voiceMode: VoiceMode;

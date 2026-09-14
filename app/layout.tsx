@@ -20,11 +20,15 @@ const kanaJapanese = M_PLUS_Rounded_1c({
 });
 
 export const metadata: Metadata = {
-  title: "Kana — Hermes, with a face and a voice",
+  title: "Kana Hermes",
   description:
     "A local visual conversation layer for your existing Hermes Agent installation.",
   applicationName: "Kana",
   manifest: "/manifest.webmanifest",
+  // No app/favicon.ico or app/icon.svg: Next would otherwise auto-inject a
+  // favicon <link>. The PWA install icon still lives at public/icon.svg,
+  // referenced only from manifest.ts, so it never becomes a tab favicon.
+  icons: { icon: [] },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",

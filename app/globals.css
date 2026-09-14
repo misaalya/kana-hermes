@@ -78,7 +78,6 @@
   --chat-composer: #ffffff;
 }
 
-* { border-color: var(--line); }
 
 html,
 body {
@@ -88,10 +87,17 @@ body {
 
 body { background: var(--bg); }
 
-button,
-input,
-select,
-textarea { font: inherit; }
+/* Base element resets must stay in the base layer: unlayered rules outrank
+   Tailwind's utilities layer, which silently discarded text-*, font-*, and
+   border-color utilities (border-accent, border-transparent, ...). */
+@layer base {
+  * { border-color: var(--line); }
+
+  button,
+  input,
+  select,
+  textarea { font: inherit; }
+}
 
 button,
 [role="button"] { -webkit-tap-highlight-color: transparent; }
@@ -134,35 +140,43 @@ button,
   background-size: cover;
 }
 
-.kana-stage-pattern[data-background^="pattern-"] .kana-stage-backdrop {
-  background-color: var(--bg);
-  background-position: 0 0;
-  background-repeat: repeat;
+/* Built-in patterns (public/backgrounds/kana-pattern-*.svg) are alpha masks
+   painted with a theme token, so one tile works in light and dark themes. */
+:root {
+  --kana-pattern-blue: rgb(131 193 229 / 18%);
+  --kana-pattern-blue-soft: rgb(131 193 229 / 13%);
+  --kana-pattern-pink: rgb(231 150 176 / 18%);
 }
 
-.kana-stage-pattern[data-background="pattern-sparkles"] .kana-stage-backdrop {
-  background-image: url("/backgrounds/kana-pattern-sparkles.svg");
-  background-size: 72px 72px;
+[data-theme="light"] {
+  --kana-pattern-blue: rgb(89 157 198 / 28%);
+  --kana-pattern-blue-soft: rgb(89 157 198 / 20%);
+  --kana-pattern-pink: rgb(229 138 164 / 30%);
 }
 
-.kana-stage-pattern[data-background="pattern-twinkle"] .kana-stage-backdrop {
-  background-image: url("/backgrounds/kana-pattern-twinkle.svg");
-  background-size: 96px 96px;
-}
+.kana-pattern-sakura,
+.kana-stage-pattern[data-background="pattern-sakura"] { --kana-pattern: url("/backgrounds/kana-pattern-sakura.svg"); --kana-pattern-size: 136px; --kana-pattern-ink: var(--kana-pattern-pink); }
+.kana-pattern-sparkle,
+.kana-stage-pattern[data-background="pattern-sparkle"] { --kana-pattern: url("/backgrounds/kana-pattern-sparkle.svg"); --kana-pattern-size: 112px; --kana-pattern-ink: var(--kana-pattern-blue); }
+.kana-pattern-clouds,
+.kana-stage-pattern[data-background="pattern-clouds"] { --kana-pattern: url("/backgrounds/kana-pattern-clouds.svg"); --kana-pattern-size: 176px; --kana-pattern-ink: var(--kana-pattern-blue); }
+.kana-pattern-seigaiha,
+.kana-stage-pattern[data-background="pattern-seigaiha"] { --kana-pattern: url("/backgrounds/kana-pattern-seigaiha.svg"); --kana-pattern-size: 72px; --kana-pattern-ink: var(--kana-pattern-blue-soft); }
+.kana-pattern-ribbon,
+.kana-stage-pattern[data-background="pattern-ribbon"] { --kana-pattern: url("/backgrounds/kana-pattern-ribbon.svg"); --kana-pattern-size: 136px; --kana-pattern-ink: var(--kana-pattern-blue); }
 
-.kana-stage-pattern[data-background="pattern-gingham"] .kana-stage-backdrop {
-  background-image: url("/backgrounds/kana-pattern-gingham.svg");
-  background-size: 80px 80px;
-}
-
-.kana-stage-pattern[data-background="pattern-stars"] .kana-stage-backdrop {
-  background-image: url("/backgrounds/kana-pattern-stars.svg");
-  background-size: 104px 104px;
-}
-
-.kana-stage-pattern[data-background="pattern-swirls"] .kana-stage-backdrop {
-  background-image: url("/backgrounds/kana-pattern-swirls.svg");
-  background-size: 144px 144px;
+.kana-stage-pattern[data-background^="pattern-"] .kana-stage-backdrop::after,
+.kana-background-preview-pattern::after {
+  position: absolute;
+  inset: 0;
+  background-color: var(--kana-pattern-ink);
+  content: "";
+  -webkit-mask-image: var(--kana-pattern);
+  mask-image: var(--kana-pattern);
+  -webkit-mask-size: var(--kana-pattern-size) auto;
+  mask-size: var(--kana-pattern-size) auto;
+  -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
 }
 
 .kana-avatar-content {
@@ -304,39 +318,16 @@ button,
   background-size: cover;
 }
 
-.kana-background-preview-pattern-sparkles,
-.kana-background-preview-pattern-twinkle,
-.kana-background-preview-pattern-gingham,
-.kana-background-preview-pattern-stars,
-.kana-background-preview-pattern-swirls {
-  background-color: var(--bg);
-  background-position: 0 0;
-  background-repeat: repeat;
+.kana-background-preview-pattern {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg);
 }
 
-.kana-background-preview-pattern-sparkles {
-  background-image: url("/backgrounds/kana-pattern-sparkles.svg");
-  background-size: 54px 54px;
-}
-
-.kana-background-preview-pattern-twinkle {
-  background-image: url("/backgrounds/kana-pattern-twinkle.svg");
-  background-size: 68px 68px;
-}
-
-.kana-background-preview-pattern-gingham {
-  background-image: url("/backgrounds/kana-pattern-gingham.svg");
-  background-size: 58px 58px;
-}
-
-.kana-background-preview-pattern-stars {
-  background-image: url("/backgrounds/kana-pattern-stars.svg");
-  background-size: 76px 76px;
-}
-
-.kana-background-preview-pattern-swirls {
-  background-image: url("/backgrounds/kana-pattern-swirls.svg");
-  background-size: 96px 96px;
+/* Previews are small: shrink the tile so several motifs stay visible. */
+.kana-background-preview-pattern::after {
+  -webkit-mask-size: calc(var(--kana-pattern-size) * 0.7) auto;
+  mask-size: calc(var(--kana-pattern-size) * 0.7) auto;
 }
 
 .kana-background-carousel {
@@ -349,31 +340,31 @@ button,
 }
 
 .kana-settings-nav-item {
-  border-left: 3px solid transparent;
-  color: var(--muted);
+  color: var(--ink-dim);
 }
 
 .kana-settings-nav-item:hover {
-  background: var(--surface);
+  background: color-mix(in srgb, var(--surface-strong) 75%, transparent);
   color: var(--ink);
 }
 
 .kana-settings-nav-item.is-active {
-  border-left-color: var(--accent);
-  color: var(--accent-strong);
+  background: var(--surface-strong);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.kana-settings-nav {
+  scrollbar-width: none;
+}
+
+.kana-settings-nav::-webkit-scrollbar {
+  display: none;
 }
 
 .kana-focus:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent) 75%, transparent);
   outline-offset: 2px;
-}
-
-.kana-settings-nav-item:focus-visible {
-  outline: none;
-  text-decoration: underline;
-  text-decoration-color: var(--accent);
-  text-decoration-thickness: 2px;
-  text-underline-offset: 4px;
 }
 
 @keyframes kana-pulse {
@@ -447,13 +438,132 @@ button,
   }
 }
 
-@media (max-width: 767px) {
-  .kana-settings-nav-item {
-    border-bottom: 3px solid transparent;
-    border-left: 0;
+/* Touch browsers (notably iOS Safari) zoom into form fields below 16px. */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea {
+    font-size: 16px;
   }
+}
 
-  .kana-settings-nav-item.is-active {
-    border-bottom-color: var(--accent);
+.kana-settings-shell {
+  box-shadow: 0 24px 80px -24px rgb(0 0 0 / 45%);
+}
+
+.kana-segment-active {
+  box-shadow: 0 0 0 1px var(--line-strong);
+}
+
+@media (max-width: 767px) {
+  .kana-settings-shell {
+    box-shadow: none;
+  }
+}
+
+.kana-popover {
+  box-shadow: 0 12px 32px -12px rgb(0 0 0 / 30%);
+}
+
+.kana-range {
+  height: 18px;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.kana-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--accent) var(--kana-range-fill, 50%), var(--surface-strong) var(--kana-range-fill, 50%));
+}
+
+.kana-range::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--surface-strong);
+}
+
+.kana-range::-moz-range-progress {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.kana-range::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  appearance: none;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--raised);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 25%);
+}
+
+.kana-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--raised);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 25%);
+}
+
+.kana-layout-surface {
+  cursor: grab;
+}
+
+.kana-layout-surface.is-dragging {
+  cursor: grabbing;
+}
+
+.kana-layout-guide {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  border-left: 1px dashed color-mix(in srgb, var(--accent) 70%, transparent);
+  pointer-events: none;
+}
+
+.kana-layout-surface[data-chat-open="true"] .kana-layout-guide {
+  left: calc(50% + max(-17.5vw, -255px));
+}
+
+@media (max-width: 1023px) {
+  .kana-layout-surface[data-chat-open="true"] .kana-layout-guide {
+    left: 50%;
+  }
+}
+
+.kana-workspace-action[aria-expanded="true"] {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+/* Stage edges covered by the workspace UI. The Live2D fit reads the resolved
+   pixel values so framing stays clear of the header and the phone chat. */
+@property --kana-avatar-safe-top {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
+@property --kana-avatar-safe-bottom {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
+.kana-avatar-content {
+  --kana-avatar-safe-top: 76px;
+  --kana-avatar-safe-bottom: 0px;
+}
+
+@media (max-width: 1023px) {
+  .kana-avatar-content {
+    --kana-avatar-safe-top: 64px;
+    --kana-avatar-safe-bottom: 46dvh;
   }
 }

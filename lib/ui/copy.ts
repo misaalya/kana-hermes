@@ -28,13 +28,18 @@ export type Copy = {
     welcomeEyebrow: string;
     welcomeTitle: string;
     welcomeBody: string;
-    welcomeDiagramYou: string;
-    welcomeDiagramBody: string;
+    welcomePlan: ReadonlyArray<{ title: string; body: string }>;
+    welcomeLater: string;
+    stepOf(step: number, total: number): string;
+    officialSample: string;
+    statusReady: string;
+    statusOnDemand: string;
+    statusAttention: string;
     languageEyebrow: string;
     languageTitle: string;
     languageBody: string;
     interfaceLabel: string;
-    subtitleLabel: string;
+    subtitleNote: string;
     characterEyebrow: string;
     characterTitle: string;
     characterBody: string;
@@ -57,6 +62,8 @@ export type Copy = {
     label: string;
     preparing: string;
     waitingForLive2D: string;
+    loadFailed: string;
+    loadFailedHint: string;
   };
   composer: {
     reviewAttachments: string;
@@ -74,6 +81,7 @@ export type Copy = {
     listeningOnline: string;
     dictationPermission: string;
     dictationNetwork: string;
+    dictationBrave: string;
     dictationUnsupported: string;
     dictationFailed(error: string): string;
     dictationComplete: string;
@@ -254,13 +262,6 @@ export type Copy = {
     sending: string;
     sendSecurely: string;
   };
-  subtitlePicker: {
-    commonLanguages: string;
-    customLanguage: string;
-    customPlaceholder: string;
-    customAria: string;
-    hint: string;
-  };
   login: {
     eyebrow: string;
     body: string;
@@ -286,12 +287,14 @@ export type Copy = {
     sections: Record<string, { label: string; hint: string }>;
     sectionsAria: string;
     saveError: string;
+    saved: string;
+    logoutDescription: string;
+    savingChanges: string;
     close: string;
     interfaceTitle: string;
     interfaceDescription: string;
     subtitleTitle: string;
     subtitleDescription: string;
-    historicalSubtitles: string;
     voiceTitle: string;
     voiceOn: string;
     voiceOff: string;
@@ -342,6 +345,12 @@ export type Copy = {
     avatarLayoutScale: string;
     avatarLayoutReset: string;
     avatarLayoutAria: string;
+    avatarLayoutHint: string;
+    avatarLayoutCenter: string;
+    avatarLayoutSmaller: string;
+    avatarLayoutLarger: string;
+    avatarLayoutClose: string;
+    avatarLayoutSurface: string;
     avatarMouthParameter: string;
     avatarMouthHint: string;
     avatarMouthReady: string;
@@ -484,14 +493,23 @@ const id: Copy = {
     saveFailed: "Pengaturan awal tidak dapat disimpan.",
     welcomeEyebrow: "Selamat datang",
     welcomeTitle: "Kenalan dulu dengan Kana",
-    welcomeBody: "Atur hal yang terasa personal saja. Detail teknis bisa Kana tangani sendiri dan selalu bisa diubah nanti.",
-    welcomeDiagramYou: "Kamu",
-    welcomeDiagramBody: "Satu agent yang sama, dengan pengalaman yang lebih hangat.",
+    welcomeBody: "Kana memberi wajah dan suara untuk Hermes Agent-mu. Hermes tetap yang berpikir dan bekerja. Ada tiga langkah singkat, tidak sampai semenit.",
+    welcomePlan: [
+      { title: "Bahasa", body: "Bahasa menu dan tombol Kana." },
+      { title: "Karakter dan suara", body: "Avatar Live2D dan suara Kana." },
+      { title: "Pemeriksaan", body: "Memastikan Hermes dan mesin suara siap." },
+    ],
+    welcomeLater: "Semua pilihan bisa diubah nanti di Pengaturan.",
+    stepOf: (step, total) => `Langkah ${step} dari ${total}`,
+    officialSample: "Sampel resmi Live2D",
+    statusReady: "Siap",
+    statusOnDemand: "Saat dibutuhkan",
+    statusAttention: "Perlu perhatian",
     languageEyebrow: "Bahasa",
     languageTitle: "Buat percakapan terasa nyaman",
-    languageBody: "Kana selalu berbicara dalam bahasa Jepang. Kamu memilih bahasa tulisan untuk balasan baru.",
+    languageBody: "Pilih bahasa untuk menu dan tombol Kana.",
     interfaceLabel: "Antarmuka",
-    subtitleLabel: "Subtitle",
+    subtitleNote: "Kana selalu berbicara dalam bahasa Jepang. Subtitle otomatis mengikuti bahasa yang kamu pakai saat menulis, jadi tidak perlu diatur.",
     characterEyebrow: "Karakter",
     characterTitle: "Pilih tampilan dan suara",
     characterBody: "Mulai dengan pilihan bawaan. Avatar Live2D dan sampel suaramu sendiri bisa ditambahkan dari Pengaturan.",
@@ -514,6 +532,8 @@ const id: Copy = {
     label: "Panggung avatar Kana",
     preparing: "Kana sedang bersiap",
     waitingForLive2D: "Menunggu avatar Live2D",
+    loadFailed: "Avatar tidak dapat dimuat",
+    loadFailedHint: "Pilih avatar lain di Pengaturan → Avatar.",
   },
   composer: {
     reviewAttachments: "Periksa file terlampir.",
@@ -531,7 +551,8 @@ const id: Copy = {
     listening: "Mendengarkan…",
     listeningOnline: "Mendengarkan… layanan browser dapat menggunakan internet.",
     dictationPermission: "Izinkan mikrofon dan layanan pengenalan suara di browser.",
-    dictationNetwork: "Layanan dikte browser tidak terhubung. Periksa internet lalu coba lagi.",
+    dictationNetwork: "Layanan dikte browser tidak terhubung. Periksa internet; browser berbasis Chromium tanpa layanan Google tidak bisa dikte, jadi pakai Google Chrome atau Edge.",
+    dictationBrave: "Brave tidak mendukung dikte suara karena tidak terhubung ke layanan pengenalan suara. Pakai Google Chrome atau Edge, atau ketik pesan.",
     dictationUnsupported: "Dikte perlu HTTPS atau localhost dan browser yang mendukung pengenalan suara, seperti Google Chrome.",
     dictationFailed: (error) => `Dikte gagal (${error}). Coba lagi atau ketik pesan.`,
     dictationComplete: "Dikte selesai. Periksa teks lalu kirim.",
@@ -725,13 +746,6 @@ const id: Copy = {
     sending: "Mengirim…",
     sendSecurely: "Kirim dengan aman",
   },
-  subtitlePicker: {
-    commonLanguages: "Bahasa subtitle umum",
-    customLanguage: "Bahasa khusus",
-    customPlaceholder: "Atau ketik bahasa apa pun…",
-    customAria: "Bahasa subtitle khusus",
-    hint: "Hermes menulis subtitle dalam bahasa ini. Ucapan tetap dalam bahasa Jepang; riwayat tidak pernah diterjemahkan ulang.",
-  },
   login: {
     eyebrow: "Selamat datang kembali",
     body: "Masukkan kata sandi lokalmu untuk kembali ke Kana.",
@@ -764,12 +778,14 @@ const id: Copy = {
     },
     sectionsAria: "Bagian pengaturan",
     saveError: "Tidak dapat menyimpan",
+    saved: "Tersimpan otomatis",
+    logoutDescription: "Keluar dari browser ini. Browser lain tetap masuk sampai kata sandi diganti.",
+    savingChanges: "Menyimpan…",
     close: "Tutup pengaturan",
     interfaceTitle: "Bahasa antarmuka",
     interfaceDescription: "Pilih bahasa yang digunakan oleh kontrol dan menu Kana.",
-    subtitleTitle: "Bahasa subtitle",
-    subtitleDescription: "Kana selalu berbicara dalam bahasa Jepang. Ini mengatur subtitle tertulis untuk balasan baru.",
-    historicalSubtitles: "Subtitle lama tetap persis seperti saat pertama kali ditampilkan.",
+    subtitleTitle: "Subtitle",
+    subtitleDescription: "Kana selalu berbicara dalam bahasa Jepang. Subtitle otomatis memakai bahasa yang kamu pakai saat menulis, dan subtitle lama tetap seperti saat pertama ditampilkan.",
     voiceTitle: "Suara Kana",
     voiceOn: "Kana membacakan balasan baru dalam bahasa Jepang.",
     voiceOff: "Balasan tetap tersedia sebagai teks saat suara dimatikan.",
@@ -779,11 +795,11 @@ const id: Copy = {
     backgroundOptions: {
       plain: { label: "Polos", hint: "Panggung datar yang tenang" },
       room: { label: "Kamar Kana", hint: "Kamar ilustrasi yang nyaman" },
-      "pattern-sparkles": { label: "Kisi kilau", hint: "Tanda silang kecil dengan ritme ringan" },
-      "pattern-twinkle": { label: "Kelap-kelip lembut", hint: "Kilau ringan dan titik-titik kecil" },
-      "pattern-gingham": { label: "Gingham nyaman", hint: "Pola kotak lembut dengan titik kecil" },
-      "pattern-stars": { label: "Parade bintang", hint: "Bintang ceria dengan jarak yang tenang" },
-      "pattern-swirls": { label: "Pusaran ceria", hint: "Bentuk spiral bebas seperti gambar tangan" },
+      "pattern-sakura": { label: "Sakura", hint: "Bunga sakura kecil dan kelopak lepas" },
+      "pattern-sparkle": { label: "Kilau", hint: "Kilau empat sudut ala anime" },
+      "pattern-clouds": { label: "Awan", hint: "Awan mungil yang berselang-seling" },
+      "pattern-seigaiha": { label: "Seigaiha", hint: "Pola ombak tradisional Jepang" },
+      "pattern-ribbon": { label: "Pita", hint: "Pita kecil dengan titik-titik lembut" },
     },
     backgrounds: (count) => `${count} latar · tersimpan di perangkat ini`,
     carouselControls: "Kontrol carousel latar",
@@ -819,15 +835,21 @@ const id: Copy = {
     avatarBehaviorLoading: "Membaca kemampuan avatar…",
     avatarBehaviorFailed: "Kemampuan avatar tidak dapat dibaca.",
     avatarBehaviorBuiltin: "Avatar bawaan sudah memiliki pemetaan ekspresi yang disiapkan oleh Kana.",
-    avatarLayoutTitle: "Posisi dan ukuran avatar",
+    avatarLayoutTitle: "Posisi avatar",
     avatarLayoutDescription: "Kana menyesuaikan model otomatis dari bounds Live2D-nya. Koreksi ini disimpan khusus untuk avatar yang sedang dipilih.",
     avatarLayoutAutomatic: "Posisi otomatis",
     avatarLayoutAdjusted: "Disesuaikan",
-    avatarLayoutHorizontal: "Posisi X",
-    avatarLayoutVertical: "Posisi Y",
+    avatarLayoutHorizontal: "Horizontal",
+    avatarLayoutVertical: "Vertikal",
     avatarLayoutScale: "Ukuran",
-    avatarLayoutReset: "Kembali otomatis",
+    avatarLayoutReset: "Atur ulang",
     avatarLayoutAria: "Atur posisi dan ukuran avatar",
+    avatarLayoutHint: "Seret avatar untuk memindahkannya. Scroll atau cubit untuk mengubah ukuran.",
+    avatarLayoutCenter: "Tengah",
+    avatarLayoutSmaller: "Perkecil avatar",
+    avatarLayoutLarger: "Perbesar avatar",
+    avatarLayoutClose: "Tutup pengaturan posisi avatar",
+    avatarLayoutSurface: "Panggung avatar. Seret untuk memindahkan, tombol panah untuk menggeser, plus atau minus untuk ukuran.",
     avatarMouthParameter: "Lip-sync otomatis",
     avatarMouthHint: "Kana mendeteksi kontrol mulut saat avatar dimuat. Jika model tidak menyediakannya, avatar tetap berfungsi tanpa lip-sync.",
     avatarMouthReady: "Diatur otomatis",
@@ -1002,14 +1024,23 @@ const en: Copy = {
     saveFailed: "Could not save setup.",
     welcomeEyebrow: "Welcome",
     welcomeTitle: "Meet Kana",
-    welcomeBody: "Choose only what feels personal. Kana handles the technical details, and everything can be changed later.",
-    welcomeDiagramYou: "You",
-    welcomeDiagramBody: "The same agent, with a warmer experience.",
+    welcomeBody: "Kana gives your Hermes agent a face and a voice. Hermes still does the thinking and the work. Three short steps, under a minute.",
+    welcomePlan: [
+      { title: "Language", body: "The language of Kana's menus and buttons." },
+      { title: "Character and voice", body: "Kana's Live2D avatar and voice." },
+      { title: "Checkup", body: "Makes sure Hermes and the voice engine are ready." },
+    ],
+    welcomeLater: "Every choice can be changed later in Settings.",
+    stepOf: (step, total) => `Step ${step} of ${total}`,
+    officialSample: "Official Live2D sample",
+    statusReady: "Ready",
+    statusOnDemand: "On demand",
+    statusAttention: "Needs attention",
     languageEyebrow: "Language",
     languageTitle: "Make conversation feel comfortable",
-    languageBody: "Kana always speaks Japanese. You choose the written language for new replies.",
+    languageBody: "Choose the language for Kana's menus and buttons.",
     interfaceLabel: "Interface",
-    subtitleLabel: "Subtitle",
+    subtitleNote: "Kana always speaks Japanese. Subtitles automatically follow the language you write in, so there is nothing to set.",
     characterEyebrow: "Character",
     characterTitle: "Choose a look and voice",
     characterBody: "Start with a default. Your own Live2D avatar and voice sample can be added from Settings.",
@@ -1032,6 +1063,8 @@ const en: Copy = {
     label: "Kana avatar stage",
     preparing: "Kana is getting ready",
     waitingForLive2D: "Waiting for Live2D avatar",
+    loadFailed: "The avatar couldn't load",
+    loadFailedHint: "Choose another avatar in Settings → Avatar.",
   },
   composer: {
     reviewAttachments: "Review the attached files.",
@@ -1049,7 +1082,8 @@ const en: Copy = {
     listening: "Listening…",
     listeningOnline: "Listening… the browser service may use the internet.",
     dictationPermission: "Allow microphone and speech recognition access in your browser.",
-    dictationNetwork: "The browser's dictation service could not connect. Check your internet connection and retry.",
+    dictationNetwork: "The browser's dictation service could not connect. Check your internet; Chromium-based browsers without Google's service cannot dictate, so use Google Chrome or Edge.",
+    dictationBrave: "Brave does not support voice input because it cannot reach a speech recognition service. Use Google Chrome or Edge, or type your message.",
     dictationUnsupported: "Dictation needs HTTPS or localhost and a browser with speech recognition, such as Google Chrome.",
     dictationFailed: (error) => `Dictation failed (${error}). Retry or type your message.`,
     dictationComplete: "Dictation complete. Review the text before sending.",
@@ -1243,13 +1277,6 @@ const en: Copy = {
     sending: "Sending…",
     sendSecurely: "Send securely",
   },
-  subtitlePicker: {
-    commonLanguages: "Common subtitle languages",
-    customLanguage: "Custom language",
-    customPlaceholder: "Or type any language…",
-    customAria: "Custom subtitle language",
-    hint: "Hermes writes subtitles in this language. Speech stays Japanese; history is never retranslated.",
-  },
   login: {
     eyebrow: "Welcome back",
     body: "Enter your local password to return to your companion.",
@@ -1282,12 +1309,14 @@ const en: Copy = {
     },
     sectionsAria: "Settings sections",
     saveError: "Could not save",
+    saved: "Saved automatically",
+    logoutDescription: "Sign out of this browser. Other browsers stay signed in until the password changes.",
+    savingChanges: "Saving…",
     close: "Close settings",
     interfaceTitle: "Interface language",
     interfaceDescription: "Choose the language used by Kana's controls and menus.",
-    subtitleTitle: "Subtitle language",
-    subtitleDescription: "Kana always speaks Japanese. This controls the written subtitle for new replies.",
-    historicalSubtitles: "Existing subtitles stay exactly as you first saw them.",
+    subtitleTitle: "Subtitles",
+    subtitleDescription: "Kana always speaks Japanese. Subtitles automatically use the language you write in, and earlier subtitles stay exactly as you first saw them.",
     voiceTitle: "Kana's voice",
     voiceOn: "Kana speaks new replies in Japanese.",
     voiceOff: "Replies remain available as text while voice is off.",
@@ -1297,11 +1326,11 @@ const en: Copy = {
     backgroundOptions: {
       plain: { label: "Plain", hint: "A quiet flat stage" },
       room: { label: "Kana's room", hint: "A cozy illustrated room" },
-      "pattern-sparkles": { label: "Sparkle grid", hint: "Tiny crosses with an AIRI-like rhythm" },
-      "pattern-twinkle": { label: "Soft twinkle", hint: "Airy sparkles and small dots" },
-      "pattern-gingham": { label: "Cozy gingham", hint: "A soft check pattern with tiny dots" },
-      "pattern-stars": { label: "Star parade", hint: "Playful stars with calm spacing" },
-      "pattern-swirls": { label: "Playful swirls", hint: "Loose hand-drawn spiral shapes" },
+      "pattern-sakura": { label: "Sakura", hint: "Small cherry blossoms and loose petals" },
+      "pattern-sparkle": { label: "Sparkle", hint: "Four-point anime sparkles" },
+      "pattern-clouds": { label: "Clouds", hint: "Tiny clouds in offset rows" },
+      "pattern-seigaiha": { label: "Seigaiha", hint: "Traditional Japanese wave scales" },
+      "pattern-ribbon": { label: "Ribbon", hint: "Little bows with soft dots" },
     },
     backgrounds: (count) => `${count} backgrounds · stored on this device`,
     carouselControls: "Background carousel controls",
@@ -1337,15 +1366,21 @@ const en: Copy = {
     avatarBehaviorLoading: "Reading avatar capabilities…",
     avatarBehaviorFailed: "Could not read this avatar's capabilities.",
     avatarBehaviorBuiltin: "Included avatars already have expression mappings prepared by Kana.",
-    avatarLayoutTitle: "Avatar position and size",
+    avatarLayoutTitle: "Avatar position",
     avatarLayoutDescription: "Kana fits the model automatically from its Live2D bounds. These corrections are stored only for the selected avatar.",
     avatarLayoutAutomatic: "Automatic position",
     avatarLayoutAdjusted: "Adjusted",
-    avatarLayoutHorizontal: "X position",
-    avatarLayoutVertical: "Y position",
+    avatarLayoutHorizontal: "Horizontal",
+    avatarLayoutVertical: "Vertical",
     avatarLayoutScale: "Size",
-    avatarLayoutReset: "Reset to automatic",
+    avatarLayoutReset: "Reset",
     avatarLayoutAria: "Adjust avatar position and size",
+    avatarLayoutHint: "Drag the avatar to move it. Scroll or pinch to resize.",
+    avatarLayoutCenter: "Center",
+    avatarLayoutSmaller: "Make avatar smaller",
+    avatarLayoutLarger: "Make avatar larger",
+    avatarLayoutClose: "Close avatar position",
+    avatarLayoutSurface: "Avatar stage. Drag to move, arrow keys to nudge, plus or minus to resize.",
     avatarMouthParameter: "Automatic lip sync",
     avatarMouthHint: "Kana detects the mouth control when the avatar loads. If the model does not provide one, the avatar still works without lip sync.",
     avatarMouthReady: "Automatic",

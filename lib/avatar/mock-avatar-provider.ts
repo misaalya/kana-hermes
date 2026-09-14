@@ -49,6 +49,10 @@ export class MockAvatarProvider implements ObservableAvatarProvider {
     this.update({ renderMode });
   }
 
+  setLoadError(loadError: string | undefined): void {
+    this.update({ loadError });
+  }
+
   getSnapshot(): AvatarSnapshot {
     return this.snapshot;
   }

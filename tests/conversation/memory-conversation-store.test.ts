@@ -5,7 +5,7 @@ import { MemoryConversationStore } from "@/lib/conversation/memory-conversation-
 it("isolates each workspace's conversation working set", async () => {
   const first = new MemoryConversationStore();
   const second = new MemoryConversationStore();
-  const conversation = await first.create({ subtitleLanguage: "en" });
+  const conversation = await first.create({});
   assert.equal((await first.list()).length, 1);
   assert.deepEqual(await second.list(), []);
   assert.equal(await second.get(conversation.id), null);

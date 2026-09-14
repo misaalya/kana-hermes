@@ -267,8 +267,11 @@ async function installFakeHermes(page: Page): Promise<void> {
         const persistentId = runtimeToPersistent.get(runtimeId);
         const session = persistentId ? sessions.get(persistentId) : undefined;
         const submitted = String(body.params?.text ?? "");
-        const language =
-          /"subtitle_language"\s*:\s*"([a-z]+)"/i.exec(submitted)?.[1] ?? "en";
+        // Stand-in for Hermes following the contract: the subtitle uses the
+        // language the user wrote in. Kana no longer sends a subtitle setting.
+        if (/subtitle_language/.test(submitted)) throw new Error("Kana sent a subtitle language setting.");
+        const userMessage = /"user_message"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(submitted)?.[1] ?? "";
+        const language = /\b(halo|aku|kamu|apa)\b/i.test(userMessage) ? "id" : "en";
         const subtitles: Record<string, string> = {
           en: "Hello! I am here.",
           id: "Halo! Aku di sini.",
@@ -411,7 +414,7 @@ test("renders text replies without entering the TTS pipeline when voice is off",
   expect(speechRequests).toBe(0);
 });
 
-test("preserves displayed subtitles after the preference changes and reloads", async ({
+test("subtitles follow the language the user writes in and survive reloads", async ({
   page,
 }) => {
   const composer = page.getByRole("textbox", { name: "Message Kana" });
@@ -421,16 +424,7 @@ test("preserves displayed subtitles after the preference changes and reloads", a
   const overlay = page.getByText("Hello! I am here.", { exact: true });
   await expect(overlay.first()).toBeVisible();
 
-  await page.getByRole("button", { name: "Open settings" }).click();
-  await page
-    .getByRole("heading", { name: "Subtitle language" })
-    .locator("..")
-    .locator("..")
-    .getByRole("button", { name: "Bahasa Indonesia", exact: true })
-    .click();
-  await page.getByRole("button", { name: "Close settings" }).click();
-
-  await composer.fill("Halo Kana");
+  await composer.fill("Halo Kana, apa kabar?");
   await composer.press("Enter");
   await expect(
     page.getByText("Halo! Aku di sini.", { exact: true }).first(),
@@ -458,20 +452,20 @@ test("persists the selected stage background across refreshes", async ({ page })
     name: /^Avatar(?: Avatar and stage)?$/,
   }).click();
   await page.getByRole("radio", {
-    name: "Star parade. Playful stars with calm spacing",
+    name: "Seigaiha. Traditional Japanese wave scales",
     exact: true,
   }).click();
   await page.getByRole("button", { name: "Close settings" }).click();
 
   await expect(page.locator(".kana-stage-pattern")).toHaveAttribute(
     "data-background",
-    "pattern-stars",
+    "pattern-seigaiha",
   );
 
   await page.reload();
   await expect(page.locator(".kana-stage-pattern")).toHaveAttribute(
     "data-background",
-    "pattern-stars",
+    "pattern-seigaiha",
   );
 });
 
@@ -487,7 +481,7 @@ test("adjusts the active avatar from the workspace instead of settings", async (
     name: "Adjust avatar position and size",
   });
   await expect(panel).toBeVisible();
-  const horizontal = panel.getByRole("slider", { name: /X position/ });
+  const horizontal = panel.getByRole("slider", { name: /^Horizontal$/ });
   await horizontal.evaluate((input) => {
     const slider = input as HTMLInputElement;
     const nativeSetter = Object.getOwnPropertyDescriptor(
@@ -505,13 +499,13 @@ test("adjusts the active avatar from the workspace instead of settings", async (
   await trigger.click();
   await expect(
     page.getByRole("region", { name: "Adjust avatar position and size" })
-      .getByRole("slider", { name: /X position/ }),
+      .getByRole("slider", { name: /^Horizontal$/ }),
   ).toHaveValue("20");
 
   await trigger.click();
   await page.getByRole("button", { name: "Open settings" }).click();
   await page.getByRole("button", { name: /^Avatar(?: Avatar and stage)?$/ }).click();
-  await expect(page.getByRole("slider", { name: /X position/ })).toHaveCount(0);
+  await expect(page.getByRole("slider", { name: /^Horizontal$/ })).toHaveCount(0);
 });
 
 test("composer uploads files, preserves failed drafts, and removes attachments", async ({ page }) => {
@@ -626,14 +620,12 @@ test("updates workspace, history, chat, and settings copy with the interface lan
 }) => {
   await page.getByRole("button", { name: "Open settings" }).click();
   await page
-    .getByRole("heading", { name: "Interface language" })
-    .locator("..")
-    .locator("..")
-    .getByRole("button", { name: "Bahasa Indonesia", exact: true })
+    .getByRole("radiogroup", { name: "Interface language" })
+    .getByRole("radio", { name: "Bahasa Indonesia", exact: true })
     .click();
 
   await expect(page.getByRole("heading", { name: "Pengaturan" }).first()).toBeVisible();
-  await expect(page.getByText("Preferensi pribadi", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Pengalaman", exact: true })).toBeVisible();
   await expect(page.getByText("Bahasa antarmuka", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Tutup pengaturan" }).click();
 
@@ -869,6 +861,16 @@ test("guides a new browser profile through onboarding onto the workspace", async
   await expect(
     page.getByRole("heading", { name: "Buat percakapan terasa nyaman" }),
   ).toBeVisible();
+  // Each step focuses its heading; Shift+Tab and Tab from there stay inside
+  // the wizard instead of reaching the workspace behind it.
+  await expect(page.getByRole("heading", { name: "Buat percakapan terasa nyaman" })).toBeFocused();
+  const focusInsideWizard = () =>
+    page.evaluate(() => Boolean(document.activeElement?.closest('[role="dialog"]')));
+  await page.keyboard.press("Shift+Tab");
+  expect(await focusInsideWizard()).toBe(true);
+  await page.getByRole("heading", { name: "Buat percakapan terasa nyaman" }).focus();
+  await page.keyboard.press("Tab");
+  expect(await focusInsideWizard()).toBe(true);
   await page.getByRole("button", { name: "Lanjut" }).click();
 
   await expect(
@@ -903,9 +905,8 @@ test("falls back to the placeholder avatar when Live2D cannot load", async ({
   });
 
   await page.reload();
-  await expect(
-    page.getByText("Waiting for Live2D avatar"),
-  ).toBeVisible();
+  await expect(page.getByText("The avatar couldn't load")).toBeVisible();
+  await expect(page.getByText("Waiting for Live2D avatar")).toHaveCount(0);
   await expect(page.getByTestId("live2d-canvas")).toHaveClass(/opacity-0/);
 });
 

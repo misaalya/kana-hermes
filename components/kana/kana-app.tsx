@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentInputDialog } from "./agent-input-dialog";
 import { AvatarLayoutControl } from "./avatar-layout-control";
+import { AvatarLayoutSurface } from "./avatar-layout-surface";
 import { AvatarStage } from "./avatar-stage";
 import { ConversationSidebar } from "./conversation-sidebar";
 import { LiveChatFeed } from "./live-chat-feed";
@@ -46,8 +47,8 @@ import {
   ChevronRightIcon,
   HistoryIcon,
   MoonIcon,
-  ArrowUpIcon,
   PlusIcon,
+  ReturnIcon,
   SettingsIcon,
   SunIcon,
 } from "./icons";
@@ -525,7 +526,9 @@ export function KanaApp({ appVersion }: KanaAppProps) {
     kana.connectionState === "authentication_failed" ||
     kana.connectionState === "incompatible";
 
-  const chatVisible = usesMobileChat || chatOpen;
+  // On phones the chat covers the lower stage; step it aside while the avatar
+  // is being positioned so the whole model stays visible and draggable.
+  const chatVisible = usesMobileChat ? !avatarLayoutOpen : chatOpen;
 
   return (
     <main className="relative h-dvh w-full overflow-hidden bg-bg">
@@ -542,6 +545,15 @@ export function KanaApp({ appVersion }: KanaAppProps) {
         locale={kana.preferences.uiLocale}
         onCanvasReady={kana.attachAvatarCanvas}
       />
+
+      {avatarLayoutOpen && kana.avatar.renderMode === "live2d" ? (
+        <AvatarLayoutSurface
+          layout={avatarLayout}
+          label={copy.settings.avatarLayoutSurface}
+          chatOpen={chatVisible}
+          onChange={updateAvatarLayout}
+        />
+      ) : null}
 
       <header className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-4 p-4 max-sm:p-3">
         <div className="pointer-events-auto min-w-0 max-sm:hidden">
@@ -672,7 +684,7 @@ export function KanaApp({ appVersion }: KanaAppProps) {
                 readOnly={submitting}
                 placeholder={workspaceCopy.messagePlaceholder}
                 aria-label={workspaceCopy.messageAria}
-                className="max-h-28 min-h-11 w-full resize-none bg-transparent px-1 py-3 text-[13px] leading-snug focus:outline-none"
+                className="max-h-28 min-h-11 w-full resize-none bg-transparent px-1 py-3 text-[15px] leading-snug focus:outline-none"
                 onChange={(event) => setMessage(event.target.value)}
                 onKeyDown={(event) => {
                   if (kana.commandSuggestions.length > 0) {
@@ -723,7 +735,7 @@ export function KanaApp({ appVersion }: KanaAppProps) {
                 title={copy.composer.attachFiles}
                 disabled={submitting || !activeConversationId} className="kana-focus inline-flex size-10 shrink-0 items-center justify-center rounded-lg hover:bg-white/12 disabled:opacity-40"
                 onClick={() => fileInputRef.current?.click()}><PlusIcon className="size-5" /></button>
-              <ComposerDictation key={activeConversationId} locale={kana.preferences.uiLocale} language={kana.preferences.subtitleLanguage}
+              <ComposerDictation key={activeConversationId} locale={kana.preferences.uiLocale}
                 disabled={submitting || kana.busy || voiceActive || !activeConversationId} onText={appendDictation} onActive={setDictating} onNotice={setComposerNotice} />
               <ComposerModelChoice key={`model-${activeConversationId}`} locale={kana.preferences.uiLocale} sessionKey={activeConversationId}
                 connected={kana.connectionState === "connected"} disabled={kana.busy || submitting}
@@ -742,10 +754,10 @@ export function KanaApp({ appVersion }: KanaAppProps) {
                   type="button"
                   aria-label={workspaceCopy.send}
                   disabled={(!message.trim() && !files.length) || submitting || dictating || (kana.busy && !canSubmitWhileBusy)}
-                  className="kana-focus inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#28658c] transition-colors hover:bg-[#1e5072] disabled:cursor-not-allowed disabled:opacity-40"
+                  className="kana-focus inline-flex size-10 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-white/12 disabled:cursor-not-allowed disabled:opacity-40"
                   onClick={() => void submitMessage()}
                 >
-                  <ArrowUpIcon className="size-5" />
+                  <ReturnIcon className="size-[18px]" />
                 </button>
               )}
               </div>
@@ -758,14 +770,14 @@ export function KanaApp({ appVersion }: KanaAppProps) {
       {/* Session history modal */}
       {sessionsOpen ? (
         <div
-          className="fixed inset-0 z-30 flex justify-end bg-[var(--backdrop)] p-3 backdrop-blur-md max-sm:p-0"
+          className="fixed inset-0 z-30 flex justify-end bg-[var(--backdrop)] p-3 backdrop-blur-sm max-sm:p-0"
           role="dialog"
           aria-modal="true"
           aria-label={workspaceCopy.conversationHistory}
           onClick={closeSessions}
         >
           <section
-            className="kana-panel flex h-full w-[min(420px,100%)] flex-col overflow-hidden rounded-2xl animate-kana-in max-sm:rounded-none"
+            className="kana-settings-shell flex h-full w-[min(380px,100%)] flex-col overflow-hidden rounded-2xl border border-line-strong bg-raised animate-kana-in max-sm:w-full max-sm:rounded-none max-sm:border-0"
             onClick={(event) => event.stopPropagation()}
           >
             <ConversationSidebar

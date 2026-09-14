@@ -138,7 +138,6 @@ function recoverLooseKanaEnvelope(raw: string): unknown {
 function validateKanaEnvelope(
   candidate: unknown,
   rawResponse: string,
-  expectedSubtitleLanguage?: string,
 ): KanaResponse {
   if (!isRecord(candidate)) {
     throw new KanaProtocolError(
@@ -174,16 +173,6 @@ function validateKanaEnvelope(
     );
   }
 
-  if (
-    expectedSubtitleLanguage &&
-    subtitle.language.toLowerCase() !== expectedSubtitleLanguage.toLowerCase()
-  ) {
-    throw new KanaProtocolError(
-      `Hermes used subtitle language ${subtitle.language}; ${expectedSubtitleLanguage} was requested.`,
-      rawResponse,
-    );
-  }
-
   if (value.emotion !== undefined && !isEmotion(value.emotion)) {
     throw new KanaProtocolError(
       "Hermes returned an unsupported Kana emotion.",
@@ -201,24 +190,17 @@ function validateKanaEnvelope(
   };
 }
 
-export function parseKanaResponse(
-  rawResponse: string,
-  expectedSubtitleLanguage?: string,
-): KanaResponse {
+export function parseKanaResponse(rawResponse: string): KanaResponse {
   const trimmed = rawResponse.trim();
 
   const embedded = parseEmbeddedEnvelope(rawResponse);
   if (embedded !== undefined) {
-    return validateKanaEnvelope(
-      embedded,
-      rawResponse,
-      expectedSubtitleLanguage,
-    );
+    return validateKanaEnvelope(embedded, rawResponse);
   }
 
   const loose = recoverLooseKanaEnvelope(rawResponse);
   if (loose !== undefined) {
-    return validateKanaEnvelope(loose, rawResponse, expectedSubtitleLanguage);
+    return validateKanaEnvelope(loose, rawResponse);
   }
 
   // Graceful degradation: when Hermes answers in plain text instead of the
@@ -229,7 +211,7 @@ export function parseKanaResponse(
   if (!trimmed.startsWith("{") && !trimmed.startsWith("```")) {
     return {
       speech_ja: trimmed,
-      subtitle: { text: trimmed, language: expectedSubtitleLanguage ?? "und" },
+      subtitle: { text: trimmed, language: "und" },
       emotion: "neutral",
     };
   }

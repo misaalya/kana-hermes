@@ -4,21 +4,13 @@ import { useEffect, useState } from "react";
 import type { HermesRuntimeStatus } from "@/lib/runtime/hermes-control-client";
 import type { UiLocale } from "@/lib/ui/copy";
 import { getCopy } from "@/lib/ui/copy";
-import { btnGhost, btnSecondary } from "./ui";
+import { settingsButton, settingsButtonDanger, SettingsRow, StatusPill } from "./settings-layout";
 
 type HermesControlPanelProps = {
   locale: UiLocale;
   onInspect(preferredPort?: number): Promise<HermesRuntimeStatus>;
   onStart(options: { port?: number; restart?: boolean }): Promise<HermesRuntimeStatus>;
   onStop(): Promise<HermesRuntimeStatus>;
-};
-
-const STATE_STYLE: Record<string, string> = {
-  running: "border-accent/50 text-accent-strong",
-  starting: "border-accent/40 text-accent-strong animate-kana-pulse",
-  stopping: "border-line-strong text-muted",
-  failed: "border-danger/50 text-danger",
-  stopped: "border-line-strong text-muted",
 };
 
 // Human-facing control for the managed `hermes serve` process. Technical
@@ -94,53 +86,40 @@ export function HermesControlPanel({
     }
   };
 
+  const tone = status?.state === "running"
+    ? "ok"
+    : status?.state === "starting" || status?.state === "stopping"
+      ? "busy"
+      : status?.state === "failed" || (!status && notice)
+        ? "error"
+        : "idle";
+  const message = notice ?? status?.message ?? "";
+
   return (
     <section aria-label={copy.hermesAria}>
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <div>
-          <p className="text-xs font-bold text-ink">{copy.hermesTitle}</p>
-          <p className="text-[10px] text-faint">{copy.hermesSubtitle}</p>
-        </div>
-        <span className={`border px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase ${STATE_STYLE[status?.state ?? ""] ?? "border-line-strong text-muted"}`}>
-          {stateLabel}
-        </span>
-      </div>
-
-      {status?.controlAvailable ? (
-        <>
-          <div className="flex flex-wrap items-center gap-2">
-            {status.state === "running" && status.managed ? (
-              <>
-                <button type="button" className={btnSecondary} disabled={busy} onClick={() => void run("restart")}>
-                  {copy.restart}
-                </button>
-                <button type="button" className={`${btnSecondary} hover:border-danger hover:text-danger`} disabled={busy} onClick={() => void run("stop")}>
-                  {copy.stop}
-                </button>
-              </>
-            ) : status.state !== "running" ? (
-              <button
-                type="button"
-                className={btnSecondary}
-                disabled={busy || !status.executable}
-                onClick={() => void run("start")}
-              >
-                {busy ? copy.starting : copy.start}
-              </button>
-            ) : null}
-            <button type="button" className={btnGhost} disabled={busy} onClick={() => void refresh()}>
-              {copy.refresh}
+      <SettingsRow
+        label={copy.hermesTitle}
+        description={<>{copy.hermesSubtitle}{message ? <span className="mt-1 block text-ink-dim">{message}</span> : null}</>}
+      >
+        <StatusPill tone={tone}>{stateLabel}</StatusPill>
+        {status?.controlAvailable && status.state === "running" && status.managed ? (
+          <>
+            <button type="button" className={settingsButton} disabled={busy} onClick={() => void run("restart")}>
+              {copy.restart}
             </button>
-          </div>
-        </>
-      ) : (
-        <button type="button" className={btnGhost} disabled={busy} onClick={() => void refresh()}>
+            <button type="button" className={settingsButtonDanger} disabled={busy} onClick={() => void run("stop")}>
+              {copy.stop}
+            </button>
+          </>
+        ) : status?.controlAvailable && status.state !== "running" ? (
+          <button type="button" className={settingsButton} disabled={busy || !status.executable} onClick={() => void run("start")}>
+            {busy ? copy.starting : copy.start}
+          </button>
+        ) : null}
+        <button type="button" className={settingsButton} disabled={busy} onClick={() => void refresh()}>
           {copy.refresh}
         </button>
-      )}
-      <p className="mt-2 min-h-4 text-[11px] text-muted">
-        {notice ?? status?.message ?? ""}
-      </p>
+      </SettingsRow>
     </section>
   );
 }

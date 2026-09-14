@@ -4,55 +4,61 @@ import {
   type Live2DModelLayout,
 } from "@/lib/avatar/model-layout";
 import type { Copy } from "@/lib/ui/copy";
-import { btnGhost } from "./ui";
+import { CloseIcon, MinusIcon, PlusIcon, ResetIcon } from "./icons";
 
 type AvatarLayoutPanelProps = {
   layout: Live2DModelLayout;
   copy: Copy["settings"];
   onChange(layout: Live2DModelLayout): void;
   onReset(): void;
+  onClose(): void;
 };
 
-type LayoutControlProps = {
-  label: string;
-  value: number;
-  minimum: number;
-  maximum: number;
-  suffix: string;
-  onChange(value: number): void;
-};
+const iconButton =
+  "kana-focus grid size-7 shrink-0 place-items-center rounded-md text-muted transition-colors hover:bg-surface-strong hover:text-ink disabled:cursor-not-allowed disabled:opacity-35";
 
-function LayoutControl({
+function LayoutSlider({
   label,
   value,
   minimum,
   maximum,
-  suffix,
+  display,
+  children,
   onChange,
-}: LayoutControlProps) {
+}: {
+  label: string;
+  value: number;
+  minimum: number;
+  maximum: number;
+  display: string;
+  children?: React.ReactNode;
+  onChange(value: number): void;
+}) {
+  const fill = ((value - minimum) / (maximum - minimum)) * 100;
   return (
-    <label className="grid gap-2 rounded-xl border-2 border-line bg-surface-strong px-3 py-3">
-      <span className="flex items-center justify-between gap-3">
-        <span className="text-[10px] font-bold text-ink-dim">{label}</span>
-        <output
-          aria-hidden="true"
-          className="min-w-12 text-right text-[10px] font-bold text-accent"
-        >
-          {Math.round(value)}{suffix}
-        </output>
-      </span>
+    <div className="py-2">
+      <div className="flex min-h-7 items-center justify-between gap-3">
+        <span className="text-[13px] text-ink">{label}</span>
+        <span className="flex items-center gap-1">
+          {children}
+          <output aria-hidden="true" className="min-w-12 text-right text-xs tabular-nums text-muted">
+            {display}
+          </output>
+        </span>
+      </div>
       <input
         type="range"
         min={minimum}
         max={maximum}
         step={1}
-        value={value}
+        value={Math.round(value)}
         aria-label={label}
-        aria-valuetext={`${Math.round(value)}${suffix}`}
-        className="kana-focus h-6 w-full cursor-pointer accent-[var(--accent)]"
+        aria-valuetext={display}
+        className="kana-range kana-focus mt-1.5 w-full"
+        style={{ "--kana-range-fill": `${fill}%` } as React.CSSProperties}
         onChange={(event) => onChange(Number(event.currentTarget.value))}
       />
-    </label>
+    </div>
   );
 }
 
@@ -61,62 +67,70 @@ export function AvatarLayoutPanel({
   copy,
   onChange,
   onReset,
+  onClose,
 }: AvatarLayoutPanelProps) {
   const normalized = normalizeLive2DModelLayout(layout);
   const automatic = isDefaultLive2DModelLayout(normalized);
   const update = (patch: Partial<Live2DModelLayout>) => {
     onChange(normalizeLive2DModelLayout({ ...normalized, ...patch }));
   };
+  const offset = (fraction: number) => {
+    const percent = Math.round(fraction * 100);
+    return percent === 0 ? copy.avatarLayoutCenter : `${percent > 0 ? "+" : ""}${percent}%`;
+  };
+  const size = Math.round(normalized.scale * 100);
 
   return (
     <section
-      className="w-[min(340px,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border-2 border-line-strong bg-raised animate-kana-in"
+      className="kana-popover w-[min(300px,calc(100vw-1.5rem))] rounded-xl border border-line-strong bg-raised px-4 pb-3 pt-3 animate-kana-in max-sm:w-full"
       aria-label={copy.avatarLayoutAria}
     >
-      <header className="flex items-center justify-between gap-4 border-b-2 border-line px-4 py-3">
-        <h2 className="text-sm font-bold text-ink">{copy.avatarLayoutTitle}</h2>
-        <span className="shrink-0 text-[10px] font-bold text-accent">
-          {automatic ? copy.avatarLayoutAutomatic : copy.avatarLayoutAdjusted}
-        </span>
+      <header className="flex items-center justify-between gap-2">
+        <h2 className="text-[13px] font-bold text-ink">{copy.avatarLayoutTitle}</h2>
+        <div className="-mr-1.5 flex items-center">
+          <button type="button" className={iconButton} disabled={automatic} onClick={onReset} aria-label={copy.avatarLayoutReset} title={copy.avatarLayoutReset}>
+            <ResetIcon className="size-3.5" />
+          </button>
+          <button type="button" className={iconButton} onClick={onClose} aria-label={copy.avatarLayoutClose}>
+            <CloseIcon className="size-4" />
+          </button>
+        </div>
       </header>
+      <p className="mt-0.5 text-[11.5px] leading-relaxed text-muted">{copy.avatarLayoutHint}</p>
 
-      <div className="grid gap-2 p-3">
-        <LayoutControl
+      <div className="mt-2 divide-y divide-line">
+        <LayoutSlider
+          label={copy.avatarLayoutScale}
+          value={size}
+          minimum={25}
+          maximum={250}
+          display={`${size}%`}
+          onChange={(value) => update({ scale: value / 100 })}
+        >
+          <button type="button" className={iconButton} aria-label={copy.avatarLayoutSmaller} disabled={size <= 25} onClick={() => update({ scale: (size - 10) / 100 })}>
+            <MinusIcon className="size-3.5" />
+          </button>
+          <button type="button" className={iconButton} aria-label={copy.avatarLayoutLarger} disabled={size >= 250} onClick={() => update({ scale: (size + 10) / 100 })}>
+            <PlusIcon className="size-3.5" />
+          </button>
+        </LayoutSlider>
+        <LayoutSlider
           label={copy.avatarLayoutHorizontal}
           value={normalized.x * 100}
           minimum={-75}
           maximum={75}
-          suffix="%"
+          display={offset(normalized.x)}
           onChange={(value) => update({ x: value / 100 })}
         />
-        <LayoutControl
+        <LayoutSlider
           label={copy.avatarLayoutVertical}
           value={normalized.y * 100}
           minimum={-75}
           maximum={75}
-          suffix="%"
+          display={offset(normalized.y)}
           onChange={(value) => update({ y: value / 100 })}
         />
-        <LayoutControl
-          label={copy.avatarLayoutScale}
-          value={normalized.scale * 100}
-          minimum={25}
-          maximum={250}
-          suffix="%"
-          onChange={(value) => update({ scale: value / 100 })}
-        />
       </div>
-
-      <footer className="flex justify-end border-t-2 border-line px-3 py-2">
-        <button
-          type="button"
-          className={btnGhost}
-          disabled={automatic}
-          onClick={onReset}
-        >
-          {copy.avatarLayoutReset}
-        </button>
-      </footer>
     </section>
   );
 }

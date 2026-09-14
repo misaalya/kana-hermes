@@ -10,7 +10,7 @@ import { DEFAULT_PREFERENCES } from "@/lib/preferences/local-preferences-store";
 
 describe("Kana local backup", () => {
   it("preserves displayed subtitles while excluding credentials and avatar assets", () => {
-    const conversation = createConversation({ subtitleLanguage: "id" });
+    const conversation = createConversation({});
     conversation.messages.push({
       id: "assistant-1",
       role: "assistant",

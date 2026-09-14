@@ -12,7 +12,6 @@ test.setTimeout(240_000);
 
 const HARU_PREFS = {
   onboardingCompleted: true,
-  subtitleLanguage: "en",
   agentMode: "hermes",
   voiceEnabled: false,
   voiceMode: "configured",

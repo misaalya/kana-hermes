@@ -93,11 +93,6 @@ function parseConversation(value: unknown): Conversation {
     id: limitedString(value.id, "conversation id", 500),
     title: limitedString(value.title, "conversation title", 500),
     messages: value.messages.map(parseMessage),
-    subtitleLanguageAtCreation: limitedString(
-      value.subtitleLanguageAtCreation,
-      "conversation subtitle language",
-      32,
-    ),
     ...(agent
       ? {
           agent: {
@@ -176,10 +171,6 @@ function parsePreferences(value: unknown): KanaPreferences {
   return sanitizeBackupPreferences({
     ...DEFAULT_PREFERENCES,
     onboardingCompleted: true,
-    subtitleLanguage:
-      typeof value.subtitleLanguage === "string"
-        ? value.subtitleLanguage.slice(0, 32)
-        : DEFAULT_PREFERENCES.subtitleLanguage,
     stageBackground: isStageBackground(value.stageBackground)
       ? value.stageBackground
       : "plain",

@@ -9,7 +9,7 @@ import {
   type Live2DModelCapabilities,
 } from "@/lib/avatar/live2d-model-capabilities";
 import { Live2DAvatarProvider } from "@/lib/avatar/live2d-avatar-provider";
-import { ManagedAvatarProvider } from "@/lib/avatar/managed-avatar-provider";
+import { AvatarLoadSupersededError, ManagedAvatarProvider } from "@/lib/avatar/managed-avatar-provider";
 import {
   live2DModelBindings,
   live2DModelLayout,
@@ -65,7 +65,8 @@ export function useAvatarController(
           prev.emotion === snapshot.emotion &&
           prev.talking === snapshot.talking &&
           prev.loaded === snapshot.loaded &&
-          prev.renderMode === snapshot.renderMode
+          prev.renderMode === snapshot.renderMode &&
+          prev.loadError === snapshot.loadError
         ) {
           return prev;
         }
@@ -137,6 +138,8 @@ export function useAvatarController(
         });
         return true;
       } catch (avatarError) {
+        // A newer configureAvatar call owns the stage; leave its state alone.
+        if (avatarError instanceof AvatarLoadSupersededError) return false;
         avatarLoadErrorRef.current = avatarError instanceof Error
           ? avatarError
           : new Error("Unknown Live2D runtime error.");
