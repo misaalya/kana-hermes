@@ -151,12 +151,19 @@ describe("LocalPreferencesStore", () => {
     assert.equal((persistent.getItem("kana.preferences.v5") ?? "").includes("data:image"), false);
   });
 
+  it("starts with voice off, since local speech needs an explicit engine download", () => {
+    const loaded = new LocalPreferencesStore(new MemoryStorage()).load();
+    assert.equal(loaded.voiceEnabled, false);
+    assert.deepEqual(loaded.voice, { voiceId: "", deliveryMode: "complete" });
+  });
+
   it("migrates v4 preferences to complete speech delivery without changing existing choices", () => {
     const persistent = new MemoryStorage();
     persistent.setItem(
       "kana.preferences.v4",
       JSON.stringify({
         onboardingCompleted: true,
+        voiceEnabled: true,
         subtitleLanguage: "ja",
         qwen3Tts: {
           baseUrl: "http://127.0.0.1:7860",
@@ -169,7 +176,11 @@ describe("LocalPreferencesStore", () => {
     const loaded = store.load();
 
     assert.equal("subtitleLanguage" in loaded, false);
-    assert.equal(loaded.qwen3Tts.deliveryMode, "complete");
+    assert.equal("qwen3Tts" in loaded, false);
+    // Qwen voice ids named service-side profiles; the bundled Kana voice is used instead.
+    assert.deepEqual(loaded.voice, { voiceId: "", deliveryMode: "complete" });
+    assert.equal(loaded.voiceEnabled, true, "an existing voice choice is kept");
+    assert.equal((persistent.getItem("kana.preferences.v5") ?? "").includes("7860"), false);
     assert.equal(persistent.getItem("kana.preferences.v4"), null);
     assert.ok(persistent.getItem("kana.preferences.v5"));
   });
@@ -200,10 +211,6 @@ describe("LocalPreferencesStore", () => {
     assert.throws(() =>
       store.save({
         ...DEFAULT_PREFERENCES,
-        qwen3Tts: {
-          ...DEFAULT_PREFERENCES.qwen3Tts,
-          baseUrl: "http://secret@example.com:7860",
-        },
         live2d: {
           ...DEFAULT_PREFERENCES.live2d,
           modelUrl: "javascript:alert(1)",
@@ -215,7 +222,6 @@ describe("LocalPreferencesStore", () => {
       }),
     );
     const persisted = persistent.getItem("kana.preferences.v5") ?? "";
-    assert.equal(persisted.includes("secret@example.com"), false);
     assert.equal(persisted.includes("javascript:"), false);
     assert.equal(persisted.includes("arbitrary.js"), false);
   });

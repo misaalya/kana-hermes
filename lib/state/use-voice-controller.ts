@@ -6,12 +6,6 @@ import type {
   KanaErrorCategory,
   KanaErrorSource,
 } from "@/lib/diagnostics/types";
-import {
-  createQwen3VoiceClone,
-  deleteQwen3VoiceClone,
-  inspectQwen3TTSService,
-  type CreateVoiceCloneInput,
-} from "@/lib/voice/qwen3-tts-contract";
 import { TtsRelayProvider } from "@/lib/voice/tts-relay-provider";
 import { inspectConfiguredTtsProvider } from "@/lib/voice/tts-relay-contract";
 import type {
@@ -71,13 +65,14 @@ export function useVoiceController(
   }, [avatarController, onMetrics]);
 
   const inspectVoiceService = useCallback(
-    async (baseUrl: string) => {
-      void baseUrl;
+    async () => {
       setVoiceRuntimeState("checking");
       const { status: inspection } = await inspectConfiguredTtsProvider();
       setVoiceStatus(inspection);
       setVoiceRuntimeState(inspection.state);
-      if (inspection.state === "error" || inspection.state === "unavailable") {
+      // "unavailable" is an engine that has not been downloaded: a setup step
+      // shown in Settings and first-run setup, not an error.
+      if (inspection.state === "error") {
         onError(
           "voice",
           inspection.message || "The configured voice provider is unavailable.",
@@ -87,26 +82,6 @@ export function useVoiceController(
       return inspection;
     },
     [onError],
-  );
-
-  const cloneVoice = useCallback(
-    async (baseUrl: string, input: CreateVoiceCloneInput) => {
-      const voice = await createQwen3VoiceClone(baseUrl, input);
-      const inspection = await inspectQwen3TTSService(baseUrl);
-      setVoiceStatus(inspection);
-      return voice;
-    },
-    [],
-  );
-
-  const deleteClonedVoice = useCallback(
-    async (baseUrl: string, voiceId: string) => {
-      await deleteQwen3VoiceClone(baseUrl, voiceId);
-      const inspection = await inspectQwen3TTSService(baseUrl);
-      setVoiceStatus(inspection);
-      return inspection;
-    },
-    [],
   );
 
   const unlockVoice = useCallback(() => {
@@ -134,8 +109,6 @@ export function useVoiceController(
     voiceStatus,
     getVoice,
     inspectVoiceService,
-    cloneVoice,
-    deleteClonedVoice,
     unlockVoice,
     stopVoice,
     cleanupVoice,

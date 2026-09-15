@@ -17,25 +17,17 @@ import type { VoiceProviderStatus } from "@/lib/voice/types";
 
 type VoicePanelProps = {
   selectedVoiceId: string;
-  onVoiceSelect(serviceVoiceId: string): void;
+  onVoiceSelect(voiceId: string): void;
   locale: UiLocale;
 };
 
 const MAX_VOICE_REFERENCE_MIB = MAX_VOICE_REFERENCE_BYTES / (1024 * 1024);
-
-type EngineState =
-  | "ready"
-  | "loading"
-  | "error"
-  | "stopped"
-  | "unavailable"
-  | "external";
+const DEFAULT_VOICE_ID = "kc-default";
 
 function VoiceChoice({
   active,
   label,
   hint,
-  selectable,
   deletable,
   onSelect,
   onDelete,
@@ -44,7 +36,6 @@ function VoiceChoice({
   active: boolean;
   label: string;
   hint: string | null;
-  selectable: boolean;
   deletable: boolean;
   onSelect(): void;
   onDelete(): void;
@@ -54,16 +45,14 @@ function VoiceChoice({
     <div
       role="radio"
       aria-checked={active}
-      aria-disabled={!selectable}
       className={`flex min-h-16 items-stretch overflow-hidden rounded-xl border transition-colors ${
         active
           ? "border-accent bg-accent/8"
           : "border-line-strong hover:bg-surface-strong/60"
-      } ${selectable ? "" : "opacity-60"}`}
+      }`}
     >
       <button
         type="button"
-        disabled={!selectable}
         onClick={onSelect}
         className="kana-focus flex min-w-0 flex-1 items-center justify-between gap-3 px-4 py-3 text-left disabled:cursor-not-allowed"
       >
@@ -74,7 +63,7 @@ function VoiceChoice({
           {hint ? <span className="mt-0.5 block truncate text-[11px] text-muted">{hint}</span> : null}
         </span>
         <span className={`shrink-0 text-[11px] font-semibold ${active ? "text-accent-strong" : "text-faint"}`}>
-          {active ? copy.selected : selectable ? copy.choose : copy.pending}
+          {active ? copy.selected : copy.choose}
         </span>
       </button>
       {deletable ? (
@@ -91,9 +80,8 @@ function VoiceChoice({
 }
 
 // Voice management backed by Kana's persistent library (data/voices +
-// SQLite). The shipped default voice is always present, so the radio group
-// is never empty; pending rows stay visible with an honest hint while the
-// engine registers them.
+// SQLite). The bundled Kana voice and the model's own voice are always
+// present, so the radio group is never empty.
 
 export function VoicePanel({
   selectedVoiceId,
@@ -101,16 +89,7 @@ export function VoicePanel({
   locale,
 }: VoicePanelProps) {
   const copy = getCopy(locale).voiceLibrary;
-  const engineLines: Record<EngineState, string> = {
-    ready: "",
-    loading: copy.engineLoading,
-    error: copy.engineError,
-    stopped: copy.engineStopped,
-    unavailable: copy.externalUnavailable,
-    external: "",
-  };
   const [voices, setVoices] = useState<LibraryVoice[]>([]);
-  const [engineState, setEngineState] = useState<EngineState>("stopped");
   const [loadingVoices, setLoadingVoices] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -128,7 +107,6 @@ export function VoicePanel({
     try {
       const value = await listKanaVoices();
       setVoices(value.voices);
-      setEngineState((value.engine?.state as EngineState) ?? "stopped");
       setSupportsVoiceLibrary(value.supportsVoiceLibrary !== false);
       setProviderName(value.provider?.name ?? "");
       setProviderStatus(value.providerStatus ?? null);
@@ -145,7 +123,6 @@ export function VoicePanel({
       .then((value) => {
         if (!active) return;
         setVoices(value.voices);
-        setEngineState((value.engine?.state as EngineState) ?? "stopped");
         setSupportsVoiceLibrary(value.supportsVoiceLibrary !== false);
         setProviderName(value.provider?.name ?? "");
         setProviderStatus(value.providerStatus ?? null);
@@ -161,16 +138,6 @@ export function VoicePanel({
     };
   }, [copy.checkFailed]);
 
-  // Retry registration while something is pending and the panel is open.
-  const hasPending = voices.some((voice) => !voice.registered) && engineState !== "error";
-  useEffect(() => {
-    if (!hasPending) return;
-    const timer = setInterval(() => {
-      void refresh();
-    }, 15_000);
-    return () => clearInterval(timer);
-  }, [hasPending, refresh]);
-
   const voiceErrorMessage = (error: unknown, fallback: string): string => {
     if (error instanceof AudioConversionError) {
       return error.code === "unsupported" ? copy.audioUnsupported : copy.audioUnreadable;
@@ -178,6 +145,7 @@ export function VoicePanel({
     if (error instanceof VoiceLibraryError) {
       if (error.code === "voice_too_large") return copy.tooLarge(MAX_VOICE_REFERENCE_MIB);
       if (error.code === "default_voice_protected") return copy.defaultProtected;
+      if (error.code === "audio_not_wav") return copy.notWav;
     }
     return error instanceof Error ? error.message : fallback;
   };
@@ -192,16 +160,8 @@ export function VoicePanel({
     try {
       const wav = await convertToWav(cloneAudio);
       const result = await uploadKanaVoice(cloneName.trim(), wav, cloneConsent);
-      if (result.voice.registered && result.voice.serviceVoiceId) {
-        onVoiceSelect(result.voice.serviceVoiceId);
-      }
-      setNotice(
-        result.pending === "registration_failed"
-          ? copy.registrationFailed
-          : result.pending
-            ? engineLines[result.pending]
-            : copy.added(result.voice.name),
-      );
+      onVoiceSelect(result.voice.id);
+      setNotice(copy.added(result.voice.name));
       setCloneName("");
       setCloneAudio(null);
       setCloneConsent(false);
@@ -227,13 +187,10 @@ export function VoicePanel({
     }
   };
 
-  const registeredIds = new Set(
-    voices.filter((voice) => voice.registered && voice.serviceVoiceId).map((voice) => voice.serviceVoiceId),
-  );
-  const effectiveSelected =
-    selectedVoiceId && registeredIds.has(selectedVoiceId)
-      ? selectedVoiceId
-      : (voices.find((voice) => voice.registered)?.serviceVoiceId ?? "");
+  // A deleted or unknown selection speaks with the bundled voice server-side too.
+  const effectiveSelected = voices.some((voice) => voice.id === selectedVoiceId)
+    ? selectedVoiceId
+    : DEFAULT_VOICE_ID;
 
   if (!supportsVoiceLibrary) {
     const providerReady = providerStatus?.state === "ready";
@@ -303,14 +260,11 @@ export function VoicePanel({
           voices.map((voice) => (
             <VoiceChoice
               key={voice.id}
-              active={Boolean(voice.registered && voice.serviceVoiceId === effectiveSelected)}
+              active={voice.id === effectiveSelected}
               label={voice.name}
-              hint={voice.registered ? (voice.isDefault ? copy.included : copy.yours) : copy.waiting}
-              selectable={voice.registered}
-              deletable={!voice.isDefault}
-              onSelect={() => {
-                if (voice.registered && voice.serviceVoiceId) onVoiceSelect(voice.serviceVoiceId);
-              }}
+              hint={voice.kind === "model" ? copy.modelVoice : voice.kind === "bundled" ? copy.included : copy.yours}
+              deletable={voice.kind === "reference"}
+              onSelect={() => onVoiceSelect(voice.id)}
               onDelete={() => void remove(voice.id)}
               copy={copy}
             />
@@ -318,11 +272,6 @@ export function VoicePanel({
         )}
       </fieldset>
 
-      {engineState !== "ready" ? (
-        <p className={`mt-3 text-[11.5px] leading-relaxed ${engineState === "error" ? "text-danger" : "text-muted"}`}>
-          {engineLines[engineState]}
-        </p>
-      ) : null}
 
       {!addingVoice ? (
         <div className="mt-4 border-t border-line">

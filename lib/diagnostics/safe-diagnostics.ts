@@ -52,7 +52,7 @@ export function classifyKanaError(
       inferred = "connection";
     } else if (/session|resume|branch/.test(normalized)) inferred = "session";
     else if (/indexeddb|storage|quota|database/.test(normalized)) inferred = "storage";
-    else if (/qwen|tts|voice|audio/.test(normalized)) inferred = "voice";
+    else if (/irodori|tts|voice|audio/.test(normalized)) inferred = "voice";
     else if (/live2d|avatar|cubism|webgl|model folder/.test(normalized)) {
       inferred = "avatar";
     } else if (/speech_ja|subtitle|structured response|model response/.test(normalized)) {

@@ -23,18 +23,3 @@ export async function cancelTtsRequest(id: string, signal: AbortSignal): Promise
   if (entry.provider.cancel) await entry.provider.cancel(id, signal);
   return true;
 }
-
-/** Abort one caller's wait without killing a startup shared with other callers. */
-export async function awaitTtsStartup<T>(startup: Promise<T>, signal: AbortSignal): Promise<T> {
-  if (signal.aborted) {
-    void startup.catch(() => {});
-    signal.throwIfAborted();
-  }
-  let onAbort: () => void = () => {};
-  const aborted = new Promise<never>((_, reject) => {
-    onAbort = () => reject(signal.reason);
-    signal.addEventListener("abort", onAbort, { once: true });
-  });
-  try { return await Promise.race([startup, aborted]); }
-  finally { signal.removeEventListener("abort", onAbort); }
-}

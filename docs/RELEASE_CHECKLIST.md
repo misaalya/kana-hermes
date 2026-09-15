@@ -18,10 +18,11 @@
 8. Run the temporary Hermes live audit and isolated restart audit without
    sending an LLM prompt; record any incomplete active-turn restart cases as
    supported-environment limitations.
-9. If Qwen changed, run Python tests and `npm run tts:acceptance` on target
-   hardware; preserve its JSON evidence and one intelligibility check.
+9. If the pinned voice engine or model changed, update `shared/irodori-release.mjs`
+   with sizes and SHA-256 from the release, install it on target hardware, and
+   keep one intelligibility check.
 10. Start `.next/standalone/server.js` from outside the source checkout and run desktop/mobile smoke tests.
-11. Create a checksum for the package archive and record exact Node, Kana, Hermes, and optional Qwen versions.
+11. Create a checksum for the package archive and record exact Node, Kana, Hermes, and voice engine versions.
 12. Run `npm run dogfood:check`; publish its result with the release evidence.
     A non-passing field-validation report limits future compatibility claims;
     it must never be presented as a passing result.

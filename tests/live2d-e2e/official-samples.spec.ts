@@ -20,9 +20,8 @@ const HARU_PREFS = {
     websocketUrl: "ws://127.0.0.1:9119/api/ws",
     cwd: "",
   },
-  qwen3Tts: {
-    baseUrl: "http://127.0.0.1:9191",
-    voiceId: "Ono_Anna",
+  voice: {
+    voiceId: "",
     deliveryMode: "complete",
   },
   live2d: {

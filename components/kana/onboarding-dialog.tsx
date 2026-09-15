@@ -11,7 +11,7 @@ import { btnGhost, btnPrimary, Toggle } from "./ui";
 
 export type DependencyFindings = {
   hermes: "running" | "installed" | "missing";
-  voice: "ok" | "loading" | "stopped" | "error" | "off" | null;
+  voice: "ok" | "loading" | "stopped" | "not_installed" | "unsupported" | "error" | "off" | null;
 };
 
 type OnboardingDialogProps = {
@@ -66,7 +66,7 @@ export function OnboardingWizard({
   const step = steps[stepIndex];
   const { common, onboarding: text } = getCopy(draft.uiLocale);
   const hermesHealthy = deps.hermes !== "missing";
-  const voiceHealthy = !draft.voiceEnabled || deps.voice === "ok" || deps.voice === "loading" || deps.voice === "stopped";
+  const voiceHealthy = !draft.voiceEnabled || deps.voice === "ok" || deps.voice === "loading" || deps.voice === "stopped" || deps.voice === null;
 
   // Move focus to each step's title so screen readers announce the new step
   // instead of leaving focus on a button whose label may not have changed.
@@ -215,7 +215,7 @@ export function OnboardingWizard({
                 })}
               </div>
               <div className="mt-4 border-t border-line">
-                <SettingsRow label={text.voiceLabel} description={draft.voiceEnabled ? common.on : common.off}>
+                <SettingsRow label={text.voiceLabel} description={<>{draft.voiceEnabled ? common.on : common.off}<span className="mt-1 block">{text.voiceDownloadNote}</span></>}>
                   <Toggle checked={draft.voiceEnabled} label={text.voiceLabel} onChange={() => setDraft((current) => ({ ...current, voiceEnabled: !current.voiceEnabled }))} />
                 </SettingsRow>
               </div>
@@ -240,7 +240,7 @@ export function OnboardingWizard({
                   </SettingsRow>
                   <SettingsRow
                     label={text.voiceEngine}
-                    description={!draft.voiceEnabled ? text.voiceNotNeeded : deps.voice === "ok" ? text.voiceReady : deps.voice === "error" ? text.voiceNeedsAttention : text.voicePreparedOnUse}
+                    description={!draft.voiceEnabled ? text.voiceNotNeeded : deps.voice === "ok" ? text.voiceReady : deps.voice === "error" ? text.voiceNeedsAttention : deps.voice === "not_installed" ? text.voiceNotInstalled : deps.voice === "unsupported" ? text.voiceUnsupported : deps.voice === "loading" ? text.voiceInstalling : text.voicePreparedOnUse}
                   >
                     <StatusPill capitalize={false} tone={!voiceHealthy ? "error" : !draft.voiceEnabled ? "idle" : deps.voice === "ok" ? "ok" : "idle"}>
                       {!voiceHealthy ? text.statusAttention : !draft.voiceEnabled ? common.off : deps.voice === "ok" ? text.statusReady : text.statusOnDemand}

@@ -1,5 +1,8 @@
 # Kana Remediation Plan
 
+> Catatan 2026-09-15: butir Qwen3-TTS di bawah adalah riwayat. Layanan Python
+> Qwen telah diganti mesin irodori-c (lihat `docs/CONFIGURATION.md`).
+
 Dokumen ini menggantikan roadmap produk lama. Sumbernya adalah audit menyeluruh
 2026-08-25 atas seluruh codebase (controller, agent client, bridge server,
 runtime Hermes, TTS relay, auth/persistence, React layer) yang diverifikasi

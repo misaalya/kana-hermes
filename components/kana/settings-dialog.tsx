@@ -26,14 +26,10 @@ import {
 import { useDialogFocus } from "@/lib/accessibility/use-dialog-focus";
 import { getCopy } from "@/lib/ui/copy";
 import { HermesControlPanel } from "./hermes-control-panel";
-import { TtsControlPanel } from "./tts-control-panel";
+import { VoiceEnginePanel } from "./voice-engine-panel";
 import { VoicePanel } from "./voice-panel";
 import { AvatarExpressionPanel } from "./avatar-expression-panel";
 import { ModelControlPanel } from "./model-control-panel";
-import {
-  inspectTtsRuntime,
-  controlTtsRuntime,
-} from "@/lib/runtime/tts-control-client";
 import { AdvancedConfigCard, SecuritySection } from "./settings-access-section";
 import {
   STAGE_BACKGROUND_OPTIONS,
@@ -145,6 +141,8 @@ export function SettingsDialog({
     error: boolean;
   } | null>(null);
   const [stageBackgrounds, setStageBackgrounds] = useState<StageBackgroundSummary[]>([]);
+  // null while unknown or when the configured provider needs no local engine.
+  const [voiceEngineReady, setVoiceEngineReady] = useState<boolean | null>(null);
   const [backgroundBusy, setBackgroundBusy] = useState(false);
   const [backgroundNotice, setBackgroundNotice] = useState<string | null>(null);
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
@@ -545,16 +543,22 @@ export function SettingsDialog({
                     >
                       <Toggle checked={draft.voiceEnabled} label={settingsCopy.voiceToggle} onChange={() => setDraft((current) => ({ ...current, voiceEnabled: !current.voiceEnabled }))} />
                     </SettingsRow>
+                    <VoiceEnginePanel locale={draft.uiLocale} onReadyChange={setVoiceEngineReady} />
                   </SettingsRows>
+                  {draft.voiceEnabled && voiceEngineReady === false ? (
+                    <p className="mt-2 text-[11.5px] leading-relaxed text-muted" role="status">
+                      {copy.voiceEngine.notInstalledHint}
+                    </p>
+                  ) : null}
                 </SettingsGroup>
                 {draft.voiceEnabled ? (
                   <SettingsGroup>
                     <VoicePanel
                       locale={draft.uiLocale}
-                      selectedVoiceId={draft.qwen3Tts.voiceId}
+                      selectedVoiceId={draft.voice.voiceId}
                       onVoiceSelect={(voiceId) => setDraft((current) => ({
                         ...current,
-                        qwen3Tts: { ...current.qwen3Tts, voiceId },
+                        voice: { ...current.voice, voiceId },
                       }))}
                     />
                   </SettingsGroup>
@@ -780,12 +784,6 @@ export function SettingsDialog({
                       onInspect={() => onInspectHermesControl()}
                       onStart={onStartHermesControl}
                       onStop={onStopHermesControl}
-                    />
-                    <TtsControlPanel
-                      locale={draft.uiLocale}
-                      onInspect={inspectTtsRuntime}
-                      onStart={({ restart }) => controlTtsRuntime({ action: restart ? "restart" : "start" })}
-                      onStop={() => controlTtsRuntime({ action: "stop" })}
                     />
                   </SettingsRows>
                 </SettingsGroup>

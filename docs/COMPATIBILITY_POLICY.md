@@ -14,7 +14,7 @@ sentence-based TTS delivery. A stable package version does not turn an
 untested browser, CPU/GPU combination, Linux architecture, or Hermes version
 into a supported target.
 
-Long-running field validation (the dogfood journal, target-host Qwen evidence,
+Long-running field validation (the dogfood journal, target-host voice evidence,
 custom Live2D packages, and active-turn recovery cases) determines when Kana
 can expand the supported-environment claim. It is release evidence, not a
 second npm channel.

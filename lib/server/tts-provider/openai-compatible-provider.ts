@@ -140,7 +140,7 @@ export class OpenAiCompatibleTtsProvider implements ServerTtsProvider {
       voice: this.voice,
       capabilities: {
         instruction: Boolean(this.instructionField),
-        runtimeControl: false,
+        localInstall: false,
         upstreamCancellation: false,
         voiceLibrary: false,
       },
