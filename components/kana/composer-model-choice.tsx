@@ -1,32 +1,26 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AgentModelCatalog, AgentModelSwitchResult } from "@/lib/agent/types";
 import { getCopy, type UiLocale } from "@/lib/ui/copy";
 import { ModelControlPanel } from "./model-control-panel";
 
-export function ComposerModelChoice({ locale, sessionKey, connected, disabled, onList, onSelect }: {
+export function ComposerModelChoice({ locale, sessionKey, connected, disabled, catalog, onList, onSelect }: {
   locale: UiLocale;
   sessionKey?: string;
   connected: boolean;
   disabled: boolean;
+  /** Cached catalog from the workspace; its model labels the button. */
+  catalog: AgentModelCatalog | null;
   onList(refresh?: boolean): Promise<AgentModelCatalog>;
   onSelect(provider: string, model: string, confirm?: boolean): Promise<AgentModelSwitchResult>;
 }) {
-  const [model, setModel] = useState("");
+  const model = catalog?.model ?? "";
   const [open, setOpen] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
-  const load = useCallback(async (refresh = false) => {
-    const catalog = await onList(refresh);
-    setModel(catalog.model);
-    return catalog;
-  }, [onList]);
+  // Load the catalog once connected; later conversations reuse the cache.
   useEffect(() => {
-    let cancelled = false;
-    if (connected) void onList(false).then((catalog) => {
-      if (!cancelled) setModel(catalog.model);
-    }).catch(() => { if (!cancelled) setModel(""); });
-    return () => { cancelled = true; };
+    if (connected) void onList(false).catch(() => undefined);
   }, [connected, sessionKey, onList]);
   useEffect(() => {
     if (open) dialog.current?.showModal();
@@ -48,7 +42,7 @@ export function ComposerModelChoice({ locale, sessionKey, connected, disabled, o
         <div className="mb-4 flex items-center justify-between"><h2 className="text-sm font-bold">{label}</h2>
           <button type="button" className="kana-focus min-h-10 px-3" onClick={() => setOpen(false)} aria-label={text.closeModelChooser}>×</button>
         </div>
-        <ModelControlPanel locale={locale} onList={load} onSelect={onSelect} />
+        <ModelControlPanel locale={locale} catalog={catalog} onList={onList} onSelect={onSelect} />
       </> : null}
     </dialog>
   </>;

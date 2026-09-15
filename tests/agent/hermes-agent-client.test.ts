@@ -821,6 +821,15 @@ describe("HermesAgentClient (relay transport)", () => {
     assert.equal(suggestions.length, 2);
     assert.match(suggestions[0]?.text ?? "", /--provider 'fireworks_ai' --session$/);
 
+    const modelCalls = FakeRelay.requests.filter((request) => request.method === "model.options").length;
+    const fromCache = await client.completeCommands("/model deepseek-v4", { models: catalog });
+    assert.deepEqual(fromCache, suggestions);
+    assert.equal(
+      FakeRelay.requests.filter((request) => request.method === "model.options").length,
+      modelCalls,
+      "a supplied catalog is used instead of another model.options call",
+    );
+
     await client.selectModel({ provider: "openrouter", model: "deepseek/deepseek-v4" });
     assert.deepEqual(
       FakeRelay.requests.findLast((request) => request.method === "config.set")?.params,
