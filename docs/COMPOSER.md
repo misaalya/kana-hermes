@@ -55,9 +55,14 @@ queue and Live2D lip sync; dictation adds no TTS provider or credentials.
 
 ## Model choice
 
-Click the model name to load Hermes's current provider/model catalog. Select the
-provider and model, then apply. Any expensive-model confirmation from Hermes is
-shown before switching. The change applies to the current Hermes conversation,
-not the global configuration. Model changes are blocked while a turn is running.
-Escape closes the chooser and returns focus to its button. The existing settings
-model panel uses the same controller and Hermes model-selection implementation.
+Click the model name to open Hermes's provider/model catalog. The list Kana
+loaded last for this Hermes session appears at once while Kana asks Hermes for
+it again in the background, because Hermes re-reads its configuration and saved
+provider keys on every request; **Refresh list** waits for a full reload.
+Switching models, running `/model`, opening another session, or losing the
+connection drops the saved list. Select the provider and model, then apply. Any
+expensive-model confirmation from Hermes is shown before switching. The change
+applies to the current Hermes conversation, not the global configuration. Model
+changes are blocked while a turn is running. Escape closes the chooser and
+returns focus to its button. The model panel in Settings shares the same saved
+list and Hermes model-selection implementation.

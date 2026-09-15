@@ -407,22 +407,10 @@ button,
   }
 
   .kana-chat-scroll {
-    padding: 3.75rem 0.75rem 0.625rem;
+    padding: 0.75rem 0.75rem 0.625rem;
     scrollbar-width: none;
-    -webkit-mask-image: linear-gradient(
-      to bottom,
-      transparent 0,
-      rgb(0 0 0 / 0.16) 7%,
-      rgb(0 0 0 / 0.78) 18%,
-      #000 30%
-    );
-    mask-image: linear-gradient(
-      to bottom,
-      transparent 0,
-      rgb(0 0 0 / 0.16) 7%,
-      rgb(0 0 0 / 0.78) 18%,
-      #000 30%
-    );
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 1.25rem);
+    mask-image: linear-gradient(to bottom, transparent 0, #000 1.25rem);
   }
 
   .kana-chat-scroll::-webkit-scrollbar {
@@ -537,9 +525,12 @@ button,
   }
 }
 
+/* An open control stays filled with a white icon in both themes; the rule
+   comes after :hover so hovering an open control does not change it. */
 .kana-workspace-action[aria-expanded="true"] {
   border-color: var(--accent);
-  color: var(--accent-strong);
+  background: var(--accent);
+  color: #ffffff;
 }
 
 /* Stage edges covered by the workspace UI. The Live2D fit reads the resolved
@@ -564,6 +555,67 @@ button,
 @media (max-width: 1023px) {
   .kana-avatar-content {
     --kana-avatar-safe-top: 64px;
-    --kana-avatar-safe-bottom: 46dvh;
+    --kana-avatar-safe-bottom: 0px;
+  }
+}
+
+/* Phones and tablets: a chat-first screen with the avatar in a small
+   call-style tile at the top left. The chat starts below that band. */
+:root {
+  --kana-compact-width: 132px;
+  --kana-compact-height: 176px;
+  --kana-compact-inset: 16px;
+  --kana-compact-band: calc(var(--kana-compact-height) + 2 * var(--kana-compact-inset) + env(safe-area-inset-top));
+}
+
+@media (max-width: 639px) {
+  :root {
+    --kana-compact-width: 96px;
+    --kana-compact-height: 128px;
+    --kana-compact-inset: 12px;
+  }
+}
+
+.kana-stage-pattern.is-compact {
+  inset: auto;
+  top: calc(var(--kana-compact-inset) + env(safe-area-inset-top));
+  left: var(--kana-compact-inset);
+  z-index: 20;
+  width: var(--kana-compact-width);
+  height: var(--kana-compact-height);
+  border: 2px solid var(--line-strong);
+  border-radius: 18px;
+}
+
+.kana-stage-pattern.is-compact .kana-avatar-content {
+  --kana-avatar-safe-top: 0px;
+  --kana-avatar-safe-bottom: 0px;
+  --kana-avatar-head-share: 0.9;
+}
+
+/* The tile keeps the status headline (for example a load failure) but drops
+   the longer explanation, which does not fit. */
+.kana-stage-pattern.is-compact .kana-stage-message {
+  padding: 0.375rem;
+}
+
+.kana-stage-pattern.is-compact .kana-stage-message p {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.25;
+}
+
+.kana-stage-pattern.is-compact .kana-stage-message p + p {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  /* Beside the avatar tile, under the header actions. */
+  .kana-degraded-banner {
+    top: calc(var(--kana-compact-inset) + env(safe-area-inset-top) + 54px);
+    right: var(--kana-compact-inset);
+    bottom: auto;
+    left: auto;
+    max-width: calc(100vw - var(--kana-compact-width) - 3 * var(--kana-compact-inset));
   }
 }

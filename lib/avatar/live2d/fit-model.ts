@@ -27,6 +27,11 @@ export type Live2DModelGeometry = {
 export type Live2DStageInsets = {
   top: number;
   bottom: number;
+  /**
+   * Largest head width as a share of the usable stage width. Small avatar
+   * tiles raise it so the face, not the outfit, fills the frame.
+   */
+  headWidthShare?: number;
 };
 
 export type Live2DFraming = "portrait" | "compact";
@@ -147,6 +152,7 @@ export function fitLive2DModel(
   const visibleHeight = stageHeight - bottomInset;
   const topInset = Math.min(Math.max(0, finiteOr(insets.top, 0)), visibleHeight * 0.3);
   const widthBasis = Math.min(stageWidth, visibleHeight * WIDTH_BASIS_RATIO);
+  const headWidthShare = Math.min(1, positiveOr(finiteOr(insets.headWidthShare ?? HEAD_WIDTH_LIMIT, HEAD_WIDTH_LIMIT), HEAD_WIDTH_LIMIT));
   const { framing, head } = classifyLive2DFraming({ ...geometry, bounds });
 
   let automaticScale: number;
@@ -163,7 +169,7 @@ export function fitLive2DModel(
     screenY = Math.max(topInset, visibleHeight * TOP_MARGIN_RATIO);
     automaticScale = Math.min(
       (visibleHeight - screenY) / Math.max(1, cropBottom - cropTop),
-      (widthBasis * HEAD_WIDTH_LIMIT) / head.width,
+      (widthBasis * headWidthShare) / head.width,
     );
     anchorX = head.x + head.width / 2;
     anchorY = cropTop;
