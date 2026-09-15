@@ -506,6 +506,11 @@ function readPixelProperty(element: Element, name: string): number {
   return Number.isFinite(pixels) && pixels > 0 ? pixels : 0;
 }
 
+function readNumberProperty(element: Element, name: string): number | undefined {
+  const value = Number.parseFloat(getComputedStyle(element).getPropertyValue(name).trim());
+  return Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
 function retireCurrentModel(runtime: CanvasRuntime): void {
   const previous = runtime.currentModel;
   runtime.currentModel = null;
@@ -708,6 +713,7 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
         {
           top: readPixelProperty(host, "--kana-avatar-safe-top"),
           bottom: readPixelProperty(host, "--kana-avatar-safe-bottom"),
+          headWidthShare: readNumberProperty(host, "--kana-avatar-head-share"),
         },
       );
       model.scale.set(fit.scale, fit.scale);

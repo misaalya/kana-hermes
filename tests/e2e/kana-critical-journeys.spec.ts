@@ -733,14 +733,17 @@ test("recenters the avatar over a full background without restyling chat", async
     };
   });
 
-  await expect
-    .poll(async () => Math.round((await stage.boundingBox())?.width ?? 0))
-    .toBe(viewportWidth);
-
   if (mobileChat) {
+    // Chat-first phones: the avatar is a small call-style tile at the top left
+    // and the transcript fills the rest of the screen below it.
     await expect(page.getByRole("button", { name: "Hide chat" })).toBeHidden();
     await expect(chatPanel).toHaveAttribute("aria-hidden", "false");
     await expect(avatarViewport).toHaveAttribute("data-chat-open", "true");
+    const tile = await page.locator(".kana-stage-pattern").boundingBox();
+    expect(tile).not.toBeNull();
+    expect(tile!.x).toBeLessThan(24);
+    expect(tile!.y).toBeLessThan(24);
+    expect(tile!.width).toBeLessThan(viewportWidth / 3);
     const mobileLayout = await page.locator(".kana-chat-dock").evaluate((element) => {
       const bounds = element.getBoundingClientRect();
       const feedStyle = getComputedStyle(
@@ -748,13 +751,23 @@ test("recenters the avatar over a full background without restyling chat", async
       );
       return {
         dockTop: bounds.top,
+        dockBottom: bounds.bottom,
         fade: feedStyle.maskImage || feedStyle.webkitMaskImage,
       };
     });
-    expect(mobileLayout.dockTop).toBeGreaterThan(viewportHeight * 0.45);
+    expect(mobileLayout.dockTop).toBeGreaterThanOrEqual(tile!.y + tile!.height);
+    expect(mobileLayout.dockTop).toBeLessThan(viewportHeight * 0.3);
+    expect(Math.round(mobileLayout.dockBottom)).toBe(viewportHeight);
     expect(mobileLayout.fade).not.toBe("none");
+    await expect
+      .poll(async () => (await avatarCanvas.evaluate((canvas) => (canvas as HTMLCanvasElement).width)))
+      .toBeGreaterThan(0);
     return;
   }
+
+  await expect
+    .poll(async () => Math.round((await stage.boundingBox())?.width ?? 0))
+    .toBe(viewportWidth);
 
   await page.getByRole("button", { name: "Hide chat" }).click();
   await expect(avatarViewport).toHaveAttribute("data-chat-open", "false");
