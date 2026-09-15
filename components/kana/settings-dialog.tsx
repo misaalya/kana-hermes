@@ -73,6 +73,8 @@ type SettingsDialogProps = {
   onInspectHermesControl(preferredPort?: number): Promise<HermesRuntimeStatus>;
   onStartHermesControl(options: { port?: number; restart?: boolean }): Promise<HermesRuntimeStatus>;
   onStopHermesControl(): Promise<HermesRuntimeStatus>;
+  /** Cached Hermes model catalog, updated by background refreshes. */
+  agentModelCatalog?: AgentModelCatalog | null;
   onListAgentModels(refresh?: boolean): Promise<AgentModelCatalog>;
   onSelectAgentModel(provider: string, model: string, confirm?: boolean): Promise<AgentModelSwitchResult>;
   onPreviewAvatarEmotion(preferences: KanaPreferences, emotion: Emotion): Promise<void>;
@@ -116,6 +118,7 @@ export function SettingsDialog({
   onInspectHermesControl,
   onStartHermesControl,
   onStopHermesControl,
+  agentModelCatalog,
   onListAgentModels,
   onSelectAgentModel,
   onPreviewAvatarEmotion,
@@ -768,6 +771,7 @@ export function SettingsDialog({
                 <div className="mt-2">
                   <ModelControlPanel
                     locale={draft.uiLocale}
+                    catalog={agentModelCatalog}
                     onList={onListAgentModels}
                     onSelect={onSelectAgentModel}
                   />

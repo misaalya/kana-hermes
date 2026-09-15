@@ -1,5 +1,5 @@
 import { memo } from "react";
-import type { ActivityItem } from "@/lib/state/use-kana-controller";
+import type { ActivityItem } from "@/lib/agent/types";
 import { toolVariant } from "@/lib/agent/tool-presets";
 import { getCopy, type UiLocale } from "@/lib/ui/copy";
 
