@@ -87,11 +87,11 @@ Your data (password hash, settings, voice profiles, model cache) lives in
   </tr>
   <tr>
     <td width="50%"><img src=".github/readme/settings-avatar.png" alt="Avatar settings with stage backgrounds and the Live2D avatar library"></td>
-    <td width="50%"><img src=".github/readme/mobile.jpg" alt="Kana on a phone: the workspace and the conversation drawer"></td>
+    <td width="50%"><img src=".github/readme/mobile.jpg" alt="Kana on a phone: the chat fills the screen with Kana in a small call-style tile, next to the conversation list"></td>
   </tr>
   <tr>
     <td align="center"><sub>Avatars, stages, and per-model bindings</sub></td>
-    <td align="center"><sub>Works on phones too</sub></td>
+    <td align="center"><sub>Chat-first on phones, with Kana in a call-style tile</sub></td>
   </tr>
 </table>
 
@@ -104,6 +104,10 @@ Your data (password hash, settings, voice profiles, model cache) lives in
 - History comes from Hermes, so conversations follow you to other browsers.
 - The Hermes activity log shows which tools ran for each reply.
 - Composer with [file attachments, voice dictation, and a model picker](docs/COMPOSER.md).
+  The picker opens with the last Hermes model list at once and refreshes it in
+  the background.
+- On phones and tablets the conversation fills the screen and Kana sits in a
+  small call-style tile framed on the face.
 
 **Hermes controls**
 - The live, categorized `/` command catalog with argument completion, including
@@ -116,7 +120,8 @@ Your data (password hash, settings, voice profiles, model cache) lives in
 - Live2D avatars: the official Haru and Mao samples, any hosted `.model3.json`,
   or a model folder imported into your browser.
 - Emotions, motions, lip sync, and cursor-following gaze.
-- Stage backgrounds, including your own images, plus light and dark themes.
+- Stage backgrounds (an illustrated room, soft patterns, or your own image), plus
+  light and dark themes.
 
 **Voice**
 - Local Japanese speech with Irodori-TTS v4.1 Anime on a CPU engine, with voice cloning from a short, consented sample.
@@ -174,8 +179,8 @@ HERMES_DASHBOARD_SESSION_TOKEN="a-long-random-token" hermes serve --host 127.0.0
 
 ## Voice
 
-Voice is optional. Turn Kana's voice on or off in **Settings → Voice**; replies
-always stay readable as text.
+Voice is optional and off on new installs. Turn Kana's voice on or off in
+**Settings → Voice**; replies always stay readable as text.
 
 - **Local Irodori TTS (default).** [Irodori-TTS v4.1 Anime](https://huggingface.co/phasefield-audio/Irodori-TTS-v4.1-Anime)
   on the [irodori-c](https://github.com/misaalya/irodori-c) engine, on the CPU of the
@@ -223,7 +228,11 @@ Kana server (Next.js)
 
 Hermes events are translated into a stable internal model that drives the
 transcript, activity log, avatar emotion, and audio. Each reply carries Japanese
-speech, a subtitle, and an emotion in one structured Hermes response. More in
+speech, a subtitle, and an emotion in one structured Hermes response. In the
+browser, each workspace keeps its shared state in small per-concern
+[zustand](https://github.com/pmndrs/zustand) stores, and plain service classes
+talk to Hermes, voice, and the avatar, so typing re-renders only the composer.
+More in
 [process boundaries](docs/ADR-001-PROCESS-BOUNDARIES.md) and the
 [security model](docs/SECURITY.md).
 
