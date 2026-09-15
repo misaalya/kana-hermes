@@ -12,7 +12,7 @@ Hermes stays the only agent: its tools, files, memory, and sessions work exactly
 ![Node.js 22.13+](https://img.shields.io/badge/node-%3E%3D22.13-339933)
 ![Linux x64](https://img.shields.io/badge/platform-Linux%20x64-lightgrey)
 
-![Kana workspace with a Live2D avatar, a room background, and a conversation with Hermes](.github/readme/workspace.jpg)
+![Kana workspace with a Live2D avatar, a room background, and a conversation with Hermes](.github/readme/workspace-v2.jpg)
 
 </div>
 
@@ -78,16 +78,16 @@ Your data (password hash, settings, voice profiles, model cache) lives in
 
 <table>
   <tr>
-    <td width="50%"><img src=".github/readme/workspace-dark.jpg" alt="Kana in dark theme"></td>
-    <td width="50%"><img src=".github/readme/slash-commands.jpg" alt="The slash command menu listing live Hermes commands"></td>
+    <td width="50%"><img src=".github/readme/workspace-dark-v2.jpg" alt="Kana in dark theme"></td>
+    <td width="50%"><img src=".github/readme/slash-commands-v2.jpg" alt="The slash command menu listing live Hermes commands"></td>
   </tr>
   <tr>
     <td align="center"><sub>Dark theme and built-in stage backgrounds</sub></td>
     <td align="center"><sub>Hermes slash commands, read live from your installation</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src=".github/readme/settings-avatar.png" alt="Avatar settings with stage backgrounds and the Live2D avatar library"></td>
-    <td width="50%"><img src=".github/readme/mobile.jpg" alt="Kana on a phone: the chat fills the screen with Kana in a small call-style tile, next to the conversation list"></td>
+    <td width="50%"><img src=".github/readme/settings-avatar-v2.png" alt="Avatar settings with stage backgrounds and the Live2D avatar library"></td>
+    <td width="50%"><img src=".github/readme/mobile-v2.jpg" alt="Kana on a phone: the chat fills the screen with Kana in a small call-style tile, next to the conversation list"></td>
   </tr>
   <tr>
     <td align="center"><sub>Avatars, stages, and per-model bindings</sub></td>
