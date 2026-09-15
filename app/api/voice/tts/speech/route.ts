@@ -75,7 +75,7 @@ function errorResponse(status: number, error: string): Response {
 
 // Stable browser boundary: JSON in, raw audio bytes out. The selected
 // server-side provider owns synthesis and credentials; playback never needs
-// to know whether the bytes came from local Qwen or a remote compatible API.
+// to know whether the bytes came from the local engine or a remote compatible API.
 export const POST = withSession(async (request) => {
   let tracked: ReturnType<typeof trackTtsRequest> | undefined;
   let delivering = false;

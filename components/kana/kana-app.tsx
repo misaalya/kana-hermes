@@ -142,12 +142,12 @@ export function KanaApp({ appVersion }: KanaAppProps) {
       hermes = current.connectionState === "connected" ? "running" : "missing";
     }
 
+    // Always inspect: the check is a cheap install lookup, and first-run setup
+    // needs it before the voice preference is saved.
     let voice: DependencyFindings["voice"] = null;
-    if (current.preferences.voiceEnabled) {
+    {
       try {
-        const status = await current.inspectVoiceService(
-          current.preferences.qwen3Tts.baseUrl,
-        );
+        const status = await current.inspectVoiceService();
         voice =
           status.state === "error"
             ? "error"
@@ -155,7 +155,11 @@ export function KanaApp({ appVersion }: KanaAppProps) {
               ? "loading"
               : status.state === "ready"
                 ? "ok"
-                : "stopped";
+                : status.state === "unavailable"
+                  ? status.installRequired
+                    ? "not_installed"
+                    : "unsupported"
+                  : "stopped";
       } catch {
         voice = "error";
       }
@@ -386,7 +390,8 @@ export function KanaApp({ appVersion }: KanaAppProps) {
       const findings = await inspectDependencyFindings();
       if (!active) return;
 
-      const degraded = findings.hermes === "missing" || findings.voice === "error";
+      const degraded = findings.hermes === "missing" ||
+        (findings.voice === "error" && runtimeInspectionRef.current.preferences.voiceEnabled);
       if (state && !state.onboardingCompleted) {
         setWizardMode("full");
       } else if (
@@ -401,7 +406,7 @@ export function KanaApp({ appVersion }: KanaAppProps) {
     return () => { active = false; };
   }, [inspectDependencyFindings, kana.ready]);
 
-  // A cold Qwen start or a temporarily inaccessible process-control route
+  // A voice engine download or a temporarily inaccessible process-control route
   // must not leave the repair banner frozen for the lifetime of the page.
   useEffect(() => {
     if (
@@ -466,7 +471,7 @@ export function KanaApp({ appVersion }: KanaAppProps) {
       return;
     }
     // Prime Web Audio while Send/Enter still owns a browser user gesture.
-    // The actual WAV arrives after Hermes + Qwen finish, too late to unlock
+    // The actual WAV arrives after Hermes and the voice engine finish, too late to unlock
     // autoplay on stricter mobile browsers.
     if (kana.preferences.voiceEnabled) kana.unlockVoice();
     const confirmation = destructiveCommandPrompt(text, workspaceCopy);
@@ -921,7 +926,7 @@ export function KanaApp({ appVersion }: KanaAppProps) {
         />
       ) : null}
 
-      {!wizardMode && (deps.hermes === "missing" || deps.voice === "error") ? (
+      {!wizardMode && (deps.hermes === "missing" || (deps.voice === "error" && kana.preferences.voiceEnabled)) ? (
         <DegradedBanner
           locale={kana.preferences.uiLocale}
           onCheck={() => setWizardMode("repair")}

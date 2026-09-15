@@ -44,6 +44,7 @@ export type Copy = {
     characterTitle: string;
     characterBody: string;
     voiceLabel: string;
+    voiceDownloadNote: string;
     almostThere: string;
     needsHelpTitle: string;
     readyTitle: string;
@@ -56,6 +57,9 @@ export type Copy = {
     voiceReady: string;
     voiceNeedsAttention: string;
     voicePreparedOnUse: string;
+    voiceNotInstalled: string;
+    voiceUnsupported: string;
+    voiceInstalling: string;
     openConnectionSettings: string;
   };
   avatarStage: {
@@ -120,22 +124,17 @@ export type Copy = {
   panels: {
     hermesTitle: string;
     hermesSubtitle: string;
-    ttsTitle: string;
-    ttsSubtitle: string;
     states: Record<string, string>;
     start: string;
     starting: string;
     restart: string;
     stop: string;
     refresh: string;
-    ttsAutoNote: string;
-    ttsFirstStart: string;
     advanced: string;
     portLabel: string;
     cwdLabel: string;
     cwdPlaceholder: string;
     hermesAria: string;
-    ttsAria: string;
     checkFailed: string;
     controlFailed: string;
   };
@@ -433,14 +432,10 @@ export type Copy = {
     empty: string;
     selected: string;
     choose: string;
-    pending: string;
     remove: string;
     included: string;
     yours: string;
-    waiting: string;
-    engineLoading: string;
-    engineError: string;
-    engineStopped: string;
+    modelVoice: string;
     externalProvider(name: string): string;
     externalReady: string;
     externalUnavailable: string;
@@ -465,11 +460,34 @@ export type Copy = {
     added(name: string): string;
     addFailed: string;
     removeFailed: string;
-    registrationFailed: string;
+    notWav: string;
     tooLarge(maxMib: number): string;
     defaultProtected: string;
     audioUnsupported: string;
     audioUnreadable: string;
+  };
+  voiceEngine: {
+    title: string;
+    aria: string;
+    body(model: string): string;
+    states: Record<"ready" | "installing" | "not_installed" | "failed" | "unsupported" | "checking", string>;
+    downloadNote(size: string): string;
+    diskNote(needed: string, free: string): string;
+    lowDisk(needed: string, free: string): string;
+    progress(step: string, percent: number): string;
+    steps: Record<"engine" | "assets" | "model", string>;
+    phases: Record<"downloading" | "verifying" | "extracting", string>;
+    reusedCache: string;
+    configuredModel: string;
+    device(int8: boolean): string;
+    install: string;
+    resume: string;
+    cancel: string;
+    remove: string;
+    confirmRemove: string;
+    refresh: string;
+    failedCheck: string;
+    notInstalledHint: string;
   };
   status: Record<string, string>;
 };
@@ -514,6 +532,7 @@ const id: Copy = {
     characterTitle: "Pilih tampilan dan suara",
     characterBody: "Mulai dengan pilihan bawaan. Avatar Live2D dan sampel suaramu sendiri bisa ditambahkan dari Pengaturan.",
     voiceLabel: "Suara Kana",
+    voiceDownloadNote: "Suara memakai mesin lokal yang perlu diunduh sekali (±3,6 GB) dari Pengaturan → Suara. Tanpa itu, balasan tetap tampil sebagai teks.",
     almostThere: "Hampir selesai",
     needsHelpTitle: "Kana butuh sedikit bantuan",
     readyTitle: "Kana siap menemanimu",
@@ -526,6 +545,9 @@ const id: Copy = {
     voiceReady: "Siap berbicara.",
     voiceNeedsAttention: "Perlu diperiksa dari Pengaturan.",
     voicePreparedOnUse: "Akan disiapkan saat pertama digunakan.",
+    voiceNotInstalled: "Mesin suara belum diunduh. Unduh dari Pengaturan → Suara.",
+    voiceUnsupported: "Mesin suara lokal tidak bisa berjalan di perangkat ini. Pakai penyedia suara OpenAI-compatible di config.json.",
+    voiceInstalling: "Mesin suara sedang diunduh.",
     openConnectionSettings: "Buka pengaturan koneksi",
   },
   avatarStage: {
@@ -596,8 +618,6 @@ const id: Copy = {
   panels: {
     hermesTitle: "Hermes — otak asisten",
     hermesSubtitle: "Proses resmi di mesin ini, tanpa dimodifikasi.",
-    ttsTitle: "Provider suara Jepang",
-    ttsSubtitle: "Sumber audio yang dipilih di config.json.",
     states: {
       checking: "memeriksa…",
       running: "menyala",
@@ -612,14 +632,11 @@ const id: Copy = {
     restart: "Mulai ulang",
     stop: "Matikan",
     refresh: "Perbarui status",
-    ttsAutoNote: "Tidak dipakai = tidak memakan daya. Model hanya bekerja saat ada permintaan suara.",
-    ttsFirstStart: "Menyiapkan model suara — pemakaian pertama bisa mengunduh ±2,3 GB dan butuh beberapa menit.",
     advanced: "Pengaturan lanjutan",
     portLabel: "Port lokal",
     cwdLabel: "Folder kerja (opsional)",
     cwdPlaceholder: "/home/user/project",
     hermesAria: "Kontrol proses Hermes",
-    ttsAria: "Status provider suara",
     checkFailed: "Pemeriksaan kontrol gagal.",
     controlFailed: "Kontrol layanan gagal.",
   },
@@ -918,7 +935,7 @@ const id: Copy = {
     advancedModeSourceEnvironment: "Mode ini sedang ditentukan oleh KANA_DEPLOYMENT_MODE dan mengesampingkan file JSON.",
     advancedModeSourceConfig: "Mode ini dibaca dari file JSON di atas.",
     advancedModeSourceDefault: "Mode lokal bawaan digunakan karena belum ada pilihan eksplisit.",
-    advancedRestart: "Perubahan TTS dan mode dibaca otomatis; port Hermes/Qwen berlaku setelah Kana dimulai ulang.",
+    advancedRestart: "Perubahan TTS dan mode dibaca otomatis; port Hermes berlaku setelah Kana dimulai ulang.",
     advancedConfigError: "File ini tidak valid, jadi Kana memakai pengaturan bawaan:",
     checkingAccess: "Memeriksa perlindungan akses…",
     currentPassword: "Kata sandi saat ini",
@@ -934,21 +951,17 @@ const id: Copy = {
   },
   voiceLibrary: {
     title: "Koleksi suara",
-    body: "Pilih suara yang siap. Kana menggunakannya untuk setiap balasan Jepang baru.",
+    body: "Kana memakai suara ini untuk setiap balasan Jepang baru. Suara berbasis sampel lebih konsisten, suara Irodori lebih cepat.",
     chooseAria: "Pilih suara Kana",
     available: "Suara yang tersedia",
     loading: "Memuat suara…",
     empty: "Belum ada suara. Tambahkan sampel suara di bawah.",
     selected: "Dipilih",
     choose: "Pilih",
-    pending: "Menunggu",
     remove: "Hapus",
     included: "Bawaan Kana",
     yours: "Suaramu",
-    waiting: "Menunggu mesin suara…",
-    engineLoading: "Mesin suara sedang bersiap. Suaramu akan muncul otomatis setelah selesai.",
-    engineError: "Mesin suara tidak dapat dijalankan. Buka Koneksi untuk memeriksanya.",
-    engineStopped: "Mesin suara sedang tidur. Kana akan menjalankannya saat suara dibutuhkan.",
+    modelVoice: "Suara asli model · tercepat",
     externalProvider: (name) => `Kana memakai ${name}. Suara, model, dan kredensial provider ini diatur melalui config.json.`,
     externalReady: "Siap digunakan",
     externalUnavailable: "Konfigurasi belum siap",
@@ -973,11 +986,41 @@ const id: Copy = {
     added: (name) => `Suara “${name}” siap digunakan.`,
     addFailed: "Suara tidak dapat ditambahkan.",
     removeFailed: "Suara tidak dapat dihapus.",
-    registrationFailed: "Suara tersimpan, tetapi belum terdaftar ke mesin suara. Kana akan mencobanya lagi.",
+    notWav: "Sampel suara harus berupa WAV.",
     tooLarge: (maxMib) => `Sampel suara maksimal ${maxMib} MB.`,
     defaultProtected: "Suara bawaan tidak bisa dihapus.",
     audioUnsupported: "Browser tidak mendukung konversi audio. Gunakan file WAV.",
     audioUnreadable: "Audio tidak bisa dibaca browser. Gunakan WAV, atau format lain yang bisa diputar di sini.",
+  },
+  voiceEngine: {
+    title: "Mesin suara lokal",
+    aria: "Mesin suara lokal",
+    body: (model) => `${model} lewat mesin irodori-c, berjalan di CPU mesin ini tanpa Python atau GPU.`,
+    states: {
+      ready: "Terpasang",
+      installing: "Mengunduh…",
+      not_installed: "Belum diunduh",
+      failed: "Gagal",
+      unsupported: "Tidak didukung",
+      checking: "Memeriksa…",
+    },
+    downloadNote: (size) => `Unduhan ${size}. Tidak ada yang diunduh sampai kamu memintanya.`,
+    diskNote: (needed, free) => `Butuh ${needed} ruang disk · tersedia ${free}.`,
+    lowDisk: (needed, free) => `Ruang disk tidak cukup: butuh ${needed}, tersedia ${free}.`,
+    progress: (step, percent) => `${step} · ${percent}%`,
+    steps: { engine: "Mesin", assets: "Aset suara", model: "Model" },
+    phases: { downloading: "Mengunduh", verifying: "Memeriksa checksum", extracting: "Membongkar" },
+    reusedCache: "Model dipakai ulang dari cache Hugging Face, jadi tidak diunduh lagi.",
+    configuredModel: "Model memakai file dari tts.irodoriLocal.modelPath.",
+    device: (int8) => (int8 ? "CPU int8 (AVX-512 VNNI)" : "CPU fp32"),
+    install: "Unduh mesin suara",
+    resume: "Lanjutkan unduhan",
+    cancel: "Batalkan",
+    remove: "Hapus",
+    confirmRemove: "Yakin hapus?",
+    refresh: "Perbarui",
+    failedCheck: "Status mesin suara tidak dapat diperiksa.",
+    notInstalledHint: "Kana baru bisa bersuara setelah mesin suara diunduh. Sampai itu, balasan tetap tampil sebagai teks.",
   },
   status: {
     ready: "Siap kapan pun kamu siap",
@@ -1045,6 +1088,7 @@ const en: Copy = {
     characterTitle: "Choose a look and voice",
     characterBody: "Start with a default. Your own Live2D avatar and voice sample can be added from Settings.",
     voiceLabel: "Kana's voice",
+    voiceDownloadNote: "Voice uses a local engine that is downloaded once (~3.6 GB) from Settings → Voice. Without it, replies still appear as text.",
     almostThere: "Almost there",
     needsHelpTitle: "Kana needs a little help",
     readyTitle: "Kana is ready for you",
@@ -1057,6 +1101,9 @@ const en: Copy = {
     voiceReady: "Ready to speak.",
     voiceNeedsAttention: "Needs attention in Settings.",
     voicePreparedOnUse: "Will be prepared on first use.",
+    voiceNotInstalled: "The voice engine is not downloaded yet. Download it in Settings → Voice.",
+    voiceUnsupported: "The local voice engine cannot run on this device. Use an OpenAI-compatible voice provider in config.json.",
+    voiceInstalling: "The voice engine is downloading.",
     openConnectionSettings: "Open connection settings",
   },
   avatarStage: {
@@ -1127,8 +1174,6 @@ const en: Copy = {
   panels: {
     hermesTitle: "Hermes — the assistant's brain",
     hermesSubtitle: "The official, unmodified process on this machine.",
-    ttsTitle: "Japanese voice provider",
-    ttsSubtitle: "The audio source selected in config.json.",
     states: {
       checking: "checking…",
       running: "running",
@@ -1143,14 +1188,11 @@ const en: Copy = {
     restart: "Restart",
     stop: "Stop",
     refresh: "Refresh status",
-    ttsAutoNote: "Idle = zero cost. The model only works when a voice request comes in.",
-    ttsFirstStart: "Preparing the voice model — first use may download ~2.3 GB and take several minutes.",
     advanced: "Advanced",
     portLabel: "Local port",
     cwdLabel: "Working folder (optional)",
     cwdPlaceholder: "/home/user/project",
     hermesAria: "Hermes process control",
-    ttsAria: "Voice provider status",
     checkFailed: "Control check failed.",
     controlFailed: "Service control failed.",
   },
@@ -1449,7 +1491,7 @@ const en: Copy = {
     advancedModeSourceEnvironment: "This mode is currently set by KANA_DEPLOYMENT_MODE and overrides the JSON file.",
     advancedModeSourceConfig: "This mode is read from the JSON file above.",
     advancedModeSourceDefault: "The local default is used because no explicit mode is configured.",
-    advancedRestart: "TTS and mode changes are picked up automatically; Hermes/Qwen port changes apply after restarting Kana.",
+    advancedRestart: "TTS and mode changes are picked up automatically; Hermes port changes apply after restarting Kana.",
     advancedConfigError: "This file is invalid, so Kana is using defaults:",
     checkingAccess: "Checking access protection…",
     currentPassword: "Current password",
@@ -1465,21 +1507,17 @@ const en: Copy = {
   },
   voiceLibrary: {
     title: "Voice library",
-    body: "Choose a ready voice. Kana uses it for every new Japanese reply.",
+    body: "Kana uses this voice for every new Japanese reply. Sample-based voices stay more consistent; the Irodori voice is faster.",
     chooseAria: "Choose Kana's voice",
     available: "Available voices",
     loading: "Loading voices…",
     empty: "No voices yet. Add a voice sample below.",
     selected: "Selected",
     choose: "Choose",
-    pending: "Pending",
     remove: "Remove",
     included: "Included with Kana",
     yours: "Your voice",
-    waiting: "Waiting for the voice engine…",
-    engineLoading: "The voice engine is getting ready. Your voices will appear automatically when it finishes.",
-    engineError: "The voice engine could not start. Open Connection to check it.",
-    engineStopped: "The voice engine is asleep. Kana will start it when voice is needed.",
+    modelVoice: "The model's own voice · fastest",
     externalProvider: (name) => `Kana is using ${name}. Its voice, model, and credentials are managed in config.json.`,
     externalReady: "Ready to use",
     externalUnavailable: "Configuration is not ready",
@@ -1504,11 +1542,41 @@ const en: Copy = {
     added: (name) => `Voice “${name}” is ready.`,
     addFailed: "The voice could not be added.",
     removeFailed: "The voice could not be removed.",
-    registrationFailed: "The voice was saved but is not registered with the voice engine yet. Kana will retry.",
+    notWav: "Voice samples must be WAV files.",
     tooLarge: (maxMib) => `Voice samples can be at most ${maxMib} MB.`,
     defaultProtected: "The bundled voice cannot be removed.",
     audioUnsupported: "This browser cannot convert audio. Use a WAV file.",
     audioUnreadable: "The browser could not read this audio. Use WAV or another format it can play.",
+  },
+  voiceEngine: {
+    title: "Local voice engine",
+    aria: "Local voice engine",
+    body: (model) => `${model} on the irodori-c engine, running on this machine's CPU with no Python or GPU.`,
+    states: {
+      ready: "Installed",
+      installing: "Downloading…",
+      not_installed: "Not downloaded",
+      failed: "Failed",
+      unsupported: "Not supported",
+      checking: "Checking…",
+    },
+    downloadNote: (size) => `${size} download. Nothing is downloaded until you ask.`,
+    diskNote: (needed, free) => `Needs ${needed} of disk · ${free} free.`,
+    lowDisk: (needed, free) => `Not enough disk space: ${needed} needed, ${free} free.`,
+    progress: (step, percent) => `${step} · ${percent}%`,
+    steps: { engine: "Engine", assets: "Voice assets", model: "Model" },
+    phases: { downloading: "Downloading", verifying: "Verifying checksum", extracting: "Unpacking" },
+    reusedCache: "The model is reused from the Hugging Face cache, so it is not downloaded again.",
+    configuredModel: "The model uses the file from tts.irodoriLocal.modelPath.",
+    device: (int8) => (int8 ? "CPU int8 (AVX-512 VNNI)" : "CPU fp32"),
+    install: "Download voice engine",
+    resume: "Resume download",
+    cancel: "Cancel",
+    remove: "Remove",
+    confirmRemove: "Remove it?",
+    refresh: "Refresh",
+    failedCheck: "Could not check the voice engine.",
+    notInstalledHint: "Kana can speak once the voice engine is downloaded. Until then, replies still appear as text.",
   },
   status: {
     ready: "Ready when you are",

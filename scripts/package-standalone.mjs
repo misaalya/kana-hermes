@@ -17,7 +17,7 @@ await cp(
   path.join(standalone, "README.md"),
   { force: true },
 );
-for (const tool of ["qwen3-tts-acceptance.mjs", "dogfood-check.mjs"]) {
+for (const tool of ["dogfood-check.mjs"]) {
   await cp(path.join(root, "scripts", tool), path.join(standalone, "tools", tool), {
     force: true,
   });

@@ -1,11 +1,13 @@
-// Client-side audio normalization for voice uploads. The Qwen service only
-// accepts libsndfile-decodable containers (WAV/FLAC/OGG), while users naturally
-// record or download MP3/M4A. The browser decodes nearly everything, so we
-// convert any input to 16-bit PCM mono WAV before it leaves the page.
+// Client-side audio normalization for voice uploads. The local engine reads
+// only WAV references, while users naturally record or download MP3/M4A. The
+// browser decodes nearly everything, so we convert any input to 16-bit PCM
+// mono WAV before it leaves the page.
 
 import { MAX_VOICE_REFERENCE_BYTES } from "@/lib/limits";
 
-const MAX_REFERENCE_SECONDS = 30;
+// The engine re-encodes the reference for every utterance, so its length adds
+// directly to speech latency; 15 seconds is plenty for a stable voice.
+const MAX_REFERENCE_SECONDS = 15;
 
 export type AudioConversionErrorCode = "unsupported" | "unreadable";
 

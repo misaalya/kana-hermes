@@ -4,20 +4,18 @@ import type {
 } from "@/lib/voice/types";
 
 // Browser client for Kana's persistent voice library (server SQLite +
-// data/voices). Clones survive service cache wipes because the reference
-// audio and metadata live on the Kana side, not inside the Qwen service.
+// data/voices). Each voice is a reference WAV the local engine reads directly.
 
 export type LibraryVoice = {
   id: string;
   name: string;
-  registered: boolean;
-  serviceVoiceId: string | null;
+  /** "model": the engine's own voice; "bundled": Kana's reference; "reference": user-added. */
+  kind: "model" | "bundled" | "reference";
   isDefault: boolean;
 };
 
 export type VoiceLibrarySnapshot = {
   voices: LibraryVoice[];
-  engine?: { state?: string };
   provider?: TtsProviderDescriptor;
   providerStatus?: VoiceProviderStatus;
   supportsVoiceLibrary?: boolean;
@@ -32,10 +30,7 @@ export async function listKanaVoices(): Promise<VoiceLibrarySnapshot> {
   return (await response.json()) as VoiceLibrarySnapshot;
 }
 
-/** Why a saved voice is not usable yet; the UI localizes it. */
-export type VoicePendingReason = "loading" | "stopped" | "error" | "registration_failed";
-
-export type UploadedVoice = { voice: LibraryVoice; pending?: VoicePendingReason };
+export type UploadedVoice = { voice: LibraryVoice };
 
 /** A voice-library failure with an optional stable code for localization. */
 export class VoiceLibraryError extends Error {

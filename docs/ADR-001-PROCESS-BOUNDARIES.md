@@ -1,4 +1,4 @@
-# ADR-001: Keep Hermes and Qwen outside the Kana application process
+# ADR-001: Keep Hermes and the voice engine outside the Kana application process
 
 Status: accepted, 2026-08-22.
 
@@ -8,11 +8,11 @@ holds one server-side WebSocket to it. Kana never patches, updates, vendors, or
 writes into the Hermes installation. Hermes therefore remains independently
 updatable and is still the only agent.
 
-Qwen3-TTS runs in its own managed Python process. Kana packages the versioned
-service source needed to start it, but its Python environment, model cache,
-and voice data stay outside the npm or standalone artifact under Kana's data
-root. The browser reaches either Qwen or an external OpenAI-compatible TTS
-provider only through Kana's same-origin relay.
+Local speech runs in separate irodori-c engine processes, one per utterance
+(updated 2026-09-15; this replaced a managed Qwen3-TTS Python service). The
+engine release and model are not packaged: Kana downloads and verifies them on
+request into its data root. The browser reaches either the local engine or an
+external OpenAI-compatible TTS provider only through Kana's same-origin relay.
 
 A native desktop wrapper is deferred. It may be reconsidered only when real
 usage demonstrates a need for OS keychain storage, auto-start, or native

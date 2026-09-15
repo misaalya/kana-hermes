@@ -26,7 +26,7 @@ import { withRecoveredLive2DPresets } from "./live2d-model-capabilities";
  *   imported folders (the library's FileLoader reads webkitRelativePath,
  *   which Kana's IndexedDB model store restores);
  * - an AIRI-style motion-manager hook whose final-phase plugin owns the
- *   bound mouth parameter during Qwen3-TTS playback;
+ *   bound mouth parameter during speech playback;
  * - bounds-aware automatic fit with a per-model normalized user adjustment;
  * - pointer focus plus idle Lissajous gaze wander through FocusController;
  * - ticker-level maxFPS and render guarding, pause when hidden/offscreen,

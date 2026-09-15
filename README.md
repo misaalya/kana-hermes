@@ -67,7 +67,7 @@ Useful commands:
 | `kana serve` | Run headless for a VPS or systemd service |
 | `kana password` | Create or change the access password (`--stdin` for scripts) |
 | `kana doctor` | Check Node.js, Hermes, password, voice, and data folders |
-| `kana setup` | Prepare optional local voice cloning (Qwen3-TTS) |
+| `kana setup` | Explain the optional local voice engine download |
 | `kana config` | Open the advanced `config.json` |
 
 Your data (password hash, settings, voice profiles, model cache) lives in
@@ -119,7 +119,7 @@ Your data (password hash, settings, voice profiles, model cache) lives in
 - Stage backgrounds, including your own images, plus light and dark themes.
 
 **Voice**
-- Local Qwen3-TTS with voice cloning from a short, consented sample.
+- Local Japanese speech with Irodori-TTS v4.1 Anime on a CPU engine, with voice cloning from a short, consented sample.
 - Or any OpenAI-compatible speech API, with a Pollinations preset.
 - Lip sync follows the audio, and Stop cancels generation on the server.
 
@@ -177,16 +177,21 @@ HERMES_DASHBOARD_SESSION_TOKEN="a-long-random-token" hermes serve --host 127.0.0
 Voice is optional. Turn Kana's voice on or off in **Settings → Voice**; replies
 always stay readable as text.
 
-- **Local Qwen3-TTS (default).** Run `kana setup` to prepare an isolated Python
-  environment (about 4 GB with the model). The official
-  `Qwen/Qwen3-TTS-12Hz-0.6B-Base` model downloads on first use and runs on CPU.
-  Clone a voice from a consented sample of up to 10 MB.
+- **Local Irodori TTS (default).** [Irodori-TTS v4.1 Anime](https://huggingface.co/phasefield-audio/Irodori-TTS-v4.1-Anime)
+  on the [irodori-c](https://github.com/misaalya/irodori-c) engine, on the CPU of the
+  machine running Kana (Linux x86-64; no Python or GPU). Nothing is downloaded
+  until you press **Download voice engine** in Settings → Voice: about 480 MB for
+  the engine and 3.1 GB for the model, checksum-verified and resumable. A model
+  already in your Hugging Face cache is reused instead of downloaded.
+  Pick the bundled Kana voice, the model's own faster voice, or clone one from a
+  consented sample.
 - **OpenAI-compatible API.** Point `tts.provider` at any `POST /v1/audio/speech`
   service. API keys stay in the server's `config.json` and never reach the browser.
 
 Configuration examples are in [TTS providers](docs/CONFIGURATION.md#tts-providers),
-and the local service is described in [services/qwen3-tts](services/qwen3-tts/README.md).
-CPU synthesis is slower than realtime on modest hardware.
+including every local engine option. CPU synthesis is slower than realtime on
+modest hardware; the engine's int8 path is used automatically on CPUs with
+AVX-512 VNNI.
 
 ## Live2D avatars
 
@@ -212,7 +217,7 @@ Browser (Kana UI)
   ▼
 Kana server (Next.js)
   ├─ /api/hermes/*    → one server-held WebSocket → hermes serve  → Hermes agent
-  ├─ /api/voice/tts/* → local Qwen3-TTS service or OpenAI-compatible API
+  ├─ /api/voice/tts/* → local irodori-c engine or OpenAI-compatible API
   └─ data folder      → password hash, settings, activity log, voices
 ```
 
@@ -260,7 +265,6 @@ Contributor rules are in [AGENTS.md](AGENTS.md).
 | VPS, systemd, Nginx, supported platforms | [SUPPORTED_ENVIRONMENT.md](docs/SUPPORTED_ENVIRONMENT.md) |
 | Threat model and reverse proxy | [SECURITY.md](docs/SECURITY.md) |
 | Attachments, dictation, model picker | [COMPOSER.md](docs/COMPOSER.md) |
-| Qwen3-TTS on a VPS | [QWEN3_TTS_VPS_ACCEPTANCE.md](docs/QWEN3_TTS_VPS_ACCEPTANCE.md) |
 | Quality gates and releases | [QUALITY.md](docs/QUALITY.md) · [RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) |
 | Changes and migration notes | [CHANGELOG.md](CHANGELOG.md) |
 | Roadmap | [PLAN.md](PLAN.md) |

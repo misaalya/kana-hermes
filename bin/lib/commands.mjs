@@ -2,14 +2,20 @@
 
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { findExecutableSync } from "../../shared/executables.mjs";
 import path from "node:path";
-import { ensureConfigFile, sessionSecretReady, updateConfig } from "./bootstrap.mjs";
+import {
+  IRODORI_ASSETS_ARCHIVE,
+  IRODORI_ENGINE_ARCHIVE,
+  IRODORI_MODEL_FILE,
+  IRODORI_MODEL_NAME,
+  irodoriEngineInstalled,
+  irodoriInstalledModel,
+  irodoriInstallPaths,
+} from "../../shared/irodori-release.mjs";
+import { ensureConfigFile, sessionSecretReady } from "./bootstrap.mjs";
 import {
   configPath,
-  defaultConfig,
   manifest,
-  packageRoot,
   readConfigSafely,
   runtimeRoot,
   serverEntry,
@@ -27,7 +33,6 @@ import {
   heading,
   keyValues,
   print,
-  promptConfirm,
   readStdinLine,
   status,
   style,
@@ -54,10 +59,28 @@ function nodeVersionSatisfied() {
   return major > requiredMajor || (major === requiredMajor && minor >= requiredMinor);
 }
 
+/** @param {number} bytes */
+function formatGigabytes(bytes) {
+  return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+}
+
+/**
+ * Local voice install state, read from the same markers the server writes.
+ * @param {string} dataRoot
+ * @param {Record<string, any>} config
+ */
+function localVoiceState(dataRoot, config) {
+  const local = config.tts?.irodoriLocal ?? {};
+  const paths = irodoriInstallPaths({ dataRoot, installDirectory: local.installDirectory });
+  const engine = irodoriEngineInstalled(paths);
+  const model = irodoriInstalledModel(paths, local.modelPath);
+  return { paths, engine, model };
+}
+
 export async function doctor({ dataRoot }) {
   heading("Kana doctor");
   const config = readConfigSafely(dataRoot);
-  const qwen = { ...defaultConfig.tts?.qwen3Local, ...config.value.tts?.qwen3Local };
+  const voice = localVoiceState(dataRoot, config.value);
 
   if (nodeVersionSatisfied()) status.success("Node.js", `v${process.versions.node}`);
   else status.error("Node.js", `v${process.versions.node} — Kana requires ${REQUIRED_NODE} or newer`);
@@ -93,20 +116,18 @@ export async function doctor({ dataRoot }) {
     }
   }
 
-  const provider = config.value.tts?.provider ?? defaultConfig.tts?.provider ?? "qwen3-local";
-  const uv = findExecutableSync("uv", { configured: config.value.tts?.qwen3Local?.uvExecutable });
-  if (provider !== "qwen3-local") status.info("Voice", provider);
-  else if (uv) status.success("Voice", `qwen3-local via ${displayPath(uv)}`);
-  else status.warning("Voice", "qwen3-local needs uv — install uv or run `kana setup`");
+  const provider = config.value.tts?.provider === "openai-compatible" ? "openai-compatible" : "irodori-local";
+  if (provider !== "irodori-local") status.info("Voice", provider);
+  else if (voice.engine && voice.model) status.success("Voice", `${IRODORI_MODEL_NAME}, installed`);
+  else status.info("Voice", "local engine not downloaded — optional, see `kana setup`");
 
   print();
   print(style.bold("  Locations"));
   print(keyValues([
     ["Data", displayPath(dataRoot)],
     ["Voice references", displayPath(path.join(dataRoot, "voices"))],
-    ["Qwen runtime", displayPath(qwen.runtimeDirectory ?? path.join(dataRoot, "qwen-runtime"))],
-    ["Qwen model cache", displayPath(qwen.cacheDirectory ?? path.join(dataRoot, "qwen3-tts-cache"))],
-    ["Qwen voice profiles", displayPath(path.join(qwen.dataDirectory ?? path.join(dataRoot, "qwen3-tts"), "voices"))],
+    ["Voice engine", displayPath(voice.paths.root)],
+    ...(voice.model ? [["Voice model", displayPath(voice.model.path)]] : []),
     ["Session secret", (await sessionSecretReady(dataRoot)) ? "ready" : "created on first start"],
   ], "    ").join("\n"));
   print();
@@ -139,44 +160,25 @@ export async function setup({ dataRoot }) {
   if (hermes.executable) status.success("Hermes", displayPath(hermes.executable));
   else status.warning("Hermes", "not found — Kana starts, but chat needs Hermes");
 
-  if (!canPrompt()) {
-    status.info("Non-interactive terminal: nothing was changed. Run `kana setup` in a terminal.");
+  if (config.value.tts?.provider === "openai-compatible") {
+    status.info("Voice", "an OpenAI-compatible provider is configured; nothing to install.");
     print();
     return;
   }
+  const voice = localVoiceState(dataRoot, config.value);
+  if (voice.engine && voice.model) {
+    status.success("Voice", `${IRODORI_MODEL_NAME} is installed.`);
+    print();
+    return;
+  }
+  const download =
+    (voice.engine ? 0 : IRODORI_ENGINE_ARCHIVE.sizeBytes + IRODORI_ASSETS_ARCHIVE.sizeBytes) +
+    (voice.model ? 0 : IRODORI_MODEL_FILE.sizeBytes);
   print();
-  const prepare = await promptConfirm(
-    "Set up local Qwen3-TTS voice cloning? Needs Python, uv, and about 4 GB",
-    false,
-  );
-  if (!prepare) {
-    status.info("No voice configuration was changed.");
-    print();
-    return;
-  }
-  const uv = findExecutableSync("uv", { configured: config.value.tts?.qwen3Local?.uvExecutable });
-  if (!uv) {
-    throw new LauncherError("uv was not found.", "Install uv (https://docs.astral.sh/uv/), then run `kana setup` again.");
-  }
-  const packagedService = path.join(runtimeRoot, "services", "qwen3-tts");
-  const serviceRoot = existsSync(packagedService)
-    ? packagedService
-    : path.join(packageRoot, "services", "qwen3-tts");
-  status.info("Preparing the isolated Qwen3-TTS Python environment…");
-  await runChild(uv, ["sync", "--frozen", "--project", serviceRoot], {
-    UV_PROJECT_ENVIRONMENT: path.join(dataRoot, "qwen-runtime"),
-  });
-  await updateConfig(dataRoot, (current) => {
-    const tts = current.tts && typeof current.tts === "object" && !Array.isArray(current.tts) ? current.tts : {};
-    const local = tts.qwen3Local && typeof tts.qwen3Local === "object" && !Array.isArray(tts.qwen3Local)
-      ? tts.qwen3Local
-      : {};
-    return {
-      ...current,
-      tts: { ...tts, provider: "qwen3-local", qwen3Local: { ...defaultConfig.tts?.qwen3Local, ...local } },
-    };
-  });
-  status.success("Qwen runtime is ready.", "The model downloads the first time Kana speaks.");
+  print(`  Local voice uses ${IRODORI_MODEL_NAME} on the irodori-c engine (Linux x86-64, CPU only).`);
+  print(`  It is optional and downloads about ${formatGigabytes(download)} into ${displayPath(voice.paths.root)}.`);
+  print(style.dim("  Start the download from Kana: Settings → Voice → Download voice engine."));
+  print(style.dim("  Progress is shown there; interrupted downloads resume, and every file is checksum-verified."));
   print();
 }
 

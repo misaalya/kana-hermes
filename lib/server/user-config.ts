@@ -19,37 +19,32 @@ export type KanaUserConfig = {
     workingDirectory?: string;
   };
   tts?: {
-    /** The server-side audio source. Defaults to the bundled local provider. */
+    /** The server-side audio source. Defaults to the local Irodori engine. */
     provider?: KanaTtsProviderType;
-    /** Entire synthesis request, including local startup and voice registration. */
+    /** Entire synthesis request, including queueing behind another utterance. */
     timeoutSeconds?: number;
     /** Provider-specific values are isolated so model/voice fields cannot clash. */
-    qwen3Local?: KanaQwen3LocalConfig;
+    irodoriLocal?: KanaIrodoriLocalConfig;
     openAiCompatible?: KanaOpenAiCompatibleTtsConfig;
   };
 };
 
-export type KanaTtsProviderType = "qwen3-local" | "openai-compatible";
+export type KanaTtsProviderType = "irodori-local" | "openai-compatible";
 export type KanaOpenAiTtsPreset = "pollinations";
 export type KanaTtsResponseFormat = "mp3" | "opus" | "aac" | "flac" | "wav";
-export type KanaQwen3TtsDtype = "auto" | "float32" | "float16" | "bfloat16";
+export type KanaIrodoriPrecision = "auto" | "int8" | "fp32";
 
-export type KanaQwen3LocalConfig = {
-  projectDirectory?: string;
-  uvExecutable?: string;
-  runtimeDirectory?: string;
-  cacheDirectory?: string;
-  dataDirectory?: string;
-  port?: number;
-  model?: string;
-  modelRevision?: string | null;
-  device?: string;
-  dtype?: KanaQwen3TtsDtype;
-  attention?: string;
-  defaultVoice?: string;
-  maxCharacters?: number;
-  maxNewTokens?: number;
-  startupTimeoutSeconds?: number;
+export type KanaIrodoriLocalConfig = {
+  /** Where Kana installs the engine and model; defaults to <data root>/irodori. */
+  installDirectory?: string;
+  /** An existing Irodori v4.1 model.safetensors to use instead of downloading one. */
+  modelPath?: string;
+  /** Engine threads; defaults to the number of physical CPU cores. */
+  threads?: number;
+  /** Euler sampling steps: 8 is fastest, 40 is the engine's quality default. */
+  steps?: number;
+  /** int8 needs AVX-512 VNNI; auto picks int8 when the CPU supports it. */
+  precision?: KanaIrodoriPrecision;
 };
 
 export type KanaOpenAiCompatibleTtsConfig = {
@@ -145,15 +140,6 @@ function optionalPositiveInteger(
   return Number(value);
 }
 
-function optionalNullableString(
-  record: Record<string, unknown>,
-  key: string,
-  section: string,
-): string | null | undefined {
-  if (record[key] === null) return null;
-  return optionalString(record, key, section);
-}
-
 function withoutUndefined<T extends Record<string, unknown>>(value: T): Partial<T> {
   return Object.fromEntries(
     Object.entries(value).filter(([, entry]) => entry !== undefined),
@@ -166,42 +152,12 @@ export function kanaUserConfigPath(): string {
 
 export const DEFAULT_KANA_USER_CONFIG = defaultUserConfig as KanaUserConfig;
 
-export function defaultQwen3LocalConfig(): Required<
-  Pick<
-    KanaQwen3LocalConfig,
-    | "port"
-    | "model"
-    | "modelRevision"
-    | "device"
-    | "dtype"
-    | "attention"
-    | "maxCharacters"
-    | "maxNewTokens"
-  >
-> {
-  const config = DEFAULT_KANA_USER_CONFIG.tts?.qwen3Local;
-  if (
-    !config?.port ||
-    !config.model ||
-    config.modelRevision === undefined ||
-    !config.device ||
-    !config.dtype ||
-    !config.attention ||
-    !config.maxCharacters ||
-    !config.maxNewTokens
-  ) {
-    throw new Error("Kana's bundled Qwen3-TTS defaults are incomplete.");
+export function defaultIrodoriLocalConfig(): Required<Pick<KanaIrodoriLocalConfig, "steps" | "precision">> {
+  const config = DEFAULT_KANA_USER_CONFIG.tts?.irodoriLocal;
+  if (!config?.steps || !config.precision) {
+    throw new Error("Kana's bundled Irodori voice defaults are incomplete.");
   }
-  return {
-    port: config.port,
-    model: config.model,
-    modelRevision: config.modelRevision,
-    device: config.device,
-    dtype: config.dtype,
-    attention: config.attention,
-    maxCharacters: config.maxCharacters,
-    maxNewTokens: config.maxNewTokens,
-  };
+  return { steps: config.steps, precision: config.precision };
 }
 
 /** Create an editable, owner-only JSON file without replacing existing data. */
@@ -330,18 +286,18 @@ function parseKanaUserConfigFile(filePath: string): KanaUserConfig {
     const provider = optionalString(ttsRecord, "provider", "tts");
     if (
       provider !== undefined &&
-      provider !== "qwen3-local" &&
-      provider !== "openai-compatible"
+      provider !== "irodori-local" &&
+      provider !== "openai-compatible" &&
+      // Builds before Irodori used a local Qwen3-TTS service; its slot is now
+      // the local Irodori engine, and the old qwen3Local block is ignored.
+      provider !== "qwen3-local"
     ) {
       throw new Error(
-        'tts.provider must be either "qwen3-local" or "openai-compatible".',
+        'tts.provider must be either "irodori-local" or "openai-compatible".',
       );
     }
-    const usesNestedProviderConfig =
-      ttsRecord.qwen3Local !== undefined ||
-      ttsRecord.openAiCompatible !== undefined;
     const legacyExternalConfig =
-      !usesNestedProviderConfig &&
+      ttsRecord.openAiCompatible === undefined &&
       [
         "preset",
         "baseUrl",
@@ -350,17 +306,17 @@ function parseKanaUserConfigFile(filePath: string): KanaUserConfig {
         "instructionField",
         "responseFormat",
       ].some((key) => ttsRecord[key] !== undefined);
-    if (provider === undefined && ttsRecord.qwen3Local !== undefined && ttsRecord.openAiCompatible !== undefined) {
+    if (provider === undefined && ttsRecord.irodoriLocal !== undefined && ttsRecord.openAiCompatible !== undefined) {
       throw new Error("Set tts.provider when keeping both local and external configurations.");
     }
-    const resolvedProvider = provider ??
-      (legacyExternalConfig || ttsRecord.openAiCompatible !== undefined ? "openai-compatible" : "qwen3-local");
+    const resolvedProvider: KanaTtsProviderType = provider === "openai-compatible" ||
+      (provider === undefined && (legacyExternalConfig || ttsRecord.openAiCompatible !== undefined))
+      ? "openai-compatible"
+      : "irodori-local";
     // Inactive values stay untouched on disk and cannot break the selected provider.
-    const qwenRecord = resolvedProvider === "qwen3-local"
-      ? (ttsRecord.qwen3Local === undefined ? ttsRecord : ttsRecord.qwen3Local)
-      : {};
-    if (!isRecord(qwenRecord)) {
-      throw new Error("tts.qwen3Local must be a JSON object.");
+    const irodoriRecord = resolvedProvider === "irodori-local" ? (ttsRecord.irodoriLocal ?? {}) : {};
+    if (!isRecord(irodoriRecord)) {
+      throw new Error("tts.irodoriLocal must be a JSON object.");
     }
     const openAiRecord = resolvedProvider === "openai-compatible"
       ? (ttsRecord.openAiCompatible === undefined ? ttsRecord : ttsRecord.openAiCompatible)
@@ -414,66 +370,17 @@ function parseKanaUserConfigFile(filePath: string): KanaUserConfig {
         "tts.openAiCompatible.instructionField cannot replace a standard speech field.",
       );
     }
-    const dtype = optionalString(qwenRecord, "dtype", "tts.qwen3Local");
-    if (
-      dtype !== undefined &&
-      !["auto", "float32", "float16", "bfloat16"].includes(dtype)
-    ) {
-      throw new Error(
-        "tts.qwen3Local.dtype must be auto, float32, float16, or bfloat16.",
-      );
+    const precision = optionalString(irodoriRecord, "precision", "tts.irodoriLocal");
+    if (precision !== undefined && !["auto", "int8", "fp32"].includes(precision)) {
+      throw new Error("tts.irodoriLocal.precision must be auto, int8, or fp32.");
     }
-    const qwen3Local = withoutUndefined<KanaQwen3LocalConfig>({
-        projectDirectory: optionalAbsolutePath(
-          qwenRecord,
-          "projectDirectory",
-          "tts.qwen3Local",
-        ),
-        uvExecutable: optionalAbsolutePath(
-          qwenRecord,
-          "uvExecutable",
-          "tts.qwen3Local",
-        ),
-        runtimeDirectory: optionalAbsolutePath(
-          qwenRecord,
-          "runtimeDirectory",
-          "tts.qwen3Local",
-        ),
-        cacheDirectory: optionalAbsolutePath(
-          qwenRecord,
-          "cacheDirectory",
-          "tts.qwen3Local",
-        ),
-        dataDirectory: optionalAbsolutePath(
-          qwenRecord,
-          "dataDirectory",
-          "tts.qwen3Local",
-        ),
-        port: optionalPort(qwenRecord, "port", "tts.qwen3Local"),
-        model: optionalString(qwenRecord, "model", "tts.qwen3Local"),
-        modelRevision: optionalNullableString(
-          qwenRecord,
-          "modelRevision",
-          "tts.qwen3Local",
-        ),
-        device: optionalString(qwenRecord, "device", "tts.qwen3Local"),
-        dtype: dtype as KanaQwen3TtsDtype | undefined,
-        attention: optionalString(qwenRecord, "attention", "tts.qwen3Local"),
-        defaultVoice: optionalString(qwenRecord, "defaultVoice", "tts.qwen3Local"),
-        maxCharacters: optionalPositiveInteger(
-          qwenRecord,
-          "maxCharacters",
-          "tts.qwen3Local",
-          100_000,
-        ),
-        maxNewTokens: optionalPositiveInteger(
-          qwenRecord,
-          "maxNewTokens",
-          "tts.qwen3Local",
-          100_000,
-        ),
-        startupTimeoutSeconds: optionalPositiveInteger(qwenRecord, "startupTimeoutSeconds", "tts.qwen3Local", 3600),
-      });
+    const irodoriLocal = withoutUndefined<KanaIrodoriLocalConfig>({
+      installDirectory: optionalAbsolutePath(irodoriRecord, "installDirectory", "tts.irodoriLocal"),
+      modelPath: optionalAbsolutePath(irodoriRecord, "modelPath", "tts.irodoriLocal"),
+      threads: optionalPositiveInteger(irodoriRecord, "threads", "tts.irodoriLocal", 256),
+      steps: optionalPositiveInteger(irodoriRecord, "steps", "tts.irodoriLocal", 200),
+      precision: precision as KanaIrodoriPrecision | undefined,
+    });
     const openAiCompatible = withoutUndefined<KanaOpenAiCompatibleTtsConfig>({
         preset: preset as KanaOpenAiTtsPreset | undefined,
         baseUrl: optionalStringWithLimit(
@@ -505,9 +412,9 @@ function parseKanaUserConfigFile(filePath: string): KanaUserConfig {
         responseFormat: responseFormat as KanaTtsResponseFormat | undefined,
       });
     config.tts = {
-      provider: resolvedProvider as KanaTtsProviderType | undefined,
+      provider: resolvedProvider,
       ...withoutUndefined({ timeoutSeconds: optionalPositiveInteger(ttsRecord, "timeoutSeconds", "tts", 3600) }),
-      ...(Object.keys(qwen3Local).length ? { qwen3Local } : {}),
+      ...(Object.keys(irodoriLocal).length ? { irodoriLocal } : {}),
       ...(Object.keys(openAiCompatible).length ? { openAiCompatible } : {}),
     };
   }
