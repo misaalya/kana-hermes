@@ -281,8 +281,6 @@ export function useKanaController(appVersion: string) {
     voiceStatus,
     getVoice,
     inspectVoiceService,
-    cloneVoice,
-    deleteClonedVoice,
     unlockVoice,
     stopVoice,
     cleanupVoice,
@@ -592,8 +590,8 @@ export function useKanaController(appVersion: string) {
               text: event.response.speech_ja,
               language: "ja",
               emotion: assistantMessage.emotion,
-              voiceId: preferencesRef.current.qwen3Tts.voiceId || undefined,
-              deliveryMode: preferencesRef.current.qwen3Tts.deliveryMode,
+              voiceId: preferencesRef.current.voice.voiceId || undefined,
+              deliveryMode: preferencesRef.current.voice.deliveryMode,
               onAudioStart: () => {
                 avatarController.presentEmotion(assistantMessage.emotion);
                 setStatus(statusCopy(preferencesRef.current.uiLocale).speaking);
@@ -2032,7 +2030,7 @@ export function useKanaController(appVersion: string) {
           service: voiceStatus?.service,
           model: voiceStatus?.model,
           device: voiceStatus?.device,
-          deliveryMode: preferences.qwen3Tts.deliveryMode,
+          deliveryMode: preferences.voice.deliveryMode,
         },
         avatar: {
           mode: preferences.avatarMode,
@@ -2115,8 +2113,6 @@ export function useKanaController(appVersion: string) {
     renameAvatarModel,
     deleteAvatarModel,
     inspectVoiceService,
-    cloneVoice,
-    deleteClonedVoice,
     inspectHermesControl: (preferredPort?: number) => inspectHermesRuntime(preferredPort),
     startHermesControl: (options: { port?: number; restart?: boolean } = {}) =>
       controlHermesRuntime({

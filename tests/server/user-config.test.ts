@@ -51,22 +51,13 @@ describe("advanced user configuration", () => {
           workingDirectory: "/srv/hermes",
         },
         tts: {
-          provider: "qwen3-local",
-          qwen3Local: {
-            projectDirectory: "/opt/kana/qwen",
-            uvExecutable: "/opt/uv/bin/uv",
-            runtimeDirectory: "/srv/kana/qwen-runtime",
-            cacheDirectory: "/srv/kana/qwen-cache",
-            dataDirectory: "/srv/kana/qwen-data",
-            port: 7861,
-            model: "custom/model",
-            modelRevision: null,
-            device: "cpu",
-            dtype: "float32",
-            attention: "eager",
-            defaultVoice: "kana",
-            maxCharacters: 1500,
-            maxNewTokens: 2500,
+          provider: "irodori-local",
+          irodoriLocal: {
+            installDirectory: "/srv/kana/voice",
+            modelPath: "/srv/models/anime.safetensors",
+            threads: 2,
+            steps: 12,
+            precision: "int8",
           },
         },
       }),
@@ -80,22 +71,13 @@ describe("advanced user configuration", () => {
         workingDirectory: "/srv/hermes",
       },
       tts: {
-        provider: "qwen3-local",
-        qwen3Local: {
-          projectDirectory: "/opt/kana/qwen",
-          uvExecutable: "/opt/uv/bin/uv",
-          runtimeDirectory: "/srv/kana/qwen-runtime",
-          cacheDirectory: "/srv/kana/qwen-cache",
-          dataDirectory: "/srv/kana/qwen-data",
-          port: 7861,
-          model: "custom/model",
-          modelRevision: null,
-          device: "cpu",
-          dtype: "float32",
-          attention: "eager",
-          defaultVoice: "kana",
-          maxCharacters: 1500,
-          maxNewTokens: 2500,
+        provider: "irodori-local",
+        irodoriLocal: {
+          installDirectory: "/srv/kana/voice",
+          modelPath: "/srv/models/anime.safetensors",
+          threads: 2,
+          steps: 12,
+          precision: "int8",
         },
       },
     });
@@ -151,17 +133,14 @@ describe("advanced user configuration", () => {
     writeFileSync(kanaUserConfigPath(), JSON.stringify({ hermes: { executable: "bin/hermes" } }));
     assert.throws(() => readKanaUserConfig(), /absolute path/);
 
-    writeFileSync(
-      kanaUserConfigPath(),
-      JSON.stringify({ tts: { qwen3Local: { port: 80 } } }),
-    );
+    writeFileSync(kanaUserConfigPath(), JSON.stringify({ hermes: { port: 80 } }));
     assert.throws(() => readKanaUserConfig(), /between 1024 and 65535/);
 
     writeFileSync(kanaUserConfigPath(), JSON.stringify({ deployment: { mode: "remote-ish" } }));
     assert.throws(() => readKanaUserConfig(), /local.*deployment/);
 
     writeFileSync(kanaUserConfigPath(), JSON.stringify({ tts: { provider: "cloud-magic" } }));
-    assert.throws(() => readKanaUserConfig(), /qwen3-local.*openai-compatible/);
+    assert.throws(() => readKanaUserConfig(), /irodori-local.*openai-compatible/);
 
     writeFileSync(
       kanaUserConfigPath(),
@@ -175,25 +154,43 @@ describe("advanced user configuration", () => {
     assert.throws(() => readKanaUserConfig(), /cannot replace/);
   });
 
-  it("reads the previous flat TTS shape without exposing it as the new API", () => {
+  it("maps a Qwen-era local configuration onto the local Irodori engine", () => {
     writeFileSync(
       kanaUserConfigPath(),
       JSON.stringify({
         tts: {
           provider: "qwen3-local",
-          port: 7862,
-          model: "legacy/model",
-          device: "cpu",
+          timeoutSeconds: 600,
+          qwen3Local: { port: 7862, model: "Qwen/Qwen3-TTS-12Hz-0.6B-Base", uvExecutable: "relative/uv" },
         },
       }),
     );
     const tts = readKanaUserConfig().tts;
-    assert.equal(tts?.qwen3Local?.port, 7862);
-    assert.equal(tts?.qwen3Local?.model, "legacy/model");
-    assert.equal("model" in (tts ?? {}), false);
+    assert.equal(tts?.provider, "irodori-local");
+    assert.equal(tts?.timeoutSeconds, 600);
+    assert.equal("qwen3Local" in (tts ?? {}), false);
   });
 
-  it("migrates a flat Pollinations preset without treating its model as local Qwen", () => {
+  it("validates the local Irodori settings", () => {
+    const write = (irodoriLocal: unknown) =>
+      writeFileSync(kanaUserConfigPath(), JSON.stringify({ tts: { provider: "irodori-local", irodoriLocal } }));
+    write({ steps: 8, threads: 4, precision: "fp32", modelPath: "/models/anime.safetensors", installDirectory: "/srv/kana-voice" });
+    assert.deepEqual(readKanaUserConfig().tts?.irodoriLocal, {
+      steps: 8,
+      threads: 4,
+      precision: "fp32",
+      modelPath: "/models/anime.safetensors",
+      installDirectory: "/srv/kana-voice",
+    });
+    write({ precision: "int4" });
+    assert.throws(() => readKanaUserConfig(), /precision must be auto, int8, or fp32/);
+    write({ steps: 0 });
+    assert.throws(() => readKanaUserConfig(), /steps/);
+    write({ modelPath: "relative/model.safetensors" });
+    assert.throws(() => readKanaUserConfig(), /absolute path/);
+  });
+
+  it("migrates a flat Pollinations preset to the OpenAI-compatible provider", () => {
     writeFileSync(
       kanaUserConfigPath(),
       JSON.stringify({
@@ -207,7 +204,7 @@ describe("advanced user configuration", () => {
     );
     const tts = readKanaUserConfig().tts;
     assert.equal(tts?.provider, "openai-compatible");
-    assert.equal(tts?.qwen3Local, undefined);
+    assert.equal(tts?.irodoriLocal, undefined);
     assert.equal(tts?.openAiCompatible?.model, "qwen-tts-instruct");
   });
 
@@ -254,20 +251,19 @@ describe("advanced user configuration", () => {
 
 it("only validates the selected provider and requires an explicit choice with both blocks", () => {
   const write = (tts: unknown) => writeFileSync(kanaUserConfigPath(), JSON.stringify({ tts }));
-  write({ provider: "openai-compatible", qwen3Local: { port: 80, projectDirectory: "old/path" }, openAiCompatible: { preset: "pollinations", apiKey: "test" } });
-  assert.equal(readKanaUserConfig().tts?.qwen3Local, undefined);
-  write({ provider: "qwen3-local", qwen3Local: { port: 7860 }, openAiCompatible: { instructionField: "model" } });
+  write({ provider: "openai-compatible", irodoriLocal: { steps: -1, modelPath: "old/path" }, openAiCompatible: { preset: "pollinations", apiKey: "test" } });
+  assert.equal(readKanaUserConfig().tts?.irodoriLocal, undefined);
+  write({ provider: "irodori-local", irodoriLocal: { steps: 16 }, openAiCompatible: { instructionField: "model" } });
   assert.equal(readKanaUserConfig().tts?.openAiCompatible, undefined);
-  write({ qwen3Local: {}, openAiCompatible: {} });
+  write({ irodoriLocal: {}, openAiCompatible: {} });
   assert.throws(() => readKanaUserConfig(), /Set tts.provider/);
   write({ openAiCompatible: { preset: "pollinations" } });
   assert.equal(readKanaUserConfig().tts?.provider, "openai-compatible");
 });
 
-it("validates readable synthesis and startup timeout settings", () => {
-  writeFileSync(kanaUserConfigPath(), JSON.stringify({ tts: { timeoutSeconds: 900, qwen3Local: { startupTimeoutSeconds: 600 } } }));
+it("validates the readable synthesis timeout setting", () => {
+  writeFileSync(kanaUserConfigPath(), JSON.stringify({ tts: { timeoutSeconds: 900 } }));
   assert.equal(readKanaUserConfig().tts?.timeoutSeconds, 900);
-  assert.equal(readKanaUserConfig().tts?.qwen3Local?.startupTimeoutSeconds, 600);
   for (const value of [0, -1, 3601, 1.5, "900"]) {
     writeFileSync(kanaUserConfigPath(), JSON.stringify({ tts: { timeoutSeconds: value } }));
     assert.throws(() => readKanaUserConfig(), /timeoutSeconds/);

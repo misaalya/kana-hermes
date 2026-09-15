@@ -5,7 +5,6 @@ import { isIP } from "node:net";
 import { platform } from "node:os";
 import { ensureConfigFile, ensureSessionSecret } from "./bootstrap.mjs";
 import {
-  defaultConfig,
   manifest,
   readConfigSafely,
   runtimeRoot,
@@ -175,7 +174,8 @@ export async function runServer({ serving, host, port, open, dataRoot }) {
   ready = true;
   progress.stop();
 
-  const voiceProvider = config.value.tts?.provider ?? defaultConfig.tts?.provider ?? "qwen3-local";
+  // Builds before Irodori wrote "qwen3-local"; the server maps it to the local engine.
+  const voiceProvider = config.value.tts?.provider === "openai-compatible" ? "openai-compatible" : "irodori-local";
   if (serving) {
     status.success(`Kana is ready at ${url}`);
     print(keyValues([

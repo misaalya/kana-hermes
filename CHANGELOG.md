@@ -17,6 +17,33 @@
 
 ### Changed
 
+- **Local voice now uses Irodori TTS instead of Qwen3-TTS.** Japanese speech
+  comes from the Irodori-TTS v4.1 Anime model on the irodori-c CPU engine: no
+  Python, `uv`, or GPU. The Qwen3-TTS service, its `uv` setup, and its routes
+  are removed.
+  - **Nothing downloads unless you ask.** Starting Kana or turning voice on
+    downloads nothing. Settings → Voice shows the size (about 480 MB engine +
+    3.1 GB model), free disk space, and a Download button with progress,
+    cancel, and remove. Downloads resume after interruption, every file is
+    pinned by size and SHA-256, and a matching model already in the Hugging Face
+    cache is reused instead of downloaded. A cancelled download can be removed
+    from the same panel, and first-run setup says plainly when this device
+    cannot run the local engine instead of offering a download.
+  - Voice is off by default on new installs. Until the engine is installed, a
+    speech request fails immediately and the reply is shown as text.
+  - Kana's emotions become speaking-style captions, long replies are split into
+    engine-sized parts and joined, and the int8 path is used automatically on
+    AVX-512 VNNI CPUs. The voice library offers the bundled Kana voice, the
+    model's own faster voice, and consented reference samples (WAV, up to 15 s).
+  - `config.json`: `tts.provider` is `irodori-local` or `openai-compatible`;
+    local options live in `tts.irodoriLocal` (`steps`, `precision`, `threads`,
+    `modelPath`, `installDirectory`). An existing `qwen3-local` setting now
+    selects the local Irodori engine; the old `qwen3Local` block is ignored.
+    Existing voice selections return to the bundled Kana voice, and Qwen's own
+    data under the Kana data folder (`qwen3-tts`, `qwen-runtime`,
+    `qwen3-tts-cache`) is no longer used and can be deleted.
+  - Local voice requires Linux x86-64 with glibc 2.35+ and an AVX2 CPU; other
+    hosts use an OpenAI-compatible provider.
 - **Subtitles follow the language you write in.** The subtitle language setting
   is removed from Settings and first-run setup. Hermes is told to write each
   subtitle in the language of the user's latest message (keeping the earlier
@@ -79,6 +106,8 @@
   `scripts/generate-stage-patterns.py`.
 - The composer's send button uses a plain return-key icon without its own
   background, matching the other composer actions.
+- Voice journeys in the Playwright suite select the Settings voice section again;
+  their selector also matched the composer's dictation button.
 - Voice input (dictation): Brave, which exposes browser speech recognition but
   cannot reach a recognition service, now gets a clear "not supported" message
   instead of a misleading network error; dictation listens in the interface

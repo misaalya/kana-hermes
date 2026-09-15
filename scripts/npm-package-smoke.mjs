@@ -9,6 +9,7 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { createServer } from "node:net";
 import { platform, tmpdir } from "node:os";
 import path from "node:path";
@@ -46,14 +47,16 @@ try {
     ".npm-package/runtime/.next/BUILD_ID",
     ".npm-package/runtime/assets/voices/kana-default.wav",
     ".npm-package/runtime/public/backgrounds/kana-room.png",
-    ".npm-package/runtime/services/qwen3-tts/pyproject.toml",
+    "shared/irodori-release.mjs",
   ]) {
     if (!paths.has(required)) throw new Error(`npm package is missing ${required}`);
   }
   const forbidden = [...paths].find((entry) =>
     /^\.npm-package\/runtime\/(?:app|components)\//.test(entry) ||
     /(^|\/)\.env(?:\.|$)/.test(entry) ||
-    /(^|\/)(?:\.git|\.hermes|\.omo|\.codegraph|data|test-results|auth-reference|__pycache__|\.venv)(?:\/|$)/.test(entry)
+    /(^|\/)(?:\.git|\.hermes|\.omo|\.codegraph|data|test-results|auth-reference|__pycache__|\.venv|services)(?:\/|$)/.test(entry) ||
+    // The voice engine and model are downloaded on request, never shipped.
+    /\.safetensors$|(^|\/)(?:irodori-(?:onemkl|blas)|libmkl_[\w.]+)$/.test(entry)
   );
   if (forbidden) {
     throw new Error(`npm package contains forbidden local content: ${forbidden}`);
@@ -206,12 +209,11 @@ process.once("SIGINT", stop);
     if (config.deployment !== undefined) {
       throw new Error("first npm launch pinned a deployment mode in config.json.");
     }
-    if (
-      config.tts?.provider !== "qwen3-local"
-      || config.tts?.qwen3Local?.model !== "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
-      || config.tts?.qwen3Local?.port !== 7860
-    ) {
-      throw new Error("first npm launch did not create the default local Qwen config.");
+    if (config.tts?.provider !== "irodori-local" || config.tts?.irodoriLocal?.steps !== 16) {
+      throw new Error("first npm launch did not create the default local voice config.");
+    }
+    if (existsSync(path.join(dataDirectory, "irodori"))) {
+      throw new Error("first npm launch downloaded the voice engine without being asked.");
     }
     if (jwtSecret.length < 32) {
       throw new Error("first npm launch did not create a strong JWT session secret.");

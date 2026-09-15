@@ -34,21 +34,14 @@ export type VoiceProviderStatus = {
   defaultVoiceId?: string;
   voices: VoiceDescriptor[];
   message?: string;
-  setup?: {
-    cacheDir?: string;
-    cacheExists: boolean;
-    modelCacheDetected: boolean;
-    freeDiskBytes: number;
-    totalDiskBytes: number;
-    recommendedFreeDiskBytes: number;
-    diskSufficient: boolean;
-  };
+  /** True when installing the local engine would make an unavailable voice work. */
+  installRequired?: boolean;
 };
 
 /** Sanitized server-provider metadata; credentials and upstream URLs are excluded. */
 export type TtsProviderDescriptor = {
   id: string;
-  type: "qwen3-local" | "openai-compatible";
+  type: "irodori-local" | "openai-compatible";
   name: string;
   preset?: string;
   configured: boolean;
@@ -56,7 +49,8 @@ export type TtsProviderDescriptor = {
   voice?: string;
   capabilities: {
     instruction: boolean;
-    runtimeControl: boolean;
+    /** Kana downloads and runs this provider's engine on the server machine. */
+    localInstall: boolean;
     upstreamCancellation: boolean;
     voiceLibrary: boolean;
   };

@@ -23,7 +23,7 @@ treated as automatically trusted.
 | TTS API key | User-supplied in owner-only server `config.json`; attached only to the upstream request and excluded from browser status, preferences, diagnostics, and backups |
 | TTS response abuse | Speech text and provider error bodies are bounded, non-audio/empty responses are rejected, and local or external audio is capped at 64 MB before browser buffering |
 | Protected input | Password/secret fields are uncontrolled, ephemeral, and submitted directly to Hermes |
-| Qwen CORS | Service defaults to `127.0.0.1`/`localhost`, no credentials, and a small method/header allow-list |
+| Local voice engine | No listening service: each utterance is a short-lived child process with a minimal environment; every downloaded file is pinned by size and SHA-256 and verified before it is unpacked or run |
 | Rendered text | React text nodes render transcript/tool status; Kana does not inject response HTML or Markdown |
 | Cubism Core | Only `https://cubism.live2d.com/sdk-web/cubismcore/*.js` is executable |
 | Remote models | HTTPS or localhost HTTP `.model3.json`, no embedded credentials; CSP permits data fetch but not remote scripts |
@@ -37,7 +37,7 @@ treated as automatically trusted.
 | Request bodies | Every route reads a bounded body (see `lib/limits.ts`); oversized requests are cancelled before decoding. Next's proxy buffer and the Nginx `client_max_body_size` are derived from the same limit, because Next truncates longer bodies silently |
 | Event streams | Abort/cancel releases subscriptions and timers, slow readers are disconnected at a 16 MiB queue limit, and session validity is rechecked every 25 seconds |
 | Backup | Versioned and size-limited; parser validates records; tokens and imported avatar assets are excluded |
-| Offline cache | Service worker handles same-origin navigation/static assets only and explicitly ignores `/api` plus all cross-origin Hermes/Qwen/model traffic |
+| Offline cache | Service worker handles same-origin navigation/static assets only and explicitly ignores `/api` plus all cross-origin Hermes/model traffic |
 | Framing/injection | CSP blocks objects and framing; `nosniff`, no-referrer, and restrictive permissions headers are set |
 
 ## Reverse proxy (VPS)
@@ -62,7 +62,7 @@ public origin in `KANA_TRUSTED_ORIGINS` (comma-separated).
 
 Forwarding `X-Forwarded-Proto $scheme` keeps session cookies `Secure`
 automatically; if your proxy cannot forward it, set `AUTH_COOKIE_SECURE=true`.
-A valid Kana session authorizes the same process controls for Hermes and Qwen.
+A valid Kana session authorizes the same process controls for Hermes and the voice engine download.
 
 ## Access password
 
@@ -99,7 +99,7 @@ The app remains statically renderable and uses a header CSP. Next/React require
 inline styles/scripts in this packaging mode (a nonce-based policy would force
 dynamic rendering and break the cached offline shell); development additionally
 needs `unsafe-eval`. Remote JavaScript is allowed only from Live2D's official
-Core host. The browser reaches Hermes and Qwen only through Kana's same-origin
+Core host. The browser reaches Hermes and the voice engine only through Kana's same-origin
 relay; `connect-src`/`img-src` still permit HTTPS and loopback HTTP because
 users may load Live2D models from a hosted URL or a local static server.
 Insecure arbitrary remote HTTP and remote WebSocket origins are not allowed.
@@ -112,7 +112,7 @@ would break loopback `http://` Live2D model hosting.
 The production service worker caches the statically rendered root shell,
 manifest, icon, and same-origin Next static assets. It never stores transcript
 data, IndexedDB records, credentials, protected input, external Live2D assets,
-Hermes WebSockets, Qwen requests, or application API responses. Offline mode
+Hermes WebSockets, speech requests, or application API responses. Offline mode
 therefore restores the UI and CSS fallback only; it does not imitate a working
 agent or voice service.
 

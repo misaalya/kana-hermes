@@ -46,26 +46,15 @@ npm run hermes:active-check
 Success is exactly `passed: true`, `casesPassed: 5`, and an empty `blockers`
 array. Only then mark `hermes-restart-active` passed.
 
-## 3. Qwen3-TTS on the VPS
+## 3. Local voice on the target host
 
-Follow `docs/QWEN3_TTS_VPS_ACCEPTANCE.md`; heavy inference is intentionally not
-required on the development laptop. The automated benchmark must exit 0 and
-end with:
-
-```json
-{
-  "contractPassed": true,
-  "baselineComplete": true,
-  "cancellationPassed": true,
-  "passed": true
-}
-```
-
-Also listen to one generated WAV and confirm intelligible Japanese. In Kana,
-enable Qwen, play one Hermes response, press Stop during a later response, and
-replay the completed previous response. Pass only when Stop prevents stale
-audio/lip sync and Replay makes no Hermes request. This supplies evidence for
-`hermes-qwen` and `qwen-cancel-and-replay`.
+In Kana, open Settings → Voice and download the voice engine; confirm the size
+shown before the download, the progress bar, and the final "Installed" state.
+Listen to one generated reply and confirm intelligible Japanese. Play one
+Hermes response, press Stop during a later response, and replay the completed
+previous response. Pass only when Stop prevents stale audio/lip sync and Replay
+makes no Hermes request. This supplies evidence for `hermes-local-voice` and
+`voice-cancel-and-replay`.
 
 ## 4. Two user Live2D packages
 
@@ -108,6 +97,6 @@ npm audit --omit=dev --audit-level=high
 ```
 
 Field validation is complete only when every command exits 0,
-`dogfood:check` reports 13/13 and seven days, target Qwen evidence is
+`dogfood:check` reports 13/13 and seven days, target voice evidence is
 preserved, and no P0/P1 issue remains open or merely fixed without
 verification.

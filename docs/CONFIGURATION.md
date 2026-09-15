@@ -19,12 +19,11 @@ kana config
 
 Kana opens the file with `$VISUAL`/`$EDITOR` when available; otherwise it
 prints the exact path so it can be edited with any editor or over SSH. Creating
-the file never overwrites existing data; `kana setup` only updates the TTS
-provider section after explicit confirmation. Restart Kana after manual edits.
+the file never overwrites existing data. Restart Kana after manual edits.
 
 With the global package, the first `kana` launch creates this file from
 [`config/default-config.json`](../config/default-config.json). The starter
-selects local deployment and local Qwen3-TTS with safe CPU defaults. Kana also
+selects the local Irodori voice engine, which is not downloaded until requested. Kana also
 creates a separate owner-only JWT signing secret in the same data directory.
 This happens on first launch rather than during `npm install -g`: npm may run
 as root while Kana later runs as a normal user, so install-time state would
@@ -39,31 +38,19 @@ The complete starter file is:
 
 ```json
 {
-  "deployment": {
-    "mode": "local"
-  },
   "tts": {
-    "provider": "qwen3-local",
+    "provider": "irodori-local",
     "timeoutSeconds": 900,
-    "qwen3Local": {
-      "startupTimeoutSeconds": 600,
-      "port": 7860,
-      "model": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
-      "modelRevision": "5d83992436eae1d760afd27aff78a71d676296fc",
-      "device": "cpu",
-      "dtype": "auto",
-      "attention": "sdpa",
-      "maxCharacters": 1200,
-      "maxNewTokens": 2048
+    "irodoriLocal": {
+      "steps": 16,
+      "precision": "auto"
     }
   }
 }
 ```
 
 All override fields are optional. Paths must be absolute and ports must be
-between 1024 and 65535. Do not create a separate Qwen configuration file or
-set `KANA_TTS_*` variables when Qwen is managed by Kana; Kana derives the
-internal Python process environment from this JSON.
+between 1024 and 65535.
 
 ## TTS providers
 
@@ -71,52 +58,61 @@ internal Python process environment from this JSON.
 uses Kana's same-origin speech relay, playback cache, replay controls, Web
 Audio decoder, and Live2D lip sync regardless of the selected provider.
 
-The default is `qwen3-local` when no TTS provider configuration is supplied.
+The default is `irodori-local` when no TTS provider configuration is supplied.
 `tts.provider` is the single explicit selector. You may keep both provider
 blocks in the file and switch just this field: inactive fields are preserved
 on disk and do not affect validation or requests for the selected provider.
 If both blocks exist, the selector is required. For compatibility, an external
 block by itself (or an old flat external config) still selects the external
-adapter; older flat local settings remain readable.
+adapter, and `"qwen3-local"` from builds that used the Qwen3-TTS service now
+selects the local Irodori engine (its old `qwen3Local` block is ignored).
 
 `tts.timeoutSeconds` defaults to **900 seconds** for the whole speech request,
-including local warmup and generation. It accepts integers from 1 to 3600.
+including waiting behind another utterance. It accepts integers from 1 to 3600.
 For VPS deployments set the reverse proxy read timeout above this value
 (the example uses 910 seconds). Provider changes apply to new requests;
 cancellation of an in-flight request still follows its original provider.
 There is no automatic fallback between local and external providers.
 
-Optional local-only fields belong under `tts.qwen3Local`:
+### Local voice engine
+
+`irodori-local` speaks with the
+[Irodori-TTS v4.1 Anime](https://huggingface.co/phasefield-audio/Irodori-TTS-v4.1-Anime)
+model on the [irodori-c](https://github.com/misaalya/irodori-c) CPU engine. It
+needs Linux on x86-64 with glibc 2.35+ and an AVX2/FMA CPU; CPUs with AVX-512
+VNNI use the faster int8 path automatically. No Python, PyTorch, or GPU is used.
+
+**Nothing is downloaded until someone asks for it.** Starting Kana, turning
+voice on, or opening Settings never downloads anything. The engine release
+(~480 MB) and the model (~3.1 GB) are fetched only after Settings → Voice →
+Download voice engine, into `$KANA_DATA_DIR/irodori`. Until then a speech
+request fails immediately with "not installed" and the reply is shown as text.
+
+- Every file is pinned by size and SHA-256 (see `shared/irodori-release.mjs`)
+  and checked before use; a mismatch is deleted rather than run.
+- Interrupted downloads resume where they stopped. Cancelling keeps the
+  partial file for next time.
+- The install is refused up front when the disk lacks the space it needs.
+- If the pinned model already exists in the Hugging Face cache
+  (`$HF_HUB_CACHE`, `$HF_HOME/hub`, or `~/.cache/huggingface/hub`), Kana
+  verifies it once and uses it in place instead of downloading a copy.
+- Remove deletes only what Kana downloaded; a cached or configured model stays.
+
+Each utterance runs one short-lived engine process (serialized, since each
+needs 1.4–2 GB of RAM). Long replies are split at sentence boundaries to fit
+the engine's 256-token / 30-second limit and joined into one WAV. Kana's
+emotion selects a Japanese speaking-style caption; a voice from the library is
+passed as the engine's reference audio.
+
+Optional fields under `tts.irodoriLocal`:
 
 | Field | Default | Purpose |
 | --- | --- | --- |
-| `startupTimeoutSeconds` | `600` | Maximum wait for model readiness, 1–3600 seconds; bounded by the whole request timeout |
-| `projectDirectory` | bundled service | Override the Qwen service source directory |
-| `uvExecutable` | auto-discovered | Absolute path to `uv` when discovery fails; Kana checks `PATH`, `~/.local/bin`, `~/.cargo/bin`, Termux, and system paths |
-| `runtimeDirectory` | `$KANA_DATA_DIR/qwen-runtime` | Isolated Python environment |
-| `cacheDirectory` | `$KANA_DATA_DIR/qwen3-tts-cache` | Downloaded model cache |
-| `dataDirectory` | `$KANA_DATA_DIR/qwen3-tts` | Voice profiles and local service data |
-| `port` | `7860` | Loopback service port |
-| `model` / `modelRevision` | pinned official Base model | Hugging Face model and revision; `null` disables revision pinning |
-| `device` | `cpu` | Torch device such as `cpu` or `cuda:0` |
-| `dtype` | `auto` | `auto`, `float32`, `float16`, or `bfloat16` |
-| `attention` | `sdpa` | Transformers attention implementation |
-| `defaultVoice` | none | Fallback cloned voice profile ID |
-| `maxCharacters` | `1200` | Per-request text limit |
-| `maxNewTokens` | `2048` | Synthesis generation limit |
-
-Kana starts Qwen lazily when voice is enabled and speech is first requested.
-The npm launcher no longer has a separate `qwenEnabled` state and never starts
-a competing Qwen process. A responding health endpoint is not sufficient:
-Kana waits for the model to report ready before voice registration or synthesis.
-On a first installation, dependency/model downloads may exceed the request's
-wait limit. Shared warmup continues so a subsequent request can use the model;
-stopping a reply cancels that reply without killing other callers' warmup.
-Explicit runtime Stop remains available for a model process managed by Kana.
-The loader resolves one model snapshot at `modelRevision` and loads its
-processor/tokenizer from that same directory. A complete cache can be used
-with Hugging Face's `HF_HUB_OFFLINE=1` operator setting; a first installation
-still needs network access to download dependencies and model files.
+| `steps` | `16` | Euler sampling steps, 1–200: 8 is fastest, 40 is the engine's quality default |
+| `precision` | `auto` | `auto` (int8 when the CPU has AVX-512 VNNI), `int8`, or `fp32` |
+| `threads` | physical cores | Engine threads |
+| `modelPath` | none | Absolute path to an existing Irodori v4.1 `model.safetensors`; skips the model download |
+| `installDirectory` | `$KANA_DATA_DIR/irodori` | Where the engine and model are installed |
 
 To use Pollinations, replace the `tts` section with:
 
@@ -185,14 +181,14 @@ environment-variable override and takes precedence over the JSON value.
 - `local` means the browser reaches Kana only on the same machine. This is
   the default used by the global `kana` launcher.
 - `deployment` means Kana is exposed through Nginx, a public/private network,
-  a VPS, or another remote host. Authentication is mandatory for Hermes and
-  Qwen process controls in this mode. Local mode also requires authentication.
+  a VPS, or another remote host. Authentication is mandatory for Hermes
+  process controls and the voice engine download in this mode. Local mode also requires authentication.
 
 `KANA_DEPLOYMENT_MODE=local|deployment` remains an operator-level deployment
 override. `KANA_TRUSTED_ORIGINS` (comma-separated origins) is only needed when
 a reverse proxy rewrites `Host` without forwarding `X-Forwarded-Host`.
 `KANA_DEV_ALLOWED_ORIGINS` lists extra hosts allowed to reach `next dev`. `KANA_DATA_DIR` selects the single data root, and
-`KANA_HERMES_BIN` can override Hermes discovery. TTS provider and Qwen runtime
+`KANA_HERMES_BIN` can override Hermes discovery. TTS provider and local voice
 settings intentionally have no environment-variable override; edit this JSON
 instead. Provider selection is resolved per request, but restart Kana after
 editing local runtime fields so every server worker agrees.
@@ -201,9 +197,9 @@ editing local runtime fields so every server worker agrees.
 ## Local computer versus VPS
 
 Installation and deployment instructions are in [Install and deploy Kana](INSTALLATION.md).
-The same config schema applies everywhere. A local Qwen model runs on the
+The same config schema applies everywhere. The local voice engine runs on the
 machine hosting Kana, including when that machine is a VPS. Config paths,
-Hermes discovery, model cache and API keys refer to that server, never to the
+Hermes discovery, the voice engine download and API keys refer to that server, never to the
 visitor's computer. The browser only calls same-origin Kana relay routes.
 Speech text is held until playback starts; Web Audio drives the lip sync.
 If synthesis/decoding/playback fails, Kana reveals the text with a visible

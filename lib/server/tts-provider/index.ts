@@ -1,5 +1,5 @@
 import { readKanaUserConfig, type KanaUserConfig } from "@/lib/server/user-config";
-import { LocalQwen3TtsProvider } from "./local-qwen3-provider";
+import { IrodoriLocalTtsProvider } from "./irodori-local-provider";
 import {
   OpenAiCompatibleTtsProvider,
   openAiCompatibleConfigFromUserConfig,
@@ -8,11 +8,10 @@ import type { ServerTtsProvider } from "./types";
 
 /** Resolve on each request so editing config.json does not retain a stale API key. */
 export function getConfiguredTtsProvider(config: KanaUserConfig["tts"] = readKanaUserConfig().tts): ServerTtsProvider {
-  const provider = config?.provider ?? "qwen3-local";
-  if (provider === "openai-compatible") {
+  if (config?.provider === "openai-compatible") {
     return new OpenAiCompatibleTtsProvider(openAiCompatibleConfigFromUserConfig(config));
   }
-  return new LocalQwen3TtsProvider();
+  return new IrodoriLocalTtsProvider();
 }
 
 export type {

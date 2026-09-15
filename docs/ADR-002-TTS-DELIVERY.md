@@ -3,14 +3,14 @@
 Status: accepted baseline; opt-in sentence experiment implemented; streaming
 deferred, 2026-08-22.
 
-Kana's Qwen provider uses one cancellable HTTP synthesis request and direct WAV
+Kana's speech relay uses one cancellable HTTP synthesis request and direct WAV
 playback. The generated audio can be replayed in memory without another Hermes
-or Qwen request. Conversation changes and Stop invalidate stale responses.
+or synthesis request. Conversation changes and Stop invalidate stale responses.
 
 Complete-response WAV remains the default because it has the simplest failure
 model and smoothest prosody. Kana also offers an explicitly experimental
 sentence-chunk mode. It deterministically splits the same `speech_ja`, preserves
-the exact text and order, prefetches the next Qwen request while the current
+the exact text and order, prefetches the next synthesis request while the current
 part plays, cancels the active part on Stop, and caches all parts for replay.
 It does not call Hermes again or introduce a translation/agent model.
 

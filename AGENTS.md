@@ -67,8 +67,13 @@ capability.
   checked for an equivalent capability.
 - Kana has no second mock agent or conversation-store provider; agent and
   avatar modes remain Hermes and Live2D. TTS is selected server-side between
-  local Qwen3-TTS and explicitly configured OpenAI-compatible providers, and
-  integrations must fail honestly when their service is unavailable.
+  the local irodori-c engine and explicitly configured OpenAI-compatible
+  providers, and integrations must fail honestly when their service is
+  unavailable.
+- Never download the local voice engine or model without an explicit user
+  request (Settings → Voice). Every artifact stays pinned by size and SHA-256
+  in `shared/irodori-release.mjs` and is verified before use; do not vendor
+  engine binaries or model weights into the repository or packages.
 
 ## Hermes environment and safety
 
@@ -154,9 +159,10 @@ RPC  POST /api/hermes/rpc    ->  allow-listed JSON-RPC forward
   password. Existing SSE streams revalidate authorization every 25 seconds.
   Login admits one password check per limiter bucket at a time; passwords are
   8–256 characters without leading/trailing whitespace.
-- The Qwen3-TTS Python service is spawned/probed by the Node runtime and
-  reached by the browser only through `/api/voice/tts/*` relay routes,
-  including request cancellation.
+- Local speech runs the irodori-c engine as one short-lived child process per
+  utterance (serialized, minimal environment). The browser reaches it only
+  through `/api/voice/tts/*` relay routes: `speech`, request cancellation, and
+  `engine` (install status and install/cancel/remove actions).
 
 For VPS deployment requirements see the checklist in `PLAN.md` §10 and
 `docs/SUPPORTED_ENVIRONMENT.md`.
@@ -315,20 +321,23 @@ ornamental dashboard. This is a product direction, not a temporary theme.
   used by npm packages, source builds, local development, and deployments.
 - Browser audio decoding/playback and amplitude-based lip sync through the Web
   Audio API, with autoplay-policy timeouts and per-playback graph cleanup.
-- A versioned local Qwen3-TTS API service backed by the official
-  `qwen-tts==0.1.1` package and pinned official 0.6B Base model. It
-  exposes health, voice discovery, Japanese WAV synthesis, request
-  cancellation, local-only CORS, and a CPU-safe default.
+- Local Japanese speech with the pinned Irodori-TTS v4.1 Anime model on the
+  prebuilt irodori-c `v0.2.0` CPU engine (no Python). The engine (~480 MB) and
+  model (~3.1 GB) install only on request, resume after interruption, are
+  SHA-256 verified, refuse to start without enough disk, and reuse a matching
+  model from the Hugging Face cache. int8 is used on AVX-512 VNNI CPUs. Long
+  speech is split to the engine's 256-token/30-second limit and joined; Kana
+  emotions map to speaking-style captions; library voices are passed as
+  reference WAVs (bundled Kana voice by default, or the model's own voice).
 - `TtsRelayProvider` reaches the selected server provider only through the
-  Kana relay (`/api/voice/tts/*`). For local Qwen it checks API compatibility and discovers live voices,
-  sends `speech_ja` as Japanese, cancels server work when stopped (dedicated
-  cancel route + upstream abort propagation), decodes WAV audio, and drives
-  Live2D lip sync. Complete WAV is the default. An opt-in
+  Kana relay (`/api/voice/tts/*`). It sends `speech_ja` as Japanese, cancels
+  server work when stopped (dedicated cancel route that kills the engine
+  process), decodes WAV audio, and drives Live2D lip sync. Complete WAV is the default. An opt-in
   experimental sentence mode preserves the exact text/order, prefetches the
   next part, cancels safely, and replays all cached parts without another
   Hermes request.
 - A server-side TTS provider boundary keeps synthesis transport separate from
-  browser playback/cache/lip sync. Local Qwen3-TTS remains the default;
+  browser playback/cache/lip sync. The local Irodori engine is the default;
   OpenAI-compatible `POST /v1/audio/speech` is supported with user-owned
   credentials in owner-only `config.json`, and Pollinations is a preset over
   that generic adapter rather than a dedicated playback implementation.
@@ -397,24 +406,25 @@ ornamental dashboard. This is a product direction, not a temporary theme.
 - Next.js standalone output, installable web manifest, same-origin service
   worker shell, and `npm run package:local` package assembly are operational.
   The worker caches only the Kana shell/static assets, not cross-origin
-  Hermes/Qwen traffic or `/api`. Hermes and the multi-gigabyte Qwen
-  runtime/cache remain external by design.
+  Hermes traffic or `/api`. Hermes and the multi-gigabyte voice engine and
+  model remain outside the package by design.
 
 ### Implemented foundation but not complete end-to-end
 
-- The Qwen3-TTS service is real and verified, but its Python environment and
-  2.3 GB model cache are intentionally separate from the Next.js install. The
-  target machine defaults to CPU because its 2 GB MX330 cannot hold the model;
-  generation is functional but slower than realtime. Streaming audio is not
-  implemented; sentence delivery is experimental until a VPS baseline exists.
+- The local voice engine is real and verified end to end on the target laptop
+  (i3-1005G1, int8), but it is CPU-only and slower than realtime there: about
+  7 s for a short reply with the model voice and about 20 s with a reference
+  voice, which the engine re-encodes per utterance. Linux x86-64 only; other
+  hosts use an OpenAI-compatible provider. Streaming audio is not implemented;
+  sentence delivery is experimental until a VPS baseline exists.
 - The local package is a self-contained web runtime, not a signed native
-  desktop application. Kana's server can supervise loopback Hermes/Qwen child
-  processes, but it is not an OS-level service manager or native auto-start.
+  desktop application. Kana's server can supervise a loopback Hermes child and
+  voice engine processes, but it is not an OS-level service manager or native auto-start.
 
 ### Fixed agent/avatar modes and TTS fallbacks
 
 - Agent and avatar modes are fixed to Hermes and Live2D. Browser voice mode is
-  the configured server provider; `config.json` chooses local Qwen3-TTS or an
+  the configured server provider; `config.json` chooses the local Irodori engine or an
   OpenAI-compatible source without exposing its API key to browser state.
   `normalizeKanaPreferences` forces these presentation modes on every load and
   save, so legacy stored values cannot re-enable unsupported implementations.
@@ -463,20 +473,18 @@ lib/avatar/pixi-live2d-runtime-adapter.ts  Pixi/Cubism canvas implementation
 lib/avatar/indexed-db-avatar-model-store.ts Imported model persistence
 lib/avatar/model-bindings.ts               Per-source binding resolution
 lib/avatar/binding-backup.ts               Asset-free binding import/export
-lib/voice/qwen3-tts-contract.ts            Versioned browser/service protocol
 lib/voice/tts-relay-provider.ts            Provider-neutral TTS playback client
-lib/voice/qwen3-tts-provider.ts            Compatibility re-export for old imports
-lib/server/tts-relay.ts                    Relay helpers (session + port guard)
-lib/server/local-qwen3-tts-runtime.ts      Python service spawn/probe control
+shared/irodori-release.mjs                 Pinned engine/model artifacts (size + SHA-256)
+lib/server/irodori/install.ts              Lazy, resumable, verified engine/model install
+lib/server/irodori/synthesis.ts            Serialized engine processes, captions, joining
 lib/server/tts-provider/                   Server synthesis provider boundary,
-                                          local Qwen and OpenAI-compatible adapters
+                                          local Irodori and OpenAI-compatible adapters
+components/kana/voice-engine-panel.tsx     Download size/progress/remove UI
 lib/voice/audio-lip-sync.ts                Web Audio lip-sync mechanism
 lib/preferences/local-preferences-store.ts Local settings persistence
 lib/diagnostics/safe-diagnostics.ts        Redacted local diagnostics
-services/qwen3-tts/                         Official-model local Python service
 scripts/package-standalone.mjs              Local production package assembly
 scripts/hermes-restart-acceptance.ts         Isolated real-server restart audit
-scripts/qwen3-tts-acceptance.mjs             Target-host latency/cancel evidence
 tests/agent/hermes-agent-client.test.ts     Adapter/control/recovery tests
 tests/server/                               data-dir, auth, activity-store unit tests
 tests/e2e/kana-critical-journeys.spec.ts    Desktop/mobile acceptance journeys
@@ -504,9 +512,12 @@ Work incrementally and keep the application usable after every phase.
 - [x] Add focused adapter tests for aliases, prefills, send/skill directives,
       queueing, interruption, approval, branch, and reconnect behavior.
 
-### Phase 2 — real Qwen3-TTS
+### Phase 2 — real local TTS
 
-- [x] Inspect the chosen local Qwen3-TTS server and freeze one versioned adapter
+Completed with a Qwen3-TTS Python service; on 2026-09-15 the local engine was
+replaced by irodori-c with the Irodori-TTS v4.1 Anime model.
+
+- [x] Inspect the chosen local TTS engine and freeze one versioned adapter
       contract outside React components.
 - [x] Add connection/health status and voice discovery where supported.
 - [x] Verify Japanese synthesis, stop/abort behavior, browser CORS, audio format,
@@ -528,7 +539,7 @@ Work incrementally and keep the application usable after every phase.
       persist as a local user preference.
 - [x] Store per-model mouth, expression, and motion bindings.
 - [x] Connect emotion, talking state, motions, and Web Audio lip sync to the
-      avatar provider and real Qwen3-TTS output.
+      avatar provider and real local TTS output.
 
 ### Phase 4 — persistence and product hardening
 
@@ -538,8 +549,8 @@ Work incrementally and keep the application usable after every phase.
       migration/fallback; do not add cloud sync prematurely.
 - [x] Reconcile Kana and Hermes session lifecycle edge cases, including deleted
       or externally renamed Hermes sessions.
-- [x] Maintain preference migrations through v5 for the versioned Qwen3-TTS
-      URL contract, credentials, onboarding, and voice delivery mode.
+- [x] Maintain preference migrations through v5 for the voice settings,
+      credentials, onboarding, and voice delivery mode.
 - [x] Keep conversation migration idempotent for every persisted schema change
       introduced so far.
 - [x] Add accessibility, keyboard navigation, responsive, and error-recovery
@@ -547,7 +558,7 @@ Work incrementally and keep the application usable after every phase.
 
 ### Phase 5 — optional future product work
 
-- [ ] Add streaming TTS only if the chosen Qwen server can provide a stable,
+- [ ] Add streaming TTS only if the local engine can provide a stable,
       cancellable stream and the latency improvement justifies the complexity.
 - [x] Add model-library screens for listing, selecting, renaming, previewing,
       and deleting imported and hosted Live2D models.
@@ -570,9 +581,9 @@ Work incrementally and keep the application usable after every phase.
   starts. Stop and failure reveal text; failures must remain visible in the UI.
 - Config uses one `tts.provider` selector. Inactive provider settings do not
   influence active requests; cancellation follows the original request owner.
-  Optional `tts.timeoutSeconds` defaults to 900 and local startup timeout to 600.
-- Local Qwen loads all components from one pinned snapshot directory, including
-  cached/offline use. Never patch installed Qwen/Hermes packages to achieve this.
+  Optional `tts.timeoutSeconds` defaults to 900.
+- The local voice engine and model are pinned artifacts installed on request;
+  never patch Hermes or the engine release to change behavior.
 - Deployment requires one server process per data root; do not claim support
   for multiple clustered workers sharing process-held gateway/cancel state.
 - See `docs/INSTALLATION.md`, `docs/CONFIGURATION.md`, and
@@ -611,13 +622,12 @@ The real external gates are separate:
 ```bash
 npm run test:hermes:restart
 npm run test:live2d:official
-npm run tts:acceptance
 npm run hermes:active-check
 npm run dogfood:check
 ```
 
 The Live2D command requires internet access to Live2D and GitHub's pinned
-official assets. The Qwen benchmark needs target hardware, and dogfood
+official assets. Local voice checks need target hardware, and dogfood
 intentionally fails until seven real days and every required matrix case have
 evidence.
 

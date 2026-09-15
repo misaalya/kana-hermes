@@ -72,7 +72,7 @@ export function kanaUnavailableMessage(command: string): string | null {
   }
   if (reason === "presentation") {
     return normalized.toLowerCase() === "voice"
-      ? "/voice is managed in Kana Settings → Japanese voice, where Qwen3-TTS health and speakers are available."
+      ? "/voice is managed in Kana Settings → Japanese voice, where the local voice engine and voice library are managed."
       : "/wake is not connected to Kana yet; Kana does not claim Hermes Desktop's microphone lease.";
   }
   return null;

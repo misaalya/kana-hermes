@@ -16,7 +16,7 @@ const COMMANDS = {
   start: "Start Kana on this computer and open the browser",
   serve: "Run Kana headless for a VPS or systemd service",
   password: "Create or change the access password",
-  setup: "Prepare optional local voice cloning (Qwen3-TTS)",
+  setup: "Explain the optional local voice engine download",
   config: "Open the advanced config.json",
   doctor: "Check Hermes, voice, password, and data locations",
 };

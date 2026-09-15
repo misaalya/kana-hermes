@@ -88,7 +88,7 @@ export function migrateLegacyKanaFile(
     if (fileName.endsWith(".db")) {
       for (const suffix of SQLITE_COMPANION_SUFFIXES) {
         const companion = `${candidate}${suffix}`;
-        if (existsSync(companion) && !existsSync(`${target}${suffix}`)) {
+        if (existsSync(/* turbopackIgnore: true */ companion) && !existsSync(/* turbopackIgnore: true */ `${target}${suffix}`)) {
           moveFile(companion, `${target}${suffix}`);
         }
       }

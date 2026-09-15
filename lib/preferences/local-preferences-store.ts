@@ -7,11 +7,6 @@ import {
   normalizeLive2DModelUrl,
 } from "@/lib/avatar/defaults";
 import { normalizeLive2DLayoutProfiles } from "@/lib/avatar/model-layout";
-import {
-  DEFAULT_QWEN3_TTS_BASE_URL,
-  DEFAULT_QWEN3_TTS_VOICE_ID,
-  normalizeQwen3TTSBaseUrl,
-} from "@/lib/voice/qwen3-tts-contract";
 import type {
   KanaPreferences,
   PreferencesStore,
@@ -36,30 +31,32 @@ const LEGACY_STORAGE_KEYS = [
 ];
 
 type StoredPreferences = Partial<
-  Omit<KanaPreferences, "hermes" | "qwen3Tts">
+  Omit<KanaPreferences, "hermes" | "voice">
 > & {
   hermes?: Partial<KanaPreferences["hermes"]> & {
     // Legacy fields are tolerated on read and dropped on persist.
     websocketUrl?: string;
     token?: string;
   };
-  qwen3Tts?: Partial<KanaPreferences["qwen3Tts"]> & { endpoint?: string };
+  voice?: Partial<KanaPreferences["voice"]>;
+  /** Builds with the Qwen3-TTS service kept voice choices here. */
+  qwen3Tts?: { deliveryMode?: unknown; voiceId?: unknown; baseUrl?: unknown; endpoint?: unknown };
 };
 
 export const DEFAULT_PREFERENCES: KanaPreferences = {
   onboardingCompleted: false,
   uiLocale: "id",
   agentMode: "hermes",
-  voiceEnabled: true,
+  // Local speech needs a multi-gigabyte engine download, so it is opt-in.
+  voiceEnabled: false,
   voiceMode: "configured",
   avatarMode: "live2d",
   stageBackground: "plain",
   hermes: {
     cwd: "",
   },
-  qwen3Tts: {
-    baseUrl: DEFAULT_QWEN3_TTS_BASE_URL,
-    voiceId: DEFAULT_QWEN3_TTS_VOICE_ID,
+  voice: {
+    voiceId: "",
     deliveryMode: "complete",
   },
   live2d: {
@@ -85,8 +82,12 @@ export function normalizeKanaPreferences(
     : "plain";
   // Subtitles follow the language the user writes in; drop the retired
   // per-browser subtitle language setting from older stored preferences.
-  const { subtitleLanguage: _retired, ...current } = preferences as KanaPreferences & { subtitleLanguage?: unknown };
+  const { subtitleLanguage: _retired, qwen3Tts: _retiredVoice, ...current } = preferences as KanaPreferences & {
+    subtitleLanguage?: unknown;
+    qwen3Tts?: unknown;
+  };
   void _retired;
+  void _retiredVoice;
   return {
     ...current,
     // Runtime guard: stored or restored values can never re-enable another
@@ -101,9 +102,9 @@ export function normalizeKanaPreferences(
     hermes: {
       cwd: preferences.hermes.cwd,
     },
-    qwen3Tts: {
-      ...preferences.qwen3Tts,
-      baseUrl: normalizeQwen3TTSBaseUrl(preferences.qwen3Tts.baseUrl),
+    voice: {
+      voiceId: typeof preferences.voice?.voiceId === "string" ? preferences.voice.voiceId.slice(0, 500) : "",
+      deliveryMode: preferences.voice?.deliveryMode === "sentence_chunks" ? "sentence_chunks" : "complete",
     },
     live2d: {
       ...preferences.live2d,
@@ -140,13 +141,6 @@ export class LocalPreferencesStore implements PreferencesStore {
       }
       const value = JSON.parse(raw) as StoredPreferences;
       const migratedFromLegacy = !current && Boolean(legacy);
-      const legacyEndpoint = value.qwen3Tts?.endpoint;
-      let baseUrl = value.qwen3Tts?.baseUrl ?? legacyEndpoint;
-      try {
-        baseUrl = normalizeQwen3TTSBaseUrl(baseUrl ?? "");
-      } catch {
-        baseUrl = DEFAULT_PREFERENCES.qwen3Tts.baseUrl;
-      }
       let coreScriptUrl = value.live2d?.coreScriptUrl;
       let modelUrl = value.live2d?.modelUrl;
       try {
@@ -201,12 +195,12 @@ export class LocalPreferencesStore implements PreferencesStore {
               ? value.hermes.cwd
               : DEFAULT_PREFERENCES.hermes.cwd,
         },
-        qwen3Tts: {
-          ...DEFAULT_PREFERENCES.qwen3Tts,
-          ...value.qwen3Tts,
-          baseUrl,
+        voice: {
+          // Qwen voice ids named service-side profiles that no longer exist,
+          // so a migrated selection starts from the bundled Kana voice.
+          voiceId: typeof value.voice?.voiceId === "string" ? value.voice.voiceId : "",
           deliveryMode:
-            value.qwen3Tts?.deliveryMode === "sentence_chunks"
+            (value.voice?.deliveryMode ?? value.qwen3Tts?.deliveryMode) === "sentence_chunks"
               ? "sentence_chunks"
               : "complete",
         },
@@ -250,14 +244,8 @@ export class LocalPreferencesStore implements PreferencesStore {
     storage: BrowserStorage,
     preferences: KanaPreferences,
   ): void {
-    let qwenBaseUrl = DEFAULT_PREFERENCES.qwen3Tts.baseUrl;
     let modelUrl = DEFAULT_PREFERENCES.live2d.modelUrl;
     let coreScriptUrl = DEFAULT_PREFERENCES.live2d.coreScriptUrl;
-    try {
-      qwenBaseUrl = normalizeQwen3TTSBaseUrl(preferences.qwen3Tts.baseUrl);
-    } catch {
-      // Keep the known-safe local default.
-    }
     try {
       modelUrl = normalizeLive2DModelUrl(preferences.live2d.modelUrl);
     } catch {
@@ -282,7 +270,6 @@ export class LocalPreferencesStore implements PreferencesStore {
       hermes: {
         cwd: preferences.hermes.cwd,
       },
-      qwen3Tts: { ...preferences.qwen3Tts, baseUrl: qwenBaseUrl },
       live2d: {
         ...preferences.live2d,
         modelUrl,

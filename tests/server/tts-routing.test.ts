@@ -1,65 +1,102 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { after, it } from "node:test";
+import { after, before, it } from "node:test";
+import { GET as engineStatus, POST as engineAction } from "@/app/api/voice/tts/engine/route";
 import { POST as speech } from "@/app/api/voice/tts/speech/route";
 import { createSessionToken } from "@/lib/server/auth/session";
 import { changeAccessPassword } from "@/lib/server/auth/password-store";
-import { __setTestTtsPort } from "@/lib/server/local-qwen3-tts-runtime";
+import { __setIrodoriPlatformForTests } from "@/lib/server/irodori/platform";
+import { installFakeEngine, useSupportedPlatform } from "./irodori-fixtures";
 
 const root = mkdtempSync(path.join(tmpdir(), "kana-tts-routing-"));
-const previous = process.env.KANA_DATA_DIR;
-process.env.KANA_DATA_DIR = root;
+const previous = { data: process.env.KANA_DATA_DIR, hub: process.env.HF_HUB_CACHE };
 const originalFetch = globalThis.fetch;
+let token = "";
+
+before(async () => {
+  process.env.KANA_DATA_DIR = root;
+  // Keep the host's real Hugging Face cache out of the download estimate.
+  process.env.HF_HUB_CACHE = path.join(root, "hub");
+  useSupportedPlatform();
+  await changeAccessPassword("tts-routing-secret");
+  token = await createSessionToken();
+});
+
 after(() => {
   globalThis.fetch = originalFetch;
-  if (previous === undefined) delete process.env.KANA_DATA_DIR;
-  else process.env.KANA_DATA_DIR = previous;
+  __setIrodoriPlatformForTests(null);
+  for (const [key, value] of [["KANA_DATA_DIR", previous.data], ["HF_HUB_CACHE", previous.hub]] as const) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
   rmSync(root, { recursive: true, force: true });
 });
 
-it("routes both provider choices from server config despite stale browser voice and inactive config", async () => {
-  await changeAccessPassword("tts-routing-secret");
-  const token = await createSessionToken();
+const authorized = (url: string, init: RequestInit = {}) =>
+  new Request(url, { ...init, headers: { Cookie: `kana_session=${token}`, "Content-Type": "application/json", ...init.headers } });
+
+const speak = (id: string, voice?: string) =>
+  speech(authorized("http://kana.test/api/voice/tts/speech", {
+    method: "POST",
+    headers: { "X-Kana-Request-Id": id },
+    body: JSON.stringify({ text: "こんにちは。", voice_id: voice, language: "ja", emotion: "happy" }),
+  }));
+
+it("answers honestly and quickly before the local engine is downloaded, without downloading it", async () => {
+  const fetches: string[] = [];
+  globalThis.fetch = async (input) => {
+    fetches.push(String(input));
+    throw new Error("no network in this test");
+  };
+  const response = await speak("not-installed");
+  assert.equal(response.status, 503);
+  assert.match((await response.json() as { error: string }).error, /not installed yet/);
+  const status = await engineStatus(authorized("http://kana.test/api/voice/tts/engine"));
+  const body = await status.json() as { install: { state: string; downloadBytes: number } };
+  assert.equal(body.install.state, "not_installed");
+  assert.ok(body.install.downloadBytes > 3_000_000_000);
+  assert.deepEqual(fetches, [], "checking status must not start a download");
+});
+
+it("routes each provider choice from server config despite a stale browser voice", async () => {
+  const model = path.join(root, "anime.safetensors");
+  writeFileSync(model, "model");
+  const { log } = installFakeEngine(root);
   const calls: string[] = [];
-  const audio = new Uint8Array([82, 73, 70, 70, 1, 2, 3, 4]);
+  const remoteAudio = new Uint8Array([82, 73, 70, 70, 1, 2, 3, 4]);
   globalThis.fetch = async (input, init) => {
-    const url = String(input); calls.push(url);
-    if (url.endsWith("/health")) return Response.json({ service: "kana-qwen3-tts", api_version: "2", status: "ready" });
-    if (url.endsWith("/voices")) return Response.json({ default_voice_id: "local-default", supports_voice_clone: true, voices: [{ id: "local-default" }] });
+    calls.push(String(input));
     const body = JSON.parse(String(init?.body));
-    if (url.startsWith("https://voice.example")) {
-      assert.equal(new Headers(init?.headers).get("Authorization"), "Bearer server-key");
-      assert.equal(body.voice, "remote-voice");
-      assert.equal(body.input, "こんにちは。");
-      assert.equal(body.voice_id, undefined);
-    } else {
-      assert.equal(body.voice_id, "local-default");
-      assert.equal(body.text, "こんにちは。");
-    }
-    return new Response(audio, { headers: { "content-type": "audio/wav" } });
+    assert.equal(new Headers(init?.headers).get("Authorization"), "Bearer server-key");
+    assert.equal(body.voice, "remote-voice");
+    assert.equal(body.input, "こんにちは。");
+    return new Response(remoteAudio, { headers: { "content-type": "audio/wav" } });
   };
-  const run = async (id: string, voice?: string) => {
-    const result = await speech(new Request("http://kana.test/api/voice/tts/speech", {
-      method: "POST", headers: { Cookie: `kana_session=${token}`, "Content-Type": "application/json", "X-Kana-Request-Id": id },
-      body: JSON.stringify({ text: "こんにちは。", voice_id: voice, language: "ja" }),
-    }));
-    assert.equal(result.status, 200, await result.clone().text());
-    assert.deepEqual(new Uint8Array(await result.arrayBuffer()), audio);
-  };
+
   writeFileSync(path.join(root, "config.json"), JSON.stringify({ tts: {
-    provider: "openai-compatible", qwen3Local: { port: 80 },
+    provider: "openai-compatible", irodoriLocal: { modelPath: "not/absolute" },
     openAiCompatible: { baseUrl: "https://voice.example/v1", apiKey: "server-key", model: "tts-model", voice: "remote-voice", responseFormat: "wav" },
   } }));
-  await run("external", "stale-local-clone");
+  const external = await speak("external", "stale-local-voice");
+  assert.equal(external.status, 200, await external.clone().text());
+  assert.deepEqual(new Uint8Array(await external.arrayBuffer()), remoteAudio);
   assert.deepEqual(calls, ["https://voice.example/v1/audio/speech"]);
+  const conflict = await engineAction(authorized("http://kana.test/api/voice/tts/engine", { method: "POST", body: JSON.stringify({ action: "install" }) }));
+  assert.equal(conflict.status, 409, "an external provider has nothing to install");
+
   calls.length = 0;
   writeFileSync(path.join(root, "config.json"), JSON.stringify({ tts: {
-    provider: "qwen3-local", qwen3Local: { port: 17862 }, openAiCompatible: { instructionField: "model" },
+    provider: "irodori-local", irodoriLocal: { modelPath: model }, openAiCompatible: { instructionField: "model" },
   } }));
-  __setTestTtsPort(17862);
-  await run("local");
-  assert.ok(calls.some((url) => url === "http://127.0.0.1:17862/v1/speech"));
-  assert.ok(calls.every((url) => url.startsWith("http://127.0.0.1:17862/")));
+  const local = await speak("local", "stale-local-voice");
+  assert.equal(local.status, 200, await local.clone().text());
+  assert.equal(local.headers.get("content-type"), "audio/wav");
+  const bytes = new Uint8Array(await local.arrayBuffer());
+  assert.equal(String.fromCharCode(...bytes.subarray(0, 4)), "RIFF");
+  assert.deepEqual(calls, [], "local speech makes no network requests");
+  const [run] = readFileSync(log, "utf8").trim().split("\n").map((line) => JSON.parse(line) as { args: string[] });
+  // An unknown voice id falls back to the bundled Kana reference.
+  assert.match(run.args[run.args.indexOf("--ref") + 1], /kana-default\.wav$/);
 });

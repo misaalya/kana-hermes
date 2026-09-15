@@ -17,8 +17,8 @@ does not claim support for platforms that have not been tested.
 - Hermes Agent 0.20.1 (2026.8.13) through `hermes serve` JSON-RPC/WebSocket.
   The live audit observed the registry dynamically and does not pin command
   counts as a protocol guarantee.
-- Optional Qwen service Python 3.10–3.13 with `qwen-tts==0.1.1` and the pinned
-  0.6B Base revision.
+- Optional local voice: irodori-c `v0.2.0` prebuilt Linux x86-64 release with the
+  pinned Irodori-TTS v4.1 Anime revision (verified on an Intel i3-1005G1, int8).
 - Official pinned Live2D Haru and Mao samples load and switch in Chrome with
   model-specific `ParamMouthOpenY`/`ParamA` bindings.
 
@@ -38,23 +38,28 @@ are reported explicitly with a text fallback. No mock voice or agent is used.
   depends on history length and imported Live2D assets.
 - Every imported Live2D folder is shown with its browser-local size. Browser
   quota is implementation-specific.
-- Qwen needs an isolated Python environment, roughly 2.3 GB model download,
-  and at least 4 GB free disk before setup. CPU works but may be slower than
-  realtime. The reference MX330's 2 GB VRAM is not a supported CUDA target.
+- The local voice engine needs Linux x86-64, glibc 2.35+, an AVX2/FMA CPU, about
+  3.9 GB of disk (480 MB engine download plus the 3.1 GB model, unless reused
+  from the Hugging Face cache), and 1.4–2 GB of RAM per utterance. It runs on
+  CPU only and is slower than realtime on small CPUs: on the reference 2-core
+  i3-1005G1 at the default 16 steps, a 2.3-second reply took 6.8 s with the
+  model's own voice and a 4-second reply took 21.6 s with the bundled reference
+  voice (the reference is re-encoded for every utterance). macOS, Windows, and ARM hosts use an
+  OpenAI-compatible provider instead.
 
 ## Known limitations
 
 - The global launcher can supervise local Hermes and an explicitly configured
-  Qwen service, but Kana remains a web package rather than a signed desktop
+  voice engine processes, but Kana remains a web package rather than a signed desktop
   application. Starting `server.js` directly does not add native OS lifecycle
   integration.
-- Qwen streaming is deferred. Complete WAV is the default; experimental
+- Streaming speech is deferred. Complete WAV is the default; experimental
   sentence delivery plays ordered complete WAV parts and remains opt-in until
   target-host latency evidence supports changing the default.
 - Hermes owns conversation history on the server; avatar packages and UI
   preferences are browser-local.
 - Real restart recovery while every kind of pending Hermes protected input,
-  two custom Live2D packages, and real Qwen p50/p95 still need target-host
+  two custom Live2D packages, and local voice p50/p95 still need target-host
   field validation before broader platform support is claimed.
 
 ## Hermes auto-detection on Linux

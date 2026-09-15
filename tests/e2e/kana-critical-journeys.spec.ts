@@ -134,10 +134,13 @@ async function installFakeHermes(page: Page): Promise<void> {
       }),
     }),
   );
-  await page.route("**/api/voice/tts/status**", (route) =>
+  await page.route("**/api/voice/tts/engine", (route) =>
     route.fulfill({
       contentType: "application/json",
-      body: JSON.stringify({ state: "stopped", message: "Voice is optional." }),
+      body: JSON.stringify({
+        provider: { id: "irodori-local", type: "irodori-local", name: "Irodori TTS", configured: true, model: "Irodori-TTS v4.1 Anime", capabilities: { instruction: false, localInstall: true, upstreamCancellation: true, voiceLibrary: true } },
+        install: { state: "not_installed", engineInstalled: false, modelInstalled: false, modelSource: null, step: null, phase: null, completedBytes: 0, totalBytes: 0, downloadBytes: 3_544_900_182, requiredDiskBytes: 4_331_065_517, freeDiskBytes: 50_000_000_000, partialDownloadBytes: 0, int8: true, message: "The local voice engine has not been downloaded yet." },
+      }),
     }),
   );
   await page.route("**/api/hermes/rpc", async (route) => {
@@ -396,7 +399,7 @@ test("renders text replies without entering the TTS pipeline when voice is off",
   });
 
   await page.getByRole("button", { name: "Open settings" }).click();
-  await page.getByRole("button", { name: /^Voice/ }).click();
+  await page.getByRole("dialog").getByRole("button", { name: /^Voice/ }).click();
   const voiceSwitch = page.getByRole("switch", { name: "Japanese voice" });
   await expect(voiceSwitch).not.toBeChecked();
   await voiceSwitch.click();
@@ -1040,17 +1043,17 @@ function testToneWav(): Buffer {
 async function enableTestVoice(page: Page, type = "openai-compatible") {
   await page.route("**/api/voice/tts/provider", (route) => route.fulfill({ json: {
     provider: { id: type, type, name: "Test voice", configured: true, capabilities: {
-      instruction: false, runtimeControl: type === "qwen3-local", upstreamCancellation: true, voiceLibrary: false,
+      instruction: false, localInstall: type === "irodori-local", upstreamCancellation: true, voiceLibrary: false,
     } }, status: { state: "ready", voices: [], message: "Ready" },
   } }));
   await page.route("**/api/kana/voices**", (route) => route.fulfill({ json: { voices: [] } }));
   await page.getByRole("button", { name: "Open settings" }).click();
-  await page.getByRole("button", { name: /^Voice/ }).click();
+  await page.getByRole("dialog").getByRole("button", { name: /^Voice/ }).click();
   await page.getByRole("switch", { name: "Japanese voice" }).check();
   await page.getByRole("button", { name: "Close settings" }).click();
 }
 
-for (const provider of ["qwen3-local", "openai-compatible"]) {
+for (const provider of ["irodori-local", "openai-compatible"]) {
   test(`TTS holds text until audible playback and runs lip sync for ${provider} without randomUUID`, async ({ page }) => {
     await enableTestVoice(page, provider);
     await page.evaluate(() => {
@@ -1082,6 +1085,38 @@ for (const provider of ["qwen3-local", "openai-compatible"]) {
     await expect(page.getByRole("button", { name: "Stop", exact: true })).not.toBeVisible();
   });
 }
+
+test("downloads the local voice engine only when asked and shows progress", async ({ page }) => {
+  const actions: string[] = [];
+  let polls = 0;
+  const provider = { id: "irodori-local", type: "irodori-local", name: "Irodori TTS", configured: true, model: "Irodori-TTS v4.1 Anime", capabilities: { instruction: false, localInstall: true, upstreamCancellation: true, voiceLibrary: true } };
+  const base = { engineInstalled: false, modelInstalled: false, modelSource: null, step: null, phase: null, completedBytes: 0, totalBytes: 0, downloadBytes: 3_544_900_182, requiredDiskBytes: 4_331_065_517, freeDiskBytes: 50_000_000_000, partialDownloadBytes: 0, int8: true, message: "" };
+  await page.route("**/api/voice/tts/engine", async (route) => {
+    if (route.request().method() === "POST") {
+      actions.push(route.request().postDataJSON().action);
+      return route.fulfill({ json: { provider, install: { ...base, state: "installing", step: "engine", phase: "downloading", completedBytes: 0, totalBytes: 3_544_900_182 } } });
+    }
+    if (!actions.length) return route.fulfill({ json: { provider, install: { ...base, state: "not_installed" } } });
+    polls += 1;
+    return route.fulfill({ json: { provider, install: polls < 2
+      ? { ...base, state: "installing", step: "model", phase: "downloading", completedBytes: 1_772_450_091, totalBytes: 3_544_900_182 }
+      : { ...base, state: "ready", engineInstalled: true, modelInstalled: true, modelSource: "download", downloadBytes: 0, requiredDiskBytes: 0 } } });
+  });
+  await page.route("**/api/kana/voices**", (route) => route.fulfill({ json: { voices: [], supportsVoiceLibrary: true } }));
+  await page.getByRole("button", { name: "Open settings" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: /^Voice/ }).click();
+  const engine = dialog.getByRole("region", { name: "Local voice engine" });
+  await expect(engine.getByText("Not downloaded")).toBeVisible();
+  await expect(engine.getByText(/3\.3 GB download\. Nothing is downloaded until you ask\./)).toBeVisible();
+  expect(actions).toEqual([]);
+
+  await engine.getByRole("button", { name: "Download voice engine" }).click();
+  await expect(engine.getByRole("progressbar")).toBeVisible();
+  await expect(engine.getByText(/Downloading model · 50%/)).toBeVisible();
+  await expect(engine.getByText("Installed")).toBeVisible({ timeout: 10_000 });
+  expect(actions).toEqual(["install"]);
+});
 
 test("TTS failure reveals held text with an explicit voice error", async ({ page }) => {
   await enableTestVoice(page);

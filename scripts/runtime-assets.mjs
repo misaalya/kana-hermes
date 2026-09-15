@@ -48,7 +48,8 @@ async function copyTrackedDirectory(root, relativeDirectory, targetRoot) {
 }
 
 /**
- * Static assets, public files, the Qwen service, and the default voice.
+ * Static assets, public files, and the default voice reference. The local
+ * voice engine and model are never packaged: Kana downloads them on request.
  * `launcher: true` also ships the `kana` launcher next to server.js, so a
  * standalone deployment can run `node bin/kana.mjs password|serve`.
  */
@@ -59,7 +60,7 @@ export async function copyRuntimeAssets(root, targetRoot, { launcher }) {
     force: true,
   });
   await cp(path.join(root, "public"), path.join(targetRoot, "public"), { recursive: true, force: true });
-  const directories = ["services/qwen3-tts", "assets/voices", ...(launcher ? ["bin", "config", "shared"] : [])];
+  const directories = ["assets/voices", ...(launcher ? ["bin", "config", "shared"] : [])];
   for (const directory of directories) {
     await copyTrackedDirectory(root, directory, targetRoot);
   }

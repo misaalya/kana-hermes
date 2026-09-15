@@ -85,17 +85,18 @@ artifact targets Linux x64/glibc and Node.js 22.13+.
 
 ## Where things run
 
-Hermes and an optional local Qwen model run on the **Kana server machine**.
+Hermes and the optional local voice engine run on the **Kana server machine**.
 Browser audio playback and Live2D run on the device opening the page.
 A VPS installation cannot discover Hermes installed only on your laptop.
 Install and configure the user's unmodified Hermes on the VPS and run Kana
 under the same account: Linux only lets that user read a running gateway's
 session token. Existing Hermes installations remain independently managed.
 
-`tts.provider` in server `config.json` chooses local Qwen or an external speech
-API. Both work with either installation method. External TTS needs no local
-Qwen environment; local Qwen needs `uv`, model storage, and sufficient server
-RAM/CPU or GPU. No automatic fallback sends local speech text to an external
+`tts.provider` in server `config.json` chooses the local Irodori engine or an
+external speech API. Both work with either installation method. External TTS
+downloads nothing; the local engine is downloaded only from Settings → Voice
+and needs Linux x86-64 with an AVX2 CPU, about 3.9 GB of disk, and 2 GB of free
+RAM while speaking. No automatic fallback sends local speech text to an external
 provider. See [configuration](CONFIGURATION.md).
 
 Server config, password and voice references belong to `KANA_DATA_DIR`.

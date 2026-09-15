@@ -43,8 +43,8 @@ export type KanaPreferences = {
     /** Working folder for the managed Hermes process (server-side concern). */
     cwd: string;
   };
-  qwen3Tts: {
-    baseUrl: string;
+  voice: {
+    /** Kana voice library id; empty selects the bundled Kana voice. */
     voiceId: string;
     deliveryMode: VoiceDeliveryMode;
   };

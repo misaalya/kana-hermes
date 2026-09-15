@@ -11,7 +11,6 @@ import {
   isStageBackground,
   type KanaPreferences,
 } from "@/lib/preferences/types";
-import { normalizeQwen3TTSBaseUrl } from "@/lib/voice/qwen3-tts-contract";
 
 export const KANA_BACKUP_VERSION = 1;
 
@@ -166,7 +165,8 @@ export function createKanaBackup(
 function parsePreferences(value: unknown): KanaPreferences {
   if (!isRecord(value)) throw new Error("Invalid preferences in Kana backup.");
   const hermes = isRecord(value.hermes) ? value.hermes : {};
-  const qwen3Tts = isRecord(value.qwen3Tts) ? value.qwen3Tts : {};
+  // Backups from builds with the Qwen3-TTS service kept voice choices in qwen3Tts.
+  const voice = isRecord(value.voice) ? value.voice : isRecord(value.qwen3Tts) ? value.qwen3Tts : {};
   const live2d = isRecord(value.live2d) ? value.live2d : {};
   return sanitizeBackupPreferences({
     ...DEFAULT_PREFERENCES,
@@ -185,18 +185,12 @@ function parsePreferences(value: unknown): KanaPreferences {
           ? hermes.cwd.slice(0, 10_000)
           : DEFAULT_PREFERENCES.hermes.cwd,
     },
-    qwen3Tts: {
-      baseUrl: normalizeQwen3TTSBaseUrl(
-        typeof qwen3Tts.baseUrl === "string"
-          ? qwen3Tts.baseUrl
-          : DEFAULT_PREFERENCES.qwen3Tts.baseUrl,
-      ),
-      voiceId:
-        typeof qwen3Tts.voiceId === "string"
-          ? qwen3Tts.voiceId.slice(0, 500)
-          : DEFAULT_PREFERENCES.qwen3Tts.voiceId,
+    voice: {
+      voiceId: isRecord(value.voice) && typeof voice.voiceId === "string"
+        ? voice.voiceId.slice(0, 500)
+        : DEFAULT_PREFERENCES.voice.voiceId,
       deliveryMode:
-        qwen3Tts.deliveryMode === "sentence_chunks"
+        voice.deliveryMode === "sentence_chunks"
           ? "sentence_chunks"
           : "complete",
     },
