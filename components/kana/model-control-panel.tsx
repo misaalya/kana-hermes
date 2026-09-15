@@ -7,11 +7,24 @@ import { btnPrimary, btnSecondary, fieldLabel, inputBase } from "./ui";
 
 type ModelControlPanelProps = {
   locale: UiLocale;
+  /** Latest catalog from the workspace cache; a background refresh replaces what is shown. */
+  catalog?: AgentModelCatalog | null;
   onList(refresh?: boolean): Promise<AgentModelCatalog>;
   onSelect(provider: string, model: string, confirm?: boolean): Promise<AgentModelSwitchResult>;
 };
 
-export function ModelControlPanel({ locale, onList, onSelect }: ModelControlPanelProps) {
+function currentSelection(catalog: AgentModelCatalog) {
+  const provider =
+    catalog.providers.find((item) => item.slug === catalog.provider) ??
+    catalog.providers.find((item) => item.current) ??
+    catalog.providers[0];
+  return {
+    provider: provider?.slug ?? "",
+    model: provider?.models.includes(catalog.model) ? catalog.model : provider?.models[0] ?? "",
+  };
+}
+
+export function ModelControlPanel({ locale, catalog: cachedCatalog, onList, onSelect }: ModelControlPanelProps) {
   const copy = getCopy(locale).settings;
   const [catalog, setCatalog] = useState<AgentModelCatalog | null>(null);
   const [provider, setProvider] = useState("");
@@ -26,17 +39,10 @@ export function ModelControlPanel({ locale, onList, onSelect }: ModelControlPane
     setConfirmationPending(false);
     try {
       const next = await onList(refresh);
+      const selection = currentSelection(next);
       setCatalog(next);
-      const currentProvider =
-        next.providers.find((item) => item.slug === next.provider) ??
-        next.providers.find((item) => item.current) ??
-        next.providers[0];
-      setProvider(currentProvider?.slug ?? "");
-      setModel(
-        currentProvider?.models.includes(next.model)
-          ? next.model
-          : currentProvider?.models[0] ?? "",
-      );
+      setProvider(selection.provider);
+      setModel(selection.model);
       setState("ready");
     } catch (error) {
       setState("error");
@@ -49,6 +55,22 @@ export function ModelControlPanel({ locale, onList, onSelect }: ModelControlPane
     // onList is a controller callback and remains stable for the dialog lifetime.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // A background refresh finished with a different catalog: show it, and keep
+  // the user's choice unless they had not changed anything yet.
+  const [adoptedCatalog, setAdoptedCatalog] = useState(cachedCatalog);
+  if (cachedCatalog !== adoptedCatalog) {
+    setAdoptedCatalog(cachedCatalog);
+    if (cachedCatalog && catalog && cachedCatalog !== catalog && state === "ready") {
+      const untouched = provider === catalog.provider && model === catalog.model;
+      setCatalog(cachedCatalog);
+      if (untouched || !cachedCatalog.providers.some((item) => item.slug === provider && item.models.includes(model))) {
+        const selection = currentSelection(cachedCatalog);
+        setProvider(selection.provider);
+        setModel(selection.model);
+      }
+    }
+  }
 
   const selectedProvider = useMemo(
     () => catalog?.providers.find((item) => item.slug === provider) ?? null,

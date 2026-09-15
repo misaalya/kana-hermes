@@ -4,15 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import { useDialogFocus } from "@/lib/accessibility/use-dialog-focus";
 import { OFFICIAL_LIVE2D_SAMPLES } from "@/lib/avatar/defaults";
 import type { KanaPreferences } from "@/lib/preferences/types";
+import type { DependencyFindings } from "@/lib/store/workspace-store";
 import { getCopy, type UiLocale } from "@/lib/ui/copy";
 import { CheckIcon, LanguageIcon, PersonIcon, PlugIcon } from "./icons";
 import { SettingsRow, SettingsRows, SettingsSegmented, StatusPill, settingsButton } from "./settings-layout";
 import { btnGhost, btnPrimary, Toggle } from "./ui";
 
-export type DependencyFindings = {
-  hermes: "running" | "installed" | "missing";
-  voice: "ok" | "loading" | "stopped" | "not_installed" | "unsupported" | "error" | "off" | null;
-};
+export type { DependencyFindings };
 
 type OnboardingDialogProps = {
   locale: UiLocale;
