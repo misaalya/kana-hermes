@@ -17,6 +17,10 @@
 
 ### Changed
 
+- **Chat-first phone and tablet layout.** Below 1024px the conversation fills
+  the screen and Kana appears in a small call-style tile at the top left,
+  framed closer on the face. Positioning the avatar still expands the stage to
+  full screen while you drag.
 - **Local voice now uses Irodori TTS instead of Qwen3-TTS.** Japanese speech
   comes from the Irodori-TTS v4.1 Anime model on the irodori-c CPU engine: no
   Python, `uv`, or GPU. The Qwen3-TTS service, its `uv` setup, and its routes

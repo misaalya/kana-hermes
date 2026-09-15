@@ -8,6 +8,8 @@ type AvatarStageProps = {
   background: StageBackground;
   customBackgroundUrl?: string;
   chatOpen: boolean;
+  /** Phones show the avatar as a small call-style tile beside a full-screen chat. */
+  compact?: boolean;
   locale: UiLocale;
   onCanvasReady(canvas: HTMLCanvasElement | null): void;
 };
@@ -17,6 +19,7 @@ export const AvatarStage = memo(function AvatarStage({
   background,
   customBackgroundUrl,
   chatOpen,
+  compact = false,
   locale,
   onCanvasReady,
 }: AvatarStageProps) {
@@ -25,7 +28,7 @@ export const AvatarStage = memo(function AvatarStage({
 
   return (
     <section
-      className="kana-stage-pattern absolute inset-0 overflow-hidden"
+      className={`kana-stage-pattern absolute inset-0 overflow-hidden ${compact ? "is-compact" : ""}`}
       data-background={background}
       aria-label={copy.label}
     >
@@ -50,7 +53,7 @@ export const AvatarStage = memo(function AvatarStage({
 
           {!isLive2D ? (
             avatar.loadError ? (
-              <div className="absolute inset-0 z-[2] flex items-center justify-center px-6 text-center" role="status">
+              <div className="kana-stage-message absolute inset-0 z-[2] flex items-center justify-center px-6 text-center" role="status">
                 <div className="max-w-sm">
                   <p className="text-sm font-bold text-ink">{copy.loadFailed}</p>
                   <p className="mt-1.5 text-[12px] leading-relaxed text-muted">{avatar.loadError}</p>
@@ -58,7 +61,7 @@ export const AvatarStage = memo(function AvatarStage({
                 </div>
               </div>
             ) : (
-              <div className="absolute inset-0 z-[2] flex flex-col items-center justify-center text-center" aria-hidden="true">
+              <div className="kana-stage-message absolute inset-0 z-[2] flex flex-col items-center justify-center text-center" aria-hidden="true">
                 <div>
                   <p className="text-sm font-bold text-ink-dim">{copy.preparing}</p>
                   <p className="mt-1 text-[11px] text-muted">{copy.waitingForLive2D}</p>

@@ -270,15 +270,19 @@ ornamental dashboard. This is a product direction, not a temporary theme.
 - Desktop uses a quiet conversation sidebar, a thin workspace header, a
   centered avatar stage, an inline conversation transcript, and a floating
   bottom composer.
-- The avatar remains the visual focus in the center of the workspace. Do not
-  push it into a small side card merely to expose more panels.
+- On desktop the avatar remains the visual focus in the center of the
+  workspace. Do not push it into a small side card merely to expose more panels.
 - Prefer typography, spacing, borders, and subtle surface contrast over
   gradients, decorative orbits, heavy glass effects, or large shadows.
 - Preserve the Codex-like information hierarchy without copying OpenAI assets,
   logos, or proprietary visuals.
 - On mobile, the conversation sidebar becomes a modal drawer with a backdrop,
   the workspace remains one column, and the composer stays reachable at the
-  bottom. Do not render desktop side-by-side panels at narrow widths.
+  bottom. Phones and tablets (below 1024px) are chat-first: the transcript
+  fills the screen and the live avatar sits in a small call-style tile at the
+  top left, framed on the face. Positioning the avatar temporarily expands
+  the stage to full screen. Do not render desktop side-by-side panels at
+  narrow widths.
 - Keep touch targets accessible, prevent horizontal overflow, respect dynamic
   viewport height, and retain keyboard access to the slash-command menu and
   composer.

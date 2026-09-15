@@ -38,6 +38,17 @@ describe("Live2D automatic framing", () => {
     assert.ok(fit.y + HARU.head.y * fit.scale < 844 - 388, "head sits above the chat");
   });
 
+  it("lets a small avatar tile frame the face larger", () => {
+    const normal = fitLive2DModel(96, 128, HARU, DEFAULT_LIVE2D_MODEL_LAYOUT);
+    const tile = fitLive2DModel(96, 128, HARU, DEFAULT_LIVE2D_MODEL_LAYOUT, { top: 0, bottom: 0, headWidthShare: 0.9 });
+    assert.ok(HARU.head.width * normal.scale <= 96 * 0.6 + 1e-6);
+    assert.ok(tile.scale > normal.scale, "the tile zooms in");
+    assert.ok(HARU.head.width * tile.scale <= 96 * 0.9 + 1e-6, "the head still fits the tile");
+    close(tile.x + (HARU.head.x + HARU.head.width / 2) * tile.scale, 48);
+    const invalid = fitLive2DModel(96, 128, HARU, DEFAULT_LIVE2D_MODEL_LAYOUT, { top: 0, bottom: 0, headWidthShare: Number.NaN });
+    close(invalid.scale, normal.scale);
+  });
+
   it("estimates the head of a tall figure without a head hit area", () => {
     const tall = { bounds: { x: -500, y: -1_800, width: 1_000, height: 3_600 }, head: null };
     const { framing, head } = classifyLive2DFraming(tall);
