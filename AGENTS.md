@@ -51,6 +51,10 @@ capability.
 - Keep voice, avatar, conversation storage, presentation protocol, and agent
   concerns behind their existing interfaces. Do not merge them into one React
   component or controller class.
+- Shared workspace state lives in the zustand stores under `lib/store/`,
+  created per mount by `createKanaStores()`; side effects live in the
+  services under `lib/services/`. Never create a module-level store or cache.
+  State used by a single component stays local `useState`.
 - The browser never holds a Hermes session token. The Kana server mints or
   discovers it, keeps it in process memory, and the browser reaches Hermes
   only through `/api/hermes/*`.
@@ -270,15 +274,19 @@ ornamental dashboard. This is a product direction, not a temporary theme.
 - Desktop uses a quiet conversation sidebar, a thin workspace header, a
   centered avatar stage, an inline conversation transcript, and a floating
   bottom composer.
-- The avatar remains the visual focus in the center of the workspace. Do not
-  push it into a small side card merely to expose more panels.
+- On desktop the avatar remains the visual focus in the center of the
+  workspace. Do not push it into a small side card merely to expose more panels.
 - Prefer typography, spacing, borders, and subtle surface contrast over
   gradients, decorative orbits, heavy glass effects, or large shadows.
 - Preserve the Codex-like information hierarchy without copying OpenAI assets,
   logos, or proprietary visuals.
 - On mobile, the conversation sidebar becomes a modal drawer with a backdrop,
   the workspace remains one column, and the composer stays reachable at the
-  bottom. Do not render desktop side-by-side panels at narrow widths.
+  bottom. Phones and tablets (below 1024px) are chat-first: the transcript
+  fills the screen and the live avatar sits in a small call-style tile at the
+  top left, framed on the face. Positioning the avatar temporarily expands
+  the stage to full screen. Do not render desktop side-by-side panels at
+  narrow widths.
 - Keep touch targets accessible, prevent horizontal overflow, respect dynamic
   viewport height, and retain keyboard access to the slash-command menu and
   composer.
@@ -296,7 +304,7 @@ ornamental dashboard. This is a product direction, not a temporary theme.
   allow-listed JSON-RPC (`/api/hermes/events`, `/api/hermes/rpc`), session
   create/resume, prompt submission, interruption, and event translation.
 - Event-driven transcript restore: `session.resume` responses carry the full
-  display transcript; the adapter emits `history.restored` and the controller
+  display transcript; the adapter emits `history.restored` and the workspace
   parses it (kana_request unwrap, response envelope, tool rows). Selecting a
   linked conversation or auto-connecting opens the session first, so
   refreshes and fresh browsers always repopulate the transcript. Auto-connect
@@ -444,8 +452,15 @@ components/kana/kana-app.tsx             Main composition, gate/auto-connect
 components/kana/live-chat-feed.tsx        Chronological message+activity feed
 components/kana/agent-input-dialog.tsx   Approval and secure Hermes input UI
 components/kana/slash-command-menu.tsx   Slash catalog/completion UI
-lib/state/use-kana-controller.ts          Application orchestration (god hook;
-                                          zustand slice refactor tracked in PLAN.md)
+components/kana/kana-workspace-context.tsx Per-mount workspace provider + useKanaStore
+lib/store/                                Per-concern zustand vanilla stores (created
+                                          per mount by createKanaStores, never global)
+lib/services/kana-workspace.ts            Wires stores and services for one workspace
+lib/services/hermes-session-manager.ts    Hermes client lifecycle and session switches
+lib/services/agent-event-handlers.ts      AgentEvent -> store updates
+lib/services/conversation-service.ts      Working set, pointer, transcript restore
+lib/services/send-message.ts              Prompt, Kana command, and slash submission
+lib/services/model-catalog-service.ts     Cached Hermes model list (stale-while-revalidate)
 lib/agent/types.ts                        Stable agent contracts/events
 lib/agent/hermes/hermes-agent-client.ts   Hermes relay adapter (SSE + JSON-RPC)
 lib/agent/hermes/gateway-types.ts         Hermes wire response types
@@ -462,8 +477,6 @@ lib/server/auth/*                         Password store, JWT session, login lim
 proxy.ts                                  Deny-by-default auth proxy (Next 16)
 lib/presentation/persona.ts               Persona and response instructions
 lib/presentation/response-parser.ts       Structured response validation
-lib/conversation/memory-conversation-store.ts In-memory conversation state
-                                          per controller (transcripts live in Hermes)
 lib/backup/kana-backup.ts                  Versioned credential-free backup format
 lib/avatar/avatar-controller.ts           Provider-independent avatar control
 lib/avatar/defaults.ts                     Official Haru/Mao URLs and bindings
@@ -496,7 +509,7 @@ PLAN.md                                     Active remediation plan/status
 ## Implementation plan
 
 The phased plan below is complete; ACTIVE remediation work (bug fixes,
-hardening, the deferred zustand slice refactor) is tracked in `PLAN.md` —
+hardening) is tracked in `PLAN.md` —
 read it before picking up work here.
 
 Work incrementally and keep the application usable after every phase.

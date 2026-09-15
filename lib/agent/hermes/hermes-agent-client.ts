@@ -494,12 +494,15 @@ export class HermesAgentClient implements AgentClient {
     return this.executeCommandInternal(input, 0);
   }
 
-  async completeCommands(input: string): Promise<AgentCommandSuggestion[]> {
+  async completeCommands(
+    input: string,
+    options: { models?: AgentModelCatalog } = {},
+  ): Promise<AgentCommandSuggestion[]> {
     if (this.state !== "connected" || !input.startsWith("/")) return [];
 
     if (/^\/model\s+/i.test(input)) {
       const query = input.replace(/^\/model\s+/i, "").trim().toLowerCase();
-      const catalog = await this.listModels();
+      const catalog = options.models ?? (await this.listModels());
       return catalog.providers
         .flatMap((provider) =>
           provider.models.map((model) => ({ provider, model })),

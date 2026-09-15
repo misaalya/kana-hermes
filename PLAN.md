@@ -406,6 +406,43 @@ sudah ada di `package.json` — dipakai, bukan dependency baru.
   mutable cache tersisa; mengetik di composer tidak memicu re-render sidebar
   list (profiler check).
 
+### Status Track 4 (2026-09-15)
+
+Keputusan pemilik: pindahkan hanya state bersama ke zustand. State sementara
+milik satu komponen (form settings, pencarian sidebar, scroll feed, panel
+kecil) tetap `useState`.
+
+- **Store** (`lib/store/`): satu `createStore` vanilla per concern —
+  preferences, conversations, agentSession, activity, commands, errors, voice,
+  avatar, workspace (draft, panel, gate, deps, wizard), dan theme. Semua dibuat
+  per mount lewat `createKanaStores()`; tidak ada store tingkat modul.
+- **Service** (`lib/services/`): kelas non-React yang membaca `getState()`
+  sehingga ref cermin hilang — `HermesSessionManager` (client Hermes,
+  subscribe sekali, `handleAgentEvent`), `ConversationService` (pointer,
+  restore transcript, aktivitas server dengan token anti respons basi),
+  `CommandService`, `VoiceService` (+ `SpokenReplyQueue`), `AvatarService`,
+  `WorkspaceSetup` (gate, deps, wizard), plus `sendMessage` dan
+  `savePreferences`. `kana-workspace.ts` hanya merangkai.
+- **React**: `KanaWorkspaceProvider` + `useKanaStore(name, selector)`.
+  `kana-app.tsx` tinggal komposisi; isinya dipecah ke `workspace-stage`,
+  `workspace-header`, `chat-dock`, `chat-composer`, `sessions-modal`,
+  `connection-gate`, `workspace-dialogs`.
+- **Dihapus**: `use-kana-controller.ts`, `use-avatar-controller.ts`,
+  `use-voice-controller.ts`, `MemoryConversationStore` (salinan Map yang tidak
+  pernah dibaca), dan aksi tanpa konsumen UI (`diagnostics`,
+  `exportLocalBackup`/`importLocalBackup`, `testAgentConnection`,
+  `disconnectAgent`, `previewAvatarMotion`). Library `lib/backup` dan
+  `lib/diagnostics` beserta test-nya tetap ada.
+- **Tidak dikerjakan**: guard backup "N percakapan tapi 0 pesan" (E5) —
+  backup tidak punya tombol di UI dan transcript memang hanya dimuat untuk
+  percakapan yang dibuka, jadi peringatan itu akan selalu salah alarm.
+- **Test**: `tests/store/kana-stores.test.ts` dan
+  `tests/services/hermes-session-manager.test.ts` (fake AgentClient) menutup
+  isolasi store, dedup error, batas aktivitas, restore transcript, dedup
+  balasan, antrean suara, unlink sesi yang tak tersimpan, antrean prompt saat
+  busy, `/new`, prefill, upload lampiran gagal, input request, landing
+  conversation, pindah/hapus percakapan, completion slash, dan token aktivitas.
+
 ---
 
 ## 9. Urutan eksekusi yang disarankan
@@ -425,7 +462,8 @@ sudah ada di `package.json` — dipakai, bukan dependency baru.
                                             secret; C4 skip dengan alasan)
    [x] B3-lite: activity-store.ts dbPath diarahkan ke
        lib/server/data-dir.ts + adopsi legacy activities.db (2026-08-25)
-3. [ ] Setelah Track 1 merge: Track 4 (E1..E5 — keputusan pemilik: berhenti di E5)
+3. [x] Track 4 (E1..E6) — keputusan pemilik 2026-09-15: dikerjakan sampai E6
+      (lihat "Status Track 4" di §8)
 4. [ ] Final: verifikasi menyeluruh §11 + live-test resume/TTS pada mesin &
       VPS + update AGENTS.md (arsitektur relay, KANA_DATA_DIR, store slices)
 
@@ -499,6 +537,7 @@ proxy_set_header X-Forwarded-Proto $scheme;
 - **A2 skema anchor**: ✅ ordinal `turn_index` — sudah diimplementasikan Track 1.
 - **C2 autentikasi awal**: ✅ satu password bawaan yang ditampilkan untuk npm,
   source, dev, dan deployment; pergantian password tetap opsional.
-- **E6 skala refactor**: ✅ berhenti di E5; E6 tidak dikerjakan untuk saat ini.
+- **E6 skala refactor**: ✅ awalnya berhenti di E5; diganti 2026-09-15 —
+  pemilik memutuskan refactor tuntas sampai E6, hanya untuk state bersama.
 - **D8 zombie uv**: ✅ diuji pada build standalone 2026-08-30; tidak ada child
   `uv`/`kana-qwen3-tts` tersisa setelah control stop dan shutdown.
