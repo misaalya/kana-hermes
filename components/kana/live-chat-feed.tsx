@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ActivityItem } from "@/lib/state/use-kana-controller";
+import type { ActivityItem } from "@/lib/agent/types";
 import type { KanaMessage } from "@/lib/conversation/types";
 import { ActivityStack } from "./activity-stack";
 import { getCopy, type UiLocale } from "@/lib/ui/copy";

@@ -17,6 +17,14 @@
 
 ### Changed
 
+- Workspace state moved from one large React hook to per-concern zustand
+  stores and plain service classes. Nothing changes for users; typing in the
+  composer now re-renders only the composer instead of the whole workspace
+  component and header.
+- The model picker and the composer's model button open with the last Hermes
+  model list at once and refresh it in the background; `/model` completion no
+  longer asks Hermes for the list on every keystroke. Switching models, a new
+  session, or a lost connection drops the saved list.
 - **Chat-first phone and tablet layout.** Below 1024px the conversation fills
   the screen and Kana appears in a small call-style tile at the top left,
   framed closer on the face. Positioning the avatar still expands the stage to

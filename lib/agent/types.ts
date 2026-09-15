@@ -267,7 +267,11 @@ export interface AgentClient {
   }>;
   sendMessage(input: AgentMessageInput): Promise<void>;
   executeCommand(input: AgentCommandInput): Promise<AgentCommandResult>;
-  completeCommands(input: string): Promise<AgentCommandSuggestion[]>;
+  /**
+   * Slash-command suggestions. `models` is an already loaded model catalog;
+   * model arguments are completed from it instead of asking Hermes again.
+   */
+  completeCommands(input: string, options?: { models?: AgentModelCatalog }): Promise<AgentCommandSuggestion[]>;
   listModels(options?: { refresh?: boolean }): Promise<AgentModelCatalog>;
   selectModel(
     selection: AgentModelSelection,
