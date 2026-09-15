@@ -56,7 +56,7 @@ The first run asks you to create an access password, then opens Kana in your
 browser. There is no default password.
 
 <p align="center">
-  <img src=".github/readme/cli-start.png" alt="The kana command printing a Ready box with the local URL, data folder, Hermes path, and voice provider" width="640">
+  <img src=".github/readme/cli-start-v2.png" alt="The kana command printing a Ready box with the local URL, data folder, Hermes path, and voice provider" width="640">
 </p>
 
 Useful commands:
