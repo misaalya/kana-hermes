@@ -531,9 +531,11 @@ export function KanaApp({ appVersion }: KanaAppProps) {
     kana.connectionState === "authentication_failed" ||
     kana.connectionState === "incompatible";
 
-  // On phones the chat covers the lower stage; step it aside while the avatar
-  // is being positioned so the whole model stays visible and draggable.
+  // Phones are chat-first: the avatar sits in a small call-style tile at the
+  // top left. While the avatar is being positioned the chat steps aside and
+  // the stage fills the screen so the whole model stays visible and draggable.
   const chatVisible = usesMobileChat ? !avatarLayoutOpen : chatOpen;
+  const compactStage = usesMobileChat && !avatarLayoutOpen;
 
   return (
     <main className="relative h-dvh w-full overflow-hidden bg-bg">
@@ -547,6 +549,7 @@ export function KanaApp({ appVersion }: KanaAppProps) {
             : undefined
         }
         chatOpen={chatVisible}
+        compact={compactStage}
         locale={kana.preferences.uiLocale}
         onCanvasReady={kana.attachAvatarCanvas}
       />
@@ -561,7 +564,8 @@ export function KanaApp({ appVersion }: KanaAppProps) {
       ) : null}
 
       <header className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-4 p-4 max-sm:p-3">
-        <div className="pointer-events-auto min-w-0 max-sm:hidden">
+        {/* Phones and tablets use that corner for the avatar tile. */}
+        <div className="pointer-events-auto min-w-0 max-lg:hidden">
           <p className="kana-session-title max-w-[34vw] truncate px-3 py-2 text-xs font-bold text-ink">
             {kana.activeConversation?.title ?? workspaceCopy.newMoment}
           </p>
@@ -612,7 +616,7 @@ export function KanaApp({ appVersion }: KanaAppProps) {
         </nav>
       </header>
 
-      <div className={`kana-chat-dock absolute bottom-4 right-4 top-[76px] z-10 w-[min(34vw,480px)] min-w-[390px] transition-transform duration-300 ease-out max-lg:inset-x-0 max-lg:bottom-0 max-lg:top-auto max-lg:h-[46dvh] max-lg:w-full max-lg:min-w-0 ${chatVisible ? "" : "is-closed"}`}>
+      <div className={`kana-chat-dock absolute bottom-4 right-4 top-[76px] z-10 w-[min(34vw,480px)] min-w-[390px] transition-transform duration-300 ease-out max-lg:inset-x-0 max-lg:bottom-0 max-lg:top-[var(--kana-compact-band)] max-lg:w-full max-lg:min-w-0 ${chatVisible ? "" : "is-closed"}`}>
         <button
           type="button"
           className="kana-chat-toggle absolute -left-12 top-1/2 z-20 h-28 w-12 -translate-y-1/2 text-accent hover:text-accent-hover max-lg:hidden"
@@ -945,7 +949,7 @@ function DegradedBanner({
 }) {
   const copy = getCopy(locale);
   return (
-    <div className="kana-panel absolute bottom-5 left-5 z-20 flex max-w-[360px] items-center gap-3 rounded-md px-3.5 py-2.5 max-lg:bottom-[calc(46dvh+12px)] max-sm:bottom-auto max-sm:left-3 max-sm:top-16">
+    <div className="kana-panel kana-degraded-banner absolute bottom-5 left-5 z-20 flex max-w-[360px] items-center gap-3 rounded-md px-3.5 py-2.5">
       <p className="text-[10px] font-semibold text-ink-dim">{copy.banner.degraded}</p>
       <button
         type="button"
