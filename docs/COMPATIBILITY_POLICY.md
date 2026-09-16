@@ -2,7 +2,7 @@
 
 ## Release policy
 
-Kana publishes final semantic versions under npm's `latest` tag. Version 0.3.1
+Kana publishes final semantic versions under npm's `latest` tag. Version 0.3.2
 is the current stable release for the tested environment in
 [Supported environment](SUPPORTED_ENVIRONMENT.md). Stable releases preserve
 documented configuration and stored-data migrations within a major version;
