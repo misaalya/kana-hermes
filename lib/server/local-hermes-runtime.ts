@@ -284,7 +284,10 @@ export async function startLocalHermesRuntime(options: {
     );
   }
   // The working folder is server configuration only; browsers cannot choose it.
-  let workingDirectory: string | undefined;
+  // Without one, Hermes works from the user's home rather than inheriting the
+  // Kana server's cwd, which for the npm launcher is the package's own runtime
+  // directory inside node_modules (replaced on every update).
+  let workingDirectory = homedir();
   const configuredWorkingDirectory = readKanaUserConfig().hermes?.workingDirectory;
   if (configuredWorkingDirectory) {
     workingDirectory = path.resolve(configuredWorkingDirectory);
