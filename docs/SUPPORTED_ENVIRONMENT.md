@@ -1,6 +1,6 @@
 # Supported environment and compatibility
 
-Kana 0.2.0 is a stable semver release for the tested Linux baseline below. It
+Kana 0.3.0 is a stable semver release for the tested Linux baseline below. It
 supports both a personal loopback installation and a VPS deployment of the
 same server. “Stable” describes the versioning and documented behavior; it
 does not claim support for platforms that have not been tested.

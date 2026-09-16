@@ -1,6 +1,6 @@
 {
   "name": "kana-alya",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Local visual-novel interface and launcher for an existing Hermes Agent",
   "license": "MIT",
   "repository": {

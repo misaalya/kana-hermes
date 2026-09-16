@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 — 2026-09-16
 
 ### Security
 
@@ -133,6 +133,24 @@
   soon as the next load starts.
 - First-run setup keeps keyboard focus inside the wizard; Shift+Tab from a
   step's title no longer reaches the workspace behind it.
+
+### Release notes
+
+- **Set a password after upgrading.** Kana no longer ships a default access
+  password. Stop Kana, run `npm install -g kana-alya@0.3.0`, then run
+  `kana password` (or answer the prompt on the next `kana` / `kana serve`
+  start) before signing in again. Existing password hashes keep working.
+- **Local voice changed engines.** Qwen3-TTS is replaced by the Irodori-TTS
+  v4.1 Anime model on the irodori-c CPU engine. Nothing downloads until you
+  press Download in Settings → Voice; voice is off by default on new
+  installs. Qwen's `uv` environment and data can be deleted.
+- Subtitles follow the language you write in; the subtitle language setting
+  is gone. Stored subtitles are unchanged.
+- Workspace state moved to per-mount zustand stores and service classes; the
+  Hermes model list is cached per session. No user-visible behavior changed.
+- Tested against Hermes Agent 0.20.1 (2026.8.13) with Node.js 22.22 on Linux
+  x64/glibc. Back up the data root and browser preferences before rolling
+  back; do not downgrade Hermes as part of a Kana rollback.
 
 ## 0.2.0 — 2026-09-08
 
