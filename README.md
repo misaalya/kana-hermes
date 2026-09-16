@@ -1,6 +1,6 @@
 <div align="center">
 
-# Kana
+# Kana Hermes Waifu Assistant
 
 **A waifu assistant for your [Hermes Agent](https://github.com/NousResearch/hermes-agent): a living, talking anime face for the Hermes you already run.**
 
