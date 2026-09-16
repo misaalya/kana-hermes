@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.2 — 2026-09-16
+
+### Fixed
+
+- A `hermes serve` started by Kana now runs in the home directory of the user
+  running Kana instead of inheriting Kana's own working directory. For the
+  npm launcher that directory was the package's runtime folder inside
+  `node_modules`, so Hermes file and terminal tools worked there and anything
+  written was lost on `npm update -g kana-alya`. `hermes.workingDirectory` in
+  `config.json` still overrides it.
+
 ## 0.3.1 — 2026-09-16
 
 ### Changed

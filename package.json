@@ -1,6 +1,6 @@
 {
   "name": "kana-app",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "private": true,
   "description": "A living, talking Live2D face for your Hermes Agent: Japanese voice, subtitles in your language, and a local web UI that leaves Hermes as the only agent.",
   "license": "MIT",
