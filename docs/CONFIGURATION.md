@@ -176,6 +176,13 @@ system install paths, and Termux's prefix. Add the field only when `kana
 doctor` still reports Hermes as not found. `KANA_HERMES_BIN` is the
 environment-variable override and takes precedence over the JSON value.
 
+`hermes.workingDirectory` is the folder Hermes starts in when Kana launches
+`hermes serve`: its file and terminal tools resolve relative paths there. It
+defaults to the home directory of the user running Kana (for example
+`/home/kenobu`). Set an absolute path to point Hermes at a project folder
+instead. It only applies to a Hermes process started by Kana; an already
+running `hermes serve` keeps its own working directory.
+
 `deployment.mode` is deliberately independent from Next.js' `NODE_ENV`:
 
 - `local` means the browser reaches Kana only on the same machine. This is
