@@ -2,9 +2,9 @@
 
 # Kana
 
-**A living, talking face for your [Hermes Agent](https://github.com/NousResearch/hermes-agent).**
+**A waifu assistant for your [Hermes Agent](https://github.com/NousResearch/hermes-agent): a living, talking anime face for the Hermes you already run.**
 
-Kana puts a Live2D character, Japanese voice, and subtitles in the language you write in on top of the Hermes you already run.
+Kana turns Hermes into a Hermes waifu: a Live2D character who speaks in Japanese, lip-syncs, and subtitles every reply in the language you write in.
 Hermes stays the only agent: its tools, files, memory, and sessions work exactly as before.
 
 [![npm](https://img.shields.io/npm/v/kana-alya?label=npm%20kana-alya)](https://www.npmjs.com/package/kana-alya)
@@ -32,8 +32,8 @@ Hermes stays the only agent: its tools, files, memory, and sessions work exactly
 
 ## Why Kana
 
-Hermes is powerful, but a terminal or chat log is not much company. Kana is a
-presentation layer, not another assistant:
+Hermes is powerful, but a terminal or chat log is not much company. Kana is
+the waifu layer on top of it: a presentation layer, not another assistant.
 
 - **One agent.** Every reply comes from your Hermes session. Kana never runs a
   second model, translator, or tool loop.
