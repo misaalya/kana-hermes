@@ -1,6 +1,6 @@
 {
   "name": "kana-app",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Local visual-novel interface and launcher for an existing Hermes Agent",
   "license": "MIT",
