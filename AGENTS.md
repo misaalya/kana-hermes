@@ -79,6 +79,35 @@ capability.
   in `shared/irodori-release.mjs` and is verified before use; do not vendor
   engine binaries or model weights into the repository or packages.
 
+## npm release authentication
+
+npm publishing for this project uses the owner's interactive 2FA. A page that
+offers **Use security key** is a valid WebAuthn/passkey challenge; it does not
+mean that 2FA was skipped merely because npm did not request a six-digit TOTP
+code. TOTP and WebAuthn are alternative second-factor methods, and the owner
+must complete whichever challenge npm presents. Never guess, request from an
+untrusted source, or enter an OTP/passkey response on the owner's behalf.
+
+Codex and other non-GUI shells may not have a working `xdg-open`. For an
+interactive release from such an environment, use npm's supported manual-URL
+mode rather than pressing Enter at a browser-opening prompt:
+
+```bash
+npm publish ./cli --ignore-scripts --auth-type=web --browser=false
+```
+
+Open the printed `https://www.npmjs.com/auth/cli/...` URL in a browser already
+signed in as the package owner, then leave the final WebAuthn/TOTP interaction
+to the owner. If the owner does not want browser automation, stop after
+printing the URL and ask them to open it themselves. Keep the publish process
+running while authorization completes, then require both the successful
+`+ kana-alya@<version>` output and registry verification of `version` and
+`dist-tags.latest` before updating GitHub release notes.
+
+For unattended future releases, prefer npm Trusted Publishing from the
+repository's GitHub Actions workflow. Do not weaken or disable 2FA and do not
+introduce a bypass-2FA token merely to avoid the interactive browser step.
+
 ## Hermes environment and safety
 
 The user-owned executable is:
