@@ -583,12 +583,16 @@ test("changes the active Hermes model with an explicit provider", async ({ page 
   await page.getByRole("button", { name: /^AI model/ }).click();
   await expect(page.getByRole("paragraph").filter({ hasText: "accounts/fireworks/models/deepseek-v4-flash-0731" })).toBeVisible();
 
-  await page.getByLabel("Provider").selectOption("openrouter");
-  await page.getByLabel("Model").selectOption("deepseek/deepseek-v4");
+  // The composer's model button and its dialog are also labelled "Model"; pick the settings selects.
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("combobox", { name: "Provider", exact: true }).selectOption("openrouter");
+  await dialog.getByRole("combobox", { name: "Model", exact: true }).selectOption("deepseek/deepseek-v4");
   await page.getByRole("button", { name: "Use this model" }).click();
 
   await expect(page.getByText("The model for this conversation has been changed.")).toBeVisible();
   await expect(page.getByRole("paragraph").filter({ hasText: "deepseek/deepseek-v4" })).toBeVisible();
+  // The composer's model button follows the switch through the cached catalog.
+  await expect(page.getByRole("button", { name: "Choose model", exact: true })).toHaveAttribute("title", "deepseek/deepseek-v4");
 });
 
 test("shows Hermes approval choices and resolves a session approval", async ({ page }) => {
