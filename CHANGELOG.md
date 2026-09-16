@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.1 — 2026-09-16
+
+### Changed
+
+- The npm package's homepage now points to <https://kana.vvo.me> and its
+  description names the Live2D face, Japanese voice, and subtitles. No code
+  changed since 0.3.0.
+
 ## 0.3.0 — 2026-09-16
 
 ### Security
