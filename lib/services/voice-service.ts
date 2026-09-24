@@ -1,7 +1,7 @@
 import type { AvatarController } from "@/lib/avatar/avatar-controller";
 import { SpokenReplyQueue } from "@/lib/presentation/spoken-reply-queue";
 import type { ErrorStore } from "@/lib/store/error-store";
-import type { VoiceStore } from "@/lib/store/voice-store";
+import { isVoiceActive, type VoiceStore } from "@/lib/store/voice-store";
 import type { VoiceProvider, VoiceProviderStatus } from "@/lib/voice/types";
 
 export type VoiceServiceDependencies = {
@@ -48,9 +48,14 @@ export class VoiceService {
   }
 
   async inspect(): Promise<VoiceProviderStatus> {
-    this.deps.voice.setState({ runtimeState: "checking" });
+    // A provider check (closing Settings, repair polling) can overlap a reply
+    // that is still synthesizing, which on a slow machine takes a while. It
+    // must not overwrite that state, or Stop disappears and the held text
+    // waits with no sign of progress.
+    const speaking = () => isVoiceActive(this.deps.voice.getState().runtimeState);
+    if (!speaking()) this.deps.voice.setState({ runtimeState: "checking" });
     const { status } = await this.deps.inspectProvider();
-    this.deps.voice.setState({ status, runtimeState: status.state });
+    this.deps.voice.setState(speaking() ? { status } : { status, runtimeState: status.state });
     // "unavailable" is an engine that has not been downloaded: a setup step
     // shown in Settings and first-run setup, not an error.
     if (status.state === "error") {
