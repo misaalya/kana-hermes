@@ -26,7 +26,13 @@ export function useDialogFocus(onEscape?: () => void) {
     const first = dialog?.querySelector<HTMLElement>("[autofocus], " + FOCUSABLE);
     window.requestAnimationFrame(() => first?.focus());
     return () => {
-      window.requestAnimationFrame(() => opener?.focus());
+      window.requestAnimationFrame(() => {
+        // Restore only focus that left with the dialog. If something else was
+        // focused in the meantime (the composer, say), taking it back would
+        // send the next keystroke, even Enter, to the opener.
+        const current = document.activeElement;
+        if (!current || current === document.body || !current.isConnected) opener?.focus();
+      });
     };
   }, []);
 
