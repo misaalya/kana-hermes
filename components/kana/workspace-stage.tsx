@@ -20,11 +20,16 @@ export function useUpdateAvatarLayout() {
   };
 }
 
-/** Phones are chat-first; while the avatar is being positioned the stage fills the screen. */
+/**
+ * Phones are chat-first; while the avatar is being positioned the stage fills
+ * the screen. Kana's first-run greeting clears the stage on every width.
+ */
 export function useChatVisible(): boolean {
   const usesMobileChat = useKanaStore("workspace", (state) => state.usesMobileChat);
   const avatarLayoutOpen = useKanaStore("workspace", (state) => state.avatarLayoutOpen);
+  const greeting = useKanaStore("workspace", (state) => state.greeting);
   const chatOpen = useKanaStore("workspace", (state) => state.chatOpen);
+  if (greeting) return false;
   return usesMobileChat ? !avatarLayoutOpen : chatOpen;
 }
 
@@ -37,6 +42,7 @@ export function WorkspaceStage() {
   const live2d = useKanaStore("preferences", (state) => state.preferences.live2d);
   const usesMobileChat = useKanaStore("workspace", (state) => state.usesMobileChat);
   const avatarLayoutOpen = useKanaStore("workspace", (state) => state.avatarLayoutOpen);
+  const greeting = useKanaStore("workspace", (state) => state.greeting);
   const chatVisible = useChatVisible();
   const updateAvatarLayout = useUpdateAvatarLayout();
   const [customBackground, setCustomBackground] = useState<{ id: string; url: string }>();
@@ -76,7 +82,7 @@ export function WorkspaceStage() {
           customBackground && customBackground.id === customBackgroundId ? customBackground.url : undefined
         }
         chatOpen={chatVisible}
-        compact={usesMobileChat && !avatarLayoutOpen}
+        compact={usesMobileChat && !avatarLayoutOpen && !greeting}
         locale={locale}
         onCanvasReady={workspace.actions.attachAvatarCanvas}
       />

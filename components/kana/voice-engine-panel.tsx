@@ -160,7 +160,7 @@ export function VoiceEnginePanel({
       </SettingsRow>
       {install?.state === "installing" ? (
         <div
-          className="mb-3 h-1.5 overflow-hidden rounded-full bg-surface-strong"
+          className="mb-3 h-2.5 overflow-hidden rounded-full bg-surface-strong"
           role="progressbar"
           aria-label={copy.aria}
           aria-valuemin={0}

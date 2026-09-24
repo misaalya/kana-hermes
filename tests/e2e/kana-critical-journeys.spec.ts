@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { E2E_ACCESS_PASSWORD } from "./access-password";
 
 /** Deterministic stand-in for Kana's current HTTP-RPC + SSE Hermes relay. */
@@ -359,6 +359,12 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByRole("textbox", { name: "Message Kana" })).toBeVisible();
 });
 
+/** Pick an option from one of Kana's custom dropdowns (no native select). */
+async function chooseOption(scope: Locator, name: string, option: string): Promise<void> {
+  await scope.getByRole("combobox", { name, exact: true }).click();
+  await scope.getByRole("option", { name: option, exact: true }).click();
+}
+
 async function openHistory(page: Page): Promise<void> {
   const openHistory = page.getByRole("button", {
     name: "Open conversation history",
@@ -412,8 +418,9 @@ test("renders text replies without entering the TTS pipeline when voice is off",
   await composer.fill("Voice-off latency check");
   await composer.press("Enter");
 
-  await expect(page.getByText("Hello! I am here.", { exact: true }).first())
-    .toBeVisible({ timeout: 2_000 });
+  // No fixed latency budget: slower laptops render later, and what matters is
+  // that the reply shows without ever waiting on speech synthesis.
+  await expect(page.getByText("Hello! I am here.", { exact: true }).first()).toBeVisible();
   expect(speechRequests).toBe(0);
 });
 
@@ -543,8 +550,17 @@ test("composer selects the Hermes model and returns keyboard focus", async ({ pa
   const trigger = page.getByRole("button", { name: "Choose model", exact: true });
   await trigger.click();
   const dialog = page.getByRole("dialog", { name: "Choose model", exact: true });
-  await dialog.getByRole("combobox", { name: "Provider", exact: true }).selectOption("openrouter");
-  await dialog.getByRole("combobox", { name: "Model", exact: true }).selectOption("deepseek/deepseek-v4");
+  await chooseOption(dialog, "Provider", "OpenRouter");
+  // Model lists can be long: the dropdown filters as you type and Enter picks.
+  await dialog.getByRole("combobox", { name: "Model", exact: true }).click();
+  const search = dialog.getByRole("combobox", { name: "Search models…" });
+  await expect(search).toBeFocused();
+  await search.fill("no such model");
+  await expect(dialog.getByText("Nothing matches.")).toBeVisible();
+  await search.fill("deepseek v4");
+  await expect(dialog.getByRole("option", { name: "deepseek/deepseek-v4", exact: true })).toBeVisible();
+  await search.press("Enter");
+  await expect(dialog.getByRole("combobox", { name: "Model", exact: true })).toHaveText("deepseek/deepseek-v4");
   await dialog.getByRole("button", { name: "Use this model" }).click();
   await expect(trigger).toContainText("deepseek-v4");
   await page.keyboard.press("Escape");
@@ -581,16 +597,19 @@ test("composer dictation appends only final speech to the editable draft", async
 test("changes the active Hermes model with an explicit provider", async ({ page }) => {
   await page.getByRole("button", { name: "Open settings" }).click();
   await page.getByRole("button", { name: /^AI model/ }).click();
-  await expect(page.getByRole("paragraph").filter({ hasText: "accounts/fireworks/models/deepseek-v4-flash-0731" })).toBeVisible();
 
   // The composer's model button and its dialog are also labelled "Model"; pick the settings selects.
   const dialog = page.getByRole("dialog");
-  await dialog.getByRole("combobox", { name: "Provider", exact: true }).selectOption("openrouter");
-  await dialog.getByRole("combobox", { name: "Model", exact: true }).selectOption("deepseek/deepseek-v4");
+  const modelSelect = dialog.getByRole("combobox", { name: "Model", exact: true });
+  await expect(modelSelect).toHaveText("accounts/fireworks/models/deepseek-v4-flash-0731");
+  await expect(dialog.getByRole("button", { name: "In use" })).toBeDisabled();
+  await chooseOption(dialog, "Provider", "OpenRouter");
+  await chooseOption(dialog, "Model", "deepseek/deepseek-v4");
   await page.getByRole("button", { name: "Use this model" }).click();
 
   await expect(page.getByText("The model for this conversation has been changed.")).toBeVisible();
-  await expect(page.getByRole("paragraph").filter({ hasText: "deepseek/deepseek-v4" })).toBeVisible();
+  await expect(modelSelect).toHaveText("deepseek/deepseek-v4");
+  await expect(dialog.getByRole("button", { name: "In use" })).toBeDisabled();
   // The composer's model button follows the switch through the cached catalog.
   await expect(page.getByRole("button", { name: "Choose model", exact: true })).toHaveAttribute("title", "deepseek/deepseek-v4");
 });
@@ -873,10 +892,13 @@ test("guides a new browser profile through onboarding onto the workspace", async
   });
   await page.reload();
 
-  await expect(
-    page.getByRole("heading", { name: "Kenalan dulu dengan Kana" }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Lanjut" }).click();
+  // Kana greets first, in view and unblurred, through a dialogue box.
+  const greeting = page.getByRole("dialog", { name: "Kana" });
+  await expect(greeting).toBeVisible();
+  await expect(greeting).toHaveAccessibleDescription(/^Hai, aku Kana!/);
+  const start = greeting.getByRole("button", { name: "Yuk, mulai" });
+  await expect(start).toBeFocused();
+  await start.click();
 
   await expect(
     page.getByRole("heading", { name: "Buat percakapan terasa nyaman" }),

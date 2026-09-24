@@ -66,28 +66,36 @@ export function ChevronRightIcon(props: IconProps) {
   return <Icon {...props}><path d="m9 18 6-6-6-6" /></Icon>;
 }
 
-export function LanguageIcon(props: IconProps) {
-  return <Icon {...props}><path d="M4 5h9M8.5 3v2M6 5c.6 3.4 2.8 6 6 7.5M11 5c-.8 4-3.6 7.2-7 8.5" /><path d="m12.5 21 3.8-9 3.7 9M13.8 18h5" /></Icon>;
+export function ChevronDownIcon(props: IconProps) {
+  return <Icon {...props}><path d="m6 9 6 6 6-6" /></Icon>;
 }
 
-export function SpeakerIcon(props: IconProps) {
-  return <Icon {...props}><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" /><path d="M16 9a4 4 0 0 1 0 6M18.8 6.5a8 8 0 0 1 0 11" /></Icon>;
+export function GlobeIcon(props: IconProps) {
+  return <Icon {...props}><circle cx="12" cy="12" r="9" /><path d="M3 12h18" /><path d="M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18Z" /></Icon>;
 }
 
-export function PersonIcon(props: IconProps) {
-  return <Icon {...props}><circle cx="12" cy="8" r="3.5" /><path d="M5 20.5c.8-3.8 3.6-6 7-6s6.2 2.2 7 6" /></Icon>;
+export function WaveformIcon(props: IconProps) {
+  return <Icon {...props}><path d="M3 10.5v3M7 7v10M11 4v16M15 8v8M19 6v12" /></Icon>;
 }
 
-export function SparkIcon(props: IconProps) {
-  return <Icon {...props}><path d="M12 3.5 13.9 9l5.6 1.9-5.6 1.9L12 18.5l-1.9-5.7L4.5 11l5.6-1.9z" /><path d="M19 3v3M17.5 4.5h3" /></Icon>;
+export function SmileIcon(props: IconProps) {
+  return <Icon {...props}><circle cx="12" cy="12" r="9" /><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0" /><path d="M9 9.5h.01M15 9.5h.01" /></Icon>;
 }
 
-export function PlugIcon(props: IconProps) {
-  return <Icon {...props}><path d="M9 3v5M15 3v5M6.5 8h11v3a5.5 5.5 0 0 1-11 0z" /><path d="M12 16.5V21" /></Icon>;
+export function BotIcon(props: IconProps) {
+  return <Icon {...props}><path d="M12 8V4.5" /><circle cx="12" cy="3.5" r="1" /><rect x="4" y="8" width="16" height="12" rx="4" /><path d="M2 13.5v2M22 13.5v2M9 13v1.5M15 13v1.5" /></Icon>;
 }
 
-export function LockIcon(props: IconProps) {
-  return <Icon {...props}><rect x="5" y="10.5" width="14" height="10" rx="2" /><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3" /></Icon>;
+export function ServerIcon(props: IconProps) {
+  return <Icon {...props}><rect x="3" y="3.5" width="18" height="7" rx="2.5" /><rect x="3" y="13.5" width="18" height="7" rx="2.5" /><path d="M7 7h.01M7 17h.01" /></Icon>;
+}
+
+export function ShieldIcon(props: IconProps) {
+  return <Icon {...props}><path d="M12 21c-4.5-1.6-7.5-4.6-7.5-9.2V5.8L12 3l7.5 2.8v6c0 4.6-3 7.6-7.5 9.2Z" /><path d="m9 12 2.2 2.2L15.5 10" /></Icon>;
+}
+
+export function LogoutIcon(props: IconProps) {
+  return <Icon {...props}><path d="M9.5 20.5H6A2.5 2.5 0 0 1 3.5 18V6A2.5 2.5 0 0 1 6 3.5h3.5" /><path d="m15.5 16.5 4.5-4.5-4.5-4.5M20 12H9" /></Icon>;
 }
 
 export function CheckIcon(props: IconProps) {

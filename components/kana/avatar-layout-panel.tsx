@@ -15,7 +15,7 @@ type AvatarLayoutPanelProps = {
 };
 
 const iconButton =
-  "kana-focus grid size-7 shrink-0 place-items-center rounded-md text-muted transition-colors hover:bg-surface-strong hover:text-ink disabled:cursor-not-allowed disabled:opacity-35";
+  "kana-focus grid size-7 shrink-0 place-items-center rounded-full text-muted transition-colors hover:bg-surface-strong hover:text-ink disabled:cursor-not-allowed disabled:opacity-35";
 
 function LayoutSlider({
   label,
@@ -82,7 +82,7 @@ export function AvatarLayoutPanel({
 
   return (
     <section
-      className="kana-popover w-[min(300px,calc(100vw-1.5rem))] rounded-xl border border-line-strong bg-raised px-4 pb-3 pt-3 animate-kana-in max-sm:w-full"
+      className="kana-popover w-[min(310px,calc(100vw-1.5rem))] rounded-[28px] bg-raised px-5 pb-4 pt-4 animate-kana-in max-sm:w-full"
       aria-label={copy.avatarLayoutAria}
     >
       <header className="flex items-center justify-between gap-2">

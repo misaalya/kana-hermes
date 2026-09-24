@@ -57,13 +57,13 @@ export function AvatarLayoutControl({
         onClick={() => onOpenChange(!open)}
       >
         <AvatarPositionIcon />
-        <span className="max-sm:sr-only">{copy.workspace.avatar}</span>
+        <span className="kana-tip">{copy.workspace.avatar}</span>
       </button>
 
       {open ? (
         <div
           id="kana-avatar-layout-panel"
-          className="fixed right-4 top-[68px] z-30 max-sm:inset-x-3 max-sm:bottom-3 max-sm:top-auto"
+          className="fixed right-4 top-[108px] z-30 max-sm:inset-x-3 max-sm:bottom-3 max-sm:top-auto"
         >
           <AvatarLayoutPanel
             layout={layout}

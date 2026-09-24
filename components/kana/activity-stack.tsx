@@ -56,14 +56,14 @@ export function ActivityStack({ activities, locale }: ActivityStackProps) {
 
   return (
     <details
-      className="group w-full border border-line bg-surface-strong px-3 py-2"
+      className="kana-activity group w-full px-3.5 py-2"
       open={activities.some((activity) => activity.state === "running")}
     >
-      <summary className="kana-details-summary kana-focus flex cursor-pointer items-center justify-between gap-3 text-[10px] font-bold text-muted">
-        <span>{getCopy(locale).activity.title}</span>
-        <span className="font-medium text-faint">{getCopy(locale).activity.steps(activities.length)}</span>
+      <summary className="kana-details-summary kana-focus flex cursor-pointer items-center justify-between gap-3 rounded-full text-[11px] font-extrabold text-muted">
+        <span className="kana-activity-title">{getCopy(locale).activity.title}</span>
+        <span className="kana-activity-count text-[10px]">{getCopy(locale).activity.steps(activities.length)}</span>
       </summary>
-      <div className="mt-2 border-t border-line pt-1">
+      <div className="mt-2 border-t-[3px] border-dotted border-line-strong pt-1">
         {ordered.map((activity) => (
           <ActivityRow key={activity.id} activity={activity} locale={locale} />
         ))}

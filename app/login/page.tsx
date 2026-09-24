@@ -69,15 +69,15 @@ export default function LoginPage() {
   );
 
   return (
-    <main className="kana-stage-pattern relative grid min-h-dvh place-items-center overflow-hidden bg-bg p-4 font-sans">
-      <button type="button" className="kana-focus absolute right-4 top-4 border border-line bg-raised px-3 py-2 text-[11px] font-semibold text-muted hover:text-ink" onClick={toggleTheme} aria-label={copy.themeToggle(nextTheme)}>
+    <main className="kana-stage-pattern kana-dots grid min-h-dvh place-items-center bg-bg p-4 font-sans">
+      <button type="button" className="kana-focus kana-pill kana-pill-soft absolute right-4 top-4 px-4 py-2.5 text-[12px]" onClick={toggleTheme} aria-label={copy.themeToggle(nextTheme)}>
         {copy.themeLabel(nextTheme)}
       </button>
-      <div className="kana-panel relative w-[min(390px,100%)] rounded-2xl p-6 sm:p-7">
+      <div className="kana-panel relative w-[min(400px,100%)] rounded-[36px] p-7 sm:p-8">
         <div className="mb-6 flex items-center gap-3">
           <div>
             <p className={sectionEyebrow}>{copy.eyebrow}</p>
-            <h1 className="text-lg font-bold tracking-wide text-ink">Kana</h1>
+            <h1 className="text-[27px] font-extrabold leading-tight text-ink">Kana</h1>
           </div>
         </div>
 
@@ -85,7 +85,7 @@ export default function LoginPage() {
           <div className="grid gap-3" role="status">
             <p className="text-xs font-bold text-ink">{copy.setupTitle}</p>
             <p className="text-xs leading-relaxed text-muted">{copy.setupBody}</p>
-            <code className="block rounded-xl border border-line bg-surface-strong px-3 py-2.5 text-sm font-bold text-ink">
+            <code className="block rounded-[20px] bg-surface-strong px-4 py-2.5 text-sm font-bold text-ink">
               {SETUP_COMMAND}
             </code>
             <p className="text-[11px] leading-relaxed text-faint">{copy.setupSource}</p>

@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { AgentModelCatalog, AgentModelSwitchResult } from "@/lib/agent/types";
 import { getCopy, type UiLocale } from "@/lib/ui/copy";
-import { btnPrimary, btnSecondary, fieldLabel, inputBase } from "./ui";
+import { KanaSelect, type KanaSelectOption } from "./kana-select";
+import { btnPrimary, btnSecondary, fieldLabel } from "./ui";
 
 type ModelControlPanelProps = {
   locale: UiLocale;
@@ -78,6 +79,28 @@ export function ModelControlPanel({ locale, catalog: cachedCatalog, onList, onSe
   );
   const unchanged = provider === catalog?.provider && model === catalog?.model;
 
+  const activeBadge = <span className="kana-select-badge">{copy.modelActive}</span>;
+  const renderProvider = (option: KanaSelectOption) => (
+    <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+      {option.label}
+      {option.value === catalog?.provider ? activeBadge : null}
+    </span>
+  );
+  // Long ids such as "fireworks.ai/accounts/fireworks/models/deepseek-v4" read
+  // better as the model's own name over its muted namespace.
+  const renderModel = (option: KanaSelectOption) => {
+    const cut = option.value.lastIndexOf("/");
+    return (
+      <span className="flex flex-col gap-0.5">
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          {cut >= 0 ? option.value.slice(cut + 1) : option.value}
+          {provider === catalog?.provider && option.value === catalog?.model ? activeBadge : null}
+        </span>
+        {cut > 0 ? <span className="text-[11px] opacity-70">{option.value.slice(0, cut)}</span> : null}
+      </span>
+    );
+  };
+
   const chooseProvider = (value: string) => {
     setProvider(value);
     const next = catalog?.providers.find((item) => item.slug === value);
@@ -129,38 +152,36 @@ export function ModelControlPanel({ locale, catalog: cachedCatalog, onList, onSe
   }
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-xl border-2 border-accent/30 bg-accent/10 px-4 py-3">
-        <p className="text-[9px] font-bold tracking-[0.14em] text-accent-strong uppercase">
-          {copy.modelCurrent}
-        </p>
-        <p className="mt-1 break-all text-xs font-bold text-ink">{catalog.model || "—"}</p>
-        <p className="mt-0.5 text-[10px] text-muted">
-          {(catalog.providers.find((item) => item.slug === catalog.provider)?.name ?? catalog.provider) || "—"}
-        </p>
+    <div className="@container space-y-4">
+      <div className="grid gap-3 @lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+        <div className="min-w-0 space-y-1.5">
+          <span className={fieldLabel} aria-hidden="true">{copy.modelProvider}</span>
+          <KanaSelect
+            label={copy.modelProvider}
+            value={provider}
+            options={catalog.providers.map((item) => ({ value: item.slug, label: item.name }))}
+            onChange={chooseProvider}
+            disabled={state === "saving"}
+            renderOption={renderProvider}
+            search={catalog.providers.length > 8 ? { placeholder: copy.providerSearch, empty: copy.modelSearchEmpty } : undefined}
+          />
+        </div>
+        <div className="min-w-0 space-y-1.5">
+          <span className={fieldLabel} aria-hidden="true">{copy.modelName}</span>
+          <KanaSelect
+            label={copy.modelName}
+            value={model}
+            options={(selectedProvider?.models ?? []).map((item) => ({ value: item, label: item }))}
+            onChange={(next) => { setModel(next); setNotice(""); setConfirmationPending(false); }}
+            disabled={state === "saving"}
+            renderOption={renderModel}
+            search={{ placeholder: copy.modelSearch, empty: copy.modelSearchEmpty }}
+          />
+        </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="min-w-0">
-          <span className={fieldLabel}>{copy.modelProvider}</span>
-          <select className={`${inputBase} w-full truncate pr-8`} value={provider} onChange={(event) => chooseProvider(event.target.value)} disabled={state === "saving"}>
-            {catalog.providers.map((item) => (
-              <option key={item.slug} value={item.slug}>{item.name}</option>
-            ))}
-          </select>
-        </label>
-        <label className="min-w-0">
-          <span className={fieldLabel}>{copy.modelName}</span>
-          <select className={`${inputBase} w-full truncate pr-8`} value={model} onChange={(event) => { setModel(event.target.value); setNotice(""); setConfirmationPending(false); }} disabled={state === "saving"}>
-            {(selectedProvider?.models ?? []).map((item) => (
-              <option key={item} value={item}>{item}</option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      {selectedProvider?.warning ? <p className="text-[10px] leading-relaxed text-muted">{selectedProvider.warning}</p> : null}
-      {notice ? <p role="status" className={`text-[10px] leading-relaxed ${state === "error" ? "text-danger" : "text-muted"}`}>{notice}</p> : null}
+      {selectedProvider?.warning ? <p className="text-[11px] leading-relaxed text-muted">{selectedProvider.warning}</p> : null}
+      {notice ? <p role="status" className={`text-[11px] leading-relaxed ${state === "error" ? "text-danger" : "text-muted"}`}>{notice}</p> : null}
 
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" className={btnPrimary} disabled={!model || (unchanged && !confirmationPending) || state === "saving"} onClick={() => void apply(confirmationPending)}>
@@ -170,7 +191,7 @@ export function ModelControlPanel({ locale, catalog: cachedCatalog, onList, onSe
           {copy.modelRefreshList}
         </button>
       </div>
-      <p className="text-[9px] leading-relaxed text-faint">
+      <p className="text-[11px] leading-relaxed text-faint">
         {copy.modelScope}
       </p>
     </div>

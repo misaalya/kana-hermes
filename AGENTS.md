@@ -295,30 +295,75 @@ load.
 
 ## UI and UX direction
 
-Kana uses a restrained, white, Codex-inspired workspace rather than an
-ornamental dashboard. This is a product direction, not a temporary theme.
+Kana uses a cozy game-menu style that follows the Clara dressing-room viewer
+(itself modelled on Nintendo life-sim menus such as Animal Crossing and
+Tomodachi Life), in Kana's own colours. It is soft, round, and friendly,
+but it stays a calm workspace rather than an ornamental dashboard. This is a
+product direction, not a temporary theme.
 
-- White is the base color. Use neutral grays for hierarchy and reserve color
-  for status, errors, avatar content, and other meaningful state.
-- Desktop uses a quiet conversation sidebar, a thin workspace header, a
-  centered avatar stage, an inline conversation transcript, and a floating
-  bottom composer.
-- On desktop the avatar remains the visual focus in the center of the
-  workspace. Do not push it into a small side card merely to expose more panels.
-- Prefer typography, spacing, borders, and subtle surface contrast over
-  gradients, decorative orbits, heavy glass effects, or large shadows.
-- Preserve the Codex-like information hierarchy without copying OpenAI assets,
-  logos, or proprietary visuals.
-- On mobile, the conversation sidebar becomes a modal drawer with a backdrop,
-  the workspace remains one column, and the composer stays reachable at the
+- Colours are Kana's originals, defined in `app/globals.css` and exposed to
+  Tailwind through `@theme inline`: the white/grey neutrals (light `#f4f4f2`
+  / `#ffffff`, dark `#1c1c1c` / `#242424`), the brand blue `--accent`
+  `#599dc6` with `--accent-hover`, `--accent-strong`, `--on-accent`,
+  `--chat-frame`, `--chat-bubble`, and the stage-pattern inks. Do not tint
+  the neutrals or add new shades of blue; style through the tokens.
+- No shadows of any kind: no drop shadows, no flat "ledge" shadows, no glow.
+  Pieces are flat colour shapes separated by fill, radius, and spacing.
+- One typeface, M PLUS Rounded 1c (`next/font/google`, variable
+  `--font-kana-sans`, weights 400–800), for Latin UI text and Japanese
+  subtitles alike. Headings and pills use the heavy weights (700–800).
+- Components copy Clara's vocabulary (shared classes in `globals.css`):
+  - header actions are a blue pill tray (`kana-bar`) of round tabs; an open
+    tab turns into the white disc, and a label bubble (`kana-tip`) appears
+    under a tab while it is pointed at or open;
+  - the conversation title is a blue name chip;
+  - buttons are heavy pills (`kana-pill`, with `kana-pill-accent` striped
+    blue for primary actions and `kana-pill-soft` for secondary ones) that
+    hop up on hover;
+  - choices are rounded cards (`kana-choice`); the selection is a blue ring
+    plus a round check badge (`kana-check`) on the corner;
+  - segmented controls are a pill track with a sliding blue thumb;
+  - in-content section labels are small rounded bubbles
+    (`kana-label-bubble`), but the Settings sidebar group labels ("Personal",
+    "System") are plain muted text; disclosures lead with a round "+" / "–"
+    disc; dividers are dotted;
+  - dropdowns are the custom `KanaSelect`, never a native `<select>`. Long
+    lists (models, and providers past eight) pass `search` for a filter field,
+    and the list is `position: fixed` so dialogs never clip it;
+  - Log out and other leave-the-app actions use the red `kana-pill-danger`
+    with an icon;
+  - Settings icons: globe, waveform, smile, bot (AI model, never a sparkle),
+    server, shield.
+- First-run setup opens with Kana herself, not a modal: the header and chat
+  step away, the stage clears (full screen on phones too), the avatar smiles,
+  and her line types out in a game-style dialogue box (`kana-greeting`) with a
+  tilted name tag. No blur, no icon, no step bar. The setup screens that
+  follow are numbered in the kicker text only ("Step 1 of 3").
+- The chat panel is the plain tray inside the blue `--chat-frame` border:
+  no texture. The composer stays the blue band with a transparent text field
+  and white text; its model chooser is a white pill and Send becomes a white
+  disc when there is something to send. While Hermes works, or while the
+  reply's voice is still being generated, the transcript shows a chat-app
+  typing bubble (`kana-typing`, three hopping dots) with the status beside
+  it. Voice generation has no short time limit on the client; slow machines
+  simply keep the bubble up longer.
+- Motion is springy (`--spring`): lift on hover, small press on click, a pop
+  for check badges. Global reduced-motion rules must keep working.
+- Desktop keeps the workspace hierarchy: a thin header, the avatar as the
+  centred visual focus of the stage, and the conversation tray on the right
+  with the transcript and the composer at the bottom. Do not push the avatar
+  into a small side card merely to expose more panels.
+- On mobile, conversation history becomes a modal drawer with a backdrop, the
+  workspace remains one column, and the composer stays reachable at the
   bottom. Phones and tablets (below 1024px) are chat-first: the transcript
   fills the screen and the live avatar sits in a small call-style tile at the
-  top left, framed on the face. Positioning the avatar temporarily expands
-  the stage to full screen. Do not render desktop side-by-side panels at
-  narrow widths.
+  top left, framed on the face and drawn like a sticker with a thick white
+  stroke. Positioning the avatar temporarily expands the stage to full
+  screen and fades the chat out in place (no sideways slide). Do not render
+  desktop side-by-side panels at narrow widths.
 - Keep touch targets accessible, prevent horizontal overflow, respect dynamic
-  viewport height, and retain keyboard access to the slash-command menu and
-  composer.
+  viewport height, and retain keyboard access to the slash-command menu,
+  dropdowns, and composer.
 - Activity and settings are secondary surfaces. They should not compete with
   the avatar and conversation for the primary viewport.
 
@@ -326,9 +371,9 @@ ornamental dashboard. This is a product direction, not a temporary theme.
 
 ### Real and operational
 
-- Next.js App Router UI with a minimal white workspace, centered avatar stage,
-  Codex-inspired conversation sidebar/composer hierarchy, and responsive
-  mobile drawer layout.
+- Next.js App Router UI with a cozy, Clara-style game-menu workspace in Kana's
+  colours, centered avatar stage, framed conversation tray with the composer,
+  and responsive mobile drawer layout.
 - `HermesAgentClient` over the server relay: SSE event stream plus
   allow-listed JSON-RPC (`/api/hermes/events`, `/api/hermes/rpc`), session
   create/resume, prompt submission, interruption, and event translation.
@@ -481,6 +526,8 @@ components/kana/kana-app.tsx             Main composition, gate/auto-connect
 components/kana/live-chat-feed.tsx        Chronological message+activity feed
 components/kana/agent-input-dialog.tsx   Approval and secure Hermes input UI
 components/kana/slash-command-menu.tsx   Slash catalog/completion UI
+components/kana/kana-select.tsx          Custom dropdown (replaces native <select>)
+app/globals.css                          Theme tokens and the shared game-menu classes
 components/kana/kana-workspace-context.tsx Per-mount workspace provider + useKanaStore
 lib/store/                                Per-concern zustand vanilla stores (created
                                           per mount by createKanaStores, never global)

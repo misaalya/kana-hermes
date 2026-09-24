@@ -144,9 +144,9 @@ export function ChatComposer() {
   return (
     <div className="kana-composer-shell shrink-0 border-t px-4 pb-3 pt-2.5 max-sm:px-3 max-sm:pb-[max(12px,env(safe-area-inset-bottom))]">
       {error ? (
-        <div role="alert" className="mb-2 flex items-start gap-2 rounded-lg border border-red-300/40 bg-red-500/10 px-3 py-2 text-xs">
+        <div role="alert" className="mb-2 flex items-start gap-2 rounded-[20px] border-2 border-red-300/40 bg-red-500/10 px-3.5 py-2 text-xs">
           <p className="min-w-0 flex-1 break-words">{error}</p>
-          <button type="button" onClick={actions.clearError} className="kana-focus min-h-8 shrink-0 px-2"
+          <button type="button" onClick={actions.clearError} className="kana-focus min-h-8 shrink-0 rounded-full px-2"
             aria-label={copy.composer.dismissError}>
             ×
           </button>
@@ -163,10 +163,10 @@ export function ChatComposer() {
         />
         <div className="kana-composer flex flex-col">
           {files.length ? <ul aria-label={copy.composer.attachments} className="flex max-h-24 flex-wrap gap-1.5 overflow-y-auto py-1">
-            {files.map((file, index) => <li key={`${file.name}-${index}`} className="flex max-w-full items-center gap-1 rounded-lg bg-white/12 pl-2 text-[11px]">
+            {files.map((file, index) => <li key={`${file.name}-${index}`} className="flex max-w-full items-center gap-1 rounded-full bg-white/16 pl-3 text-[11px] font-bold">
               <span className="truncate" title={file.name}>{file.name}</span>
               <span className="shrink-0 opacity-70">{Math.ceil(file.size / 1024)} KB</span>
-              <button type="button" className="kana-focus size-8 shrink-0 rounded-lg hover:bg-white/12" disabled={submitting}
+              <button type="button" className="kana-focus size-8 shrink-0 rounded-full hover:bg-white/16" disabled={submitting}
                 aria-label={copy.composer.remove(file.name)} onClick={() => setFiles(files.filter((_, selected) => selected !== index))}>×</button>
             </li>)}
           </ul> : null}
@@ -225,7 +225,7 @@ export function ChatComposer() {
               }} />
             <button type="button" aria-label={copy.composer.attachFiles}
               title={copy.composer.attachFiles}
-              disabled={submitting || !activeConversationId} className="kana-focus inline-flex size-10 shrink-0 items-center justify-center rounded-lg hover:bg-white/12 disabled:opacity-40"
+              disabled={submitting || !activeConversationId} className="kana-focus inline-flex size-10 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-white/16 disabled:opacity-40"
               onClick={() => fileInputRef.current?.click()}><PlusIcon className="size-5" /></button>
             <ComposerDictation key={activeConversationId} locale={locale}
               disabled={submitting || busy || voiceActive || !activeConversationId}
@@ -241,7 +241,7 @@ export function ChatComposer() {
               <button
                 type="button"
                 aria-label={text.stop}
-                className="kana-focus inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-white/20 hover:bg-white/30"
+                className="kana-focus inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-white/20 transition-colors hover:bg-white/30"
                 onClick={() => void actions.abort()}
               >
                 <span aria-hidden="true" className="size-3 rounded-xs bg-current" />
@@ -251,7 +251,7 @@ export function ChatComposer() {
                 type="button"
                 aria-label={text.send}
                 disabled={(!message.trim() && !files.length) || submitting || dictating || (busy && !canSubmitWhileBusy)}
-                className="kana-focus inline-flex size-10 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-white/12 disabled:cursor-not-allowed disabled:opacity-40"
+                className="kana-send kana-focus inline-flex size-10 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-white/16 disabled:cursor-not-allowed"
                 onClick={() => void submitMessage()}
               >
                 <ReturnIcon className="size-[18px]" />

@@ -23,6 +23,8 @@ export type WorkspaceState = {
   settingsOpen: boolean;
   sessionsOpen: boolean;
   avatarLayoutOpen: boolean;
+  /** Kana's first-run greeting is on screen: the stage clears for her. */
+  greeting: boolean;
   /** Desktop chat panel; phones show chat unless the avatar is being positioned. */
   chatOpen: boolean;
   usesMobileChat: boolean;
@@ -57,6 +59,7 @@ export function createWorkspaceStore(): WorkspaceStore {
     settingsOpen: false,
     sessionsOpen: false,
     avatarLayoutOpen: false,
+    greeting: false,
     chatOpen: true,
     usesMobileChat: false,
     connectionGateOpen: false,

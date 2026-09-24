@@ -25,7 +25,7 @@ export function SessionsModal() {
       onClick={close}
     >
       <section
-        className="kana-settings-shell flex h-full w-[min(380px,100%)] flex-col overflow-hidden rounded-2xl border border-line-strong bg-raised animate-kana-in max-sm:w-full max-sm:rounded-none max-sm:border-0"
+        className="kana-settings-shell flex h-full w-[min(390px,100%)] flex-col overflow-hidden rounded-[36px] bg-raised animate-kana-in max-sm:w-full max-sm:rounded-none"
         onClick={(event) => event.stopPropagation()}
       >
         <ConversationSidebar

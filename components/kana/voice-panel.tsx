@@ -10,6 +10,7 @@ import {
 } from "@/lib/runtime/voice-library-client";
 import { AudioConversionError, convertToWav } from "@/lib/voice/audio-to-wav";
 import { MAX_VOICE_REFERENCE_BYTES } from "@/lib/limits";
+import { CheckIcon } from "./icons";
 import { btnGhost, btnPrimary, btnSecondary } from "./ui";
 import { settingsButton, settingsInput, SettingsRow } from "./settings-layout";
 import { getCopy, type Copy, type UiLocale } from "@/lib/ui/copy";
@@ -45,10 +46,8 @@ function VoiceChoice({
     <div
       role="radio"
       aria-checked={active}
-      className={`flex min-h-16 items-stretch overflow-hidden rounded-xl border transition-colors ${
-        active
-          ? "border-accent bg-accent/8"
-          : "border-line-strong hover:bg-surface-strong/60"
+      className={`kana-choice flex min-h-16 items-stretch rounded-[26px] ${
+        active ? "is-selected" : ""
       }`}
     >
       <button
@@ -62,7 +61,8 @@ function VoiceChoice({
           </span>
           {hint ? <span className="mt-0.5 block truncate text-[11px] text-muted">{hint}</span> : null}
         </span>
-        <span className={`shrink-0 text-[11px] font-semibold ${active ? "text-accent-strong" : "text-faint"}`}>
+        {active ? <span className="kana-check" aria-hidden="true"><CheckIcon className="size-3.5" /></span> : null}
+        <span className={`shrink-0 text-[11px] font-extrabold ${active ? "rounded-full bg-accent px-2.5 py-1 text-on-accent" : "text-faint"}`}>
           {active ? copy.selected : copy.choose}
         </span>
       </button>
@@ -196,7 +196,7 @@ export function VoicePanel({
     const providerReady = providerStatus?.state === "ready";
     const providerChecking = loadingVoices || providerStatus?.state === "loading";
     return (
-      <div className="rounded-xl border-2 border-line bg-surface-strong px-4 py-4">
+      <div className="rounded-[28px] bg-surface-strong px-5 py-4">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h4 className="text-xs font-bold text-ink">{copy.title}</h4>
@@ -220,7 +220,7 @@ export function VoicePanel({
         </div>
         {providerStatus?.message ? (
           <p
-            className={`mt-3 rounded-lg bg-raised px-3 py-2 text-[10px] leading-relaxed ${
+            className={`mt-3 rounded-[18px] bg-raised px-3.5 py-2 text-[10px] leading-relaxed ${
               providerReady ? "text-muted" : "text-danger"
             }`}
           >
@@ -251,9 +251,9 @@ export function VoicePanel({
       <fieldset className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label={copy.chooseAria}>
         <legend className="sr-only">{copy.available}</legend>
         {loadingVoices && voices.length === 0 ? (
-          <p className="rounded-xl border border-line px-4 py-5 text-[11.5px] text-muted sm:col-span-2">{copy.loading}</p>
+          <p className="rounded-[26px] border-[3px] border-dashed border-line px-4 py-5 text-[11.5px] text-muted sm:col-span-2">{copy.loading}</p>
         ) : voices.length === 0 ? (
-          <p className="rounded-xl border border-line px-4 py-5 text-[11.5px] text-muted sm:col-span-2">
+          <p className="rounded-[26px] border-[3px] border-dashed border-line px-4 py-5 text-[11.5px] text-muted sm:col-span-2">
             {copy.empty}
           </p>
         ) : (
@@ -282,7 +282,7 @@ export function VoicePanel({
           </SettingsRow>
         </div>
       ) : (
-        <section className="mt-4 rounded-xl border border-line-strong p-4" aria-label={copy.formAria}>
+        <section className="mt-4 rounded-[28px] border-2 border-line-strong p-5" aria-label={copy.formAria}>
           <div className="mb-4 flex items-start justify-between gap-4">
             <div>
               <h4 className="text-[13px] font-semibold text-ink">{copy.formTitle}</h4>
