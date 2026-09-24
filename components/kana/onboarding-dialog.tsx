@@ -6,7 +6,7 @@ import { OFFICIAL_LIVE2D_SAMPLES } from "@/lib/avatar/defaults";
 import type { KanaPreferences } from "@/lib/preferences/types";
 import type { DependencyFindings } from "@/lib/store/workspace-store";
 import { getCopy, type UiLocale } from "@/lib/ui/copy";
-import { CheckIcon, LanguageIcon, PersonIcon, PlugIcon } from "./icons";
+import { CheckIcon, ChevronRightIcon } from "./icons";
 import { SettingsRow, SettingsRows, SettingsSegmented, StatusPill, settingsButton } from "./settings-layout";
 import { btnGhost, btnPrimary, Toggle } from "./ui";
 
@@ -20,9 +20,100 @@ type OnboardingDialogProps = {
   onComplete(preferences: KanaPreferences): Promise<void>;
   onDismiss(): void;
   onOpenSettings(): void;
+  /** The greeting is on screen (true) or gone (false); the stage clears for it. */
+  onGreetingChange?(active: boolean): void;
+  /** Kana reacts as she starts to speak (an expression on the avatar). */
+  onGreet?(): void;
 };
 
-const PLAN_ICONS = [LanguageIcon, PersonIcon, PlugIcon] as const;
+/**
+ * When each character of a line appears, in ms from the start: a steady pace
+ * with a beat after each clause, as a character would speak it.
+ */
+function typingSchedule(line: string): number[] {
+  let at = 0;
+  return Array.from(line, (_, index) => {
+    const previous = line[index - 1];
+    at += previous && ".!?".includes(previous) ? 260 : previous === "," ? 120 : 20;
+    return at;
+  });
+}
+
+function prefersReducedMotion() {
+  return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+/**
+ * First-run hello: no modal and no blur. Kana stays in view and speaks
+ * through a game-style dialogue box; clicking the box finishes her line.
+ */
+function Greeting({ name, line, start, instant, dialogRef, startRef, onKeyDown, onStart }: {
+  name: string;
+  line: string;
+  start: string;
+  instant: boolean;
+  dialogRef: React.RefObject<HTMLElement | null>;
+  startRef: React.RefObject<HTMLButtonElement | null>;
+  onKeyDown(event: React.KeyboardEvent<HTMLElement>): void;
+  onStart(): void;
+}) {
+  const [animate] = useState(() => !instant && !prefersReducedMotion());
+  const [shown, setShown] = useState(animate ? 0 : line.length);
+
+  // Paced by elapsed time, not by timer ticks, so a busy frame (the avatar
+  // renders on the same thread) never slows the line down.
+  useEffect(() => {
+    if (!animate) return;
+    const schedule = typingSchedule(line);
+    const began = performance.now();
+    let frame = 0;
+    const tick = (now: number) => {
+      let count = 0;
+      while (count < schedule.length && schedule[count] <= now - began) count += 1;
+      setShown((current) => Math.max(current, count));
+      if (count < schedule.length) frame = window.requestAnimationFrame(tick);
+    };
+    frame = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(frame);
+  }, [animate, line]);
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-end justify-center px-4 pb-[max(24px,env(safe-area-inset-bottom))] sm:px-8 sm:pb-8">
+      <section
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="kana-greeting-name"
+        aria-describedby="kana-greeting-line"
+        onKeyDown={onKeyDown}
+        onClick={() => setShown(line.length)}
+        className="kana-greeting relative w-full max-w-[640px]"
+      >
+        <p id="kana-greeting-name" className="kana-greeting-name">{name}</p>
+        <p id="kana-greeting-line" className="sr-only">{line}</p>
+        {/* The full line reserves the box's height so it never grows while typing. */}
+        <p className="kana-greeting-text grid" aria-hidden="true">
+          <span className="invisible col-start-1 row-start-1">{line}</span>
+          <span className="col-start-1 row-start-1">{line.slice(0, shown)}</span>
+        </p>
+        <div className="mt-4 flex justify-end">
+          <button
+            ref={startRef}
+            type="button"
+            className={`${btnPrimary} min-w-36`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onStart();
+            }}
+          >
+            {start}
+            <ChevronRightIcon className="size-4" />
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
 
 function StepHeading({ kicker, title, body, headingRef }: {
   kicker: string;
@@ -32,12 +123,12 @@ function StepHeading({ kicker, title, body, headingRef }: {
 }) {
   return (
     <div>
-      <p className="text-xs font-medium text-muted">{kicker}</p>
+      <p className="text-xs font-bold text-muted">{kicker}</p>
       <h1
         id="onboarding-title"
         ref={headingRef}
         tabIndex={-1}
-        className="mt-1.5 text-[22px] leading-tight font-bold tracking-tight text-ink outline-none"
+        className="mt-1.5 text-2xl leading-tight font-extrabold text-ink outline-none"
       >
         {title}
       </h1>
@@ -53,6 +144,8 @@ export function OnboardingWizard({
   onComplete,
   onDismiss,
   onOpenSettings,
+  onGreetingChange,
+  onGreet,
 }: OnboardingDialogProps) {
   const steps = mode === "full" ? ([0, 1, 2, 3] as const) : ([3] as const);
   const [stepIndex, setStepIndex] = useState(0);
@@ -61,7 +154,11 @@ export function OnboardingWizard({
   const [notice, setNotice] = useState<string | null>(null);
   const { dialogRef, onDialogKeyDown } = useDialogFocus();
   const headingRef = useRef<HTMLHeadingElement | null>(null);
+  const startRef = useRef<HTMLButtonElement | null>(null);
+  // Coming back from the next step shows Kana's line at once.
+  const [greeted, setGreeted] = useState(false);
   const step = steps[stepIndex];
+  const greeting = step === 0;
   const { common, onboarding: text } = getCopy(draft.uiLocale);
   const hermesHealthy = deps.hermes !== "missing";
   const voiceHealthy = !draft.voiceEnabled || deps.voice === "ok" || deps.voice === "loading" || deps.voice === "stopped" || deps.voice === null;
@@ -69,10 +166,20 @@ export function OnboardingWizard({
   // Move focus to each step's title so screen readers announce the new step
   // instead of leaving focus on a button whose label may not have changed.
   // Scheduled after useDialogFocus's own initial focus frame.
+  // The greeting focuses its start button instead, announced with Kana's line.
   useEffect(() => {
-    const frame = window.requestAnimationFrame(() => headingRef.current?.focus());
+    const frame = window.requestAnimationFrame(() => (greeting ? startRef : headingRef).current?.focus());
     return () => window.cancelAnimationFrame(frame);
-  }, [stepIndex]);
+  }, [greeting, stepIndex]);
+
+  useEffect(() => {
+    onGreetingChange?.(greeting);
+  }, [greeting, onGreetingChange]);
+  useEffect(() => () => onGreetingChange?.(false), [onGreetingChange]);
+
+  useEffect(() => {
+    if (greeting && !greeted) onGreet?.();
+  }, [greeted, greeting, onGreet]);
 
   const finish = async () => {
     setSaving(true);
@@ -106,64 +213,40 @@ export function OnboardingWizard({
       return;
     }
     setNotice(null);
+    if (greeting) setGreeted(true);
     setStepIndex((current) => current + 1);
   };
 
+  // The greeting is not a numbered step: count only the setup screens.
   const kicker = (label: string) =>
-    mode === "repair" ? label : `${text.stepOf(stepIndex + 1, steps.length)} · ${label}`;
+    mode === "repair" ? label : `${text.stepOf(stepIndex, steps.length - 1)} · ${label}`;
+
+  if (greeting) {
+    return (
+      <Greeting
+        name={text.greetingName}
+        line={text.greetingText}
+        start={text.greetingStart}
+        instant={greeted}
+        dialogRef={dialogRef}
+        startRef={startRef}
+        onKeyDown={onDialogKeyDown}
+        onStart={goNext}
+      />
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-40 grid place-items-center overflow-y-auto bg-[var(--backdrop)] p-6 backdrop-blur-md max-sm:p-0">
       <section
-        className="kana-settings-shell relative flex h-[min(580px,92dvh)] w-[min(560px,100%)] flex-col overflow-hidden rounded-2xl border border-line bg-raised max-sm:h-dvh max-sm:rounded-none max-sm:border-0"
+        className="kana-settings-shell relative flex h-[min(580px,92dvh)] w-[min(560px,100%)] flex-col overflow-hidden rounded-[36px] bg-raised max-sm:h-dvh max-sm:rounded-none"
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="onboarding-title"
         onKeyDown={onDialogKeyDown}
       >
-        {mode === "full" ? (
-          <div
-            className="flex gap-1 px-8 pt-7 max-sm:px-5 max-sm:pt-5"
-            role="progressbar"
-            aria-label={text.stepOf(stepIndex + 1, steps.length)}
-            aria-valuemin={1}
-            aria-valuemax={steps.length}
-            aria-valuenow={stepIndex + 1}
-          >
-            {steps.map((item, index) => (
-              <span
-                key={item}
-                className={`h-1 flex-1 rounded-full transition-colors duration-300 ${index <= stepIndex ? "bg-accent" : "bg-line-strong/70"}`}
-              />
-            ))}
-          </div>
-        ) : null}
-
-        <main className="min-h-0 flex-1 overflow-y-auto px-8 pt-7 pb-4 max-sm:px-5 max-sm:pt-6">
-          {step === 0 ? (
-            <div>
-              <StepHeading headingRef={headingRef} kicker={kicker(text.welcomeEyebrow)} title={text.welcomeTitle} body={text.welcomeBody} />
-              <ol className="mt-6 divide-y divide-line">
-                {text.welcomePlan.map((item, index) => {
-                  const Icon = PLAN_ICONS[index] ?? PlugIcon;
-                  return (
-                    <li key={item.title} className="flex items-center gap-3.5 py-3.5">
-                      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-surface-strong text-ink-dim" aria-hidden="true">
-                        <Icon className="size-[18px]" />
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block text-[13px] font-medium text-ink">{item.title}</span>
-                        <span className="mt-0.5 block text-[11.5px] leading-relaxed text-muted">{item.body}</span>
-                      </span>
-                    </li>
-                  );
-                })}
-              </ol>
-              <p className="mt-3 text-[11.5px] text-faint">{text.welcomeLater}</p>
-            </div>
-          ) : null}
-
+        <main className="min-h-0 flex-1 overflow-y-auto px-8 pt-9 pb-4 max-sm:px-5 max-sm:pt-7">
           {step === 1 ? (
             <div>
               <StepHeading headingRef={headingRef} kicker={kicker(text.languageEyebrow)} title={text.languageTitle} body={text.languageBody} />
@@ -196,18 +279,17 @@ export function OnboardingWizard({
                       aria-checked={active}
                       key={sample.id}
                       onClick={() => selectAvatar(index)}
-                      className={`kana-focus flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${active ? "border-accent bg-accent/8" : "border-line-strong hover:bg-surface-strong/60"}`}
+                      className={`kana-focus kana-choice flex items-center justify-between gap-3 rounded-[26px] px-4 py-3 text-left ${active ? "is-selected" : ""}`}
                     >
                       <span className="min-w-0">
                         <span className="block text-[13px] font-semibold text-ink">{sample.name}</span>
                         <span className="mt-0.5 block text-[11.5px] text-muted">{text.officialSample}</span>
                       </span>
-                      <span
-                        className={`grid size-5 shrink-0 place-items-center rounded-full border ${active ? "border-accent bg-accent text-on-accent" : "border-line-strong"}`}
-                        aria-hidden="true"
-                      >
-                        {active ? <CheckIcon className="size-3" /> : null}
-                      </span>
+                      {active ? (
+                        <span className="kana-check" aria-hidden="true"><CheckIcon className="size-3.5" /></span>
+                      ) : (
+                        <span className="size-6 shrink-0 rounded-full border-[3px] border-line-strong" aria-hidden="true" />
+                      )}
                     </button>
                   );
                 })}
@@ -252,7 +334,7 @@ export function OnboardingWizard({
             </div>
           ) : null}
 
-          {notice ? <p className="mt-4 rounded-lg border border-danger/25 bg-danger/8 px-3 py-2 text-xs text-danger" role="status">{notice}</p> : null}
+          {notice ? <p className="mt-4 rounded-[20px] border-2 border-danger/25 bg-danger/8 px-4 py-2 text-xs text-danger" role="status">{notice}</p> : null}
         </main>
 
         <footer className="flex items-center justify-between gap-3 px-8 pt-3 pb-7 max-sm:px-5 max-sm:pb-[max(20px,env(safe-area-inset-bottom))]">

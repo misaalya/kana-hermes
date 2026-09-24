@@ -100,7 +100,7 @@ export function AgentInputDialog({
       }}
     >
       <section
-        className="w-[min(480px,100%)] rounded-2xl border border-line bg-bg p-3"
+        className="w-[min(480px,100%)] rounded-[32px] border-2 border-line bg-bg p-4"
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
@@ -162,7 +162,7 @@ export function AgentInputDialog({
               <div className="mb-2 flex flex-wrap gap-1.5 rounded-2xl border border-line bg-surface p-3">
                 {request.choices.map((choice) => (
                   <button
-                    className="rounded-md border border-line-strong px-3 py-1.5 text-xs font-semibold text-ink-dim transition-colors hover:border-accent hover:text-accent-strong"
+                    className="kana-pill kana-pill-soft px-3.5 py-1.5 text-xs"
                     disabled={submitting}
                     key={choice}
                     onClick={() =>

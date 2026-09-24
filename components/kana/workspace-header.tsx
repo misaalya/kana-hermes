@@ -17,21 +17,25 @@ export function WorkspaceHeader() {
   const live2d = useKanaStore("preferences", (state) => state.preferences.live2d);
   const title = useKanaStore("conversations", (state) => selectActiveConversation(state)?.title);
   const avatarLayoutOpen = useKanaStore("workspace", (state) => state.avatarLayoutOpen);
+  const greeting = useKanaStore("workspace", (state) => state.greeting);
   const updateAvatarLayout = useUpdateAvatarLayout();
   const copy = getCopy(locale);
   const text = copy.workspace;
   const setWorkspace = workspace.stores.workspace.setState;
 
   return (
-    <header className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-4 p-4 max-sm:p-3">
+    <header
+      className={`kana-workspace-header pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-4 p-4 max-sm:p-3 ${greeting ? "is-away" : ""}`}
+      inert={greeting || undefined}
+    >
       {/* Phones and tablets use that corner for the avatar tile. */}
       <div className="pointer-events-auto min-w-0 max-lg:hidden">
-        <p className="kana-session-title max-w-[34vw] truncate px-3 py-2 text-xs font-bold text-ink">
+        <p className="kana-session-title max-w-[34vw] truncate">
           {title ?? text.newMoment}
         </p>
       </div>
 
-      <nav className="pointer-events-auto ml-auto flex items-center gap-2" aria-label={text.actions}>
+      <nav className="kana-bar pointer-events-auto ml-auto" aria-label={text.actions}>
         <button
           type="button"
           className="kana-workspace-action kana-focus"
@@ -39,7 +43,7 @@ export function WorkspaceHeader() {
           aria-label={text.switchTheme(theme === "dark" ? "light" : "dark")}
         >
           {theme === "dark" ? <SunIcon /> : <MoonIcon />}
-          <span className="max-sm:sr-only">{theme === "dark" ? text.light : text.dark}</span>
+          <span className="kana-tip">{theme === "dark" ? text.light : text.dark}</span>
         </button>
         <AvatarLayoutControl
           layout={live2DModelLayout(live2d)}
@@ -56,7 +60,7 @@ export function WorkspaceHeader() {
           aria-label={text.openHistory}
         >
           <HistoryIcon />
-          <span className="max-sm:sr-only">{text.history}</span>
+          <span className="kana-tip">{text.history}</span>
         </button>
         <button
           type="button"
@@ -65,7 +69,7 @@ export function WorkspaceHeader() {
           aria-label={text.openSettings}
         >
           <SettingsIcon />
-          <span className="max-sm:sr-only">{text.settings}</span>
+          <span className="kana-tip">{text.settings}</span>
         </button>
       </nav>
     </header>

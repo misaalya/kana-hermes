@@ -137,6 +137,6 @@ export function ComposerDictation({ locale, disabled, onText, onActive, onNotice
 
   const label = active ? text.stopDictation : text.startDictation;
   return <button type="button" aria-label={label} title={label} aria-pressed={active} disabled={disabled}
-    className={`kana-focus inline-flex size-10 shrink-0 items-center justify-center rounded-lg hover:bg-white/12 disabled:opacity-40 ${active ? "bg-red-500/35 animate-pulse" : ""}`}
+    className={`kana-focus inline-flex size-10 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-white/16 disabled:opacity-40 ${active ? "bg-red-500/35 animate-pulse" : ""}`}
     onClick={() => void toggle()}><MicrophoneIcon className="size-[18px]" /></button>;
 }

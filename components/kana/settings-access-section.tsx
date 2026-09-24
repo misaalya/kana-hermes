@@ -9,9 +9,9 @@ import {
 } from "@/lib/runtime/auth-client";
 import { getCopy, type UiLocale } from "@/lib/ui/copy";
 import { passwordPolicyError } from "@/shared/password-policy.mjs";
+import { LogoutIcon } from "./icons";
 import {
   settingsButton,
-  settingsButtonDanger,
   SettingsGroup,
   settingsInput,
   SettingsRow,
@@ -94,8 +94,13 @@ export function SecuritySection({ locale }: { locale: UiLocale }) {
           </div>
         </div>
       </SettingsRow>
-      <SettingsRow label={copy.logout} description={copy.logoutDescription}>
-        <button type="button" className={settingsButtonDanger} onClick={() => void logoutAccessSession()}>
+      <SettingsRow label={<span className="text-danger">{copy.logout}</span>} description={copy.logoutDescription}>
+        <button
+          type="button"
+          className="kana-focus kana-pill kana-pill-danger min-h-9 shrink-0 whitespace-nowrap px-4 text-xs"
+          onClick={() => void logoutAccessSession()}
+        >
+          <LogoutIcon className="size-4" />
           {copy.logout}
         </button>
       </SettingsRow>
@@ -136,7 +141,7 @@ export function AdvancedConfigCard({ locale }: { locale: UiLocale }) {
     <SettingsGroup title={copy.advancedTitle} description={copy.advancedBody}>
       <SettingsRows>
         <SettingsRow label="config.json" description={copy.advancedRestart} stacked>
-          <code className="block overflow-x-auto rounded-lg border border-line bg-surface-strong/60 px-3 py-2 text-[11.5px] text-ink-dim">
+          <code className="block overflow-x-auto rounded-[18px] bg-surface-strong px-3.5 py-2 text-[11.5px] text-ink-dim">
             {configPath}
           </code>
           {configError ? (

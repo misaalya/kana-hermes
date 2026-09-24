@@ -1,5 +1,15 @@
 @import "tailwindcss";
 
+/* M PLUS Rounded 1c draws U+2026 as a centred Japanese ellipsis ("···").
+   Borrow a baseline ellipsis from a common system sans for that one glyph;
+   when none is installed the rounded font's own glyph is used. */
+@font-face {
+  font-family: "Kana Ellipsis";
+  src: local("Segoe UI"), local("Helvetica Neue"), local("HelveticaNeue"), local("Roboto"),
+    local("Arial"), local("DejaVu Sans"), local("Liberation Sans"), local("Noto Sans");
+  unicode-range: U+2026;
+}
+
 @theme inline {
   --color-bg: var(--bg);
   --color-raised: var(--raised);
@@ -17,8 +27,8 @@
   --color-on-accent: var(--on-accent);
   --color-danger: var(--danger);
 
-  --font-sans: var(--font-kana-sans), ui-rounded, system-ui, sans-serif;
-  --font-jp: var(--font-kana-jp), var(--font-kana-sans), ui-rounded, sans-serif;
+  --font-sans: var(--kana-font);
+  --font-jp: var(--kana-font);
 
   --animate-kana-pulse: kana-pulse 1.6s ease-in-out infinite;
   --animate-kana-float: kana-float 6s ease-in-out infinite;
@@ -28,6 +38,11 @@
 
 :root {
   color-scheme: dark;
+  --kana-font: "Kana Ellipsis", var(--font-kana-sans), ui-rounded, system-ui, sans-serif;
+  /* Springy ease for the game-menu motion (lift, pop, sliding thumbs). */
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* White sticker stroke around the phone avatar tile, in both themes. */
+  --sticker: #ffffff;
   --bg: #1c1c1c;
   --raised: #1c1c1c;
   --surface: #242424;
@@ -122,6 +137,32 @@ button,
   background: var(--bg);
 }
 
+/* Drifting polka dots for full-screen states (sign-in, loading), in the
+   brand pattern ink. */
+.kana-dots {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.kana-dots::before {
+  position: fixed;
+  inset: -80px;
+  z-index: -1;
+  background-image:
+    radial-gradient(circle, var(--kana-pattern-blue-soft) 0 11px, transparent 12px),
+    radial-gradient(circle, var(--kana-pattern-blue-soft) 0 6px, transparent 7px);
+  background-position: 0 0, 40px 40px;
+  background-size: 80px 80px;
+  animation: kana-drift 22s linear infinite;
+  content: "";
+  pointer-events: none;
+}
+
+@keyframes kana-drift {
+  to { transform: translate(80px, 80px); }
+}
+
 .kana-stage-backdrop {
   background: var(--bg);
 }
@@ -196,33 +237,379 @@ button,
   background: var(--raised);
 }
 
+/* ---- Game-menu components, after the Clara dressing-room screen ----
+   Flat colour shapes only: no drop shadows anywhere. Motion is a springy
+   lift on hover and a small press on click; the global reduced-motion rule
+   below turns it off. */
+
+/* Conversation title: the brand-blue name chip. */
 .kana-session-title {
-  border: 2px solid var(--line-strong);
-  border-radius: 12px;
-  background: var(--raised);
+  display: block;
+  border-radius: 999px;
+  background: var(--accent);
+  padding: 9px 18px;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+/* Header actions: a blue pill tray of round tabs. */
+.kana-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+  background: var(--accent);
+  padding: 5px;
 }
 
 .kana-workspace-action {
-  display: inline-flex;
-  min-height: 40px;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  border: 2px solid var(--line-strong);
-  border-radius: 12px;
-  background: var(--raised);
-  padding-inline: 12px;
-  color: var(--ink-dim);
-  font-size: 11px;
-  font-weight: 700;
-  transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease, transform 160ms ease;
+  position: relative;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  padding: 0;
+  color: #ffffff;
+  transition: transform 250ms var(--spring), background-color 150ms ease, color 150ms ease;
+}
+
+.kana-workspace-action svg {
+  width: 20px;
+  height: 20px;
 }
 
 .kana-workspace-action:hover {
+  background: rgb(255 255 255 / 18%);
+  transform: translateY(-2px);
+}
+
+/* The label bubble under a tab, shown while it is pointed at or open. */
+.kana-tip {
+  position: absolute;
+  top: calc(100% + 11px);
+  left: 50%;
+  display: none;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: var(--chat-bubble);
+  padding: 3px 11px;
+  color: var(--chat-text);
+  font-size: 12.5px;
+  font-weight: 800;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.kana-workspace-action:hover .kana-tip,
+.kana-workspace-action:focus-visible .kana-tip,
+.kana-workspace-action[aria-expanded="true"] .kana-tip {
+  display: block;
+}
+
+/* Section label: a small rounded bubble. */
+.kana-label-bubble {
+  display: inline-block;
+  border-radius: 999px;
+  background: var(--chat-bubble);
+  padding: 3px 11px;
+  color: var(--chat-text);
+  font-size: 11.5px;
+  font-weight: 800;
+}
+
+/* Pills: heavy rounded buttons that hop up on hover. */
+.kana-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 0;
+  border-radius: 999px;
+  font-weight: 800;
+  transition: transform 250ms var(--spring), background-color 150ms ease, color 150ms ease;
+}
+
+.kana-pill:not(:disabled):hover {
+  transform: translateY(-2px);
+}
+
+.kana-pill:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+.kana-pill-accent {
+  background: repeating-linear-gradient(-45deg, var(--accent) 0 14px, var(--accent-hover) 14px 28px);
+  color: var(--on-accent);
+}
+
+.kana-pill-soft {
+  background: var(--surface-strong);
+  color: var(--ink);
+}
+
+.kana-pill-soft:not(:disabled):hover {
+  color: var(--accent-strong);
+}
+
+/* Logout and other leave-the-app actions: red tint that fills on hover. */
+.kana-pill-danger {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
+}
+
+.kana-pill-danger:not(:disabled):hover {
+  background: var(--danger);
+  color: #fff;
+}
+
+/* Choice cards: a ring and a round check badge mark the selection. */
+.kana-choice {
+  position: relative;
+  border: 3px solid var(--line);
+  background: var(--raised);
+  transition: transform 250ms var(--spring), border-color 150ms ease;
+}
+
+.kana-choice:not(:disabled):hover {
+  transform: translateY(-3px) rotate(-0.6deg);
+}
+
+.kana-choice:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+.kana-choice.is-selected {
   border-color: var(--accent);
+}
+
+/* List rows (conversation history): no frame until hovered or chosen. */
+.kana-choice.is-plain {
+  border-color: transparent;
+  background: transparent;
+}
+
+.kana-choice.is-plain:not(:disabled):hover {
+  background: var(--surface-strong);
+  transform: translateX(3px);
+}
+
+.kana-choice.is-plain.is-selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--raised));
+}
+
+.kana-check {
+  position: absolute;
+  top: -9px;
+  right: -9px;
+  z-index: 1;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 3px solid var(--sticker);
+  border-radius: 999px;
+  background: var(--accent);
+  color: #ffffff;
+  animation: kana-pop 350ms var(--spring);
+}
+
+/* Inside a clipped card (previews, carousels) the badge sits in the corner. */
+.kana-check.is-inset {
+  top: 8px;
+  right: 8px;
+}
+
+@keyframes kana-pop {
+  from { transform: scale(0); }
+}
+
+/* Segmented control: a pill track with a sliding blue thumb. */
+.kana-seg {
+  position: relative;
+  display: inline-flex;
+  gap: 4px;
+  border-radius: 999px;
+  background: var(--surface-strong);
+  padding: 4px;
+}
+
+.kana-seg-thumb {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: transform 400ms var(--spring), width 400ms var(--spring);
+}
+
+.kana-seg-option {
+  position: relative;
+  z-index: 1;
+  border-radius: 999px;
+  color: var(--ink-dim);
+  font-weight: 700;
+  transition: color 200ms ease;
+}
+
+.kana-seg-option:hover {
+  color: var(--ink);
+}
+
+.kana-seg-option[aria-checked="true"] {
+  color: var(--on-accent);
+}
+
+/* Custom dropdown (no native select popups). */
+.kana-select {
+  display: flex;
+  width: 100%;
+  min-height: 40px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--surface-strong);
+  padding-inline: 16px 6px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: left;
+  transition: border-color 150ms ease;
+}
+
+.kana-select:not(:disabled):hover,
+.kana-select[aria-expanded="true"] {
+  border-color: var(--accent);
+}
+
+.kana-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.kana-select-chevron {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #ffffff;
+  transition: transform 250ms var(--spring);
+}
+
+.kana-select[aria-expanded="true"] .kana-select-chevron {
+  transform: rotate(180deg);
+}
+
+.kana-select-popup {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 2px solid var(--line-strong);
+  border-radius: 24px;
+  background: var(--raised);
+  padding: 6px;
+  color: var(--ink);
+  animation: kana-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.kana-select-list {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.kana-select-list:focus {
+  outline: none;
+}
+
+.kana-select-search {
+  display: flex;
+  min-height: 40px;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--surface-strong);
+  padding-inline: 14px;
+  color: var(--accent);
+  transition: border-color 150ms ease;
+}
+
+.kana-select-search:focus-within {
+  border-color: var(--accent);
+}
+
+.kana-select-search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: 700 13px/1.2 var(--kana-font);
+  outline: none;
+}
+
+.kana-select-search input::placeholder {
+  color: var(--faint);
+  font-weight: 700;
+}
+
+.kana-select-empty {
+  padding: 10px 14px 12px;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.kana-select-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-radius: 18px;
+  padding: 8px 12px 8px 14px;
+  color: var(--ink-dim);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.kana-select-option.is-active {
+  background: var(--surface-strong);
+  color: var(--ink);
+}
+
+.kana-select-option[aria-selected="true"] {
   background: var(--accent);
   color: var(--on-accent);
-  transform: translateY(-1px);
+}
+
+.kana-select-badge {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  padding: 1px 8px;
+  color: var(--accent-strong);
+  font-size: 10.5px;
+  font-weight: 800;
+}
+
+.kana-select-option[aria-selected="true"] .kana-select-badge {
+  background: rgb(255 255 255 / 24%);
+  color: inherit;
 }
 
 /* Avoid Tailwind's arbitrary WebKit pseudo-element variant here. Turbopack's
@@ -239,13 +626,107 @@ button,
   display: none;
 }
 
+/* A disclosure led by a round "+" / "–" disc. */
+.kana-plus-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kana-plus-summary::before {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #ffffff;
+  content: "+";
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+details[open] > .kana-plus-summary::before {
+  content: "\2013";
+}
+
 .kana-chat-panel {
   border: 4px solid var(--chat-frame);
   background: var(--chat-depth);
 }
 
+/* Hermes activity: a soft rounded row with a "+" / "–" disc. */
+.kana-activity {
+  border-radius: 22px;
+  background: var(--surface-strong);
+}
+
+.kana-activity-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kana-activity-title::before {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #ffffff;
+  content: "+";
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.kana-activity[open] .kana-activity-title::before {
+  content: "\2013";
+}
+
+.kana-activity-count {
+  border-radius: 999px;
+  background: var(--chat-bubble);
+  padding: 2px 10px;
+  color: var(--chat-text);
+  font-weight: 800;
+}
+
+.kana-chat-dock {
+  transition: transform 300ms ease-out, opacity 250ms ease;
+}
+
 .kana-chat-dock.is-closed {
   transform: translateX(calc(100% - 2px));
+}
+
+/* Kana's first-run greeting clears the stage: chat and header step away. */
+.kana-workspace-header {
+  transition: opacity 250ms ease;
+}
+
+.kana-chat-dock.is-away,
+.kana-workspace-header.is-away {
+  opacity: 0;
+  visibility: hidden;
+  transition: transform 300ms ease-out, opacity 250ms ease, visibility 0s linear 250ms;
+}
+
+/* Phones hide the chat only while the avatar is positioned: fade it out in
+   place instead of sliding it sideways, so no sliver is left at the edge. */
+@media (max-width: 1023px) {
+  .kana-chat-dock {
+    transition: opacity 200ms ease, visibility 0s linear 0s;
+  }
+
+  .kana-chat-dock.is-closed {
+    transform: none;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 200ms ease, visibility 0s linear 200ms;
+  }
 }
 
 .kana-chat-toggle:focus-visible {
@@ -273,7 +754,7 @@ button,
 }
 
 .kana-composer textarea {
-  font-family: var(--font-kana-sans), ui-rounded, system-ui, sans-serif;
+  font-family: var(--kana-font);
   font-weight: 700;
   color: #ffffff;
 }
@@ -283,7 +764,7 @@ button,
 }
 
 .kana-composer button {
-  font-family: var(--font-kana-sans), ui-rounded, system-ui, sans-serif;
+  font-family: var(--kana-font);
   font-weight: 700;
   color: #ffffff;
 }
@@ -292,14 +773,123 @@ button,
   color: rgb(255 255 255 / 45%);
 }
 
+/* White pills on the blue tray: the model chooser and the send disc. */
+.kana-composer .kana-model-pill {
+  background: #ffffff;
+  color: #1c1c1c;
+  font-weight: 800;
+  transition: transform 250ms var(--spring);
+}
+
+.kana-composer .kana-model-pill:not(:disabled):hover {
+  transform: translateY(-2px);
+}
+
+.kana-composer .kana-model-pill:disabled {
+  background: rgb(255 255 255 / 45%);
+  color: #1c1c1c;
+}
+
+.kana-composer .kana-send:not(:disabled) {
+  background: #ffffff;
+  color: #356f91;
+  transition: transform 250ms var(--spring);
+}
+
+.kana-composer .kana-send:not(:disabled):hover {
+  transform: translateY(-2px);
+}
+
 .kana-composer .kana-model-dialog button {
   color: var(--ink);
+}
+
+.kana-composer .kana-model-dialog .kana-pill-accent {
+  color: var(--on-accent);
 }
 
 .kana-message-assistant {
   border-color: transparent;
   background: var(--chat-bubble);
   color: var(--chat-text);
+}
+
+/* First-run greeting: Kana speaks through a game-style dialogue box with a
+   tilted name tag, her words typed out as she says them. */
+.kana-greeting {
+  border: 4px solid var(--sticker);
+  border-radius: 36px;
+  background: var(--raised);
+  padding: 32px 32px 22px;
+  color: var(--ink);
+  animation: kana-greeting-in 500ms var(--spring) both;
+}
+
+.kana-greeting-name {
+  position: absolute;
+  top: -19px;
+  left: 28px;
+  border-radius: 999px;
+  background: var(--accent);
+  padding: 6px 20px;
+  color: var(--on-accent);
+  font-size: 15px;
+  font-weight: 800;
+  transform: rotate(-3deg);
+}
+
+.kana-greeting-text {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.75;
+}
+
+@media (max-width: 639px) {
+  .kana-greeting {
+    border-radius: 30px;
+    padding: 28px 22px 18px;
+  }
+
+  .kana-greeting-text {
+    font-size: 15.5px;
+  }
+}
+
+@keyframes kana-greeting-in {
+  from { opacity: 0; transform: translateY(28px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Typing bubble, as in chat apps: three dots that hop in turn. */
+.kana-typing {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 2px solid transparent;
+  border-radius: 24px;
+  padding: 14px 16px;
+}
+
+.kana-typing > span {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.35;
+  animation: kana-typing 1.2s ease-in-out infinite;
+}
+
+.kana-typing > span:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.kana-typing > span:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+@keyframes kana-typing {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.35; }
+  30% { transform: translateY(-5px); opacity: 0.85; }
 }
 
 .kana-message-user {
@@ -340,18 +930,30 @@ button,
 }
 
 .kana-settings-nav-item {
+  border-radius: 999px;
   color: var(--ink-dim);
+  font-weight: 700;
+  transition: background-color 150ms ease, color 150ms ease, transform 250ms var(--spring);
+}
+
+.kana-settings-nav-item svg {
+  color: var(--accent);
 }
 
 .kana-settings-nav-item:hover {
   background: color-mix(in srgb, var(--surface-strong) 75%, transparent);
   color: var(--ink);
+  transform: translateX(2px);
 }
 
 .kana-settings-nav-item.is-active {
-  background: var(--surface-strong);
-  color: var(--ink);
-  font-weight: 600;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 800;
+}
+
+.kana-settings-nav-item.is-active svg {
+  color: currentColor;
 }
 
 .kana-settings-nav {
@@ -363,8 +965,8 @@ button,
 }
 
 .kana-focus:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 75%, transparent);
-  outline-offset: 2px;
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
 }
 
 @keyframes kana-pulse {
@@ -435,67 +1037,51 @@ button,
   }
 }
 
-.kana-settings-shell {
-  box-shadow: 0 24px 80px -24px rgb(0 0 0 / 45%);
-}
-
-.kana-segment-active {
-  box-shadow: 0 0 0 1px var(--line-strong);
-}
-
-@media (max-width: 767px) {
-  .kana-settings-shell {
-    box-shadow: none;
-  }
-}
-
 .kana-popover {
-  box-shadow: 0 12px 32px -12px rgb(0 0 0 / 30%);
+  border: 2px solid var(--line-strong);
 }
 
 .kana-range {
-  height: 18px;
+  height: 24px;
   appearance: none;
   background: transparent;
   cursor: pointer;
 }
 
 .kana-range::-webkit-slider-runnable-track {
-  height: 4px;
+  height: 8px;
   border-radius: 999px;
   background: linear-gradient(to right, var(--accent) var(--kana-range-fill, 50%), var(--surface-strong) var(--kana-range-fill, 50%));
 }
 
 .kana-range::-moz-range-track {
-  height: 4px;
+  height: 8px;
   border-radius: 999px;
   background: var(--surface-strong);
 }
 
 .kana-range::-moz-range-progress {
-  height: 4px;
+  height: 8px;
   border-radius: 999px;
   background: var(--accent);
 }
 
 .kana-range::-webkit-slider-thumb {
-  width: 14px;
-  height: 14px;
-  margin-top: -5px;
+  width: 20px;
+  height: 20px;
+  margin-top: -6px;
   appearance: none;
-  border: 1px solid var(--line-strong);
+  border: 3px solid var(--accent);
   border-radius: 999px;
-  background: var(--raised);
-  box-shadow: 0 1px 3px rgb(0 0 0 / 25%);
+  background: #ffffff;
 }
 
 .kana-range::-moz-range-thumb {
   width: 14px;
   height: 14px;
-  border: 1px solid var(--line-strong);
+  border: 3px solid var(--accent);
   border-radius: 999px;
-  background: var(--raised);
-  box-shadow: 0 1px 3px rgb(0 0 0 / 25%);
+  background: #ffffff;
 }
 
 .kana-layout-surface {
@@ -527,10 +1113,11 @@ button,
 
 /* An open control stays filled with a white icon in both themes; the rule
    comes after :hover so hovering an open control does not change it. */
+/* An open tab is the white disc, like the selected tab on Clara's bar. */
 .kana-workspace-action[aria-expanded="true"] {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: #ffffff;
+  background: #ffffff;
+  color: var(--accent);
+  transform: scale(1.1);
 }
 
 /* Stage edges covered by the workspace UI. The Live2D fit reads the resolved
@@ -548,7 +1135,7 @@ button,
 }
 
 .kana-avatar-content {
-  --kana-avatar-safe-top: 76px;
+  --kana-avatar-safe-top: 84px;
   --kana-avatar-safe-bottom: 0px;
 }
 
@@ -583,8 +1170,9 @@ button,
   z-index: 20;
   width: var(--kana-compact-width);
   height: var(--kana-compact-height);
-  border: 2px solid var(--line-strong);
-  border-radius: 18px;
+  /* The avatar tile reads as a sticker: a thick white stroke. */
+  border: 4px solid var(--sticker);
+  border-radius: 24px;
 }
 
 .kana-stage-pattern.is-compact .kana-avatar-content {

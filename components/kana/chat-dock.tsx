@@ -2,7 +2,6 @@
 
 import type { KanaMessage } from "@/lib/conversation/types";
 import { selectActiveConversation } from "@/lib/store/conversation-store";
-import { isVoiceActive } from "@/lib/store/voice-store";
 import { getCopy } from "@/lib/ui/copy";
 import { ChatComposer } from "./chat-composer";
 import { ChevronLeftIcon, ChevronRightIcon } from "./icons";
@@ -18,14 +17,16 @@ function ChatFeed() {
   const serverActivityTurns = useKanaStore("activity", (state) => state.serverActivityTurns);
   const busy = useKanaStore("agentSession", (state) => state.busy);
   const status = useKanaStore("agentSession", (state) => state.status);
-  const voiceActive = useKanaStore("voice", (state) => isVoiceActive(state.runtimeState));
+  // Speech is synthesized before the reply text is revealed, which can take a
+  // while on slower machines: keep the typing bubble up until it plays.
+  const synthesizing = useKanaStore("voice", (state) => state.runtimeState === "synthesizing");
   const locale = useKanaStore("preferences", (state) => state.preferences.uiLocale);
   return (
     <LiveChatFeed
       messages={messages}
       activities={activities}
       serverActivityTurns={serverActivityTurns}
-      busy={busy || voiceActive}
+      typing={busy || synthesizing}
       status={status}
       locale={locale}
     />
@@ -36,10 +37,11 @@ export function ChatDock() {
   const workspace = useKanaWorkspace();
   const locale = useKanaStore("preferences", (state) => state.preferences.uiLocale);
   const chatVisible = useChatVisible();
+  const greeting = useKanaStore("workspace", (state) => state.greeting);
   const text = getCopy(locale).workspace;
 
   return (
-    <div className={`kana-chat-dock absolute bottom-4 right-4 top-[76px] z-10 w-[min(34vw,480px)] min-w-[390px] transition-transform duration-300 ease-out max-lg:inset-x-0 max-lg:bottom-0 max-lg:top-[var(--kana-compact-band)] max-lg:w-full max-lg:min-w-0 ${chatVisible ? "" : "is-closed"}`}>
+    <div className={`kana-chat-dock absolute bottom-4 right-4 top-[84px] z-10 w-[min(34vw,480px)] min-w-[390px] transition-transform duration-300 ease-out max-lg:inset-x-0 max-lg:bottom-0 max-lg:top-[var(--kana-compact-band)] max-lg:w-full max-lg:min-w-0 ${chatVisible ? "" : "is-closed"} ${greeting ? "is-away" : ""}`}>
       <button
         type="button"
         className="kana-chat-toggle absolute -left-12 top-1/2 z-20 h-28 w-12 -translate-y-1/2 text-accent hover:text-accent-hover max-lg:hidden"
@@ -68,7 +70,7 @@ export function ChatDock() {
         id="kana-chat-panel"
         inert={chatVisible ? undefined : true}
         aria-hidden={!chatVisible}
-        className="kana-chat-panel flex h-full w-full flex-col overflow-hidden rounded-[22px] max-lg:rounded-none"
+        className="kana-chat-panel flex h-full w-full flex-col overflow-hidden rounded-[36px] max-lg:rounded-none"
       >
         <div className="flex min-h-0 flex-1">
           <ChatFeed />

@@ -32,8 +32,8 @@ function Workspace() {
 
   if (!ready) {
     return (
-      <main className="grid min-h-dvh place-items-center bg-bg">
-        <p className="text-[10px] font-bold tracking-[0.18em] text-muted uppercase animate-kana-pulse">
+      <main className="kana-dots grid min-h-dvh place-items-center bg-bg">
+        <p className="kana-label-bubble animate-kana-pulse">
           {getCopy(locale).workspace.preparing}
         </p>
       </main>

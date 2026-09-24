@@ -25,11 +25,10 @@ export type Copy = {
   onboarding: {
     checkup: string;
     saveFailed: string;
-    welcomeEyebrow: string;
-    welcomeTitle: string;
-    welcomeBody: string;
-    welcomePlan: ReadonlyArray<{ title: string; body: string }>;
-    welcomeLater: string;
+    /** Name tag over Kana's first-run greeting box. */
+    greetingName: string;
+    greetingText: string;
+    greetingStart: string;
     stepOf(step: number, total: number): string;
     officialSample: string;
     statusReady: string;
@@ -378,7 +377,10 @@ export type Copy = {
     modelLoadFailed: string;
     modelEmpty: string;
     modelRefresh: string;
-    modelCurrent: string;
+    modelActive: string;
+    modelSearch: string;
+    providerSearch: string;
+    modelSearchEmpty: string;
     modelProvider: string;
     modelName: string;
     modelConfirmNeeded: string;
@@ -395,8 +397,6 @@ export type Copy = {
     voiceEngineDescription: string;
     accessTitle: string;
     accessDescription: string;
-    privateTitle: string;
-    privateBody: string;
     avatarNamePrompt: string;
     removeAvatarConfirm(name: string): string;
     removeBackgroundConfirm(name: string): string;
@@ -509,15 +509,9 @@ const id: Copy = {
   onboarding: {
     checkup: "Pemeriksaan",
     saveFailed: "Pengaturan awal tidak dapat disimpan.",
-    welcomeEyebrow: "Selamat datang",
-    welcomeTitle: "Kenalan dulu dengan Kana",
-    welcomeBody: "Kana memberi wajah dan suara untuk Hermes Agent-mu. Hermes tetap yang berpikir dan bekerja. Ada tiga langkah singkat, tidak sampai semenit.",
-    welcomePlan: [
-      { title: "Bahasa", body: "Bahasa menu dan tombol Kana." },
-      { title: "Karakter dan suara", body: "Avatar Live2D dan suara Kana." },
-      { title: "Pemeriksaan", body: "Memastikan Hermes dan mesin suara siap." },
-    ],
-    welcomeLater: "Semua pilihan bisa diubah nanti di Pengaturan.",
+    greetingName: "Kana",
+    greetingText: "Hai, aku Kana! Aku yang akan menemanimu selama Hermes bekerja. Sebelum mulai, kita atur beberapa hal dulu, ya. Tidak sampai semenit, kok.",
+    greetingStart: "Yuk, mulai",
     stepOf: (step, total) => `Langkah ${step} dari ${total}`,
     officialSample: "Sampel resmi Live2D",
     statusReady: "Siap",
@@ -904,7 +898,10 @@ const id: Copy = {
     modelLoadFailed: "Model tidak dapat dimuat.",
     modelEmpty: "Hermes belum melaporkan provider dengan model yang siap digunakan.",
     modelRefresh: "Muat ulang model",
-    modelCurrent: "Model percakapan saat ini",
+    modelActive: "Aktif",
+    modelSearch: "Cari model…",
+    providerSearch: "Cari provider…",
+    modelSearchEmpty: "Tidak ada yang cocok.",
     modelProvider: "Provider",
     modelName: "Model",
     modelConfirmNeeded: "Hermes meminta konfirmasi biaya sebelum mengganti model.",
@@ -921,8 +918,6 @@ const id: Copy = {
     voiceEngineDescription: "Layanan lokal yang mengubah teks Jepang Kana menjadi suara.",
     accessTitle: "Perlindungan akses",
     accessDescription: "Atur siapa yang dapat membuka instalasi Kana ini.",
-    privateTitle: "Nilai privatmu tetap privat",
-    privateBody: "Kata sandi dan rahasia yang diminta Hermes dikirim langsung ke Hermes dan tidak pernah ditambahkan ke riwayat percakapan atau preferensi.",
     avatarNamePrompt: "Nama avatar",
     removeAvatarConfirm: (name) => `Hapus “${name}” dari browser ini?`,
     removeBackgroundConfirm: (name) => `Hapus ${name} dari perangkat ini?`,
@@ -1065,15 +1060,9 @@ const en: Copy = {
   onboarding: {
     checkup: "Checkup",
     saveFailed: "Could not save setup.",
-    welcomeEyebrow: "Welcome",
-    welcomeTitle: "Meet Kana",
-    welcomeBody: "Kana gives your Hermes agent a face and a voice. Hermes still does the thinking and the work. Three short steps, under a minute.",
-    welcomePlan: [
-      { title: "Language", body: "The language of Kana's menus and buttons." },
-      { title: "Character and voice", body: "Kana's Live2D avatar and voice." },
-      { title: "Checkup", body: "Makes sure Hermes and the voice engine are ready." },
-    ],
-    welcomeLater: "Every choice can be changed later in Settings.",
+    greetingName: "Kana",
+    greetingText: "Hi, I'm Kana! I'll keep you company while Hermes does the work. Let's set a few things up first. It takes less than a minute.",
+    greetingStart: "Let's go",
     stepOf: (step, total) => `Step ${step} of ${total}`,
     officialSample: "Official Live2D sample",
     statusReady: "Ready",
@@ -1460,7 +1449,10 @@ const en: Copy = {
     modelLoadFailed: "Could not load models.",
     modelEmpty: "Hermes did not report any configured provider with usable models.",
     modelRefresh: "Refresh models",
-    modelCurrent: "Current conversation model",
+    modelActive: "Active",
+    modelSearch: "Search models…",
+    providerSearch: "Search providers…",
+    modelSearchEmpty: "Nothing matches.",
     modelProvider: "Provider",
     modelName: "Model",
     modelConfirmNeeded: "Hermes requires a cost confirmation before changing models.",
@@ -1477,8 +1469,6 @@ const en: Copy = {
     voiceEngineDescription: "The local service that turns Kana's Japanese text into speech.",
     accessTitle: "Access protection",
     accessDescription: "Control who can open this Kana installation.",
-    privateTitle: "Your private values stay private",
-    privateBody: "Passwords and secrets requested by Hermes are sent directly to Hermes and never added to conversation history or preferences.",
     avatarNamePrompt: "Avatar name",
     removeAvatarConfirm: (name) => `Remove “${name}” from this browser?`,
     removeBackgroundConfirm: (name) => `Remove ${name} from this device?`,

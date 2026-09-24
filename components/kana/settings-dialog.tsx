@@ -40,13 +40,13 @@ import {
   CheckIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  BotIcon,
   CloseIcon,
-  LanguageIcon,
-  LockIcon,
-  PersonIcon,
-  PlugIcon,
-  SparkIcon,
-  SpeakerIcon,
+  GlobeIcon,
+  ServerIcon,
+  ShieldIcon,
+  SmileIcon,
+  WaveformIcon,
 } from "./icons";
 import { btnDangerGhost, btnGhost, Toggle } from "./ui";
 import {
@@ -87,12 +87,12 @@ type SettingsSection = "experience" | "voice" | "avatar" | "model" | "system" | 
 const NAV_IDS: SettingsSection[] = ["experience", "voice", "avatar", "model", "system", "privacy"];
 
 const SECTION_ICONS: Record<SettingsSection, (props: { className?: string }) => React.ReactElement> = {
-  experience: LanguageIcon,
-  voice: SpeakerIcon,
-  avatar: PersonIcon,
-  model: SparkIcon,
-  system: PlugIcon,
-  privacy: LockIcon,
+  experience: GlobeIcon,
+  voice: WaveformIcon,
+  avatar: SmileIcon,
+  model: BotIcon,
+  system: ServerIcon,
+  privacy: ShieldIcon,
 };
 
 type SettingsNavItem = {
@@ -459,7 +459,7 @@ export function SettingsDialog({
   const closeButton = (
     <button
       type="button"
-      className="kana-focus grid size-8 shrink-0 place-items-center rounded-lg text-muted transition-colors hover:bg-surface-strong hover:text-ink"
+      className="kana-focus grid size-9 shrink-0 place-items-center rounded-full bg-surface-strong text-muted transition-colors hover:text-ink"
       onClick={onClose}
       aria-label={settingsCopy.close}
     >
@@ -467,33 +467,33 @@ export function SettingsDialog({
     </button>
   );
   const carouselButton =
-    "kana-focus grid size-8 place-items-center rounded-lg border border-line-strong text-ink-dim transition-colors hover:bg-surface-strong hover:text-ink";
+    "kana-focus kana-pill grid size-9 place-items-center bg-accent text-white";
   const choiceCard = (active: boolean) =>
-    `kana-focus flex min-h-16 items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${
-      active ? "border-accent bg-accent/8" : "border-line-strong hover:bg-surface-strong/60"
+    `kana-focus kana-choice flex min-h-16 items-center justify-between gap-3 rounded-[26px] px-4 py-3 text-left ${
+      active ? "is-selected" : ""
     }`;
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-[var(--backdrop)] p-5 backdrop-blur-sm max-md:p-0" role="dialog" aria-modal="true" aria-label={settingsCopy.title}>
       <div
-        className="relative grid h-[min(760px,calc(100dvh-2.5rem))] w-full max-w-[980px] grid-cols-[228px_minmax(0,1fr)] overflow-hidden rounded-2xl border border-line-strong bg-raised kana-settings-shell max-md:h-dvh max-md:max-w-none max-md:grid-cols-1 max-md:grid-rows-[auto_minmax(0,1fr)] max-md:rounded-none max-md:border-0"
+        className="relative grid h-[min(760px,calc(100dvh-2.5rem))] w-full max-w-[980px] grid-cols-[228px_minmax(0,1fr)] overflow-hidden rounded-[36px] bg-raised kana-settings-shell max-md:h-dvh max-md:max-w-none max-md:grid-cols-1 max-md:grid-rows-[auto_minmax(0,1fr)] max-md:rounded-none"
         ref={dialogRef as React.Ref<HTMLDivElement>}
         onKeyDown={onDialogKeyDown}
       >
-        <aside className="flex min-h-0 flex-col border-r border-line bg-surface-strong/35 px-3 pb-4 pt-5 max-md:border-b max-md:border-r-0 max-md:bg-raised max-md:px-0 max-md:pb-0 max-md:pt-2">
+        <aside className="flex min-h-0 flex-col border-r-[3px] border-dotted border-line-strong bg-surface-strong/35 px-3.5 pb-4 pt-6 max-md:border-b-[3px] max-md:border-r-0 max-md:bg-raised max-md:px-0 max-md:pb-0 max-md:pt-2">
           <div className="mb-4 flex items-center justify-between gap-3 px-3 max-md:mb-1 max-md:px-4">
-            <h2 className="text-[15px] font-bold text-ink">{settingsCopy.title}</h2>
+            <h2 className="text-[22px] font-extrabold text-ink">{settingsCopy.title}</h2>
             <div className="md:hidden">{closeButton}</div>
           </div>
           {saveState === "error" ? <div className="px-4 pb-2 md:hidden">{saveStatus}</div> : null}
-          <nav className="kana-settings-nav flex flex-col gap-px max-md:flex-row max-md:gap-1 max-md:overflow-x-auto max-md:px-3 max-md:pb-2" aria-label={settingsCopy.sectionsAria}>
+          <nav className="kana-settings-nav flex flex-col gap-1 max-md:flex-row max-md:gap-1 max-md:overflow-x-auto max-md:px-3 max-md:pb-2" aria-label={settingsCopy.sectionsAria}>
             {navItems.map((item) => {
               const active = item.id === section;
               const NavIcon = SECTION_ICONS[item.id];
               return (
                 <div key={item.id} className="max-md:shrink-0">
                   {item.id === "experience" || item.id === "model" ? (
-                    <p className={`mb-1 px-3 text-[11px] text-faint max-md:hidden ${item.id === "model" ? "mt-5" : ""}`}>
+                    <p className={`mb-1.5 px-3.5 text-[11.5px] font-extrabold text-muted max-md:hidden ${item.id === "model" ? "mt-5" : ""}`}>
                       {item.id === "model" ? settingsCopy.system : settingsCopy.personal}
                     </p>
                   ) : null}
@@ -501,9 +501,9 @@ export function SettingsDialog({
                     type="button"
                     onClick={() => setSection(item.id)}
                     aria-current={active ? "page" : undefined}
-                    className={`kana-settings-nav-item kana-focus flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] transition-colors max-md:w-auto max-md:whitespace-nowrap max-md:py-1.5 ${active ? "is-active" : ""}`}
+                    className={`kana-settings-nav-item kana-focus flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-[13px] max-md:w-auto max-md:whitespace-nowrap max-md:py-2 ${active ? "is-active" : ""}`}
                   >
-                    <NavIcon className="size-4 shrink-0" />
+                    <NavIcon className="size-[18px] shrink-0" />
                     {item.label}
                   </button>
                 </div>
@@ -513,7 +513,7 @@ export function SettingsDialog({
           <div className="mt-auto px-3 pt-4 max-md:hidden">{saveStatus}</div>
         </aside>
 
-        <div className="absolute right-3 top-3 z-10 max-md:hidden">{closeButton}</div>
+        <div className="absolute right-5 top-5 z-10 max-md:hidden">{closeButton}</div>
 
         <main className="min-h-0 overflow-y-auto px-10 pb-12 pt-9 max-md:px-4 max-md:pb-8 max-md:pt-4">
           <div className="mx-auto max-w-[660px]">
@@ -587,7 +587,7 @@ export function SettingsDialog({
                   </div>
                   <div
                     ref={backgroundCarouselRef}
-                    className="kana-background-carousel flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1"
+                    className="kana-background-carousel flex snap-x snap-mandatory gap-3 overflow-x-auto py-2"
                     role="radiogroup"
                     aria-label={settingsCopy.stageAria}
                   >
@@ -674,8 +674,8 @@ export function SettingsDialog({
                                 <span className="block text-[13px] font-semibold text-ink">{sample.name}</span>
                                 <span className="mt-0.5 block text-[11px] text-muted">{settingsCopy.live2dSample}</span>
                               </span>
-                              {active ? <CheckIcon className="size-4 shrink-0 text-accent-strong" /> : (
-                                <span className="text-[11px] text-faint">{settingsCopy.choose}</span>
+                              {active ? <span className="kana-check" aria-hidden="true"><CheckIcon className="size-3.5" /></span> : (
+                                <span className="text-[11px] font-bold text-faint">{settingsCopy.choose}</span>
                               )}
                             </button>
                           );
@@ -695,7 +695,7 @@ export function SettingsDialog({
                         {avatarModels.map((model) => {
                           const active = draft.live2d.modelId === model.id;
                           return (
-                            <div key={model.id} className={`overflow-hidden rounded-xl border ${active ? "border-accent bg-accent/8" : "border-line-strong"}`}>
+                            <div key={model.id} className={`kana-choice rounded-[26px] ${active ? "is-selected" : ""}`}>
                               <button type="button" className="kana-focus flex w-full min-w-0 items-center justify-between gap-3 px-4 py-3 text-left" disabled={avatarBusy} onClick={() => void selectImported(model)}>
                                 <span className="min-w-0">
                                   <span className="block truncate text-[13px] font-semibold text-ink">{model.name}</span>
@@ -703,11 +703,11 @@ export function SettingsDialog({
                                     {(model.sizeBytes / 1024 / 1024).toFixed(1)} MB
                                   </span>
                                 </span>
-                                {active ? <CheckIcon className="size-4 shrink-0 text-accent-strong" /> : (
-                                  <span className="text-[11px] text-faint">{settingsCopy.choose}</span>
+                                {active ? <span className="kana-check" aria-hidden="true"><CheckIcon className="size-3.5" /></span> : (
+                                  <span className="text-[11px] font-bold text-faint">{settingsCopy.choose}</span>
                                 )}
                               </button>
-                              <div className="flex justify-end gap-1 border-t border-line px-2 py-1">
+                              <div className="flex justify-end gap-1 border-t-[3px] border-dotted border-line px-2 py-1">
                                 <button type="button" className={btnGhost} onClick={() => void renameImported(model)}>{settingsCopy.rename}</button>
                                 <button type="button" className={btnDangerGhost} onClick={() => void deleteImported(model)}>{settingsCopy.remove}</button>
                               </div>
@@ -716,7 +716,7 @@ export function SettingsDialog({
                         })}
                         <button
                           type="button"
-                          className="kana-focus min-h-16 rounded-xl border border-dashed border-line-strong px-4 py-3 text-left transition-colors hover:bg-surface-strong/60"
+                          className="kana-focus min-h-16 rounded-[26px] border-[3px] border-dashed border-line-strong px-4 py-3 text-left transition-colors hover:border-accent"
                           disabled={avatarBusy}
                           onClick={() => avatarInputRef.current?.click()}
                         >
@@ -732,7 +732,7 @@ export function SettingsDialog({
                     </SettingsRow>
                   </SettingsRows>
                   <details className="mt-1 text-[11px] leading-relaxed text-faint">
-                    <summary className="kana-details-summary kana-focus cursor-pointer text-muted hover:text-ink">
+                    <summary className="kana-details-summary kana-focus kana-plus-summary cursor-pointer font-extrabold text-muted hover:text-ink">
                       {settingsCopy.includedAvatarAbout}
                     </summary>
                     <p className="mt-2">{LIVE2D_SAMPLE_COPYRIGHT_NOTICE}</p>
@@ -796,12 +796,9 @@ export function SettingsDialog({
             ) : null}
 
             {section === "privacy" ? (
-              <>
-                <SettingsGroup title={settingsCopy.accessTitle} description={settingsCopy.accessDescription}>
-                  <SecuritySection locale={draft.uiLocale} />
-                </SettingsGroup>
-                <SettingsGroup title={settingsCopy.privateTitle} description={settingsCopy.privateBody} />
-              </>
+              <SettingsGroup title={settingsCopy.accessTitle} description={settingsCopy.accessDescription}>
+                <SecuritySection locale={draft.uiLocale} />
+              </SettingsGroup>
             ) : null}
           </div>
         </main>

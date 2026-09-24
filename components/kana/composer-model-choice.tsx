@@ -31,16 +31,16 @@ export function ComposerModelChoice({ locale, sessionKey, connected, disabled, c
   return <>
     <button type="button" aria-label={label} title={model || label} disabled={disabled || !connected}
       aria-haspopup="dialog" aria-expanded={open}
-      className="kana-focus ml-auto flex min-h-10 min-w-0 max-w-[min(55%,260px)] items-center gap-1 rounded-lg px-2 text-[13px] hover:bg-white/12 disabled:opacity-40"
+      className="kana-model-pill kana-focus ml-auto flex min-h-10 min-w-0 max-w-[min(55%,260px)] items-center gap-1.5 rounded-full px-4 text-[12.5px]"
       onClick={() => setOpen(true)}>
       <span className="truncate">{connected && model ? model.split("/").pop() : label}</span><span aria-hidden="true">⌄</span>
     </button>
     <dialog ref={dialog} aria-label={label} onCancel={() => setOpen(false)} onClose={() => setOpen(false)}
       onClick={(event) => { if (event.target === event.currentTarget) setOpen(false); }}
-      className="kana-model-dialog fixed inset-0 m-auto max-h-[80dvh] w-[min(420px,calc(100vw-24px))] overflow-y-auto rounded-2xl border border-line bg-surface p-5 text-ink shadow-xl backdrop:bg-black/25">
+      className="kana-model-dialog fixed inset-0 m-auto max-h-[80dvh] w-[min(440px,calc(100vw-24px))] overflow-y-auto rounded-[32px] border-0 bg-surface p-6 text-ink backdrop:bg-[var(--backdrop)]">
       {open ? <>
-        <div className="mb-4 flex items-center justify-between"><h2 className="text-sm font-bold">{label}</h2>
-          <button type="button" className="kana-focus min-h-10 px-3" onClick={() => setOpen(false)} aria-label={text.closeModelChooser}>×</button>
+        <div className="mb-4 flex items-center justify-between"><h2 className="text-lg font-extrabold">{label}</h2>
+          <button type="button" className="kana-focus grid size-9 place-items-center rounded-full bg-surface-strong text-lg leading-none" onClick={() => setOpen(false)} aria-label={text.closeModelChooser}>×</button>
         </div>
         <ModelControlPanel locale={locale} catalog={catalog} onList={onList} onSelect={onSelect} />
       </> : null}

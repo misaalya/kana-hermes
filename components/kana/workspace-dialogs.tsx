@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback } from "react";
 import type { KanaPreferences } from "@/lib/preferences/types";
 import { getCopy } from "@/lib/ui/copy";
 import { AgentInputDialog } from "./agent-input-dialog";
@@ -68,6 +69,18 @@ function SetupHost() {
   const deps = useKanaStore("workspace", (state) => state.deps);
   const preferences = useKanaStore("preferences", (state) => state.preferences);
   const degraded = deps.hermes === "missing" || (deps.voice === "error" && preferences.voiceEnabled);
+  const setGreeting = useCallback(
+    (greeting: boolean) => workspace.stores.workspace.setState({ greeting }),
+    [workspace],
+  );
+  // Kana smiles and starts talking as her greeting begins.
+  const greet = useCallback(() => {
+    const current = workspace.preferences.current();
+    void workspace.actions
+      .previewAvatarEmotion(current, "happy")
+      .then(() => workspace.actions.previewAvatarTalking(current))
+      .catch(() => undefined);
+  }, [workspace]);
 
   if (wizardMode) {
     return (
@@ -78,6 +91,8 @@ function SetupHost() {
         mode={wizardMode}
         onComplete={workspace.actions.completeOnboarding}
         onDismiss={() => setWizardMode(null)}
+        onGreetingChange={setGreeting}
+        onGreet={greet}
         onOpenSettings={() => setWorkspace({ wizardMode: null, settingsOpen: true })}
       />
     );
@@ -94,11 +109,11 @@ function SetupHost() {
 function DegradedBanner({ locale, onCheck }: { locale: KanaPreferences["uiLocale"]; onCheck(): void }) {
   const copy = getCopy(locale);
   return (
-    <div className="kana-panel kana-degraded-banner absolute bottom-5 left-5 z-20 flex max-w-[360px] items-center gap-3 rounded-md px-3.5 py-2.5">
-      <p className="text-[10px] font-semibold text-ink-dim">{copy.banner.degraded}</p>
+    <div className="kana-panel kana-degraded-banner absolute bottom-5 left-5 z-20 flex max-w-[380px] items-center gap-3 rounded-full py-2 pl-4 pr-2">
+      <p className="text-[11px] font-bold text-ink-dim">{copy.banner.degraded}</p>
       <button
         type="button"
-        className="kana-focus rounded-lg px-2 py-1 text-[10px] font-bold text-accent-strong hover:bg-accent/10"
+        className="kana-focus kana-pill kana-pill-accent shrink-0 px-3.5 py-1.5 text-[11px]"
         onClick={onCheck}
       >
         {copy.banner.action}

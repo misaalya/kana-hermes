@@ -14,7 +14,8 @@ type LiveChatFeedProps = {
   messages: KanaMessage[];
   activities: ActivityItem[];
   serverActivityTurns?: ServerActivityTurn[];
-  busy: boolean;
+  /** Hermes is working or the reply's voice is still being generated. */
+  typing: boolean;
   status: string;
   locale: UiLocale;
 };
@@ -23,7 +24,7 @@ export const LiveChatFeed = memo(function LiveChatFeed({
   messages,
   activities,
   serverActivityTurns = [],
-  busy,
+  typing,
   status,
   locale,
 }: LiveChatFeedProps) {
@@ -50,7 +51,7 @@ export const LiveChatFeed = memo(function LiveChatFeed({
 
   useEffect(() => {
     if (pinnedToBottom) scrollToBottom();
-  }, [entries.length, busy, pinnedToBottom, scrollToBottom]);
+  }, [entries.length, typing, pinnedToBottom, scrollToBottom]);
 
   const handleScroll = useCallback(() => {
     const node = scrollRef.current;
@@ -68,9 +69,9 @@ export const LiveChatFeed = memo(function LiveChatFeed({
         aria-live="polite"
         aria-label={copy.chat.aria}
       >
-        {!entries.length && !busy ? (
+        {!entries.length && !typing ? (
           <div className="m-auto flex max-w-[280px] flex-col items-center py-12 text-center max-sm:hidden">
-            <h2 className="text-sm font-bold text-ink">{copy.chat.emptyTitle}</h2>
+            <h2 className="text-base font-extrabold text-ink">{copy.chat.emptyTitle}</h2>
             <p className="mt-1.5 text-[11px] leading-relaxed text-muted">
               {copy.chat.emptyBody}
             </p>
@@ -89,9 +90,9 @@ export const LiveChatFeed = memo(function LiveChatFeed({
 
           if (isSystem) {
             return (
-              <article key={message.id} className="rounded-xl border-2 border-line bg-raised px-3 py-2.5 max-sm:px-2.5 max-sm:py-2">
+              <article key={message.id} className="rounded-[22px] border-2 border-line bg-raised px-4 py-2.5 max-sm:px-3 max-sm:py-2">
                 <div className="mb-1 flex items-center justify-between gap-3">
-                  <strong className="text-[9px] font-bold tracking-[0.14em] text-muted uppercase">{copy.chat.hermesNote}</strong>
+                  <strong className="kana-label-bubble">{copy.chat.hermesNote}</strong>
                   <span className="text-[9px] tabular-nums text-faint">{dateFormatter.format(message.timestamp)}</span>
                 </div>
                 <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-ink-dim max-sm:text-[10px]">{messageCopy}</p>
@@ -102,13 +103,13 @@ export const LiveChatFeed = memo(function LiveChatFeed({
           return (
             <article
               key={message.id}
-              className={`max-w-[88%] rounded-2xl border-2 px-3.5 py-3 max-sm:max-w-[90%] max-sm:rounded-xl max-sm:px-2.5 max-sm:py-2 ${
+              className={`max-w-[88%] rounded-[24px] border-2 px-4 py-3 max-sm:max-w-[90%] max-sm:rounded-[20px] max-sm:px-3 max-sm:py-2 ${
                 isAssistant
                   ? "kana-message-assistant self-start"
                   : "kana-message-user self-end"
               }`}
             >
-              <p className="whitespace-pre-wrap text-[13px] leading-relaxed max-sm:text-[11px] max-sm:leading-[1.5]">{messageCopy}</p>
+              <p className="whitespace-pre-wrap text-[13px] font-medium leading-relaxed max-sm:text-[11px] max-sm:leading-[1.5]">{messageCopy}</p>
               <span className="mt-1.5 block text-right text-[9px] tabular-nums opacity-50 max-sm:text-[8px]">
                 {dateFormatter.format(message.timestamp)}
               </span>
@@ -116,9 +117,14 @@ export const LiveChatFeed = memo(function LiveChatFeed({
           );
         })}
 
-        {busy ? (
-          <div className="self-start rounded-xl border-2 border-accent/45 bg-raised px-3 py-2 text-[10px] font-semibold text-accent">
-            {status}
+        {typing ? (
+          <div className="flex items-center gap-2.5 self-start">
+            <span className="kana-typing kana-message-assistant" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </span>
+            <span className="text-[11px] font-bold text-muted">{status}</span>
           </div>
         ) : null}
         <div aria-hidden="true" />
@@ -131,7 +137,7 @@ export const LiveChatFeed = memo(function LiveChatFeed({
             setPinnedToBottom(true);
             scrollToBottom();
           }}
-          className="kana-focus absolute bottom-3 left-1/2 -translate-x-1/2 rounded-xl border-2 border-line-strong bg-raised px-3 py-1.5 text-[10px] font-semibold text-muted transition-colors hover:border-accent hover:text-accent"
+          className="kana-focus kana-pill kana-pill-accent absolute bottom-3 left-1/2 -translate-x-1/2 px-4 py-1.5 text-[11px]"
           aria-label={copy.chat.latestAria}
         >
           {copy.chat.latest}
