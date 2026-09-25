@@ -164,7 +164,7 @@ export type Copy = {
     openSettings: string;
     settings: string;
     openAvatarLayout: string;
-    avatar: string;
+    scale: string;
     hideChat: string;
     showChat: string;
     messagePlaceholder: string;
@@ -197,6 +197,7 @@ export type Copy = {
     title: string;
     close: string;
     search: string;
+    clearSearch: string;
     newConversation: string;
     newLabel: string;
     found(count: number): string;
@@ -261,8 +262,6 @@ export type Copy = {
     sendSecurely: string;
   };
   login: {
-    eyebrow: string;
-    body: string;
     password: string;
     placeholder: string;
     submit: string;
@@ -334,7 +333,6 @@ export type Copy = {
     avatarBehaviorLoading: string;
     avatarBehaviorFailed: string;
     avatarBehaviorBuiltin: string;
-    avatarLayoutTitle: string;
     avatarLayoutDescription: string;
     avatarLayoutAutomatic: string;
     avatarLayoutAdjusted: string;
@@ -343,7 +341,6 @@ export type Copy = {
     avatarLayoutScale: string;
     avatarLayoutReset: string;
     avatarLayoutAria: string;
-    avatarLayoutHint: string;
     avatarLayoutCenter: string;
     avatarLayoutSmaller: string;
     avatarLayoutLarger: string;
@@ -661,7 +658,7 @@ const id: Copy = {
     openSettings: "Buka pengaturan",
     settings: "Pengaturan",
     openAvatarLayout: "Atur posisi dan ukuran avatar",
-    avatar: "Avatar",
+    scale: "Scale",
     hideChat: "Sembunyikan chat",
     showChat: "Tampilkan chat",
     messagePlaceholder: "Katakan sesuatu kepada Kana…",
@@ -694,6 +691,7 @@ const id: Copy = {
     title: "Percakapan",
     close: "Tutup riwayat percakapan",
     search: "Cari percakapan",
+    clearSearch: "Hapus pencarian",
     newConversation: "Percakapan baru",
     newLabel: "Baru",
     found: (count) => `${count} ditemukan`,
@@ -758,8 +756,6 @@ const id: Copy = {
     sendSecurely: "Kirim dengan aman",
   },
   login: {
-    eyebrow: "Selamat datang kembali",
-    body: "Masukkan kata sandi lokalmu untuk kembali ke Kana.",
     password: "Kata sandi",
     placeholder: "Masukkan kata sandi",
     submit: "Masuk ke Kana",
@@ -806,11 +802,11 @@ const id: Copy = {
     backgroundOptions: {
       plain: { label: "Polos", hint: "Panggung datar yang tenang" },
       room: { label: "Kamar Kana", hint: "Kamar ilustrasi yang nyaman" },
-      "pattern-sakura": { label: "Sakura", hint: "Bunga sakura kecil dan kelopak lepas" },
-      "pattern-sparkle": { label: "Kilau", hint: "Kilau empat sudut ala anime" },
-      "pattern-clouds": { label: "Awan", hint: "Awan mungil yang berselang-seling" },
+      "pattern-sakura": { label: "Sakura", hint: "Kelopak yang berguguran pelan" },
+      "pattern-sparkle": { label: "Kilau", hint: "Kilau yang naik perlahan" },
+      "pattern-clouds": { label: "Awan", hint: "Awan empuk yang melayang" },
       "pattern-seigaiha": { label: "Seigaiha", hint: "Pola ombak tradisional Jepang" },
-      "pattern-ribbon": { label: "Pita", hint: "Pita kecil dengan titik-titik lembut" },
+      "pattern-ribbon": { label: "Pita", hint: "Pita dan hati kecil" },
     },
     backgrounds: (count) => `${count} latar · tersimpan di perangkat ini`,
     carouselControls: "Kontrol carousel latar",
@@ -846,16 +842,14 @@ const id: Copy = {
     avatarBehaviorLoading: "Membaca kemampuan avatar…",
     avatarBehaviorFailed: "Kemampuan avatar tidak dapat dibaca.",
     avatarBehaviorBuiltin: "Avatar bawaan sudah memiliki pemetaan ekspresi yang disiapkan oleh Kana.",
-    avatarLayoutTitle: "Posisi avatar",
     avatarLayoutDescription: "Kana menyesuaikan model otomatis dari bounds Live2D-nya. Koreksi ini disimpan khusus untuk avatar yang sedang dipilih.",
     avatarLayoutAutomatic: "Posisi otomatis",
     avatarLayoutAdjusted: "Disesuaikan",
-    avatarLayoutHorizontal: "Horizontal",
-    avatarLayoutVertical: "Vertikal",
+    avatarLayoutHorizontal: "X",
+    avatarLayoutVertical: "Y",
     avatarLayoutScale: "Ukuran",
     avatarLayoutReset: "Atur ulang",
     avatarLayoutAria: "Atur posisi dan ukuran avatar",
-    avatarLayoutHint: "Seret avatar untuk memindahkannya. Scroll atau cubit untuk mengubah ukuran.",
     avatarLayoutCenter: "Tengah",
     avatarLayoutSmaller: "Perkecil avatar",
     avatarLayoutLarger: "Perbesar avatar",
@@ -1212,7 +1206,7 @@ const en: Copy = {
     openSettings: "Open settings",
     settings: "Settings",
     openAvatarLayout: "Adjust avatar position and size",
-    avatar: "Avatar",
+    scale: "Scale",
     hideChat: "Hide chat",
     showChat: "Show chat",
     messagePlaceholder: "Say something to Kana…",
@@ -1245,6 +1239,7 @@ const en: Copy = {
     title: "Conversations",
     close: "Close conversation history",
     search: "Search conversations",
+    clearSearch: "Clear search",
     newConversation: "New conversation",
     newLabel: "New",
     found: (count) => `${count} found`,
@@ -1309,8 +1304,6 @@ const en: Copy = {
     sendSecurely: "Send securely",
   },
   login: {
-    eyebrow: "Welcome back",
-    body: "Enter your local password to return to your companion.",
     password: "Password",
     placeholder: "Enter your password",
     submit: "Enter Kana",
@@ -1357,11 +1350,11 @@ const en: Copy = {
     backgroundOptions: {
       plain: { label: "Plain", hint: "A quiet flat stage" },
       room: { label: "Kana's room", hint: "A cozy illustrated room" },
-      "pattern-sakura": { label: "Sakura", hint: "Small cherry blossoms and loose petals" },
-      "pattern-sparkle": { label: "Sparkle", hint: "Four-point anime sparkles" },
-      "pattern-clouds": { label: "Clouds", hint: "Tiny clouds in offset rows" },
+      "pattern-sakura": { label: "Sakura", hint: "Softly falling petals" },
+      "pattern-sparkle": { label: "Sparkle", hint: "Slowly rising sparkles" },
+      "pattern-clouds": { label: "Clouds", hint: "Puffy clouds drifting by" },
       "pattern-seigaiha": { label: "Seigaiha", hint: "Traditional Japanese wave scales" },
-      "pattern-ribbon": { label: "Ribbon", hint: "Little bows with soft dots" },
+      "pattern-ribbon": { label: "Ribbon", hint: "Bows and little hearts" },
     },
     backgrounds: (count) => `${count} backgrounds · stored on this device`,
     carouselControls: "Background carousel controls",
@@ -1397,16 +1390,14 @@ const en: Copy = {
     avatarBehaviorLoading: "Reading avatar capabilities…",
     avatarBehaviorFailed: "Could not read this avatar's capabilities.",
     avatarBehaviorBuiltin: "Included avatars already have expression mappings prepared by Kana.",
-    avatarLayoutTitle: "Avatar position",
     avatarLayoutDescription: "Kana fits the model automatically from its Live2D bounds. These corrections are stored only for the selected avatar.",
     avatarLayoutAutomatic: "Automatic position",
     avatarLayoutAdjusted: "Adjusted",
-    avatarLayoutHorizontal: "Horizontal",
-    avatarLayoutVertical: "Vertical",
+    avatarLayoutHorizontal: "X",
+    avatarLayoutVertical: "Y",
     avatarLayoutScale: "Size",
     avatarLayoutReset: "Reset",
     avatarLayoutAria: "Adjust avatar position and size",
-    avatarLayoutHint: "Drag the avatar to move it. Scroll or pinch to resize.",
     avatarLayoutCenter: "Center",
     avatarLayoutSmaller: "Make avatar smaller",
     avatarLayoutLarger: "Make avatar larger",

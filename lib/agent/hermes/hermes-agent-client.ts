@@ -58,8 +58,14 @@ type HermesRelayOptions = {
 
 const DEFAULT_RECONNECT_DELAYS_MS = [500, 1_000, 2_000, 5_000, 10_000] as const;
 
-function quoteSlashArgument(value: string): string {
-  return `'${value.replaceAll("'", `'"'"'`)}'`;
+/**
+ * A session-scoped `/model` switch as Hermes reads it. Its parser splits on
+ * whitespace and never unquotes (`parse_model_flags_detailed` in
+ * hermes_cli/model_switch.py), so shell quoting would reach it as part of the
+ * name: `'custom:9router'` is an unknown provider.
+ */
+function modelSwitchArguments(model: string, provider: string): string {
+  return `${model} --provider ${provider} --session`;
 }
 
 function inputRequest(
@@ -388,6 +394,7 @@ export class HermesAgentClient implements AgentClient {
           ...message,
           role: message.role ?? "",
         })),
+        running: response.running === true,
       });
       try {
         const title = await this.request<{ title?: string }>("session.title", {
@@ -512,7 +519,7 @@ export class HermesAgentClient implements AgentClient {
         )
         .slice(0, 60)
         .map(({ provider, model }) => ({
-          text: `/model ${quoteSlashArgument(model)} --provider ${quoteSlashArgument(provider.slug)} --session`,
+          text: `/model ${modelSwitchArguments(model, provider.slug)}`,
           display: model,
           description: provider.name,
           group: `Models · ${provider.name}`,
@@ -627,7 +634,7 @@ export class HermesAgentClient implements AgentClient {
     const response = await this.request<HermesModelSwitchResponse>("config.set", {
       session_id: this.session.sessionId,
       key: "model",
-      value: `${quoteSlashArgument(model)} --provider ${quoteSlashArgument(provider)} --session`,
+      value: modelSwitchArguments(model, provider),
       confirm_expensive_model: options.confirm === true,
     }, 120_000);
     return {
@@ -1268,7 +1275,7 @@ export class HermesAgentClient implements AgentClient {
     this.running = response.running === true;
 
     if (this.running) {
-      this.emit({ type: "agent.started" });
+      this.emit({ type: "agent.started", resumed: true });
       this.emit({
         type: "status.updated",
         status: "working",

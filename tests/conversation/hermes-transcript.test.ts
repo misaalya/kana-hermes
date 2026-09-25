@@ -28,6 +28,23 @@ describe("Hermes transcript projection", () => {
     assert.deepEqual([...timestamps].sort((a, b) => a - b), timestamps, "order is preserved");
   });
 
+  it("returns the tools of a turn Hermes is still working on", () => {
+    const { messages, turns, unfinished } = parseHermesTranscript([
+      { role: "user", text: "hi" },
+      { role: "tool", name: "terminal", context: "ls" },
+      { role: "assistant", text: envelope("Hello.") },
+      { role: "user", text: "Find the news" },
+      { role: "tool", name: "web_search", context: "news today" },
+      { role: "tool", name: "web_extract", context: "bbc.com" },
+    ]);
+    assert.deepEqual(messages.map((message) => message.role), ["user", "assistant", "user"]);
+    assert.equal(turns.length, 1);
+    assert.deepEqual(unfinished.map((activity) => activity.tool), ["web_search", "web_extract"]);
+    assert.ok(unfinished.every((activity) => activity.state === "complete"));
+    assert.ok(unfinished[0].timestamp > messages[2].timestamp, "they sort after the pending user turn");
+    assert.deepEqual(parseHermesTranscript([{ role: "user", text: "hi" }]).unfinished, []);
+  });
+
   it("keeps a plain reply without inventing a subtitle language, and hides broken envelopes", () => {
     const { messages } = parseHermesTranscript([
       { role: "assistant", text: "plain text reply" },

@@ -37,6 +37,7 @@ import {
   StoredStageBackgroundChoice,
 } from "./settings-stage-background";
 import {
+  AvatarIcon,
   CheckIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -45,7 +46,6 @@ import {
   GlobeIcon,
   ServerIcon,
   ShieldIcon,
-  SmileIcon,
   WaveformIcon,
 } from "./icons";
 import { btnDangerGhost, btnGhost, Toggle } from "./ui";
@@ -89,7 +89,7 @@ const NAV_IDS: SettingsSection[] = ["experience", "voice", "avatar", "model", "s
 const SECTION_ICONS: Record<SettingsSection, (props: { className?: string }) => React.ReactElement> = {
   experience: GlobeIcon,
   voice: WaveformIcon,
-  avatar: SmileIcon,
+  avatar: AvatarIcon,
   model: BotIcon,
   system: ServerIcon,
   privacy: ShieldIcon,

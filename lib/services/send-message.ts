@@ -76,14 +76,14 @@ export async function sendMessage(
   if (commandName === "new") {
     if (isFreshConversation(conversation)) {
       // Reuse the blank conversation; an explicit title still applies to it.
-      if (commandArg) conversations.save({ ...conversation, title: commandArg });
+      if (commandArg) conversations.save({ ...conversation, title: commandArg, titleChosen: true });
       stores.activity.getState().reset();
       setStatus(status().alreadyNew);
       clearSuggestions();
       return;
     }
     const next = conversations.save({
-      ...conversations.create({ title: commandArg || "New conversation" }),
+      ...conversations.create({ title: commandArg }),
       messages: [
         createUserMessage(cleanText),
         createSystemMessage(
@@ -215,6 +215,9 @@ export async function sendMessage(
       }
     } else {
       await agent.sendMessage({ text: displayText, attachments });
+      // Hermes stored the session when it accepted the prompt, so a refresh
+      // from here on resumes it, even while this first turn is still running.
+      conversations.markStored(nextConversation.id);
     }
     clearSuggestions();
   } catch (sendError) {

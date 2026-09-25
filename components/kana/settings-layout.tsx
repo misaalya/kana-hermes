@@ -13,7 +13,7 @@ export const settingsButtonDanger =
   `${settingsButton} hover:border-danger/60 hover:text-danger`;
 
 export const settingsInput =
-  "kana-focus min-h-10 w-full rounded-full border-2 border-transparent bg-surface-strong px-4 text-[13px] font-medium text-ink placeholder:text-faint transition-colors focus:border-accent focus:outline-none disabled:opacity-50";
+  "kana-field min-h-10 w-full rounded-full px-4 text-[13px] font-medium";
 
 export function SettingsPageTitle({ children }: { children: React.ReactNode }) {
   return <h2 className="mb-3 text-[22px] font-extrabold text-ink max-md:hidden">{children}</h2>;

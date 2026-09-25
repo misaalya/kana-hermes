@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useState } from "react";
 import type { ActivityItem } from "@/lib/agent/types";
 import { toolVariant } from "@/lib/agent/tool-presets";
 import { getCopy, type UiLocale } from "@/lib/ui/copy";
@@ -6,6 +6,8 @@ import { getCopy, type UiLocale } from "@/lib/ui/copy";
 type ActivityStackProps = {
   activities: ActivityItem[];
   locale: UiLocale;
+  /** The running turn's block: open until its reply lands, unless closed. */
+  live?: boolean;
 };
 
 function formatDuration(durationMs?: number): string | null {
@@ -50,14 +52,21 @@ const ActivityRow = memo(function ActivityRow({
   );
 });
 
-export function ActivityStack({ activities, locale }: ActivityStackProps) {
+/**
+ * One turn's Hermes activity. A running turn's block starts open and stays
+ * open, even between tools, until the reader closes it; the feed remounts it
+ * under a new key when the reply lands, so every finished turn is collapsed.
+ */
+export function ActivityStack({ activities, locale, live = false }: ActivityStackProps) {
+  const [open, setOpen] = useState(live);
   if (!activities?.length) return null;
   const ordered = [...activities].sort((a, b) => a.timestamp - b.timestamp);
 
   return (
     <details
       className="kana-activity group w-full px-3.5 py-2"
-      open={activities.some((activity) => activity.state === "running")}
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
     >
       <summary className="kana-details-summary kana-focus flex cursor-pointer items-center justify-between gap-3 rounded-full text-[11px] font-extrabold text-muted">
         <span className="kana-activity-title">{getCopy(locale).activity.title}</span>

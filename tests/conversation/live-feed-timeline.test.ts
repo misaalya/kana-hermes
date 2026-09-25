@@ -36,6 +36,24 @@ describe("live feed activity anchoring", () => {
     );
   });
 
+  it("marks the running turn's block live and gives it a new key once its reply lands", () => {
+    const user: KanaMessage = { id: "user-1", role: "user", text: "Find env files", timestamp: 100 };
+    const running = buildLiveFeedTimeline([user], [activity], []);
+    const live = running.find((entry) => entry.kind === "activity");
+    assert.ok(live && live.kind === "activity");
+    assert.equal(live.live, true);
+    assert.equal(live.key, "live-tool-1");
+
+    const replied = buildLiveFeedTimeline(
+      [user, { id: "assistant-1", role: "assistant", subtitle: { text: "Found", language: "en" }, timestamp: 200, activities: [activity] }],
+      [activity],
+      [],
+    );
+    const closed = replied.filter((entry) => entry.kind === "activity");
+    assert.equal(closed.length, 1, "the live copy is not shown twice");
+    assert.ok(closed[0].kind === "activity" && !closed[0].live && closed[0].key === "turn-assistant-1");
+  });
+
   it("uses server activity only when the local assistant has no embedded turn log", () => {
     const messages: KanaMessage[] = [
       { id: "user-1", role: "user", text: "Find env files", timestamp: 100 },

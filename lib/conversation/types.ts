@@ -34,6 +34,12 @@ export type ConversationAgentLink = {
 export type Conversation = {
   id: string;
   title: string;
+  /**
+   * The user named this conversation (`/new <title>`). Only such a title is
+   * given to Hermes when it creates the session: Hermes keeps a create-time
+   * title as the user's choice, over the name it gives the session itself.
+   */
+  titleChosen?: boolean;
   messages: KanaMessage[];
   agent?: ConversationAgentLink;
   createdAt: number;
@@ -64,9 +70,11 @@ export function createConversation(
   input: CreateConversationInput,
 ): Conversation {
   const now = Date.now();
+  const title = input.title?.trim();
   return {
     id: createId("conversation"),
-    title: input.title?.trim() || "New conversation",
+    title: title || "New conversation",
+    ...(title ? { titleChosen: true } : {}),
     messages: [],
     createdAt: now,
     updatedAt: now,

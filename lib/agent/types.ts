@@ -111,13 +111,23 @@ export type AgentEvent =
       sessionId: string;
       persistentSessionId: string;
       messages: AgentHistoryRow[];
+      /** Hermes is still working on the latest turn; its tools so far are in `messages`. */
+      running?: boolean;
     }
   | {
       type: "session.updated";
       title?: string;
       persistentSessionId?: string;
     }
-  | { type: "agent.started" }
+  | {
+      type: "agent.started";
+      /**
+       * This client attached to a turn that was already running (a refresh,
+       * another browser, a reconnect). The restored transcript owns that
+       * turn's activity log, so it is not cleared.
+       */
+      resumed?: boolean;
+    }
   | { type: "assistant.delta"; text: string }
   | {
       type: "assistant.message";

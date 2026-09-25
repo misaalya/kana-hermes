@@ -36,9 +36,9 @@ function LayoutSlider({
 }) {
   const fill = ((value - minimum) / (maximum - minimum)) * 100;
   return (
-    <div className="py-2">
+    <div className="grid gap-1.5">
       <div className="flex min-h-7 items-center justify-between gap-3">
-        <span className="text-[13px] text-ink">{label}</span>
+        <span className="text-[13px] font-bold text-ink">{label}</span>
         <span className="flex items-center gap-1">
           {children}
           <output aria-hidden="true" className="min-w-12 text-right text-xs tabular-nums text-muted">
@@ -54,7 +54,7 @@ function LayoutSlider({
         value={Math.round(value)}
         aria-label={label}
         aria-valuetext={display}
-        className="kana-range kana-focus mt-1.5 w-full"
+        className="kana-range kana-focus w-full"
         style={{ "--kana-range-fill": `${fill}%` } as React.CSSProperties}
         onChange={(event) => onChange(Number(event.currentTarget.value))}
       />
@@ -82,23 +82,19 @@ export function AvatarLayoutPanel({
 
   return (
     <section
-      className="kana-popover w-[min(310px,calc(100vw-1.5rem))] rounded-[28px] bg-raised px-5 pb-4 pt-4 animate-kana-in max-sm:w-full"
+      className="kana-popover w-[min(310px,calc(100vw-1.5rem))] rounded-[28px] bg-raised px-5 pb-5 pt-3 animate-kana-in max-sm:w-full"
       aria-label={copy.avatarLayoutAria}
     >
-      <header className="flex items-center justify-between gap-2">
-        <h2 className="text-[13px] font-bold text-ink">{copy.avatarLayoutTitle}</h2>
-        <div className="-mr-1.5 flex items-center">
-          <button type="button" className={iconButton} disabled={automatic} onClick={onReset} aria-label={copy.avatarLayoutReset} title={copy.avatarLayoutReset}>
-            <ResetIcon className="size-3.5" />
-          </button>
-          <button type="button" className={iconButton} onClick={onClose} aria-label={copy.avatarLayoutClose}>
-            <CloseIcon className="size-4" />
-          </button>
-        </div>
-      </header>
-      <p className="mt-0.5 text-[11.5px] leading-relaxed text-muted">{copy.avatarLayoutHint}</p>
+      <div className="-mr-1.5 -mt-1 flex items-center justify-end">
+        <button type="button" className={iconButton} disabled={automatic} onClick={onReset} aria-label={copy.avatarLayoutReset} title={copy.avatarLayoutReset}>
+          <ResetIcon className="size-3.5" />
+        </button>
+        <button type="button" className={iconButton} onClick={onClose} aria-label={copy.avatarLayoutClose}>
+          <CloseIcon className="size-4" />
+        </button>
+      </div>
 
-      <div className="mt-2 divide-y divide-line">
+      <div className="-mt-1 grid gap-3.5">
         <LayoutSlider
           label={copy.avatarLayoutScale}
           value={size}

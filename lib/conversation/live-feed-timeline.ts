@@ -9,7 +9,15 @@ export type ServerActivityTurn = {
 
 export type LiveFeedEntry =
   | { kind: "message"; at: number; message: KanaMessage }
-  | { kind: "activity"; at: number; activities: ActivityItem[] };
+  | {
+      kind: "activity";
+      at: number;
+      /** Stable per block. The live block gets a new key once its reply lands. */
+      key: string;
+      /** The running turn's tools, not yet closed by a reply. */
+      live: boolean;
+      activities: ActivityItem[];
+    };
 
 export function buildLiveFeedTimeline(
   messages: KanaMessage[],
@@ -30,6 +38,8 @@ export function buildLiveFeedTimeline(
     timeline.push({
       kind: "activity",
       at: message.timestamp - 0.5,
+      key: `turn-${message.id}`,
+      live: false,
       activities: message.activities,
     });
   });
@@ -43,6 +53,8 @@ export function buildLiveFeedTimeline(
     timeline.push({
       kind: "activity",
       at: assistant ? assistant.timestamp - 0.5 : turn.turnAnchorMs,
+      key: `stored-${turn.turnIndex ?? turn.turnAnchorMs}`,
+      live: false,
       activities: turn.activities,
     });
   }
@@ -52,9 +64,14 @@ export function buildLiveFeedTimeline(
   );
   if (uncommittedActivities.length) {
     const lastUser = [...messages].reverse().find((message) => message.role === "user");
+    const first = uncommittedActivities.reduce((earliest, activity) =>
+      activity.timestamp < earliest.timestamp ? activity : earliest,
+    );
     timeline.push({
       kind: "activity",
       at: (lastUser?.timestamp ?? Date.now()) + 0.5,
+      key: `live-${first.id}`,
+      live: true,
       activities: uncommittedActivities,
     });
   }

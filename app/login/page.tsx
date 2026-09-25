@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { btnGhost, btnPrimary, inputBase, fieldLabel, sectionEyebrow } from "@/components/kana/ui";
+import { btnGhost, btnPrimary, inputBase, fieldLabel } from "@/components/kana/ui";
 import { LocalPreferencesStore } from "@/lib/preferences/local-preferences-store";
 import { fetchAuthStatus } from "@/lib/runtime/auth-client";
 import { useTheme } from "@/lib/state/use-theme";
@@ -69,17 +69,13 @@ export default function LoginPage() {
   );
 
   return (
-    <main className="kana-stage-pattern kana-dots grid min-h-dvh place-items-center bg-bg p-4 font-sans">
+    <main className="grid min-h-dvh place-items-center bg-bg p-4 font-sans">
       <button type="button" className="kana-focus kana-pill kana-pill-soft absolute right-4 top-4 px-4 py-2.5 text-[12px]" onClick={toggleTheme} aria-label={copy.themeToggle(nextTheme)}>
         {copy.themeLabel(nextTheme)}
       </button>
       <div className="kana-panel relative w-[min(400px,100%)] rounded-[36px] p-7 sm:p-8">
-        <div className="mb-6 flex items-center gap-3">
-          <div>
-            <p className={sectionEyebrow}>{copy.eyebrow}</p>
-            <h1 className="text-[27px] font-extrabold leading-tight text-ink">Kana</h1>
-          </div>
-        </div>
+        {/* No visible title: the card is just the password form. */}
+        <h1 className="sr-only">Kana</h1>
 
         {passwordConfigured === false ? (
           <div className="grid gap-3" role="status">
@@ -94,33 +90,30 @@ export default function LoginPage() {
             </button>
           </div>
         ) : (
-          <>
-            <p className="text-xs leading-relaxed text-muted">{copy.body}</p>
-            <form className="mt-6 flex flex-col gap-3" onSubmit={submit}>
-              <label className="flex flex-col gap-1">
-                <span className={fieldLabel}>{copy.password}</span>
-                <input
-                  ref={inputRef}
-                  type="password"
-                  autoFocus
-                  autoComplete="current-password"
-                  disabled={loading}
-                  placeholder={copy.placeholder}
-                  className={inputBase}
-                />
-              </label>
+          <form className="flex flex-col gap-3" onSubmit={submit}>
+            <label className="flex flex-col gap-1">
+              <span className={fieldLabel}>{copy.password}</span>
+              <input
+                ref={inputRef}
+                type="password"
+                autoFocus
+                autoComplete="current-password"
+                disabled={loading}
+                placeholder={copy.placeholder}
+                className={inputBase}
+              />
+            </label>
 
-              {error ? (
-                <p className="text-[11px] font-semibold text-danger" role="alert">
-                  {error}
-                </p>
-              ) : null}
+            {error ? (
+              <p className="text-[11px] font-semibold text-danger" role="alert">
+                {error}
+              </p>
+            ) : null}
 
-              <button className={btnPrimary} type="submit" disabled={loading}>
-                {loading ? copy.submitting : copy.submit}
-              </button>
-            </form>
-          </>
+            <button className={btnPrimary} type="submit" disabled={loading}>
+              {loading ? copy.submitting : copy.submit}
+            </button>
+          </form>
         )}
         <div className="mt-5 border-t border-line pt-4 text-[10px] text-faint">
           {copy.footer}

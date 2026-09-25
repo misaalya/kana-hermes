@@ -164,6 +164,17 @@ export class ConversationService {
     this.store.setState({ activeConversationId: conversation.id, activePointer: pointer });
   }
 
+  /**
+   * Hermes wrote the session's row: it does so when it accepts the first
+   * prompt (prompt.submit). From then on the pointer carries the session, so a
+   * refresh resumes it instead of starting a blank conversation beside it.
+   */
+  markStored(conversationId: string): void {
+    const conversation = this.get(conversationId);
+    if (!conversation?.agent || conversation.agent.durable !== false) return;
+    this.save({ ...conversation, agent: { ...conversation.agent, durable: true } });
+  }
+
   /** Append a finished assistant reply and mirror its tool activity to the server log. */
   commitAssistantMessage(conversationId: string, message: KanaMessage): void {
     const conversation = this.get(conversationId);
@@ -194,12 +205,16 @@ export class ConversationService {
    * the history.restored event). session.history is a fallback only — it
    * resolves runtime session ids, never durable keys. When neither yields rows
    * the outcome is a visible status, never a silent empty transcript.
+   *
+   * While Hermes is still `running` the turn, the tools it already finished
+   * become the live activity log, so a refresh mid-turn keeps them on screen.
    */
   async restoreTranscript(
     conversationId: string,
     hermesSessionKey: string,
     resumedRows: AgentHistoryRow[],
     fetchHistory: () => Promise<AgentHistoryRow[]>,
+    running = false,
   ): Promise<void> {
     this.restoring = true;
     try {
@@ -212,11 +227,12 @@ export class ConversationService {
         }
       }
 
-      const { messages, turns } = parseHermesTranscript(rows);
+      const { messages, turns, unfinished } = parseHermesTranscript(rows);
       // Fresh read: rows appended while the fallback fetch was in flight must
       // not be clobbered by a stale snapshot.
       const target = this.get(conversationId);
       if (!target) return;
+      if (running) this.deps.stores.activity.getState().startTurn(unfinished);
 
       if (!messages.length) {
         if (!target.messages.length) {

@@ -702,6 +702,38 @@ describe("HermesAgentClient (relay transport)", () => {
     await assert.rejects(detached.fetchHistory(), /open a hermes session/i);
   });
 
+  it("reports a turn still running on resume without restarting its activity log", async () => {
+    const events: AgentEvent[] = [];
+    const client = await connectedClient((request) => {
+      if (request.method === "session.resume") {
+        return {
+          session_id: "runtime-2",
+          session_key: "stored-1",
+          resumed: "stored-1",
+          running: true,
+          messages: [
+            { role: "user", text: "find the news" },
+            { role: "tool", name: "web_search", context: "news today" },
+          ],
+        };
+      }
+      return {};
+    });
+    client.subscribe((event) => events.push(event));
+    await client.openSession({ persistentSessionId: "stored-1" });
+
+    const restored = events.find((event) => event.type === "history.restored");
+    assert.ok(restored && restored.type === "history.restored");
+    assert.equal(restored.running, true);
+    const started = events.find((event) => event.type === "agent.started");
+    assert.ok(started && started.type === "agent.started");
+    assert.equal(started.resumed, true);
+    assert.ok(
+      events.indexOf(restored) < events.indexOf(started),
+      "the transcript is restored before the turn is reported running",
+    );
+  });
+
   it("shares one in-flight connection and automatically resumes after a drop", async () => {
     let resumeCount = 0;
     FakeRelay.handler = (request) => {
@@ -819,7 +851,10 @@ describe("HermesAgentClient (relay transport)", () => {
 
     const suggestions = await client.completeCommands("/model deepseek-v4");
     assert.equal(suggestions.length, 2);
-    assert.match(suggestions[0]?.text ?? "", /--provider 'fireworks_ai' --session$/);
+    assert.equal(
+      suggestions[0]?.text,
+      "/model accounts/fireworks/models/deepseek-v4-flash-0731 --provider fireworks_ai --session",
+    );
 
     const modelCalls = FakeRelay.requests.filter((request) => request.method === "model.options").length;
     const fromCache = await client.completeCommands("/model deepseek-v4", { models: catalog });
@@ -836,9 +871,17 @@ describe("HermesAgentClient (relay transport)", () => {
       {
         session_id: "runtime-1",
         key: "model",
-        value: "'deepseek/deepseek-v4' --provider 'openrouter' --session",
+        value: "deepseek/deepseek-v4 --provider openrouter --session",
         confirm_expensive_model: false,
       },
+    );
+
+    // Hermes splits these on whitespace and never unquotes, so a quoted
+    // 'custom:9router' was an unknown provider.
+    await client.selectModel({ provider: "custom:9router", model: "cx/gpt-5.6-luna" });
+    assert.equal(
+      FakeRelay.requests.findLast((request) => request.method === "config.set")?.params?.value,
+      "cx/gpt-5.6-luna --provider custom:9router --session",
     );
   });
 
