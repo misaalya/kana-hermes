@@ -5,7 +5,9 @@ import type { ActivityItem } from "@/lib/agent/types";
 import type { KanaMessage } from "@/lib/conversation/types";
 import { ActivityStack } from "./activity-stack";
 import { ChatMarkdown } from "./chat-markdown";
-import { getCopy, type UiLocale } from "@/lib/ui/copy";
+import { MediaAttachments } from "./media-attachments";
+import { extractMediaAttachments } from "@/lib/presentation/media";
+import { getCopy, type Copy, type UiLocale } from "@/lib/ui/copy";
 import {
   buildLiveFeedTimeline,
   type ServerActivityTurn,
@@ -20,6 +22,17 @@ type LiveChatFeedProps = {
   status: string;
   locale: UiLocale;
 };
+
+/** Hermes's reply: its Markdown, then any files it delivered. */
+const AssistantReply = memo(function AssistantReply({ text, copy }: { text: string; copy: Copy["chat"] }) {
+  const { text: markdown, attachments } = useMemo(() => extractMediaAttachments(text), [text]);
+  return (
+    <>
+      {markdown ? <ChatMarkdown text={markdown} /> : null}
+      <MediaAttachments attachments={attachments} copy={copy} />
+    </>
+  );
+});
 
 export const LiveChatFeed = memo(function LiveChatFeed({
   messages,
@@ -54,6 +67,27 @@ export const LiveChatFeed = memo(function LiveChatFeed({
   useEffect(() => {
     if (pinnedToBottom) scrollToBottom();
   }, [entries.length, activities.length, typing, pinnedToBottom, scrollToBottom]);
+
+  // A delivered picture or video takes its height only once it loads, after
+  // the reply already scrolled into view: follow it while pinned.
+  const pinnedRef = useRef(pinnedToBottom);
+  useEffect(() => {
+    pinnedRef.current = pinnedToBottom;
+  }, [pinnedToBottom]);
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (!node) return;
+    const settle = () => {
+      if (pinnedRef.current) scrollToBottom("auto");
+    };
+    // load and loadedmetadata do not bubble; listen in the capture phase.
+    node.addEventListener("load", settle, true);
+    node.addEventListener("loadedmetadata", settle, true);
+    return () => {
+      node.removeEventListener("load", settle, true);
+      node.removeEventListener("loadedmetadata", settle, true);
+    };
+  }, [scrollToBottom]);
 
   const handleScroll = useCallback(() => {
     const node = scrollRef.current;
@@ -114,7 +148,7 @@ export const LiveChatFeed = memo(function LiveChatFeed({
             >
               <div className="text-[13px] font-medium leading-relaxed max-sm:text-[11px] max-sm:leading-[1.5]">
                 {isAssistant ? (
-                  <ChatMarkdown text={messageCopy} />
+                  <AssistantReply text={messageCopy} copy={copy.chat} />
                 ) : (
                   <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{messageCopy}</p>
                 )}

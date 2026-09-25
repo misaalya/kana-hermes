@@ -23,16 +23,16 @@ export type KanaUserConfig = {
     provider?: KanaTtsProviderType;
     /** Entire synthesis request, including queueing behind another utterance. */
     timeoutSeconds?: number;
-    /** Provider-specific values are isolated so model/voice fields cannot clash. */
+    /** Each service has its own block, shaped after that service's own API. */
     irodoriLocal?: KanaIrodoriLocalConfig;
-    openAiCompatible?: KanaOpenAiCompatibleTtsConfig;
+    pollinations?: KanaPollinationsTtsConfig;
   };
 };
 
-export type KanaTtsProviderType = "irodori-local" | "openai-compatible";
-export type KanaOpenAiTtsPreset = "pollinations";
-export type KanaTtsResponseFormat = "mp3" | "opus" | "aac" | "flac" | "wav";
+export type KanaTtsProviderType = "irodori-local" | "pollinations";
 export type KanaIrodoriPrecision = "auto" | "int8" | "fp32";
+/** Formats Pollinations returns that a browser can play (not raw pcm). */
+export type KanaPollinationsAudioFormat = "mp3" | "opus" | "aac" | "flac" | "wav";
 
 export type KanaIrodoriLocalConfig = {
   /** Where Kana installs the engine and model; defaults to <data root>/irodori. */
@@ -47,19 +47,18 @@ export type KanaIrodoriLocalConfig = {
   precision?: KanaIrodoriPrecision;
 };
 
-export type KanaOpenAiCompatibleTtsConfig = {
-  /** Optional defaults/capabilities for a known OpenAI-compatible service. */
-  preset?: KanaOpenAiTtsPreset;
-  /** API root (for example https://host.example/v1) or full speech endpoint. */
-  baseUrl?: string;
-  /** Server-only user credential. This value is never returned by Kana APIs. */
+/** https://gen.pollinations.ai — its speech models, voices, and fields. */
+export type KanaPollinationsTtsConfig = {
+  /** Server-only key (sk_… or pk_…). This value is never returned by Kana APIs. */
   apiKey?: string;
+  /** A Pollinations speech model or alias; unset uses Pollinations' default. */
   model?: string;
+  /** A voice the model offers, or a custom ElevenLabs voice ID. */
   voice?: string;
-  defaultInstruction?: string;
-  /** Opt-in request field for providers that support voice instructions. */
-  instructionField?: string;
-  responseFormat?: KanaTtsResponseFormat;
+  /** How to speak, for models that take direction (Pollinations' `instructions`). */
+  instructions?: string;
+  /** Audio format; defaults to mp3. */
+  format?: KanaPollinationsAudioFormat;
 };
 
 export type KanaDeploymentMode = "local" | "deployment";
@@ -248,6 +247,101 @@ export function readKanaUserConfig(): KanaUserConfig {
   return inspection.config;
 }
 
+const POLLINATIONS_FORMATS: KanaPollinationsAudioFormat[] = ["mp3", "opus", "aac", "flac", "wav"];
+
+/**
+ * The block of a config written before Kana integrated voice services one by
+ * one, when Pollinations was a preset over a generic "openai-compatible"
+ * adapter, mapped onto `tts.pollinations`. Values the old preset filled in are
+ * kept so an untouched file sounds the same. Any other generic endpoint is
+ * refused rather than guessed at.
+ */
+function legacyPollinationsRecord(tts: Record<string, unknown>): Record<string, unknown> {
+  const block = tts.openAiCompatible === undefined ? tts : tts.openAiCompatible;
+  if (!isRecord(block)) throw new Error("tts.openAiCompatible must be a JSON object.");
+  if (block.preset !== "pollinations") {
+    throw new Error(
+      'tts.provider "openai-compatible" is no longer supported: Kana integrates each voice service directly. Use "pollinations" with a tts.pollinations block.',
+    );
+  }
+  return {
+    apiKey: block.apiKey,
+    model: block.model ?? "qwen-tts-instruct",
+    voice: block.voice ?? "Serena",
+    instructions: block.defaultInstruction,
+    format: block.responseFormat ?? "wav",
+  };
+}
+
+function parseTtsConfig(tts: Record<string, unknown>): NonNullable<KanaUserConfig["tts"]> {
+  const provider = optionalString(tts, "provider", "tts");
+  if (
+    provider !== undefined &&
+    provider !== "irodori-local" &&
+    provider !== "pollinations" &&
+    // Older builds: "qwen3-local" was the local slot the Irodori engine now
+    // fills, and "openai-compatible" carried the Pollinations preset.
+    provider !== "qwen3-local" &&
+    provider !== "openai-compatible"
+  ) {
+    throw new Error('tts.provider must be either "irodori-local" or "pollinations".');
+  }
+  const legacyFlat = ["preset", "baseUrl", "apiKey", "defaultInstruction", "instructionField", "responseFormat"]
+    .some((key) => tts[key] !== undefined);
+  const external = provider === undefined
+    ? [tts.pollinations, tts.openAiCompatible].some((block) => block !== undefined) || legacyFlat
+    : provider === "pollinations" || provider === "openai-compatible";
+  if (provider === undefined && external && tts.irodoriLocal !== undefined) {
+    throw new Error("Set tts.provider when keeping both local and external configurations.");
+  }
+  const resolved: KanaTtsProviderType = external ? "pollinations" : "irodori-local";
+
+  // Only the chosen provider is read, so an inactive block cannot break it.
+  let irodoriLocal: KanaIrodoriLocalConfig = {};
+  let pollinations: KanaPollinationsTtsConfig = {};
+  if (resolved === "irodori-local") {
+    const record = tts.irodoriLocal ?? {};
+    if (!isRecord(record)) throw new Error("tts.irodoriLocal must be a JSON object.");
+    const precision = optionalString(record, "precision", "tts.irodoriLocal");
+    if (precision !== undefined && !["auto", "int8", "fp32"].includes(precision)) {
+      throw new Error("tts.irodoriLocal.precision must be auto, int8, or fp32.");
+    }
+    irodoriLocal = withoutUndefined<KanaIrodoriLocalConfig>({
+      installDirectory: optionalAbsolutePath(record, "installDirectory", "tts.irodoriLocal"),
+      modelPath: optionalAbsolutePath(record, "modelPath", "tts.irodoriLocal"),
+      threads: optionalPositiveInteger(record, "threads", "tts.irodoriLocal", 256),
+      steps: optionalPositiveInteger(record, "steps", "tts.irodoriLocal", 200),
+      precision: precision as KanaIrodoriPrecision | undefined,
+    });
+  } else {
+    const record = tts.pollinations ??
+      (tts.openAiCompatible !== undefined || legacyFlat ? legacyPollinationsRecord(tts) : {});
+    if (!isRecord(record)) throw new Error("tts.pollinations must be a JSON object.");
+    const section = "tts.pollinations";
+    const model = optionalStringWithLimit(record, "model", section, 200);
+    if (model !== undefined && !/^[\w.:/-]+$/.test(model)) {
+      throw new Error('tts.pollinations.model must be a Pollinations model name, such as "elevenlabs".');
+    }
+    const format = optionalString(record, "format", section);
+    if (format !== undefined && !POLLINATIONS_FORMATS.includes(format as KanaPollinationsAudioFormat)) {
+      throw new Error(`tts.pollinations.format must be one of: ${POLLINATIONS_FORMATS.join(", ")}.`);
+    }
+    pollinations = withoutUndefined<KanaPollinationsTtsConfig>({
+      apiKey: optionalStringWithLimit(record, "apiKey", section, 16_384),
+      model,
+      voice: optionalStringWithLimit(record, "voice", section, 500),
+      instructions: optionalStringWithLimit(record, "instructions", section, 8_000),
+      format: format as KanaPollinationsAudioFormat | undefined,
+    });
+  }
+  return {
+    provider: resolved,
+    ...withoutUndefined({ timeoutSeconds: optionalPositiveInteger(tts, "timeoutSeconds", "tts", 3600) }),
+    ...(Object.keys(irodoriLocal).length ? { irodoriLocal } : {}),
+    ...(Object.keys(pollinations).length ? { pollinations } : {}),
+  };
+}
+
 function parseKanaUserConfigFile(filePath: string): KanaUserConfig {
   let parsed: unknown;
   try {
@@ -282,141 +376,7 @@ function parseKanaUserConfigFile(filePath: string): KanaUserConfig {
   }
   if (parsed.tts !== undefined) {
     if (!isRecord(parsed.tts)) throw new Error("tts must be a JSON object.");
-    const ttsRecord = parsed.tts;
-    const provider = optionalString(ttsRecord, "provider", "tts");
-    if (
-      provider !== undefined &&
-      provider !== "irodori-local" &&
-      provider !== "openai-compatible" &&
-      // Builds before Irodori used a local Qwen3-TTS service; its slot is now
-      // the local Irodori engine, and the old qwen3Local block is ignored.
-      provider !== "qwen3-local"
-    ) {
-      throw new Error(
-        'tts.provider must be either "irodori-local" or "openai-compatible".',
-      );
-    }
-    const legacyExternalConfig =
-      ttsRecord.openAiCompatible === undefined &&
-      [
-        "preset",
-        "baseUrl",
-        "apiKey",
-        "defaultInstruction",
-        "instructionField",
-        "responseFormat",
-      ].some((key) => ttsRecord[key] !== undefined);
-    if (provider === undefined && ttsRecord.irodoriLocal !== undefined && ttsRecord.openAiCompatible !== undefined) {
-      throw new Error("Set tts.provider when keeping both local and external configurations.");
-    }
-    const resolvedProvider: KanaTtsProviderType = provider === "openai-compatible" ||
-      (provider === undefined && (legacyExternalConfig || ttsRecord.openAiCompatible !== undefined))
-      ? "openai-compatible"
-      : "irodori-local";
-    // Inactive values stay untouched on disk and cannot break the selected provider.
-    const irodoriRecord = resolvedProvider === "irodori-local" ? (ttsRecord.irodoriLocal ?? {}) : {};
-    if (!isRecord(irodoriRecord)) {
-      throw new Error("tts.irodoriLocal must be a JSON object.");
-    }
-    const openAiRecord = resolvedProvider === "openai-compatible"
-      ? (ttsRecord.openAiCompatible === undefined ? ttsRecord : ttsRecord.openAiCompatible)
-      : {};
-    if (!isRecord(openAiRecord)) {
-      throw new Error("tts.openAiCompatible must be a JSON object.");
-    }
-
-    const preset = optionalString(openAiRecord, "preset", "tts.openAiCompatible");
-    if (preset !== undefined && preset !== "pollinations") {
-      throw new Error(
-        'tts.openAiCompatible.preset currently supports only "pollinations".',
-      );
-    }
-    const responseFormat = optionalString(
-      openAiRecord,
-      "responseFormat",
-      "tts.openAiCompatible",
-    );
-    const responseFormats: KanaTtsResponseFormat[] = [
-      "mp3",
-      "opus",
-      "aac",
-      "flac",
-      "wav",
-    ];
-    if (
-      responseFormat !== undefined &&
-      !responseFormats.includes(responseFormat as KanaTtsResponseFormat)
-    ) {
-      throw new Error(
-        `tts.openAiCompatible.responseFormat must be one of: ${responseFormats.join(", ")}.`,
-      );
-    }
-    const instructionField = optionalStringWithLimit(
-      openAiRecord,
-      "instructionField",
-      "tts.openAiCompatible",
-      64,
-    );
-    if (
-      instructionField !== undefined &&
-      !/^[A-Za-z_][A-Za-z0-9_]*$/.test(instructionField)
-    ) {
-      throw new Error(
-        "tts.openAiCompatible.instructionField must be a simple JSON field name.",
-      );
-    }
-    if (["model", "input", "voice", "response_format"].includes(instructionField ?? "")) {
-      throw new Error(
-        "tts.openAiCompatible.instructionField cannot replace a standard speech field.",
-      );
-    }
-    const precision = optionalString(irodoriRecord, "precision", "tts.irodoriLocal");
-    if (precision !== undefined && !["auto", "int8", "fp32"].includes(precision)) {
-      throw new Error("tts.irodoriLocal.precision must be auto, int8, or fp32.");
-    }
-    const irodoriLocal = withoutUndefined<KanaIrodoriLocalConfig>({
-      installDirectory: optionalAbsolutePath(irodoriRecord, "installDirectory", "tts.irodoriLocal"),
-      modelPath: optionalAbsolutePath(irodoriRecord, "modelPath", "tts.irodoriLocal"),
-      threads: optionalPositiveInteger(irodoriRecord, "threads", "tts.irodoriLocal", 256),
-      steps: optionalPositiveInteger(irodoriRecord, "steps", "tts.irodoriLocal", 200),
-      precision: precision as KanaIrodoriPrecision | undefined,
-    });
-    const openAiCompatible = withoutUndefined<KanaOpenAiCompatibleTtsConfig>({
-        preset: preset as KanaOpenAiTtsPreset | undefined,
-        baseUrl: optionalStringWithLimit(
-          openAiRecord,
-          "baseUrl",
-          "tts.openAiCompatible",
-          2_048,
-        ),
-        apiKey: optionalStringWithLimit(
-          openAiRecord,
-          "apiKey",
-          "tts.openAiCompatible",
-          16_384,
-        ),
-        model: optionalString(openAiRecord, "model", "tts.openAiCompatible"),
-        voice: optionalStringWithLimit(
-          openAiRecord,
-          "voice",
-          "tts.openAiCompatible",
-          500,
-        ),
-        defaultInstruction: optionalStringWithLimit(
-          openAiRecord,
-          "defaultInstruction",
-          "tts.openAiCompatible",
-          8_000,
-        ),
-        instructionField,
-        responseFormat: responseFormat as KanaTtsResponseFormat | undefined,
-      });
-    config.tts = {
-      provider: resolvedProvider,
-      ...withoutUndefined({ timeoutSeconds: optionalPositiveInteger(ttsRecord, "timeoutSeconds", "tts", 3600) }),
-      ...(Object.keys(irodoriLocal).length ? { irodoriLocal } : {}),
-      ...(Object.keys(openAiCompatible).length ? { openAiCompatible } : {}),
-    };
+    config.tts = parseTtsConfig(parsed.tts);
   }
   return config;
 }

@@ -9,7 +9,8 @@ $KANA_DATA_DIR/config.json
 
 The file is normal editable JSON owned by the account running Kana. Opening
 Settings → Advanced configuration creates the starter file (mode `0600`) and
-shows its absolute path. From a source checkout or global installation, run:
+shows its absolute path. Its **Guide** link opens `/docs`, a step-by-step
+guide to the same settings inside Kana. From a source checkout or global installation, run:
 
 ```bash
 npm run config
@@ -114,61 +115,55 @@ Optional fields under `tts.irodoriLocal`:
 | `modelPath` | none | Absolute path to an existing Irodori v4.1 `model.safetensors`; skips the model download |
 | `installDirectory` | `$KANA_DATA_DIR/irodori` | Where the engine and model are installed |
 
-To use Pollinations, replace the `tts` section with:
+Kana also speaks through external voice services. Each one is its own
+integration shaped after that service's API, not a generic "OpenAI-compatible"
+adapter: speech APIs have no common standard, so Kana sends each service
+exactly the fields it documents. Pollinations is available now.
+
+### Pollinations
+
+[Pollinations](https://gen.pollinations.ai/docs) serves many speech models
+(ElevenLabs, Qwen TTS, Grok TTS, Kokoro, and more) behind one key. Replace the
+`tts` section with:
 
 ```json
 {
   "tts": {
-    "provider": "openai-compatible",
-    "openAiCompatible": {
-      "preset": "pollinations",
-      "apiKey": "YOUR_POLLINATIONS_API_KEY",
-      "model": "qwen-tts-instruct",
-      "voice": "Serena",
-      "defaultInstruction": "A calm and gentle young anime girl voice. Soft, warm, soothing, natural Japanese speech.",
-      "responseFormat": "wav"
+    "provider": "pollinations",
+    "pollinations": {
+      "apiKey": "sk_YOUR_POLLINATIONS_KEY",
+      "model": "elevenlabs",
+      "voice": "rachel",
+      "instructions": "A calm and gentle young anime girl voice.",
+      "format": "mp3"
     }
   }
 }
 ```
 
-The preset supplies `https://gen.pollinations.ai/v1` as its base URL and opts
-into the non-standard `instruct` request field. Every shown value can still be
-overridden. Pollinations is not a special playback implementation; it is a
-preset over Kana's generic OpenAI-compatible `POST /v1/audio/speech` adapter.
+| Field | Default | Purpose |
+| --- | --- | --- |
+| `apiKey` | required | A secret `sk_` key from [enter.pollinations.ai](https://enter.pollinations.ai/keys). Every speech model is paid. |
+| `model` | Pollinations' default | A speech model or alias from the [live catalog](https://gen.pollinations.ai/audio/models), such as `elevenlabs`, `elevenlabs/eleven-flash-v2.5`, `qwen-tts-instruct`, or `x-ai/grok-tts` |
+| `voice` | Pollinations' default | One of the model's voices from the catalog, or a custom ElevenLabs voice ID |
+| `instructions` | none | How to speak, for models that take direction (Pollinations' `instructions` field) |
+| `format` | `mp3` | `mp3`, `opus`, `aac`, `flac`, or `wav` |
 
-For another compatible provider, configure the adapter directly:
+Kana posts `input`, `response_format`, and only the fields you set to
+`https://gen.pollinations.ai/v1/audio/speech`. A reply longer than
+Pollinations' 10,000-character limit is refused before it is sent.
 
-```json
-{
-  "tts": {
-    "provider": "openai-compatible",
-    "openAiCompatible": {
-      "baseUrl": "https://voice.example.com/v1",
-      "apiKey": "YOUR_PROVIDER_API_KEY",
-      "model": "tts-1",
-      "voice": "alloy",
-      "responseFormat": "mp3"
-    }
-  }
-}
-```
-
-Kana sends only `model`, `input`, and `voice` by default (plus
-`response_format` when configured). It sends the default instruction only when
-the provider explicitly opts in through `instructionField`, for example
-`"instructionField": "instruct"`. This keeps the generic adapter compatible
-with providers that do not implement Pollinations' extension.
+A `config.json` from when Pollinations was a preset over the generic adapter
+(`"provider": "openai-compatible"` with `"preset": "pollinations"`) keeps
+working and sounds the same; rewriting it in the shape above is recommended.
+Other `openai-compatible` endpoints are no longer supported.
 
 The API key belongs to the user. It is read from the owner-only server
 `config.json`, attached to the upstream `Authorization: Bearer` header, and is
 never included in browser preferences, provider status, diagnostics, backups,
-or client-side requests. Remote providers require HTTPS and an API key;
-credential-free HTTP is accepted only for loopback-compatible services.
+or client-side requests; Kana redacts it from any upstream error it shows.
 Kana rejects empty or mislabeled responses and caps each generated audio file
-at 64 MB before it can be buffered by the browser. The generic adapter also
-limits a single speech input to 20,000 characters; provider presets may impose
-a smaller upstream-specific limit (Pollinations currently uses 4,096).
+at 64 MB before it can be buffered by the browser.
 
 Normally `hermes.executable` should be omitted. Kana searches the environment,
 the full `PATH`, Hermes-managed homes/virtual environments, user-local and

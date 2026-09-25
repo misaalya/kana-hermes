@@ -55,7 +55,7 @@ export function detectIrodoriPlatform(input: PlatformInput): IrodoriPlatform {
   const physicalCores = countPhysicalCores(input.cpuinfo, input.logicalCpus);
   const unsupported = (reason: string): IrodoriPlatform => ({ supported: false, reason, int8: false, physicalCores });
   if (input.platform !== "linux" || input.arch !== "x64") {
-    return unsupported("Local Irodori voice needs Linux on x86-64; use an OpenAI-compatible voice provider on this machine.");
+    return unsupported("Local Irodori voice needs Linux on x86-64; use Pollinations on this machine.");
   }
   if (!glibcAtLeast(input.glibcVersion)) {
     return unsupported(`Local Irodori voice needs glibc ${MINIMUM_GLIBC.join(".")} or newer (Ubuntu 22.04+).`);

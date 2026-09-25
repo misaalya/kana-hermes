@@ -18,8 +18,6 @@ import type {
   AgentSessionOptions,
 } from "@/lib/agent/types";
 import {
-  buildKanaResumeSeedPrefix,
-  buildKanaSystemPrompt,
   buildKanaUserPrompt,
 } from "@/lib/presentation/persona";
 import {
@@ -66,6 +64,24 @@ const DEFAULT_RECONNECT_DELAYS_MS = [500, 1_000, 2_000, 5_000, 10_000] as const;
  */
 function modelSwitchArguments(model: string, provider: string): string {
   return `${model} --provider ${provider} --session`;
+}
+
+/**
+ * The warning Kana shows after a model switch that succeeded. Hermes joins
+ * its warnings with " | ". Its model-catalog checks add "Note: …" parts
+ * ("`x` was not found in … listing", "could not reach … model listing") that
+ * ride on switches Hermes accepted anyway, often only because a slow or
+ * private /models endpoint timed out; they read like a failure, so they are
+ * dropped. Other warnings (an auto-correction, a non-agentic model) stay. A
+ * switch Hermes rejects still reports its reason as an error.
+ */
+function switchWarning(warning: unknown): string | undefined {
+  if (typeof warning !== "string") return undefined;
+  const kept = warning
+    .split(" | ")
+    .map((part) => part.trim())
+    .filter((part) => part && !part.startsWith("Note: "));
+  return kept.length ? kept.join(" | ") : undefined;
 }
 
 function inputRequest(
@@ -160,9 +176,9 @@ export class HermesAgentClient implements AgentClient {
   private connectedOnce = false;
   private session: AgentSession | null = null;
   private sessionOptions: AgentSessionOptions | null = null;
-  // One-shot flag: restate the response contract on the first prompt after
-  // resuming a session (resumed history carries no system seed).
-  private needsResumeSeed = false;
+  // One-shot flag: the first prompt after a session opens (new or resumed)
+  // carries the full response contract; later prompts carry the short one.
+  private needsFullContract = false;
   private intentionallyClosing = false;
   private running = false;
   private attachmentUpload: AbortController | null = null;
@@ -333,10 +349,6 @@ export class HermesAgentClient implements AgentClient {
           source: "kana",
           close_on_disconnect: false,
         });
-        // Resumed history is restored by Hermes from its DB without any
-        // client-supplied system message, so the response contract must be
-        // re-stated once on the next prompt (see submitPrompt).
-        this.needsResumeSeed = true;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         if (/session not found/i.test(message)) {
@@ -352,19 +364,12 @@ export class HermesAgentClient implements AgentClient {
         source: "kana",
         close_on_disconnect: false,
         ...(options.cwd ? { cwd: options.cwd } : {}),
-        // Verified against hermes serve: a client-seeded system message rides
-        // into the model's conversation history and is honored for the
-        // lifetime of the session, even though the gateway does not persist it
-        // as a formal system prompt.
-        messages: [
-          {
-            role: "system",
-            content: buildKanaSystemPrompt(),
-          },
-        ],
+        // No system-role seed: Hermes sends it as a second system message,
+        // which some routes drop, and never stores it. The contract rides in
+        // the user turn instead (see lib/presentation/persona.ts).
       });
-      this.needsResumeSeed = false;
     }
+    this.needsFullContract = true;
 
     const persistentSessionId =
       response.stored_session_id ??
@@ -644,8 +649,7 @@ export class HermesAgentClient implements AgentClient {
       deferred: response.deferred === true,
       message:
         (typeof response.confirm_message === "string" && response.confirm_message) ||
-        (typeof response.warning === "string" && response.warning) ||
-        undefined,
+        switchWarning(response.warning),
     };
   }
 
@@ -1046,25 +1050,20 @@ export class HermesAgentClient implements AgentClient {
     if (!this.session) {
       throw new Error("Open a Hermes session before sending a message.");
     }
-    // One-shot: the first prompt after resuming carries the response contract,
-    // because resumed history is restored by Hermes without any system seed.
-    const text = this.needsResumeSeed
-      ? [
-          buildKanaResumeSeedPrefix(),
-          "",
-          buildKanaUserPrompt(message),
-        ].join("\n\n")
-      : buildKanaUserPrompt(message);
-    this.needsResumeSeed = false;
+    const text = buildKanaUserPrompt(message, this.needsFullContract);
     this.running = true;
     this.emit({ type: "agent.started" });
     try {
       await this.request("prompt.submit", {
         session_id: this.session.sessionId,
-        // References stay outside JSON so quoted filenames survive Hermes's
-        // context-reference parser without JSON backslash escaping.
+        // References go after the Kana note: Hermes's context-reference
+        // parser reads them anywhere, and transcript restore drops them
+        // together with the note.
         text: attachmentRefs.length ? `${text}\n\n${attachmentRefs.join("\n")}` : text,
       });
+      // Cleared only once Hermes took the prompt, so a failed submit retries
+      // with the full contract.
+      this.needsFullContract = false;
     } catch (error) {
       this.running = false;
       throw error;

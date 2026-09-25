@@ -125,7 +125,7 @@ Your data (password hash, settings, voice profiles, model cache) lives in
 
 **Voice**
 - Local Japanese speech with Irodori-TTS v4.1 Anime on a CPU engine, with voice cloning from a short, consented sample.
-- Or any OpenAI-compatible speech API, with a Pollinations preset.
+- Or an external voice service: Pollinations (ElevenLabs, Qwen TTS, Grok TTS, and more).
 - Lip sync follows the audio, and Stop cancels generation on the server.
 
 **Security and operations**
@@ -190,8 +190,9 @@ Voice is optional and off on new installs. Turn Kana's voice on or off in
   already in your Hugging Face cache is reused instead of downloaded.
   Pick the bundled Kana voice, the model's own faster voice, or clone one from a
   consented sample.
-- **OpenAI-compatible API.** Point `tts.provider` at any `POST /v1/audio/speech`
-  service. API keys stay in the server's `config.json` and never reach the browser.
+- **Pollinations.** Set `tts.provider` to `pollinations` with your key, model, and
+  voice. Each external service is its own integration; API keys stay in the
+  server's `config.json` and never reach the browser.
 
 Configuration examples are in [TTS providers](docs/CONFIGURATION.md#tts-providers),
 including every local engine option. CPU synthesis is slower than realtime on
@@ -222,7 +223,7 @@ Browser (Kana UI)
   ▼
 Kana server (Next.js)
   ├─ /api/hermes/*    → one server-held WebSocket → hermes serve  → Hermes agent
-  ├─ /api/voice/tts/* → local irodori-c engine or OpenAI-compatible API
+  ├─ /api/voice/tts/* → local irodori-c engine or Pollinations
   └─ data folder      → password hash, settings, activity log, voices
 ```
 

@@ -88,45 +88,82 @@ describe("advanced user configuration", () => {
       kanaUserConfigPath(),
       JSON.stringify({
         tts: {
-          provider: "openai-compatible",
-          openAiCompatible: {
-            preset: "pollinations",
-            baseUrl: "https://gen.pollinations.ai/v1",
+          provider: "pollinations",
+          pollinations: {
             apiKey: "user-owned-secret",
-            model: "qwen-tts-instruct",
-            voice: "Serena",
-            defaultInstruction: "Speak calmly in Japanese.",
-            instructionField: "instruct",
-            responseFormat: "wav",
+            model: "elevenlabs/eleven-v3",
+            voice: "JTlYtJrcTzPC71hMLOxo",
+            instructions: "Speak calmly in Japanese.",
+            format: "wav",
           },
         },
       }),
     );
-    const tts = readKanaUserConfig().tts;
-    assert.equal(tts?.provider, "openai-compatible");
-    assert.equal(tts?.openAiCompatible?.preset, "pollinations");
-    assert.equal(tts?.openAiCompatible?.apiKey, "user-owned-secret");
-    assert.equal(tts?.openAiCompatible?.instructionField, "instruct");
+    assert.deepEqual(readKanaUserConfig().tts, {
+      provider: "pollinations",
+      pollinations: {
+        apiKey: "user-owned-secret",
+        model: "elevenlabs/eleven-v3",
+        voice: "JTlYtJrcTzPC71hMLOxo",
+        instructions: "Speak calmly in Japanese.",
+        format: "wav",
+      },
+    });
   });
 
   it("resolves Pollinations without exposing its API key in browser-safe metadata", async () => {
+    writeFileSync(
+      kanaUserConfigPath(),
+      JSON.stringify({ tts: { provider: "pollinations", pollinations: { apiKey: "never-send-this-key" } } }),
+    );
+    const { getConfiguredTtsProvider } = await import("@/lib/server/tts-provider");
+    const provider = getConfiguredTtsProvider();
+    assert.equal(provider.descriptor.name, "Pollinations");
+    assert.equal(provider.descriptor.configured, true);
+    assert.doesNotMatch(JSON.stringify(provider.descriptor), /never-send-this-key/);
+  });
+
+  it("reads a config from the generic openai-compatible days as Pollinations", () => {
+    // The shape Kana wrote when Pollinations was a preset over a generic adapter.
     writeFileSync(
       kanaUserConfigPath(),
       JSON.stringify({
         tts: {
           provider: "openai-compatible",
           openAiCompatible: {
+            apiKey: "legacy-key",
             preset: "pollinations",
-            apiKey: "never-send-this-key",
+            baseUrl: "https://gen.pollinations.ai/v1",
+            model: "elevenlabs",
+            voice: "JTlYtJrcTzPC71hMLOxo",
+            defaultInstruction: "Speak softly.",
+            instructionField: "instruct",
           },
         },
       }),
     );
-    const { getConfiguredTtsProvider } = await import("@/lib/server/tts-provider");
-    const provider = getConfiguredTtsProvider();
-    assert.equal(provider.descriptor.name, "Pollinations");
-    assert.equal(provider.descriptor.capabilities.instruction, true);
-    assert.doesNotMatch(JSON.stringify(provider.descriptor), /never-send-this-key/);
+    assert.deepEqual(readKanaUserConfig().tts, {
+      provider: "pollinations",
+      pollinations: {
+        apiKey: "legacy-key",
+        model: "elevenlabs",
+        voice: "JTlYtJrcTzPC71hMLOxo",
+        instructions: "Speak softly.",
+        // The old preset's format, so an untouched file sounds the same.
+        format: "wav",
+      },
+    });
+
+    writeFileSync(
+      kanaUserConfigPath(),
+      JSON.stringify({
+        tts: {
+          provider: "openai-compatible",
+          openAiCompatible: { baseUrl: "https://voice.example/v1", apiKey: "k", model: "tts-1", voice: "alloy" },
+        },
+      }),
+    );
+    assert.throws(() => readKanaUserConfig(), /no longer supported.*pollinations/);
   });
 
   it("rejects relative paths and unsafe ports", () => {
@@ -140,18 +177,14 @@ describe("advanced user configuration", () => {
     assert.throws(() => readKanaUserConfig(), /local.*deployment/);
 
     writeFileSync(kanaUserConfigPath(), JSON.stringify({ tts: { provider: "cloud-magic" } }));
-    assert.throws(() => readKanaUserConfig(), /irodori-local.*openai-compatible/);
+    assert.throws(() => readKanaUserConfig(), /irodori-local.*pollinations/);
 
-    writeFileSync(
-      kanaUserConfigPath(),
-      JSON.stringify({
-        tts: {
-          provider: "openai-compatible",
-          openAiCompatible: { instructionField: "model" },
-        },
-      }),
-    );
-    assert.throws(() => readKanaUserConfig(), /cannot replace/);
+    const pollinations = (block: unknown) =>
+      writeFileSync(kanaUserConfigPath(), JSON.stringify({ tts: { provider: "pollinations", pollinations: block } }));
+    pollinations({ format: "pcm" });
+    assert.throws(() => readKanaUserConfig(), /format must be one of: mp3, opus, aac, flac, wav/);
+    pollinations({ model: "eleven labs" });
+    assert.throws(() => readKanaUserConfig(), /Pollinations model name/);
   });
 
   it("maps a Qwen-era local configuration onto the local Irodori engine", () => {
@@ -190,22 +223,15 @@ describe("advanced user configuration", () => {
     assert.throws(() => readKanaUserConfig(), /absolute path/);
   });
 
-  it("migrates a flat Pollinations preset to the OpenAI-compatible provider", () => {
+  it("migrates a flat Pollinations preset with the defaults it relied on", () => {
     writeFileSync(
       kanaUserConfigPath(),
-      JSON.stringify({
-        tts: {
-          preset: "pollinations",
-          apiKey: "legacy-user-key",
-          model: "qwen-tts-instruct",
-          voice: "Serena",
-        },
-      }),
+      JSON.stringify({ tts: { preset: "pollinations", apiKey: "legacy-user-key" } }),
     );
-    const tts = readKanaUserConfig().tts;
-    assert.equal(tts?.provider, "openai-compatible");
-    assert.equal(tts?.irodoriLocal, undefined);
-    assert.equal(tts?.openAiCompatible?.model, "qwen-tts-instruct");
+    assert.deepEqual(readKanaUserConfig().tts, {
+      provider: "pollinations",
+      pollinations: { apiKey: "legacy-user-key", model: "qwen-tts-instruct", voice: "Serena", format: "wav" },
+    });
   });
 
   it("lets the environment override deployment mode", () => {
@@ -251,14 +277,17 @@ describe("advanced user configuration", () => {
 
 it("only validates the selected provider and requires an explicit choice with both blocks", () => {
   const write = (tts: unknown) => writeFileSync(kanaUserConfigPath(), JSON.stringify({ tts }));
-  write({ provider: "openai-compatible", irodoriLocal: { steps: -1, modelPath: "old/path" }, openAiCompatible: { preset: "pollinations", apiKey: "test" } });
+  write({ provider: "pollinations", irodoriLocal: { steps: -1, modelPath: "old/path" }, pollinations: { apiKey: "test" } });
   assert.equal(readKanaUserConfig().tts?.irodoriLocal, undefined);
-  write({ provider: "irodori-local", irodoriLocal: { steps: 16 }, openAiCompatible: { instructionField: "model" } });
-  assert.equal(readKanaUserConfig().tts?.openAiCompatible, undefined);
-  write({ irodoriLocal: {}, openAiCompatible: {} });
+  write({ provider: "irodori-local", irodoriLocal: { steps: 16 }, pollinations: { format: "pcm" } });
+  assert.equal(readKanaUserConfig().tts?.pollinations, undefined);
+  write({ irodoriLocal: {}, pollinations: {} });
   assert.throws(() => readKanaUserConfig(), /Set tts.provider/);
-  write({ openAiCompatible: { preset: "pollinations" } });
-  assert.equal(readKanaUserConfig().tts?.provider, "openai-compatible");
+  write({ pollinations: { apiKey: "test" } });
+  assert.equal(readKanaUserConfig().tts?.provider, "pollinations");
+  // A new block wins over one left from the openai-compatible days.
+  write({ provider: "pollinations", pollinations: { apiKey: "new" }, openAiCompatible: { baseUrl: "https://voice.example/v1" } });
+  assert.equal(readKanaUserConfig().tts?.pollinations?.apiKey, "new");
 });
 
 it("validates the readable synthesis timeout setting", () => {

@@ -7,6 +7,7 @@ import type {
   AgentHistoryRow,
   AgentInputResponse,
   AgentModelCatalog,
+  AgentModelSelection,
   AgentSessionOptions,
 } from "@/lib/agent/types";
 import type { AvatarController } from "@/lib/avatar/avatar-controller";
@@ -77,6 +78,7 @@ export class FakeAgent implements AgentClient {
     this.opened.push(options);
     const persistentSessionId = options.persistentSessionId ?? this.nextSessionKey;
     const session = { sessionId: `runtime-${this.opened.length}`, persistentSessionId, resumed: Boolean(options.persistentSessionId) };
+    this.openSessionId = session.sessionId;
     this.emit({ type: "session.opened", ...session });
     return session;
   }
@@ -101,15 +103,24 @@ export class FakeAgent implements AgentClient {
     if (this.completionError) throw this.completionError;
     return this.completions;
   }
+  /** Runtime id of the session the client has open, as Hermes sees it. */
+  openSessionId: string | null = null;
   /** Catalog model.options returns; each call is counted in modelLists. */
   models: AgentModelCatalog = { provider: "p", model: "m1", providers: [] };
   modelLists: boolean[] = [];
+  /** Session-scoped /model picks, by runtime session id (like Hermes's model_override). */
+  readonly sessionModels = new Map<string, string>();
+  /** Each switch and the session it landed on. */
+  readonly switches: { sessionId: string | null; model: string }[] = [];
   async listModels(options: { refresh?: boolean } = {}) {
     this.modelLists.push(options.refresh === true);
-    return this.models;
+    const picked = this.openSessionId ? this.sessionModels.get(this.openSessionId) : undefined;
+    return picked ? { ...this.models, model: picked } : this.models;
   }
-  async selectModel() {
-    return {} as never;
+  async selectModel(selection: AgentModelSelection) {
+    this.switches.push({ sessionId: this.openSessionId, model: selection.model });
+    if (this.openSessionId) this.sessionModels.set(this.openSessionId, selection.model);
+    return { provider: selection.provider, model: selection.model, confirmationRequired: false, deferred: false };
   }
   async respondToInput(response: AgentInputResponse) {
     if (this.respondError) throw this.respondError;

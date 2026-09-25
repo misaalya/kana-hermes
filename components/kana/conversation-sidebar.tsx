@@ -4,6 +4,7 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { Conversation } from "@/lib/conversation/types";
 import { CheckIcon, CloseIcon, MoreIcon, PlusIcon, SearchIcon } from "./icons";
 import { getCopy, type UiLocale } from "@/lib/ui/copy";
+import { mediaPreviewText } from "@/lib/presentation/media";
 
 export type HermesSessionEntry = {
   hermesSessionKey: string;
@@ -174,17 +175,23 @@ export const ConversationSidebar = memo(function ConversationSidebar({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-1">
-        <p className="px-1 pb-2.5 pt-1">
-          <span className="kana-label-bubble">
-          {query ? copy.found(visibleConversations.length) : copy.recent}
-          </span>
-        </p>
+      {/* The same dotted stroke as the Settings sidebar edge, instead of a
+          "Recent" label, inset to the search field's edges. Only a search
+          result count gets a label. */}
+      <div aria-hidden="true" className="mx-5 my-3 border-t-[3px] border-dotted border-line-strong" />
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-3">
+        {query ? (
+          <p className="px-1 pb-2.5">
+            <span className="kana-label-bubble">{copy.found(visibleConversations.length)}</span>
+          </p>
+        ) : null}
         <div className="space-y-2">
           {visibleConversations.map((conversation) => {
             const latest = conversation.messages.at(-1);
-            const preview =
-              latest?.role === "assistant" ? latest.subtitle?.text : latest?.text;
+            // A delivered file previews as its name, never as a link.
+            const preview = mediaPreviewText(
+              latest?.role === "assistant" ? latest.subtitle?.text : latest?.text,
+            );
             const active = conversation.id === activeId;
             const menuOpen = menuId === conversation.id;
             return (

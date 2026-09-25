@@ -17,6 +17,7 @@ import {
   configPath,
   manifest,
   readConfigSafely,
+  voiceProviderName,
   runtimeRoot,
   serverEntry,
 } from "./context.mjs";
@@ -116,7 +117,7 @@ export async function doctor({ dataRoot }) {
     }
   }
 
-  const provider = config.value.tts?.provider === "openai-compatible" ? "openai-compatible" : "irodori-local";
+  const provider = voiceProviderName(config.value);
   if (provider !== "irodori-local") status.info("Voice", provider);
   else if (voice.engine && voice.model) status.success("Voice", `${IRODORI_MODEL_NAME}, installed`);
   else status.info("Voice", "local engine not downloaded — optional, see `kana setup`");
@@ -160,8 +161,9 @@ export async function setup({ dataRoot }) {
   if (hermes.executable) status.success("Hermes", displayPath(hermes.executable));
   else status.warning("Hermes", "not found — Kana starts, but chat needs Hermes");
 
-  if (config.value.tts?.provider === "openai-compatible") {
-    status.info("Voice", "an OpenAI-compatible provider is configured; nothing to install.");
+  const provider = voiceProviderName(config.value);
+  if (provider !== "irodori-local") {
+    status.info("Voice", `${provider} is configured; nothing to install.`);
     print();
     return;
   }

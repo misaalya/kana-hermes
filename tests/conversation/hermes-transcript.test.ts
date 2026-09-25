@@ -5,6 +5,7 @@ import {
   parseHermesTranscript,
   withoutLastUserTurn,
 } from "@/lib/conversation/hermes-transcript";
+import { buildKanaUserPrompt } from "@/lib/presentation/persona";
 
 const envelope = (text: string, language = "en") =>
   JSON.stringify({ speech_ja: "はい。", subtitle: { text, language }, emotion: "happy" });
@@ -26,6 +27,24 @@ describe("Hermes transcript projection", () => {
     assert.deepEqual(turns.map((turn) => turn.turnIndex), [0]);
     const timestamps = messages.map((message) => message.timestamp);
     assert.deepEqual([...timestamps].sort((a, b) => a - b), timestamps, "order is preserved");
+  });
+
+  it("restores protocol 3 turns: the user's words without the Kana note, and the header reply", () => {
+    const { messages } = parseHermesTranscript([
+      { role: "user", text: `${buildKanaUserPrompt("Halo Kana", true)}\n\n@file:"attachments/a.txt"` },
+      { role: "assistant", text: "---\nja: こんにちは。\nemotion: happy\nlang: id\n---\nHalo! **Aku** di sini." },
+      { role: "user", text: buildKanaUserPrompt("Thanks") },
+      { role: "assistant", text: "Plain English reply" },
+    ]);
+    assert.deepEqual(messages.map((message) => message.text ?? message.subtitle?.text), [
+      "Halo Kana",
+      "Halo! **Aku** di sini.",
+      "Thanks",
+      "Plain English reply",
+    ]);
+    assert.equal(messages[1].speech_ja, "こんにちは。");
+    assert.deepEqual([messages[1].subtitle?.language, messages[1].emotion], ["id", "happy"]);
+    assert.equal(messages[3].speech_ja, "", "a plain non-Japanese reply keeps no speech");
   });
 
   it("returns the tools of a turn Hermes is still working on", () => {

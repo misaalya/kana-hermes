@@ -37,7 +37,7 @@ export function ComposerModelChoice({ locale, sessionKey, connected, disabled, c
     </button>
     <dialog ref={dialog} aria-label={label} onCancel={() => setOpen(false)} onClose={() => setOpen(false)}
       onClick={(event) => { if (event.target === event.currentTarget) setOpen(false); }}
-      className="kana-model-dialog fixed inset-0 m-auto max-h-[80dvh] w-[min(440px,calc(100vw-24px))] overflow-y-auto rounded-[32px] border-0 bg-surface p-6 text-ink backdrop:bg-[var(--backdrop)]">
+      className="kana-model-dialog fixed inset-0 m-auto max-h-[80dvh] w-[min(440px,calc(100vw-24px))] overflow-y-auto border-0 bg-surface p-6 text-ink backdrop:bg-[var(--backdrop)]">
       {open ? <>
         <div className="mb-4 flex items-center justify-between"><h2 className="text-lg font-extrabold">{label}</h2>
           <button type="button" className="kana-focus grid size-9 place-items-center rounded-full bg-surface-strong text-lg leading-none" onClick={() => setOpen(false)} aria-label={text.closeModelChooser}>×</button>

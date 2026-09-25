@@ -19,14 +19,7 @@ function formatBytes(bytes: number, locale: UiLocale): string {
   return gib >= 1 ? `${formatter.format(gib)} GB` : `${formatter.format(bytes / 1024 ** 2)} MB`;
 }
 
-export function VoiceEnginePanel({
-  locale,
-  onReadyChange,
-}: {
-  locale: UiLocale;
-  /** Lets the voice library explain why speech is not available yet. */
-  onReadyChange?(ready: boolean | null): void;
-}) {
+export function VoiceEnginePanel({ locale }: { locale: UiLocale }) {
   const copy = getCopy(locale).voiceEngine;
   const [snapshot, setSnapshot] = useState<VoiceEngineSnapshot | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -58,10 +51,6 @@ export function VoiceEnginePanel({
       active = false;
     };
   }, [copy.failedCheck]);
-
-  useEffect(() => {
-    onReadyChange?.(install ? install.state === "ready" : snapshot ? true : null);
-  }, [install, onReadyChange, snapshot]);
 
   // Poll while downloading so the bar and the final state update by themselves.
   useEffect(() => {
@@ -128,7 +117,7 @@ export function VoiceEnginePanel({
         label={copy.title}
         description={
           <>
-            {copy.body(snapshot?.provider?.model ?? "Irodori-TTS")}
+            {snapshot?.provider?.model ?? "Irodori-TTS"}
             {details.map((detail, index) => (
               <span key={index} className={`mt-1 block ${lowDisk && index === details.length - 1 ? "text-danger" : ""}`}>{detail}</span>
             ))}

@@ -76,19 +76,19 @@ it("routes each provider choice from server config despite a stale browser voice
   };
 
   writeFileSync(path.join(root, "config.json"), JSON.stringify({ tts: {
-    provider: "openai-compatible", irodoriLocal: { modelPath: "not/absolute" },
-    openAiCompatible: { baseUrl: "https://voice.example/v1", apiKey: "server-key", model: "tts-model", voice: "remote-voice", responseFormat: "wav" },
+    provider: "pollinations", irodoriLocal: { modelPath: "not/absolute" },
+    pollinations: { apiKey: "server-key", model: "elevenlabs", voice: "remote-voice", format: "wav" },
   } }));
   const external = await speak("external", "stale-local-voice");
   assert.equal(external.status, 200, await external.clone().text());
   assert.deepEqual(new Uint8Array(await external.arrayBuffer()), remoteAudio);
-  assert.deepEqual(calls, ["https://voice.example/v1/audio/speech"]);
+  assert.deepEqual(calls, ["https://gen.pollinations.ai/v1/audio/speech"]);
   const conflict = await engineAction(authorized("http://kana.test/api/voice/tts/engine", { method: "POST", body: JSON.stringify({ action: "install" }) }));
   assert.equal(conflict.status, 409, "an external provider has nothing to install");
 
   calls.length = 0;
   writeFileSync(path.join(root, "config.json"), JSON.stringify({ tts: {
-    provider: "irodori-local", irodoriLocal: { modelPath: model }, openAiCompatible: { instructionField: "model" },
+    provider: "irodori-local", irodoriLocal: { modelPath: model }, pollinations: { format: "pcm" },
   } }));
   const local = await speak("local", "stale-local-voice");
   assert.equal(local.status, 200, await local.clone().text());

@@ -91,12 +91,7 @@ export function AvatarExpressionPanel({
   return (
     <section className="rounded-[28px] border-2 border-line bg-surface">
       <header className="flex flex-col gap-3 border-b-[3px] border-dotted border-line-strong px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-5">
-        <div>
-          <h3 className="text-base font-extrabold text-ink">{copy.avatarBehaviorTitle}</h3>
-          <p className="mt-1 max-w-2xl text-[11px] leading-relaxed text-muted">
-            {copy.avatarBehaviorDescription}
-          </p>
-        </div>
+        <h3 className="text-base font-extrabold text-ink">{copy.avatarBehaviorTitle}</h3>
         <span className="shrink-0 rounded-full bg-accent px-3 py-1.5 text-[10px] font-extrabold text-white">
           {copy.avatarBehaviorReady(mappedCount, EMOTIONS.length)}
         </span>
@@ -104,12 +99,7 @@ export function AvatarExpressionPanel({
 
       <div className="space-y-4 p-4 sm:p-5">
         <div className="flex flex-col gap-3 rounded-[22px] bg-surface-strong px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
           <span className="text-xs font-bold text-ink">{copy.avatarMouthParameter}</span>
-          <span className="mt-0.5 block text-[9px] leading-relaxed text-muted">
-            {copy.avatarMouthHint}
-          </span>
-          </div>
           <span className={`shrink-0 text-[9px] font-bold ${manualMouthParameter ? "text-ink" : "text-accent"}`}>
             {manualMouthParameter
               ? copy.avatarMouthManual

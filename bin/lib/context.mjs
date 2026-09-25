@@ -60,6 +60,25 @@ export function readConfigSafely(dataRoot) {
   }
 }
 
+/**
+ * The voice service config.json selects, read the way the server reads it:
+ * "irodori-local" (also the Qwen-era "qwen3-local") or "pollinations",
+ * including configs from when Pollinations was an "openai-compatible" preset.
+ * @param {Record<string, any>} config
+ * @returns {string}
+ */
+export function voiceProviderName(config) {
+  const tts = config.tts ?? {};
+  const legacy = tts.openAiCompatible ?? tts;
+  if (tts.provider === "pollinations" || (tts.provider === undefined && tts.pollinations !== undefined)) {
+    return "pollinations";
+  }
+  if (tts.provider === "openai-compatible" || (tts.provider === undefined && tts.openAiCompatible !== undefined)) {
+    return legacy.preset === "pollinations" ? "pollinations" : "openai-compatible (no longer supported)";
+  }
+  return "irodori-local";
+}
+
 /** Server entry for this installation, or a reason it is not runnable yet. */
 export function serverEntry() {
   const entry = path.join(runtimeRoot, "server.js");

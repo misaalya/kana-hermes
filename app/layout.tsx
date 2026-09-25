@@ -19,10 +19,9 @@ export const metadata: Metadata = {
     "A local visual conversation layer for your existing Hermes Agent installation.",
   applicationName: "Kana",
   manifest: "/manifest.webmanifest",
-  // No app/favicon.ico or app/icon.svg: Next would otherwise auto-inject a
-  // favicon <link>. The PWA install icon still lives at public/icon.svg,
-  // referenced only from manifest.ts, so it never becomes a tab favicon.
-  icons: { icon: [] },
+  // Tab favicon is public/kana-hermes.png. The PWA install icon stays at
+  // public/icon.svg, referenced only from manifest.ts.
+  icons: { icon: [{ url: "/kana-hermes.png", type: "image/png" }] },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",

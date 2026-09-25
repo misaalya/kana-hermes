@@ -49,7 +49,7 @@ export function ConnectionGate() {
 
   return (
     <div className="fixed inset-0 z-30 flex items-center justify-center bg-[var(--backdrop)] p-4" role="dialog" aria-modal="true" aria-label={text.gatewayAria}>
-      <div className="kana-panel flex w-full max-w-sm flex-col items-center rounded-[36px] p-7 text-center animate-kana-in">
+      <div className="kana-panel flex w-full max-w-sm flex-col items-center p-7 text-center animate-kana-in">
         <p className="text-[10px] font-bold tracking-[0.16em] text-muted uppercase">{text.gatewayEyebrow}</p>
         <h2 className="mt-1 text-lg font-bold text-ink">{text.gatewayTitle}</h2>
         <p className="mt-2 max-w-[290px] text-[11px] leading-relaxed text-muted">

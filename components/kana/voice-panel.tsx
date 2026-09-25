@@ -28,7 +28,6 @@ const DEFAULT_VOICE_ID = "kc-default";
 function VoiceChoice({
   active,
   label,
-  hint,
   deletable,
   onSelect,
   onDelete,
@@ -36,7 +35,6 @@ function VoiceChoice({
 }: {
   active: boolean;
   label: string;
-  hint: string | null;
   deletable: boolean;
   onSelect(): void;
   onDelete(): void;
@@ -55,12 +53,7 @@ function VoiceChoice({
         onClick={onSelect}
         className="kana-focus flex min-w-0 flex-1 items-center justify-between gap-3 px-4 py-3 text-left disabled:cursor-not-allowed"
       >
-        <span className="min-w-0">
-          <span className="block truncate text-[13px] font-semibold text-ink">
-            {label}
-          </span>
-          {hint ? <span className="mt-0.5 block truncate text-[11px] text-muted">{hint}</span> : null}
-        </span>
+        <span className="min-w-0 truncate text-[13px] font-semibold text-ink">{label}</span>
         {active ? <span className="kana-check" aria-hidden="true"><CheckIcon className="size-3.5" /></span> : null}
         <span className={`shrink-0 text-[11px] font-extrabold ${active ? "rounded-full bg-accent px-2.5 py-1 text-on-accent" : "text-faint"}`}>
           {active ? copy.selected : copy.choose}
@@ -200,9 +193,7 @@ export function VoicePanel({
         <div className="flex items-start justify-between gap-3">
           <div>
             <h4 className="text-xs font-bold text-ink">{copy.title}</h4>
-            <p className="mt-1 text-[10px] leading-relaxed text-muted">
-              {copy.externalProvider(providerName || "External TTS")}
-            </p>
+            <p className="mt-1 text-[10px] leading-relaxed text-muted">{providerName || "External TTS"}</p>
           </div>
           <span
             className={`shrink-0 rounded-full px-2.5 py-1 text-[9px] font-bold ${
@@ -241,12 +232,7 @@ export function VoicePanel({
 
   return (
     <div>
-      <div className="mb-3">
-        <h3 className="text-[15px] font-bold text-ink">{copy.title}</h3>
-        <p className="mt-1 text-[11.5px] leading-relaxed text-muted">
-          {copy.body}
-        </p>
-      </div>
+      <h3 className="mb-3 text-[15px] font-bold text-ink">{copy.title}</h3>
 
       <fieldset className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label={copy.chooseAria}>
         <legend className="sr-only">{copy.available}</legend>
@@ -262,7 +248,6 @@ export function VoicePanel({
               key={voice.id}
               active={voice.id === effectiveSelected}
               label={voice.name}
-              hint={voice.kind === "model" ? copy.modelVoice : voice.kind === "bundled" ? copy.included : copy.yours}
               deletable={voice.kind === "reference"}
               onSelect={() => onVoiceSelect(voice.id)}
               onDelete={() => void remove(voice.id)}
@@ -275,7 +260,7 @@ export function VoicePanel({
 
       {!addingVoice ? (
         <div className="mt-4 border-t border-line">
-          <SettingsRow label={copy.addTitle} description={copy.addBody}>
+          <SettingsRow label={copy.addTitle}>
             <button type="button" className={settingsButton} onClick={() => setAddingVoice(true)}>
               {copy.addSample}
             </button>
@@ -284,10 +269,7 @@ export function VoicePanel({
       ) : (
         <section className="mt-4 rounded-[28px] border-2 border-line-strong p-5" aria-label={copy.formAria}>
           <div className="mb-4 flex items-start justify-between gap-4">
-            <div>
-              <h4 className="text-[13px] font-semibold text-ink">{copy.formTitle}</h4>
-              <p className="mt-1 text-[11.5px] leading-relaxed text-muted">{copy.formBody}</p>
-            </div>
+            <h4 className="text-[13px] font-semibold text-ink">{copy.formTitle}</h4>
             <button type="button" className={btnGhost} onClick={() => setAddingVoice(false)}>{copy.cancel}</button>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">

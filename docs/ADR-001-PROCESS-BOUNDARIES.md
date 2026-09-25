@@ -12,7 +12,7 @@ Local speech runs in separate irodori-c engine processes, one per utterance
 (updated 2026-09-15; this replaced a managed Qwen3-TTS Python service). The
 engine release and model are not packaged: Kana downloads and verifies them on
 request into its data root. The browser reaches either the local engine or an
-external OpenAI-compatible TTS provider only through Kana's same-origin relay.
+external voice service (Pollinations) only through Kana's same-origin relay.
 
 A native desktop wrapper is deferred. It may be reconsidered only when real
 usage demonstrates a need for OS keychain storage, auto-start, or native

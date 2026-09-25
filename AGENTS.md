@@ -71,9 +71,11 @@ capability.
   checked for an equivalent capability.
 - Kana has no second mock agent or conversation-store provider; agent and
   avatar modes remain Hermes and Live2D. TTS is selected server-side between
-  the local irodori-c engine and explicitly configured OpenAI-compatible
-  providers, and integrations must fail honestly when their service is
-  unavailable.
+  the local irodori-c engine and explicitly configured external voice
+  services, and integrations must fail honestly when their service is
+  unavailable. Each external service is its own adapter shaped after that
+  service's documented API (Pollinations today); never reintroduce a generic
+  "OpenAI-compatible" adapter, because speech APIs have no common standard.
 - Never download the local voice engine or model without an explicit user
   request (Settings → Voice). Every artifact stays pinned by size and SHA-256
   in `shared/irodori-release.mjs` and is verified before use; do not vendor
@@ -159,6 +161,7 @@ SSE  GET /api/hermes/events  ->  hermes-bridge (1 shared WS)   ->  /api/ws
 RPC  POST /api/hermes/rpc    ->  allow-listed JSON-RPC forward
      GET  /api/kana/sessions ->  session.list filtered to source "kana"
      GET/PUT /api/kana/activities -> SQLite activity store
+     GET  /api/media/<token>/<name> -> a file Hermes delivered (MEDIA:)
 ```
 
 - The browser authenticates with its Kana session cookie; the Hermes session
@@ -192,6 +195,36 @@ RPC  POST /api/hermes/rpc    ->  allow-listed JSON-RPC forward
   password. Existing SSE streams revalidate authorization every 25 seconds.
   Login admits one password check per limiter bucket at a time; passwords are
   8–256 characters without leading/trailing whitespace.
+- Files Hermes delivers with `MEDIA:/local/path` (its gateway convention; the
+  TTS, browser-screenshot, and MCP tools return one) reach the browser as
+  signed links, never as paths (`lib/server/media-links.ts`):
+  - the events and RPC routes rewrite every deliverable path to
+    `MEDIA:/api/media/<token>/<name>` before relaying. User rows are left
+    alone, and `message.delta` chunks lose their text (a chunk can split a
+    path; Kana shows only the finished reply);
+  - the token is the resolved path, encrypted and authenticated (AES-256-GCM,
+    synthetic IV = HMAC of the path) with a key derived from the installation
+    secret. The browser cannot name a path, the same file always gets the same
+    link (live and restored replies compare equal, stored links survive a
+    restart), and there is no table to store or expire;
+  - "deliverable" mirrors Hermes's default rule (`validate_media_delivery_path`
+    in gateway/platforms/base.py): an existing regular file with symlinks
+    resolved, outside system paths, home credential folders (`~/.ssh`,
+    `~/.config`, ...), Hermes's secret files (`.env`, `config.yaml`,
+    `auth.json`, ...), and Kana's own data root. Any other path, and any tag
+    inside code, stays as text. The route checks the file again on every
+    request;
+  - `GET`/`HEAD /api/media/<token>/<name>` streams the file with byte ranges
+    (audio and video seek), ETag revalidation, and `private, no-cache`.
+    Audio, video, and raster images are inline; everything else, and any
+    request with `?download`, is an attachment. Responses carry a sandbox CSP
+    (set in next.config.ts too, since the app policy would replace it) so an
+    SVG or HTML file never runs as Kana;
+  - `hermes serve`'s own `GET /api/media` is not used: it returns only cached
+    images, as base64;
+  - the chat shows delivered files under the reply (`MediaAttachments`):
+    a player for audio and video, a preview for images, and a Download pill
+    for every file. The history preview names the file instead.
 - Local speech runs the irodori-c engine as one short-lived child process per
   utterance (serialized, minimal environment). The browser reaches it only
   through `/api/voice/tts/*` relay routes: `speech`, request cancellation, and
@@ -240,7 +273,7 @@ Kana should feel like another first-class Hermes client:
   structured result returned by Hermes (`output`, `alias`, `send`, `prefill`,
   or `skill`).
 - `send` and `skill` results are submitted to the same Hermes session with the
-  Kana response envelope. They must not trigger a second model.
+  Kana response contract. They must not trigger a second model.
 - `/approve` and `/deny` use `approval.respond`; `/title` and `/branch` use
   their dedicated session RPCs.
 - `/save`, `/status`, `/compress`, `/steer`, and `/handoff` use dedicated
@@ -276,11 +309,23 @@ discoverable without changing Kana's source.
 ## Kana response and language contract
 
 Hermes must return one structured user-facing response per normal assistant
-turn:
+turn (response protocol 3): a header between `---` lines, then the answer
+as Markdown.
+
+```
+---
+ja: <the same reply as natural spoken Japanese, on one line>
+emotion: <neutral | happy | sad | angry | surprised | thinking | confused | excited>
+lang: <BCP 47 code of the answer below>
+---
+<the answer shown on screen; Markdown allowed>
+```
+
+`parseKanaResponse` turns it into:
 
 ```ts
 type KanaResponse = {
-  speech_ja: string;
+  speech_ja: string; // "" when the reply had no Japanese speech
   subtitle: {
     text: string;
     language: string;
@@ -289,16 +334,45 @@ type KanaResponse = {
 };
 ```
 
+The header costs fewer tokens than the protocol 1/2 JSON envelope because
+the answer is not quoted or escaped. The parser still reads JSON envelopes
+(restored history, models with the old habit) and tolerates a fenced reply,
+a missing opening rule, quoted values, a wrapped `ja` line, and unknown
+emotions (neutral).
+
+Delivery (verified with `hermes serve` and 9router, 2026-09-26):
+
+- The contract rides in the user turn, after the user's words, inside a
+  `<kana>…</kana>` note (`buildKanaUserPrompt`). The first prompt after a
+  session opens, new or resumed, carries the full contract; later prompts
+  carry a short skeleton that is enough on its own. A failed submit keeps the
+  full contract for the retry.
+- Do not send the contract as a system-role seed on `session.create`. Hermes
+  sends a seed as a second system message, which some routes drop before the
+  model sees it (9router + `cx/gpt-5.6-luna` counted 99 prompt tokens with a
+  300-token seed, and the model answered in plain text). Hermes never stores
+  the seed, so a resumed session loses it anyway.
+- Hermes titles sessions from the user's words, which come first.
+- Transcript restore strips the note with `unwrapKanaUserPrompt`, which also
+  unwraps the protocol 1/2 `user_message` JSON wrapper.
+
 Language rules:
 
 - Hermes reasoning, tool names, tool arguments, and internal metadata: English.
-- `speech_ja`: always natural conversational Japanese.
-- `subtitle.text`: the language of the user's latest message; when that
-  message has no clear language (a command, a name, code), the language of
-  the user's earlier messages. Kana has no subtitle language setting and
-  sends none in `kana_request` (response protocol version 2).
-- `subtitle.language`: the language actually used in `subtitle.text`.
+- `ja`: always natural conversational Japanese, plain speech with no
+  Markdown, emoji, URLs, or code.
+- The answer: the language of the user's latest message; when that message
+  has no clear language (a command, a name, code), the language of the
+  user's earlier messages. Kana has no subtitle language setting and sends
+  none.
+- `lang`: the language actually used in the answer.
 - Writing in another language affects future replies only.
+
+The voice only ever reads Japanese. A `ja` value without Japanese script, or
+a plain reply (a model that ignored the contract) that is not mostly
+Japanese, becomes `speech_ja: ""`, and the reply is shown at once without a
+voice. Never speak the answer text as a fallback and never make a second
+translation request.
 
 Every stored assistant message preserves the exact `speech_ja`, subtitle text,
 subtitle language, emotion, and timestamp that were displayed. Rendering
@@ -355,12 +429,93 @@ product direction, not a temporary theme.
     reveal, autofill tint); a search field draws its own clear button;
   - the avatar layout popover has no title or hint, just reset/close and the
     Size, X, and Y sliders. Sliders are `kana-range`: a thick accent-filled
-    pill with no knob, like a console volume bar.
+    pill with no knob, like a console volume bar;
+  - modals have square corners: this is Kana's signature. That covers
+    Settings, the setup screens, conversation history, the Hermes
+    approval/input dialog, the connection gate, the composer's model
+    chooser, and the avatar layout ("Scale") popover. The Settings sidebar items (`kana-settings-nav-item`, the
+    selected one included) are square too. Controls inside a modal keep
+    their rounded shapes, and the greeting dialogue box (`kana-greeting`)
+    is not a modal;
+  - conversation history has no "Recent" label: a dotted stroke like the
+    Settings sidebar edge, inset to the search field's edges with room above
+    and below, separates the search from the list. Only a search result
+    count gets a label bubble;
+  - Settings is to the point: a group title, then rows of a short label and
+    its control. No descriptions, hints, or explainer paragraphs under
+    titles, rows, cards, or buttons; if a label needs one, find a clearer
+    label. The only text beyond labels is live status, errors, the voice
+    clone consent, and the required Live2D sample notice. `SettingsGroup`
+    takes an `action` that sits right after the title (never at the far
+    right, where the dialog's close button is). Advanced configuration's
+    action is the "Guide" link to `/docs`, opened in a new tab.
+- `/docs` is the config guide (`components/kana/config-guide.tsx`). Its
+  content is plain Markdown, one file per language in `content/docs`
+  (`configuration.id.md`, `configuration.en.md`), read at build time by
+  `app/docs/page.tsx` and rendered with the chat's own parser and renderer
+  (`lib/presentation/markdown.ts`, `renderMarkdownBlocks` in
+  `chat-markdown.tsx`), never a second Markdown library:
+  - `# Title` names the page; every `## Section {#id}` is a sidebar entry
+    whose id (shared by both languages, see `CONFIG_GUIDE_GROUPS`) drives
+    deep links and icons; a fenced `kana-config-path` block shows this
+    installation's config path; write each paragraph on one line (a single
+    newline is a line break in the chat parser). Settings go in Markdown
+    tables. `tests/presentation/config-guide.test.ts` checks the structure
+    and runs every JSON example through the real config parser;
+  - its delivery follows the Pollinations API docs
+    (https://gen.pollinations.ai/docs): a one-sentence summary quote under
+    the title, then bold-label key facts (**Config file:**, **Open it:**);
+    a Quick start of short headings each followed straight by code; one
+    section per config block that opens with one sentence, lists its keys in
+    a Markdown table (Key | Default or Required | Description) and uses
+    `> **Note:**` callouts; Troubleshooting last (symptom | fix, quoting
+    Kana's exact messages). Short, factual, formal sentences;
+  - it is written for the person using Kana, not for agents, in a formal
+    register: Indonesian is baku with "Anda" (no "kamu", no slang such as
+    "pakai", "kalau", "ketemu"), English is professional documentation
+    without contractions. One task per heading, and why someone would change
+    a setting. Each language is written on its own rather than translated
+    line by line, so wording and structure may differ; the facts, section
+    ids and example values stay shared. No JSON syntax lessons. Keep its
+    facts in step with `lib/server/user-config.ts` and
+    `docs/CONFIGURATION.md`;
+  - it uses Settings' shell: the same sidebar (plain group labels, dotted
+    edge, Settings' square nav items). The content is an ordinary document in one column
+    (`.kana-doc`) that fills the width to the right, with no max-width, read
+    top to bottom, with sections split by dotted rules. No custom layouts
+    (no side-by-side steps), no cards or bento boxes; only code blocks (and
+    the config path box) have a fill: always dark, in both themes
+    (`.kana-code-surface` redefines the theme tokens inside), with square
+    corners, not rounded;
+  - headings, bold labels (`**Config file:**`) and table headers are set in
+    a plain sans, Inter (`next/font/google` in `app/docs/page.tsx`, exposed
+    as `--font-doc-sans`), because the user found them hard to read in the
+    rounded face. Running text (paragraphs, quotes, lists, table cells,
+    links) keeps the app's M PLUS Rounded 1c, as does the sidebar. Code
+    stays monospace;
+  - `json` code blocks are coloured by `lib/presentation/json-highlight.ts`
+    (keys in Kana's blue, strings, numbers, literals; `--code-*` tokens on
+    `.kana-code-surface` in `globals.css`), a small tokenizer rather than a
+    highlighting library. It only splits the text, so Copy still copies the
+    raw example; other languages stay plain;
+  - its icons are real icons, Material Symbols Rounded from the subset font
+    in `app/fonts` (`MaterialSymbol`), never the drawn two-tone `DuoIcon`
+    glyphs. Add a name as `app/fonts/README.md` explains;
+  - html/body stay `overflow: hidden` for the app, so the guide scrolls
+    inside its `main`. Like every page it needs a signed-in session, and
+    `public/sw.js` caches only `/` as the offline shell, so `/docs` never
+    replaces it.
+- The "Preparing Kana" loading screen (`kana-app.tsx`, before the workspace
+  is ready) is always light (`data-theme="light"` on its `main`, since the
+  saved theme is not applied yet): a plain page with plain text, no pattern
+  and no bubble behind the label.
 - First-run setup opens with Kana herself, not a modal: the header and chat
   step away, the stage clears (full screen on phones too), the avatar smiles,
   and her line types out in a game-style dialogue box (`kana-greeting`) with a
-  tilted name tag. No blur, no icon, no step bar. The setup screens that
-  follow are numbered in the kicker text only ("Step 1 of 3").
+  tilted name tag. No blur, no icon, no step bar. The greeting is always
+  English (`KANA_GREETING` in `lib/ui/copy.ts`, `lang="en"`), whatever the UI
+  language; the setup screens that follow use the UI language and are
+  numbered in the kicker text only ("Step 1 of 3").
 - The chat panel is the plain tray inside the blue `--chat-frame` border:
   no texture. The composer stays the blue band with a transparent text field
   and white text; its model chooser is a white pill and Send becomes a white
@@ -416,7 +571,7 @@ product direction, not a temporary theme.
   create/resume, prompt submission, interruption, and event translation.
 - Event-driven transcript restore: `session.resume` responses carry the full
   display transcript; the adapter emits `history.restored` and the workspace
-  parses it (kana_request unwrap, response envelope, tool rows). Selecting a
+  parses it (Kana note unwrap, response header or envelope, tool rows). Selecting a
   linked conversation or auto-connecting opens the session first, so
   refreshes and fresh browsers always repopulate the transcript. Auto-connect
   lands on the most recent non-empty Hermes session instead of minting a
@@ -461,9 +616,11 @@ product direction, not a temporary theme.
   Hermes request.
 - A server-side TTS provider boundary keeps synthesis transport separate from
   browser playback/cache/lip sync. The local Irodori engine is the default;
-  OpenAI-compatible `POST /v1/audio/speech` is supported with user-owned
-  credentials in owner-only `config.json`, and Pollinations is a preset over
-  that generic adapter rather than a dedicated playback implementation.
+  Pollinations (`tts.pollinations`) posts only its documented fields
+  (`input`, `response_format`, and the configured `model`, `voice`, and
+  `instructions`) with a user-owned key from owner-only `config.json`. Configs
+  from the old `openai-compatible` Pollinations preset are read as
+  Pollinations with that preset's defaults.
 - A concrete Pixi/WebGL Live2D renderer, centered responsive canvas, emotion
   expressions, motions, talking state, and mouth-parameter updates.
 - AIRI-style cursor focus: the avatar watches the pointer and drifts its gaze
@@ -538,7 +695,7 @@ product direction, not a temporary theme.
   (i3-1005G1, int8), but it is CPU-only and slower than realtime there: about
   7 s for a short reply with the model voice and about 20 s with a reference
   voice, which the engine re-encodes per utterance. Linux x86-64 only; other
-  hosts use an OpenAI-compatible provider. Streaming audio is not implemented;
+  hosts use Pollinations. Streaming audio is not implemented;
   sentence delivery is experimental until a VPS baseline exists.
 - The local package is a self-contained web runtime, not a signed native
   desktop application. Kana's server can supervise a loopback Hermes child and
@@ -547,8 +704,8 @@ product direction, not a temporary theme.
 ### Fixed agent/avatar modes and TTS fallbacks
 
 - Agent and avatar modes are fixed to Hermes and Live2D. Browser voice mode is
-  the configured server provider; `config.json` chooses the local Irodori engine or an
-  OpenAI-compatible source without exposing its API key to browser state.
+  the configured server provider; `config.json` chooses the local Irodori engine or
+  Pollinations without exposing its API key to browser state.
   `normalizeKanaPreferences` forces these presentation modes on every load and
   save, so legacy stored values cannot re-enable unsupported implementations.
 - The placeholder avatar state (formerly the CSS mock preview) lives inside
@@ -587,15 +744,19 @@ lib/server/hermes-bridge.ts               Server-held gateway WS + token custody
 lib/server/local-hermes-runtime.ts        hermes serve spawn/discovery control
 lib/server/data-dir.ts                    KANA_DATA_DIR resolver + legacy adoption
 lib/server/activity-store.ts              SQLite per-turn activity log (schema v2)
+lib/server/media-links.ts                 MEDIA: path rules, signed links, relay rewrite
+lib/server/media-response.ts              Range/ETag file streaming for /api/media
 app/api/hermes/events                     SSE downstream relay
 app/api/hermes/rpc                        Allow-listed JSON-RPC relay
 app/api/kana/sessions                     session.list filtered to source "kana"
 app/api/kana/activities                   Activity turn store GET/PUT
+app/api/media/[token]/[name]             Delivered file download/stream
 lib/server/auth/*                         Password store, JWT session, login limiter
 proxy.ts                                  Deny-by-default auth proxy (Next 16)
 lib/presentation/persona.ts               Persona and response instructions
 lib/presentation/response-parser.ts       Structured response validation
 lib/presentation/markdown.ts              Safe Markdown subset reader for replies
+lib/presentation/media.ts                 Delivered-file links, kinds, and extraction
 lib/backup/kana-backup.ts                  Versioned credential-free backup format
 lib/avatar/avatar-controller.ts           Provider-independent avatar control
 lib/avatar/defaults.ts                     Official Haru/Mao URLs and bindings
@@ -610,8 +771,10 @@ shared/irodori-release.mjs                 Pinned engine/model artifacts (size +
 lib/server/irodori/install.ts              Lazy, resumable, verified engine/model install
 lib/server/irodori/synthesis.ts            Serialized engine processes, captions, joining
 lib/server/tts-provider/                   Server synthesis provider boundary,
-                                          local Irodori and OpenAI-compatible adapters
+                                          local Irodori and Pollinations adapters
 components/kana/voice-engine-panel.tsx     Download size/progress/remove UI
+components/kana/config-guide.tsx           /docs config guide (content: content/docs/*.md)
+components/kana/material-symbol.tsx        Material Symbols subset font (app/fonts) for /docs
 lib/voice/audio-lip-sync.ts                Web Audio lip-sync mechanism
 lib/preferences/local-preferences-store.ts Local settings persistence
 lib/diagnostics/safe-diagnostics.ts        Redacted local diagnostics

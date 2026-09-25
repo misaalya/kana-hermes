@@ -100,7 +100,7 @@ export function AgentInputDialog({
       }}
     >
       <section
-        className="w-[min(480px,100%)] rounded-[32px] border-2 border-line bg-bg p-4"
+        className="w-[min(480px,100%)] border-2 border-line bg-bg p-4"
         ref={dialogRef}
         role="dialog"
         aria-modal="true"

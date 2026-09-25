@@ -2,6 +2,7 @@ import { jsonError, NO_STORE, withSession } from "@/lib/server/api-response";
 import { readJsonObject } from "@/lib/server/request-body";
 import { hermesRpc } from "@/lib/server/hermes-bridge";
 import { LONG_HERMES_RPC_TIMEOUT_MS } from "@/lib/limits";
+import { rewriteMediaInResult } from "@/lib/server/media-links";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -84,7 +85,8 @@ export const POST = withSession(async (request) => {
   }
   const timeoutMs = LONG_RUNNING_METHODS.has(method) ? LONG_HERMES_RPC_TIMEOUT_MS : undefined;
   try {
-    const result = await hermesRpc(method, params, timeoutMs);
+    // Restored transcripts carry the same signed media links as live events.
+    const result = rewriteMediaInResult(await hermesRpc(method, params, timeoutMs));
     return Response.json({ result }, { headers: NO_STORE });
   } catch (error) {
     return jsonError(error, 502);

@@ -173,6 +173,19 @@ describe("HermesSessionManager", () => {
     assert.equal(harness.status(), copy(harness).ready);
   });
 
+  it("shows a reply without Japanese speech at once and never voices it", async () => {
+    const harness = createHarness({ preferences: { voiceEnabled: true } });
+    harness.conversations.initialize();
+    await harness.send("Halo");
+    const response = { ...envelope("Halo, aku di sini."), speech_ja: "" };
+    harness.agent.emit({ type: "assistant.message", response, rawResponse: "Halo, aku di sini." });
+    harness.agent.emit({ type: "agent.finished" });
+    await tick();
+    assert.equal(harness.active().messages.length, 2, "revealed without waiting for audio");
+    assert.equal(harness.active().messages[1].subtitle?.text, "Halo, aku di sini.");
+    assert.equal(harness.voiceProvider.spoken.length, 0);
+  });
+
   it("reveals a held reply when the connection drops", async () => {
     const harness = createHarness({ preferences: { voiceEnabled: true } });
     harness.conversations.initialize();
@@ -335,6 +348,46 @@ describe("CommandService", () => {
     const opened = harness.agent.opened.length;
     await harness.commands.complete("/sta");
     assert.equal(harness.agent.opened.length, opened);
+  });
+});
+
+describe("HermesSessionManager models", () => {
+  /** A connected conversation that has finished one turn on DeepSeek. */
+  async function switchedHarness() {
+    const harness = createHarness();
+    harness.conversations.initialize();
+    await harness.send("Halo");
+    harness.agent.emit({ type: "assistant.message", response: envelope("Hello"), rawResponse: "" });
+    harness.agent.emit({ type: "agent.finished" });
+    await harness.sessions.selectModel("deepseek", "deepseek-v4-flash");
+    harness.models.invalidate();
+    assert.equal((await harness.models.list()).model, "deepseek-v4-flash");
+    return harness;
+  }
+
+  it("opens a new conversation on its own Hermes session, back on the default model", async () => {
+    const harness = await switchedHarness();
+    const previous = harness.stores.agentSession.getState().openSessionId;
+    await harness.sessions.createConversation();
+    await tick();
+    const opened = harness.stores.agentSession.getState().openSessionId;
+    assert.ok(opened && opened !== previous, "the new conversation has its own session");
+    assert.equal(harness.active().agent?.durable, false, "Hermes stores nothing until the first prompt");
+    assert.equal((await harness.models.list()).model, "m1", "the model chip shows Hermes's default, not the old pick");
+  });
+
+  it("applies a model pick to the active conversation's session, never the previous one", async () => {
+    const harness = await switchedHarness();
+    const previous = harness.stores.agentSession.getState().openSessionId;
+    // /resume and deletes land on a conversation whose session is not open yet.
+    const fresh = harness.conversations.persist(harness.conversations.create(), false);
+    harness.conversations.activate(fresh);
+    harness.sessions.forgetOpenedSession();
+    await harness.sessions.selectModel("openai", "gpt-5.6-luna");
+    const landed = harness.agent.switches.at(-1)?.sessionId;
+    assert.notEqual(landed, previous);
+    assert.equal(landed, harness.stores.agentSession.getState().openSessionId);
+    assert.equal(harness.agent.sessionModels.get(previous!), "deepseek-v4-flash", "the old session keeps its model");
   });
 });
 

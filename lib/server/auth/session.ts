@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { hkdfSync, randomBytes, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { SignJWT, jwtVerify } from "jose";
@@ -33,6 +33,15 @@ function loadSecret(): Uint8Array {
 /** Ensure first-run session state exists even before a login token is minted. */
 export function ensureSessionSecret(): void {
   loadSecret();
+}
+
+/**
+ * A key for one purpose, derived from the installation secret (HKDF-SHA256),
+ * so other features never reuse the session-signing key itself. It changes
+ * only when the secret file or KANA_JWT_SECRET does.
+ */
+export function installationKey(purpose: string, length = 32): Buffer {
+  return Buffer.from(hkdfSync("sha256", loadSecret(), Buffer.alloc(0), purpose, length));
 }
 
 function secretFile(): string {

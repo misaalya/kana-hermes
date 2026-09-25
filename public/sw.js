@@ -70,7 +70,9 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(request)
         .then(async (response) => {
-          if (response.ok) {
+          // Only the app itself is the offline shell; other pages such as
+          // /docs must never replace it.
+          if (response.ok && url.pathname === "/") {
             const cache = await caches.open(CACHE_NAME);
             await cache.put("/", response.clone());
           }

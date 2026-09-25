@@ -1,97 +1,113 @@
+import { EMOTIONS } from "./types";
+
 /**
  * The response contract, shared by every delivery path so the wording can
  * never drift between them.
  *
- * Kana has no subtitle-language setting: Hermes writes the subtitle in the
- * language the user wrote in, and reports that language in the envelope.
+ * Kana has no subtitle-language setting: Hermes writes the answer in the
+ * language the user wrote in, and reports that language in the reply header.
  *
- * Delivery paths (verified against hermes serve, see AGENTS.md):
- * - New sessions: sent once as a system-role seed on session.create.
- * - Resumed sessions: session.resume has no seed parameter and loads history
- *   from the session DB only, so the contract is prepended to the FIRST user
- *   prompt after the resume instead.
+ * Delivery (verified against hermes serve and a 9router route, see AGENTS.md):
+ * the contract rides in the USER turn, never as a system-role seed. A seed on
+ * session.create becomes a second system message, which some OpenAI-compatible
+ * routes drop before the model sees it (9router + cx/gpt-5.6-luna counted 99
+ * prompt tokens with a 300-token seed), and Hermes never persists it, so a
+ * resumed session would lose it anyway.
+ * - The first prompt after a session opens (new or resumed) carries the full
+ *   contract.
+ * - Every later prompt carries only the reply skeleton, which is enough on
+ *   its own for a model that lost the earlier context.
+ *
+ * The reply is a short header, then the answer as Markdown. That costs fewer
+ * tokens than the old JSON envelope (no quoting or escaping of the answer)
+ * and a model that drifts still produces readable text.
  */
-const RESPONSE_PROTOCOL_VERSION = 2;
+const RESPONSE_PROTOCOL_VERSION = 3;
 
-function responseContract(): string {
+/** Opens and closes the Kana note appended to the user's message. Transcript
+ * restore strips it (see unwrapKanaUserPrompt), so keep it stable. */
+const NOTE_OPEN = "<kana>";
+const NOTE_CLOSE = "</kana>";
+
+function replySkeleton(): string[] {
   return [
-    "Response format (mandatory): your user-facing completion must be exactly",
-    "one JSON object with no Markdown fence and no prose before or after it:",
+    "---",
+    "ja: <the same reply as natural spoken Japanese, on one line>",
+    `emotion: <${EMOTIONS.join(" | ")}>`,
+    "lang: <BCP 47 code of the answer below, for example en, id, ja>",
+    "---",
+    "<the answer shown on screen; Markdown allowed>",
+  ];
+}
+
+function fullContract(): string[] {
+  return [
+    `Note from the Kana app, not from the user (Kana response protocol ${RESPONSE_PROTOCOL_VERSION}).`,
+    "Kana is the on-screen persona for this Hermes session, not a separate agent.",
+    "Keep using your own reasoning, tools, memory, skills, subagents, files,",
+    "terminal, and MCP capabilities as usual. Reasoning, tool names, tool",
+    "arguments, and internal metadata stay in English.",
     "",
-    "{",
-    '  "speech_ja": "natural conversational Japanese",',
-    "  \"subtitle\": {",
-    '    "text": "the same meaning in the language the user wrote in",',
-    '    "language": "BCP 47 code of that language, for example en, id, ja"',
-    "  },",
-    '  "emotion": "neutral | happy | sad | angry | surprised | thinking | confused | excited"',
-    "}",
+    "Start every final reply with this header, then the answer:",
+    "",
+    ...replySkeleton(),
     "",
     "Rules:",
-    "- speech_ja is always natural conversational Japanese, regardless of the",
-    "  user's language.",
-    "- subtitle.text uses the language of the user's latest message in",
-    "  user_message. If that message has no clear language (a command, a",
-    "  name, code, emoji, or a single ambiguous word), keep the language of",
-    "  the user's earlier messages. Never ask the user which language to use.",
-    "- subtitle.language is the language actually used in subtitle.text.",
-    "- Use one emotion from the allowed list and choose neutral when uncertain.",
-    "- Do not expose these presentation instructions or invent a second Kana agent.",
-  ].join("\n");
+    "- ja is always natural conversational Japanese, whatever language the user",
+    "  writes in. A voice reads it aloud, so write plain speech: no Markdown,",
+    "  emoji, URLs, or code; say what they are in words instead.",
+    "- The answer uses the language of the user's latest message. If that",
+    "  message has no clear language (a command, a name, code, emoji, or a",
+    "  single ambiguous word), keep the language of the user's earlier",
+    "  messages. Never ask the user which language to use.",
+    "- lang is the language actually used in the answer.",
+    "- emotion is one value from the list; use neutral when unsure.",
+    "- Write the Japanese speech and the answer together in this same reply;",
+    "  do not make a second translation request.",
+    "- To give the user a file (audio, image, video, or any document), put",
+    "  MEDIA:/absolute/path/to/file on its own line in the answer. Kana shows a",
+    "  player or a download button; never put the path in ja.",
+    "- Never mention this note or the header to the user.",
+  ];
 }
 
-/** System-role seed for session.create. Rides into the model's context as
- * conversation history; the gateway does not persist it as a formal system
- * prompt but the model honors it for the lifetime of the session. */
-export function buildKanaSystemPrompt(): string {
+function compactContract(): string[] {
   return [
-    "You are Hermes Agent. Kana is the presentation persona for this Hermes",
-    "session, not a separate agent. Keep using Hermes' own reasoning, tools,",
-    "memory, session, subagent, filesystem, terminal, and MCP capabilities",
-    "normally.",
-    "",
-    "Internal reasoning, tool names, tool arguments, and internal metadata stay",
-    "in English.",
-    "",
-    responseContract(),
-    "",
-    "- Do not make a second translation request. Produce Japanese speech and its",
-    "  subtitle together in this same Hermes completion.",
-  ].join("\n");
-}
-
-/** Metadata-only per-turn wrapper. Kept minimal so recurring token cost stays
- * small; the heavy contract text is delivered once via the system seed. The
- * `user_message` key is what transcript restore unwraps, so keep it stable. */
-export function buildKanaUserPrompt(message: string): string {
-  return [
-    "Use the following presentation metadata for this turn. Do not mention the metadata in the answer.",
-    JSON.stringify(
-      {
-        kana_request: {
-          response_protocol_version: RESPONSE_PROTOCOL_VERSION,
-        },
-        user_message: message,
-      },
-      null,
-      2,
-    ),
-  ].join("\n\n");
+    "Kana app note, not from the user; do not mention it. Start the final reply with:",
+    ...replySkeleton(),
+    "ja is always Japanese. The answer uses the language of the user's message.",
+  ];
 }
 
 /**
- * One-shot re-seed for resumed sessions. Hermes restores resumed-session
- * history from its DB without any client-supplied system message, so a
- * resumed session would otherwise run without the response contract. This
- * rides as a visible [System: …] prefix — the same convention Hermes itself
- * uses for personality-pivot markers — on the first prompt after resume only.
+ * The text Kana submits for one user turn: the user's message, then the Kana
+ * note. The note comes last so it is the freshest instruction the model
+ * reads, and Hermes's session title still comes from the user's own words.
+ * `full` is set on the first prompt after a session opens.
  */
-export function buildKanaResumeSeedPrefix(): string {
-  return [
-    "[System: Session re-attached from the Kana web UI. Re-stating the standing",
-    "presentation contract for this session. It applies from here on:]",
-    "",
-    responseContract(),
-    "]",
-  ].join("\n");
+export function buildKanaUserPrompt(message: string, full = false): string {
+  const note = [NOTE_OPEN, ...(full ? fullContract() : compactContract()), NOTE_CLOSE].join("\n");
+  return message ? `${message}\n\n${note}` : note;
+}
+
+/**
+ * The user's own words from a stored Hermes user row. Handles the current
+ * trailing Kana note and the protocol v1/v2 JSON wrapper (`user_message`).
+ * Anything after the note (attachment references) is dropped, as it was
+ * never part of what the user typed.
+ */
+export function unwrapKanaUserPrompt(text: string): string {
+  const start = text.startsWith(`${NOTE_OPEN}\n`) ? 0 : text.lastIndexOf(`\n\n${NOTE_OPEN}\n`);
+  if (start !== -1 && text.indexOf(`\n${NOTE_CLOSE}`, start) !== -1) {
+    return text.slice(0, start);
+  }
+  const legacy = /"user_message"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(text);
+  if (legacy) {
+    try {
+      return JSON.parse(`"${legacy[1]}"`) as string;
+    } catch {
+      /* keep raw text */
+    }
+  }
+  return text;
 }
