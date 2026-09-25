@@ -1,6 +1,7 @@
 import { classifyHermesTool } from "@/lib/agent/tool-kind";
 import type { ActivityItem, AgentHistoryRow } from "@/lib/agent/types";
 import { createId, type KanaMessage } from "@/lib/conversation/types";
+import { unwrapKanaUserPrompt } from "@/lib/presentation/persona";
 import { parseKanaResponse } from "@/lib/presentation/response-parser";
 
 // Pure projections between Hermes display rows and Kana's message model.
@@ -79,18 +80,9 @@ export function parseHermesTranscript(rows: AgentHistoryRow[]): {
       return;
     }
     if (row.role === "user") {
-      let text = row.text ?? "";
-      // Unwrap the kana_request wrapper: extract the raw user message
-      // from the metadata envelope (string value, JSON-escaped).
-      const match = /"user_message"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(text);
-      if (match) {
-        try {
-          text = JSON.parse(`"${match[1]}"`) as string;
-        } catch {
-          /* keep raw text */
-        }
-      }
-      messages.push({ ...createUserMessage(text), timestamp });
+      // Strip the Kana note (or the older kana_request JSON wrapper) so the
+      // restored bubble shows only what the user typed.
+      messages.push({ ...createUserMessage(unwrapKanaUserPrompt(row.text ?? "")), timestamp });
       return;
     }
     if (row.role !== "assistant" || !row.text?.trim()) return;
@@ -123,7 +115,6 @@ export function parseHermesTranscript(rows: AgentHistoryRow[]): {
       // during the live turn. Never resurrect its raw JSON as a chat bubble
       // when Hermes history is restored.
       if (/\b(?:speech_ja|subtitle)\b/.test(row.text)) return;
-      speech_ja = row.text;
       subtitle = { text: row.text, language: UNKNOWN_SUBTITLE_LANGUAGE };
     }
     messages.push({

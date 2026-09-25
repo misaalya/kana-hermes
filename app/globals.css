@@ -137,32 +137,6 @@ button,
   background: var(--bg);
 }
 
-/* Drifting polka dots for the full-screen loading state, in the brand
-   pattern ink. The sign-in page stays plain. */
-.kana-dots {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-}
-
-.kana-dots::before {
-  position: fixed;
-  inset: -80px;
-  z-index: -1;
-  background-image:
-    radial-gradient(circle, var(--kana-pattern-blue-soft) 0 11px, transparent 12px),
-    radial-gradient(circle, var(--kana-pattern-blue-soft) 0 6px, transparent 7px);
-  background-position: 0 0, 40px 40px;
-  background-size: 80px 80px;
-  animation: kana-drift 22s linear infinite;
-  content: "";
-  pointer-events: none;
-}
-
-@keyframes kana-drift {
-  to { transform: translate(80px, 80px); }
-}
-
 .kana-stage-backdrop {
   background: var(--bg);
 }
@@ -374,6 +348,10 @@ button,
 .kana-workspace-action svg {
   width: 23px;
   height: 23px;
+}
+
+.kana-workspace-action .kana-symbol {
+  font-size: 23px;
 }
 
 .kana-workspace-action:hover {
@@ -1084,6 +1062,58 @@ details[open] > .kana-plus-summary::before {
   border-top: 3px dotted var(--line-strong);
 }
 
+/* Files Hermes delivered, under the reply text: the same soft tint as code
+   blocks, a name row with a download pill, and the player or preview. */
+.kana-media-list {
+  display: grid;
+  gap: 8px;
+}
+
+.kana-markdown + .kana-media-list {
+  margin-top: 10px;
+}
+
+.kana-media-card {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--chat-text) 8%, transparent);
+  padding: 8px;
+}
+
+.kana-media-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding-left: 4px;
+  font-size: 12px;
+}
+
+.kana-media-preview {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: 10px;
+}
+
+.kana-media-preview img,
+video.kana-media-preview {
+  display: block;
+  max-width: 100%;
+  max-height: 18rem;
+}
+
+.kana-media-audio {
+  display: block;
+  width: 100%;
+  min-width: min(260px, 60vw);
+  height: 40px;
+}
+
 .kana-md-table {
   max-width: 100%;
   overflow-x: auto;
@@ -1139,14 +1169,15 @@ details[open] > .kana-plus-summary::before {
   display: none;
 }
 
+/* Square corners in both Settings and the /docs sidebar. */
 .kana-settings-nav-item {
-  border-radius: 999px;
+  border-radius: 0;
   color: var(--ink-dim);
   font-weight: 700;
   transition: background-color 150ms ease, color 150ms ease, transform 250ms var(--spring);
 }
 
-.kana-settings-nav-item svg {
+.kana-settings-nav-item :is(svg, .kana-symbol) {
   color: var(--accent);
 }
 
@@ -1162,12 +1193,236 @@ details[open] > .kana-plus-summary::before {
   font-weight: 800;
 }
 
-.kana-settings-nav-item.is-active svg {
+.kana-settings-nav-item.is-active :is(svg, .kana-symbol) {
   color: currentColor;
 }
 
 .kana-settings-nav {
   scrollbar-width: none;
+}
+
+/* Material Symbols glyphs (the /docs guide): drawn from ligature names in a
+   subset icon font. In the components layer so size and colour utilities
+   still apply. */
+@layer components {
+  .kana-symbol {
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    overflow: hidden;
+    font-size: 20px;
+    font-style: normal;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    white-space: nowrap;
+    direction: ltr;
+    font-feature-settings: "liga";
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+  }
+}
+
+/* The /docs guide: a plain Markdown document (rendered by the chat's
+   renderer) in one readable column. Sections are split by the same dotted
+   rule as Settings; nothing is boxed except code. In the components layer so
+   utilities on the guide's own widgets (path, copy buttons) still win.
+   Running text keeps the app's rounded face; headings, bold labels and table
+   headers are set in a plain sans (Inter, loaded by app/docs/page). */
+@layer components {
+  .kana-doc {
+    color: var(--ink-dim);
+    font-size: 15px;
+    line-height: 1.75;
+    overflow-wrap: break-word;
+  }
+
+  .kana-doc :is(h1, h2, h3, h4, strong) {
+    font-family: var(--font-doc-sans), system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+      Arial, "Noto Sans", sans-serif;
+  }
+
+  .kana-doc > * + *,
+  .kana-doc-section > * + * {
+    margin-top: 16px;
+  }
+
+  .kana-doc :is(h1, h2, h3, h4) {
+    color: var(--ink);
+    font-weight: 600;
+    text-wrap: balance;
+  }
+
+  .kana-doc :is(h1, h2) {
+    font-weight: 700;
+    letter-spacing: -0.015em;
+  }
+
+  .kana-doc h1 {
+    font-size: 30px;
+    line-height: 1.25;
+  }
+
+  /* The summary quote under the title; notes elsewhere keep the accent. */
+  .kana-doc > h1 + blockquote {
+    border-left-color: var(--line-strong);
+    font-size: 16px;
+  }
+
+  .kana-doc-section {
+    margin-top: 44px;
+    border-top: 3px dotted var(--line-strong);
+    padding-top: 40px;
+  }
+
+  .kana-doc h2 {
+    font-size: 23px;
+    line-height: 1.3;
+  }
+
+  .kana-doc h3 {
+    font-size: 17px;
+    line-height: 1.4;
+  }
+
+  .kana-doc h4 {
+    font-size: 15px;
+  }
+
+  .kana-doc-section > :is(h3, h4) {
+    margin-top: 34px;
+  }
+
+  .kana-doc-section > :is(h2, h3, h4) + * {
+    margin-top: 10px;
+  }
+
+  .kana-doc-section > h2 + :is(h3, h4) {
+    margin-top: 22px;
+  }
+
+  .kana-doc-section > .kana-md-table + .kana-md-table {
+    margin-top: 28px;
+  }
+
+  .kana-doc strong {
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  .kana-doc a {
+    border-radius: 3px;
+    color: var(--accent-strong);
+    font-weight: 700;
+    text-decoration: underline;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 3px;
+  }
+
+  .kana-doc :where(p, li, td, th, blockquote, h2, h3, h4) code {
+    border-radius: 6px;
+    background: var(--surface-strong);
+    padding: 0.12em 0.4em;
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 0.86em;
+  }
+
+  .kana-doc :is(ul, ol) {
+    padding-left: 1.5em;
+  }
+
+  .kana-doc ul {
+    list-style: disc;
+  }
+
+  .kana-doc ol {
+    list-style: decimal;
+  }
+
+  .kana-doc li + li,
+  .kana-doc li > * + * {
+    margin-top: 6px;
+  }
+
+  .kana-doc li::marker {
+    color: var(--accent);
+    font-weight: 800;
+  }
+
+  .kana-doc blockquote {
+    border-left: 3px solid var(--accent);
+    padding-left: 16px;
+    color: var(--ink);
+  }
+}
+
+/* Code in the guide sits on a dark block in both themes. The theme tokens
+   are redefined here, so the utilities inside (bg-surface-strong, text-ink,
+   text-muted, hover:bg-surface) resolve to the dark palette. */
+.kana-code-surface {
+  color-scheme: dark;
+  --surface: #363636;
+  --surface-strong: #2b2b2b;
+  --ink: #f4f4f4;
+  --muted: #969696;
+  /* JSON colours (tokens from lib/presentation/json-highlight): keys in
+     Kana's blue. */
+  --code-key: #83c1e5;
+  --code-string: #a9d18e;
+  --code-number: #f0b27a;
+  --code-literal: #d7a0e0;
+}
+
+.kana-json-key {
+  color: var(--code-key);
+}
+
+.kana-json-string {
+  color: var(--code-string);
+}
+
+.kana-json-number {
+  color: var(--code-number);
+}
+
+.kana-json-literal {
+  color: var(--code-literal);
+}
+
+.kana-json-punctuation {
+  color: var(--muted);
+}
+
+/* Markdown tables in the guide read as a plain reference list: rows split by
+   hairlines, no cell grid. Unlayered, like .kana-md-table above. */
+.kana-doc .kana-md-table table {
+  width: 100%;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.kana-doc .kana-md-table :is(th, td) {
+  min-width: 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 11px 20px 11px 0;
+}
+
+.kana-doc .kana-md-table th {
+  border-bottom: 2px solid var(--line-strong);
+  background: none;
+  padding-top: 0;
+  color: var(--ink);
+  font-family: var(--font-doc-sans), system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, "Noto Sans", sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Keys and values never break mid-token; the prose around them wraps. */
+.kana-doc .kana-md-table code {
+  white-space: nowrap;
 }
 
 .kana-settings-nav::-webkit-scrollbar {

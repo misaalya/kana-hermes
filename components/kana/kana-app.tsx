@@ -30,10 +30,12 @@ function Workspace() {
     return () => workspace.setup.stop();
   }, [ready, workspace]);
 
+  // The loading screen shows before the saved theme is applied, so it is
+  // always light: a plain page with plain text, no pattern or bubble.
   if (!ready) {
     return (
-      <main className="kana-dots grid min-h-dvh place-items-center bg-bg">
-        <p className="kana-label-bubble animate-kana-pulse">
+      <main data-theme="light" className="grid min-h-dvh place-items-center bg-bg">
+        <p className="animate-kana-pulse text-sm font-bold text-ink-dim">
           {getCopy(locale).workspace.preparing}
         </p>
       </main>

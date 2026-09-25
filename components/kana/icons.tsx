@@ -105,6 +105,14 @@ export function MicrophoneIcon(props: IconProps) {
   return <Icon {...props}><rect x="9" y="2" width="6" height="12" rx="3" /><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8" /></Icon>;
 }
 
+export function DownloadIcon(props: IconProps) {
+  return <Icon {...props}><path d="M12 4v11m-5-5 5 5 5-5M5 20h14" /></Icon>;
+}
+
+export function FileIcon(props: IconProps) {
+  return <Icon {...props}><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5" /></Icon>;
+}
+
 export function CloseIcon(props: IconProps) {
   return <Icon {...props}><path d="m6 6 12 12M18 6 6 18" /></Icon>;
 }
@@ -203,6 +211,16 @@ export function LogoutIcon(props: IconProps) {
     <DuoIcon {...props}>
       <rect opacity={SOFT} x="2.5" y="2.5" width="11.5" height="19" rx="3.4" />
       <path d="M9.5 12h11M16.6 7.9 20.7 12l-4.1 4.1" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+    </DuoIcon>
+  );
+}
+
+/** The Settings link to the config guide: an open book, the left page soft. */
+export function BookIcon(props: IconProps) {
+  return (
+    <DuoIcon {...props}>
+      <path opacity={SOFT} d="M1.8 5.4c3.3-1.2 6.6-.9 9.4 1v14.4c-2.8-1.7-6.1-2-9.4-.9Z" />
+      <path d="M22.2 5.4c-3.3-1.2-6.6-.9-9.4 1v14.4c2.8-1.7 6.1-2 9.4-.9Z" />
     </DuoIcon>
   );
 }

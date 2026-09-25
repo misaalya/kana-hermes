@@ -44,8 +44,8 @@ are reported explicitly with a text fallback. No mock voice or agent is used.
   CPU only and is slower than realtime on small CPUs: on the reference 2-core
   i3-1005G1 at the default 16 steps, a 2.3-second reply took 6.8 s with the
   model's own voice and a 4-second reply took 21.6 s with the bundled reference
-  voice (the reference is re-encoded for every utterance). macOS, Windows, and ARM hosts use an
-  OpenAI-compatible provider instead.
+  voice (the reference is re-encoded for every utterance). macOS, Windows, and ARM hosts use
+  Pollinations instead.
 
 ## Known limitations
 

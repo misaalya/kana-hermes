@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import { MAX_REQUEST_BODY_BYTES } from "./lib/limits";
+import { MEDIA_CONTENT_SECURITY_POLICY } from "./lib/presentation/media";
 
 const isDevelopment = process.env.NODE_ENV === "development";
 const distDir = process.env.KANA_NEXT_DIST_DIR?.trim() || ".next";
@@ -88,6 +89,13 @@ const nextConfig: NextConfig = {
             value: "camera=(), geolocation=(), microphone=(self)",
           },
         ],
+      },
+      {
+        // A file Hermes delivered (app/api/media), opened on its own, is a
+        // sandboxed document with no script, so an SVG or HTML file can never
+        // run as Kana. Listed last so it replaces the app policy above.
+        source: "/api/media/:path*",
+        headers: [{ key: "Content-Security-Policy", value: MEDIA_CONTENT_SECURITY_POLICY }],
       },
     ];
   },

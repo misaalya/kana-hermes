@@ -41,9 +41,8 @@ export type VoiceProviderStatus = {
 /** Sanitized server-provider metadata; credentials and upstream URLs are excluded. */
 export type TtsProviderDescriptor = {
   id: string;
-  type: "irodori-local" | "openai-compatible";
+  type: "irodori-local" | "pollinations";
   name: string;
-  preset?: string;
   configured: boolean;
   model?: string;
   voice?: string;

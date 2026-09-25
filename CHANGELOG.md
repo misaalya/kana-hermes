@@ -1,5 +1,61 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `/docs`: a configuration guide inside Kana, written as Markdown
+  (`content/docs`) separately in formal Indonesian and English and rendered
+  with the chat's Markdown renderer. It shows where this installation's
+  `config.json` is and explains each setting with an example to copy.
+  Settings → Connection → Advanced configuration links to it.
+- Files Hermes sends appear in the chat. A reply with `MEDIA:/path/to/file`
+  (Hermes's way of attaching a file, used by its voice, screenshot, and MCP
+  tools) now shows an audio or video player, an image preview, or the file
+  name, each with a Download button, instead of the raw path. Kana's server
+  swaps the path for a signed `/api/media/…` link before it reaches the
+  browser and streams the file with seeking support. It serves only existing
+  files outside credential and system folders (the same rule Hermes uses for
+  Telegram and Discord), and never Kana's own data.
+
+### Changed
+
+- External voice is now a dedicated Pollinations integration
+  (`"provider": "pollinations"` with a `tts.pollinations` block: `apiKey`,
+  `model`, `voice`, `instructions`, `format`) instead of a preset over a
+  generic OpenAI-compatible adapter. Kana sends Pollinations' documented
+  `instructions` field (the old preset sent `instruct`) and allows its
+  10,000-character input. Configs using the old Pollinations preset keep
+  working; other `openai-compatible` endpoints are no longer supported.
+- Hermes now answers Kana with a short header (`ja`, `emotion`, `lang`
+  between `---` lines) followed by the answer as Markdown, instead of a JSON
+  envelope (response protocol 3). It costs fewer tokens: the answer is no
+  longer quoted and escaped. Replies in the old JSON format are still read.
+- Dialogs and the login card have square corners, Kana's signature; the
+  buttons and fields inside them stay rounded. The history list drops its
+  "Recent" label for a dotted divider, like the one in Settings. The browser
+  tab shows Kana's portrait (`public/kana-hermes.png`, 192 px).
+
+### Fixed
+
+- Kana's voice spoke Indonesian or English instead of Japanese with some
+  models (GPT 5.6 Luna through 9router). Kana's response contract was sent as
+  a system message when the session opened; that route dropped it, so the
+  model answered in plain text and Kana read that text aloud. The contract
+  now travels with the user's messages (in full on the first message after a
+  session opens, as a short reminder after that), and the voice only ever
+  reads Japanese: a reply without Japanese speech is shown without a voice.
+- A new conversation (New moment or `/new`) opens its own Hermes session
+  straight away, so the model chip shows Hermes's default model instead of
+  the previous session's pick until the first message. Model changes always
+  apply to the open conversation's session, never the one before it.
+- A model switch that worked no longer shows Hermes's model-listing notes
+  ("could not reach this custom endpoint's model listing", "was not found in
+  … listing"). They appear when a slow `/models` endpoint times out Hermes's
+  check and read like a failure; the model chooser now says the model was
+  changed. Other Hermes warnings, and the reason for a switch that failed,
+  are still shown.
+
 ## 0.3.2 — 2026-09-16
 
 ### Fixed

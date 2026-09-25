@@ -19,22 +19,28 @@ export function SettingsPageTitle({ children }: { children: React.ReactNode }) {
   return <h2 className="mb-3 text-[22px] font-extrabold text-ink max-md:hidden">{children}</h2>;
 }
 
+/**
+ * A titled block. `action` follows the title on its row (e.g. carousel
+ * arrows); it stays left so it never meets the dialog's corner close button.
+ */
 export function SettingsGroup({
   title,
-  description,
+  action,
   children,
 }: {
   title?: string;
-  description?: React.ReactNode;
+  action?: React.ReactNode;
   children?: React.ReactNode;
 }) {
   return (
     <section className="pt-8 first:pt-0">
-      {title ? <h3 className="text-base font-extrabold text-ink">{title}</h3> : null}
-      {description ? (
-        <p className="mt-1 max-w-prose text-[11.5px] leading-relaxed text-muted">{description}</p>
+      {title || action ? (
+        <div className="flex min-h-8 items-center gap-3">
+          {title ? <h3 className="text-base font-extrabold text-ink">{title}</h3> : null}
+          {action}
+        </div>
       ) : null}
-      {children ? <div className={title || description ? "mt-2" : ""}>{children}</div> : null}
+      {children ? <div className={title || action ? "mt-2" : ""}>{children}</div> : null}
     </section>
   );
 }

@@ -98,7 +98,6 @@ const SECTION_ICONS: Record<SettingsSection, (props: { className?: string }) => 
 type SettingsNavItem = {
   id: SettingsSection;
   label: string;
-  hint: string;
 };
 
 export function SettingsDialog({
@@ -144,8 +143,6 @@ export function SettingsDialog({
     error: boolean;
   } | null>(null);
   const [stageBackgrounds, setStageBackgrounds] = useState<StageBackgroundSummary[]>([]);
-  // null while unknown or when the configured provider needs no local engine.
-  const [voiceEngineReady, setVoiceEngineReady] = useState<boolean | null>(null);
   const [backgroundBusy, setBackgroundBusy] = useState(false);
   const [backgroundNotice, setBackgroundNotice] = useState<string | null>(null);
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
@@ -411,11 +408,6 @@ export function SettingsDialog({
     }
   };
 
-  const activeOfficialAvatar = OFFICIAL_LIVE2D_SAMPLES.find(
-    (sample) => !draft.live2d.modelId && draft.live2d.modelUrl === sample.modelUrl,
-  );
-  const activeAvatarName =
-    draft.live2d.modelName || activeOfficialAvatar?.name || settingsCopy.selectedAvatar;
   const activeCapabilityResult = avatarCapabilityResult;
   const avatarCapabilities = activeCapabilityResult
     && activeCapabilityResult.modelId === draft.live2d.modelId
@@ -476,7 +468,7 @@ export function SettingsDialog({
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-[var(--backdrop)] p-5 backdrop-blur-sm max-md:p-0" role="dialog" aria-modal="true" aria-label={settingsCopy.title}>
       <div
-        className="relative grid h-[min(760px,calc(100dvh-2.5rem))] w-full max-w-[980px] grid-cols-[228px_minmax(0,1fr)] overflow-hidden rounded-[36px] bg-raised kana-settings-shell max-md:h-dvh max-md:max-w-none max-md:grid-cols-1 max-md:grid-rows-[auto_minmax(0,1fr)] max-md:rounded-none"
+        className="relative grid h-[min(760px,calc(100dvh-2.5rem))] w-full max-w-[980px] grid-cols-[228px_minmax(0,1fr)] overflow-hidden bg-raised kana-settings-shell max-md:h-dvh max-md:max-w-none max-md:grid-cols-1 max-md:grid-rows-[auto_minmax(0,1fr)]"
         ref={dialogRef as React.Ref<HTMLDivElement>}
         onKeyDown={onDialogKeyDown}
       >
@@ -518,9 +510,9 @@ export function SettingsDialog({
         <main className="min-h-0 overflow-y-auto px-10 pb-12 pt-9 max-md:px-4 max-md:pb-8 max-md:pt-4">
           <div className="mx-auto max-w-[660px]">
             {section === "experience" ? (
-              <SettingsGroup title={settingsCopy.sections.experience.hint}>
+              <SettingsGroup title={settingsCopy.sections.experience.label}>
                 <SettingsRows>
-                  <SettingsRow label={settingsCopy.interfaceTitle} description={settingsCopy.interfaceDescription}>
+                  <SettingsRow label={settingsCopy.interfaceTitle}>
                     <SettingsSegmented
                       label={settingsCopy.interfaceTitle}
                       value={draft.uiLocale}
@@ -531,7 +523,6 @@ export function SettingsDialog({
                       onChange={(uiLocale) => setDraft((current) => ({ ...current, uiLocale }))}
                     />
                   </SettingsRow>
-                  <SettingsRow label={settingsCopy.subtitleTitle} description={settingsCopy.subtitleDescription} />
                 </SettingsRows>
               </SettingsGroup>
             ) : null}
@@ -540,19 +531,11 @@ export function SettingsDialog({
               <>
                 <SettingsGroup title={settingsCopy.sections.voice.label}>
                   <SettingsRows>
-                    <SettingsRow
-                      label={settingsCopy.voiceTitle}
-                      description={draft.voiceEnabled ? settingsCopy.voiceOn : settingsCopy.voiceOff}
-                    >
+                    <SettingsRow label={settingsCopy.voiceTitle}>
                       <Toggle checked={draft.voiceEnabled} label={settingsCopy.voiceToggle} onChange={() => setDraft((current) => ({ ...current, voiceEnabled: !current.voiceEnabled }))} />
                     </SettingsRow>
-                    <VoiceEnginePanel locale={draft.uiLocale} onReadyChange={setVoiceEngineReady} />
+                    <VoiceEnginePanel locale={draft.uiLocale} />
                   </SettingsRows>
-                  {draft.voiceEnabled && voiceEngineReady === false ? (
-                    <p className="mt-2 text-[11.5px] leading-relaxed text-muted" role="status">
-                      {copy.voiceEngine.notInstalledHint}
-                    </p>
-                  ) : null}
                 </SettingsGroup>
                 {draft.voiceEnabled ? (
                   <SettingsGroup>
@@ -571,11 +554,9 @@ export function SettingsDialog({
 
             {section === "avatar" ? (
               <>
-                <SettingsGroup title={settingsCopy.stageTitle} description={settingsCopy.stageDescription}>
-                  <div className="mb-2 mt-3 flex items-center justify-between gap-3">
-                    <p className="text-[11px] text-muted">
-                      {settingsCopy.backgrounds(STAGE_BACKGROUND_OPTIONS.length + stageBackgrounds.length)}
-                    </p>
+                <SettingsGroup
+                  title={settingsCopy.stageTitle}
+                  action={(
                     <div className="flex items-center gap-1.5" aria-label={settingsCopy.carouselControls}>
                       <button type="button" className={carouselButton} aria-label={settingsCopy.previousBackgrounds} onClick={() => scrollBackgroundCarousel(-1)}>
                         <ChevronLeftIcon className="size-4" />
@@ -584,7 +565,8 @@ export function SettingsDialog({
                         <ChevronRightIcon className="size-4" />
                       </button>
                     </div>
-                  </div>
+                  )}
+                >
                   <div
                     ref={backgroundCarouselRef}
                     className="kana-background-carousel flex snap-x snap-mandatory gap-3 overflow-x-auto py-2"
@@ -599,7 +581,6 @@ export function SettingsDialog({
                           key={value}
                           active={active}
                           label={option.label}
-                          hint={option.hint}
                           previewClass={previewClass}
                           onSelect={() => setDraft((current) => ({
                             ...current,
@@ -637,7 +618,7 @@ export function SettingsDialog({
                   />
                   <div className="mt-3">
                     <SettingsRows>
-                      <SettingsRow label={settingsCopy.customBackgroundTitle} description={settingsCopy.customBackgroundHint}>
+                      <SettingsRow label={settingsCopy.customBackgroundTitle}>
                         <button
                           type="button"
                           className={settingsButton}
@@ -654,11 +635,8 @@ export function SettingsDialog({
                   ) : null}
                 </SettingsGroup>
 
-                <SettingsGroup title={settingsCopy.avatarLibrary} description={settingsCopy.avatarLibraryBody}>
+                <SettingsGroup title={settingsCopy.avatarLibrary}>
                   <SettingsRows>
-                    <SettingsRow label={settingsCopy.currentAvatar} description={draft.live2d.modelId ? settingsCopy.yourAvatar : settingsCopy.included}>
-                      <span className="max-w-56 truncate text-[13px] font-semibold text-ink">{activeAvatarName}</span>
-                    </SettingsRow>
                     <SettingsRow label={settingsCopy.includedAvatars} stacked>
                       <div className="grid gap-2 sm:grid-cols-2">
                         {OFFICIAL_LIVE2D_SAMPLES.map((sample, index) => {
@@ -670,10 +648,7 @@ export function SettingsDialog({
                               className={choiceCard(active)}
                               onClick={() => void selectOfficialAvatar(index)}
                             >
-                              <span className="min-w-0">
-                                <span className="block text-[13px] font-semibold text-ink">{sample.name}</span>
-                                <span className="mt-0.5 block text-[11px] text-muted">{settingsCopy.live2dSample}</span>
-                              </span>
+                              <span className="min-w-0 text-[13px] font-semibold text-ink">{sample.name}</span>
                               {active ? <span className="kana-check" aria-hidden="true"><CheckIcon className="size-3.5" /></span> : (
                                 <span className="text-[11px] font-bold text-faint">{settingsCopy.choose}</span>
                               )}
@@ -682,7 +657,7 @@ export function SettingsDialog({
                         })}
                       </div>
                     </SettingsRow>
-                    <SettingsRow label={settingsCopy.yourAvatars} description={settingsCopy.storedBrowserOnly} stacked>
+                    <SettingsRow label={settingsCopy.yourAvatars} stacked>
                       <input
                         ref={avatarInputRef}
                         type="file"
@@ -723,9 +698,6 @@ export function SettingsDialog({
                           <span className="block text-[13px] font-semibold text-ink">
                             {avatarBusy ? settingsCopy.preparingAvatar : settingsCopy.importLive2d}
                           </span>
-                          <span className="mt-0.5 block text-[11px] leading-relaxed text-muted">
-                            {settingsCopy.importLive2dHint}
-                          </span>
                         </button>
                       </div>
                       {avatarNotice ? <p className="mt-3 text-[11px] leading-relaxed text-muted" role="status">{avatarNotice}</p> : null}
@@ -760,14 +732,12 @@ export function SettingsDialog({
                       />
                     </SettingsGroup>
                   )
-                ) : (
-                  <SettingsGroup title={settingsCopy.avatarBehaviorTitle} description={settingsCopy.avatarBehaviorBuiltin} />
-                )}
+                ) : null}
               </>
             ) : null}
 
             {section === "model" ? (
-              <SettingsGroup title={settingsCopy.modelTitle} description={settingsCopy.modelDescription}>
+              <SettingsGroup title={settingsCopy.modelTitle}>
                 <div className="mt-2">
                   <ModelControlPanel
                     locale={draft.uiLocale}
@@ -781,7 +751,7 @@ export function SettingsDialog({
 
             {section === "system" ? (
               <>
-                <SettingsGroup title={settingsCopy.sections.system.hint}>
+                <SettingsGroup title={settingsCopy.sections.system.label}>
                   <SettingsRows>
                     <HermesControlPanel
                       locale={draft.uiLocale}
@@ -796,7 +766,7 @@ export function SettingsDialog({
             ) : null}
 
             {section === "privacy" ? (
-              <SettingsGroup title={settingsCopy.accessTitle} description={settingsCopy.accessDescription}>
+              <SettingsGroup title={settingsCopy.accessTitle}>
                 <SecuritySection locale={draft.uiLocale} />
               </SettingsGroup>
             ) : null}

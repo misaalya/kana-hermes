@@ -9,7 +9,7 @@ import {
 } from "@/lib/runtime/auth-client";
 import { getCopy, type UiLocale } from "@/lib/ui/copy";
 import { passwordPolicyError } from "@/shared/password-policy.mjs";
-import { LogoutIcon } from "./icons";
+import { BookIcon, LogoutIcon } from "./icons";
 import {
   settingsButton,
   SettingsGroup,
@@ -77,7 +77,7 @@ export function SecuritySection({ locale }: { locale: UiLocale }) {
 
   return (
     <SettingsRows>
-      <SettingsRow label={copy.updatePassword} description={copy.passwordPolicy} stacked>
+      <SettingsRow label={copy.updatePassword} stacked>
         <div className="grid max-w-md gap-2.5">
           <input type="password" autoComplete="current-password" className={settingsInput} placeholder={copy.currentPassword}
             aria-label={copy.currentPassword} value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} />
@@ -94,7 +94,7 @@ export function SecuritySection({ locale }: { locale: UiLocale }) {
           </div>
         </div>
       </SettingsRow>
-      <SettingsRow label={<span className="text-danger">{copy.logout}</span>} description={copy.logoutDescription}>
+      <SettingsRow label={<span className="text-danger">{copy.logout}</span>}>
         <button
           type="button"
           className="kana-focus kana-pill kana-pill-danger min-h-9 shrink-0 whitespace-nowrap px-4 text-xs"
@@ -112,9 +112,6 @@ export function AdvancedConfigCard({ locale }: { locale: UiLocale }) {
   const copy = getCopy(locale).settings;
   const [configPath, setConfigPath] = useState("$KANA_DATA_DIR/config.json");
   const [deploymentMode, setDeploymentMode] = useState<"local" | "deployment">("local");
-  const [deploymentModeSource, setDeploymentModeSource] = useState<
-    "environment" | "config" | "default"
-  >("default");
   const [configError, setConfigError] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
@@ -123,24 +120,34 @@ export function AdvancedConfigCard({ locale }: { locale: UiLocale }) {
       .then((value: {
         path?: string;
         deploymentMode?: "local" | "deployment";
-        deploymentModeSource?: "environment" | "config" | "default";
         configError?: string | null;
       } | null) => {
         if (active) setConfigError(value?.configError ?? null);
         if (active && value?.path) setConfigPath(value.path);
         if (active && value?.deploymentMode) setDeploymentMode(value.deploymentMode);
-        if (active && value?.deploymentModeSource) {
-          setDeploymentModeSource(value.deploymentModeSource);
-        }
       })
       .catch(() => undefined);
     return () => { active = false; };
   }, []);
 
   return (
-    <SettingsGroup title={copy.advancedTitle} description={copy.advancedBody}>
+    <SettingsGroup
+      title={copy.advancedTitle}
+      action={(
+        // A new tab, so reading the guide never interrupts a conversation.
+        <a
+          href="/docs"
+          target="_blank"
+          rel="noopener"
+          className="kana-focus kana-pill kana-pill-soft min-h-8 px-3.5 text-[11.5px]"
+        >
+          <BookIcon className="size-4 text-accent" />
+          {copy.configGuide}
+        </a>
+      )}
+    >
       <SettingsRows>
-        <SettingsRow label="config.json" description={copy.advancedRestart} stacked>
+        <SettingsRow label="config.json" stacked>
           <code className="block overflow-x-auto rounded-[18px] bg-surface-strong px-3.5 py-2 text-[11.5px] text-ink-dim">
             {configPath}
           </code>
@@ -150,14 +157,7 @@ export function AdvancedConfigCard({ locale }: { locale: UiLocale }) {
             </p>
           ) : null}
         </SettingsRow>
-        <SettingsRow
-          label={copy.advancedMode}
-          description={deploymentModeSource === "environment"
-            ? copy.advancedModeSourceEnvironment
-            : deploymentModeSource === "config"
-              ? copy.advancedModeSourceConfig
-              : copy.advancedModeSourceDefault}
-        >
+        <SettingsRow label={copy.advancedMode}>
           <span className="text-xs font-semibold text-ink-dim">
             {deploymentMode === "deployment" ? copy.advancedModeDeployment : copy.advancedModeLocal}
           </span>

@@ -86,14 +86,13 @@ export async function sendMessage(
       ...conversations.create({ title: commandArg }),
       messages: [
         createUserMessage(cleanText),
-        createSystemMessage(
-          "Fresh Kana conversation created. A new Hermes session will open with the next prompt.",
-          cleanText,
-        ),
+        createSystemMessage("Fresh Kana conversation created on a new Hermes session.", cleanText),
       ],
     });
     conversations.activate(next);
     sessions.forgetOpenedSession();
+    // Like the New moment button: a new Hermes session, on Hermes's default model.
+    await sessions.openActiveSession();
     setStatus(status().newReady);
     clearSuggestions();
     return;

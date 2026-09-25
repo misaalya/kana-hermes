@@ -73,7 +73,7 @@ export default function LoginPage() {
       <button type="button" className="kana-focus kana-pill kana-pill-soft absolute right-4 top-4 px-4 py-2.5 text-[12px]" onClick={toggleTheme} aria-label={copy.themeToggle(nextTheme)}>
         {copy.themeLabel(nextTheme)}
       </button>
-      <div className="kana-panel relative w-[min(400px,100%)] rounded-[36px] p-7 sm:p-8">
+      <div className="kana-panel relative w-[min(400px,100%)] p-7 sm:p-8">
         {/* No visible title: the card is just the password form. */}
         <h1 className="sr-only">Kana</h1>
 

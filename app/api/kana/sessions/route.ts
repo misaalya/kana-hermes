@@ -1,5 +1,6 @@
 import { jsonError, NO_STORE, withSession } from "@/lib/server/api-response";
 import { hermesRpc } from "@/lib/server/hermes-bridge";
+import { rewriteMediaTags } from "@/lib/server/media-links";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,7 +37,7 @@ export const GET = withSession(async () => {
       .map((row) => ({
         hermesSessionKey: row.id,
         title: row.title || "Untitled",
-        preview: row.preview || "",
+        preview: rewriteMediaTags(row.preview || ""),
         messageCount: row.message_count ?? 0,
         startedAt: row.started_at ?? 0,
         lastActive: row.last_active ?? row.started_at ?? 0,

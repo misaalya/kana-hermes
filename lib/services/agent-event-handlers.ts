@@ -133,7 +133,9 @@ function onAssistantMessage(context: AgentEventContext, event: Extract<AgentEven
   };
   const reveal = async () => context.conversations.commitAssistantMessage(conversation.id, message);
 
-  if (!context.preferences.current().voiceEnabled) {
+  // A reply without Japanese speech (the model ignored the contract) shows
+  // at once with no voice: the Japanese voice never reads another language.
+  if (!context.preferences.current().voiceEnabled || !message.speech_ja) {
     context.avatar.presentEmotion(message.emotion);
     void reveal();
     return;

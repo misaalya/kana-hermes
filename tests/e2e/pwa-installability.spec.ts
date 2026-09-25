@@ -50,7 +50,7 @@ test("is installable on mobile and restores the local shell while offline", asyn
         break;
       }
       await page
-        .getByRole("button", { name: /^(?:Let's go|Yuk, mulai|Continue|Lanjut)$/ })
+        .getByRole("button", { name: /^(?:Let's go|Continue|Lanjut)$/ })
         .click();
     }
     await expect(composer).toBeVisible();

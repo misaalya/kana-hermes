@@ -322,10 +322,15 @@ async function installFakeHermes(page: Page): Promise<FakeHermes> {
         const persistentId = runtimeToPersistent.get(runtimeId);
         const session = persistentId ? sessions.get(persistentId) : undefined;
         const submitted = String(body.params?.text ?? "");
-        // Stand-in for Hermes following the contract: the subtitle uses the
-        // language the user wrote in. Kana no longer sends a subtitle setting.
-        if (/subtitle_language/.test(submitted)) throw new Error("Kana sent a subtitle language setting.");
-        const userMessage = /"user_message"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(submitted)?.[1] ?? "";
+        // Stand-in for Hermes following the contract: the user's words, then
+        // the Kana note asking for the header; the answer uses the language
+        // the user wrote in. Kana sends no subtitle setting.
+        if (/subtitle_language|kana_request/.test(submitted)) throw new Error("Kana sent the old JSON wrapper.");
+        const noteStart = submitted.lastIndexOf("\n\n<kana>\n");
+        if (noteStart === -1 || !/\n---\nja: /.test(submitted.slice(noteStart))) {
+          throw new Error("Kana sent no response contract.");
+        }
+        const userMessage = submitted.slice(0, noteStart);
         const language = /\b(halo|aku|kamu|apa)\b/i.test(userMessage) ? "id" : "en";
         const subtitles: Record<string, string> = {
           en: "Hello! I am here.",
@@ -340,14 +345,20 @@ async function installFakeHermes(page: Page): Promise<FakeHermes> {
           setTimeout(() => void runTool("web_search", "Kupang weather today").catch(() => undefined), 30);
           break;
         }
-        completedResponse = JSON.stringify({
-          speech_ja: "こんにちは、ここにいます。",
-          subtitle: {
-            text: subtitles[language] ?? subtitles.en,
-            language,
-          },
-          emotion: "neutral",
-        });
+        // Asked for files, Hermes delivers two; Kana's server has already
+        // swapped their paths for signed links by the time they arrive here.
+        const delivered = /\bfiles\b/i.test(userMessage)
+          ? ["", "MEDIA:/api/media/e2e-audio/tts_e2e.wav", "MEDIA:/api/media/e2e-report/Laporan%20akhir.pdf"]
+          : [];
+        completedResponse = [
+          "---",
+          "ja: こんにちは、ここにいます。",
+          "emotion: neutral",
+          `lang: ${language}`,
+          "---",
+          subtitles[language] ?? subtitles.en,
+          ...delivered,
+        ].join("\n");
         session?.history.push(
           { role: "user", text: submitted },
           { role: "assistant", text: completedResponse },
@@ -384,6 +395,7 @@ async function installFakeHermes(page: Page): Promise<FakeHermes> {
     async finishHeldTurn() {
       if (!heldTurn) throw new Error("No research turn is running.");
       const { session, runtimeId } = heldTurn;
+      // A protocol 2 JSON envelope: older replies must keep working.
       const text = JSON.stringify({
         speech_ja: "調べました。",
         subtitle: { text: RESEARCH_REPLY, language: "en" },
@@ -502,6 +514,51 @@ test("renders text replies without entering the TTS pipeline when voice is off",
   expect(speechRequests).toBe(0);
 });
 
+test("shows files Hermes delivers as a player and download buttons, never as paths", async ({
+  page,
+}) => {
+  // A tenth of a second of 8 kHz silence, a real WAV the player can load.
+  const samples = 800;
+  const wav = Buffer.alloc(44 + samples * 2);
+  wav.write("RIFF", 0);
+  wav.writeUInt32LE(36 + samples * 2, 4);
+  wav.write("WAVEfmt ", 8);
+  wav.writeUInt32LE(16, 16);
+  wav.writeUInt16LE(1, 20);
+  wav.writeUInt16LE(1, 22);
+  wav.writeUInt32LE(8000, 24);
+  wav.writeUInt32LE(16000, 28);
+  wav.writeUInt16LE(2, 32);
+  wav.writeUInt16LE(16, 34);
+  wav.write("data", 36);
+  wav.writeUInt32LE(samples * 2, 40);
+  await page.route("**/api/media/**", (route) =>
+    route.fulfill(
+      route.request().url().includes("e2e-audio")
+        ? { status: 200, body: wav, contentType: "audio/wav" }
+        : { status: 200, body: "%PDF-1.4", contentType: "application/pdf" },
+    ),
+  );
+
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
+  await composer.fill("Send me the files");
+  await composer.press("Enter");
+  await expect(page.getByText("Hello! I am here.", { exact: true }).first()).toBeVisible();
+
+  const audio = page.locator("audio.kana-media-audio");
+  await expect(audio).toHaveCount(1);
+  await expect(audio).toHaveAttribute("src", "/api/media/e2e-audio/tts_e2e.wav");
+  await expect(audio).toBeVisible();
+  await expect(page.getByRole("link", { name: "Download tts_e2e.wav" })).toHaveAttribute(
+    "href",
+    "/api/media/e2e-audio/tts_e2e.wav?download",
+  );
+  const report = page.getByRole("link", { name: "Download Laporan akhir.pdf" });
+  await expect(report).toHaveAttribute("download", "Laporan akhir.pdf");
+  await expect(page.getByText("Laporan akhir.pdf", { exact: true })).toBeVisible();
+  await expect(page.getByText(/MEDIA:/)).toHaveCount(0);
+});
+
 test("subtitles follow the language the user writes in and survive reloads", async ({
   page,
 }) => {
@@ -610,7 +667,7 @@ test("persists the selected stage background across refreshes", async ({ page })
     name: /^Avatar(?: Avatar and stage)?$/,
   }).click();
   await page.getByRole("radio", {
-    name: "Seigaiha. Traditional Japanese wave scales",
+    name: "Seigaiha",
     exact: true,
   }).click();
   await page.getByRole("button", { name: "Close settings" }).click();
@@ -625,6 +682,45 @@ test("persists the selected stage background across refreshes", async ({ page })
     "data-background",
     "pattern-seigaiha",
   );
+});
+
+test("the config guide opens from Settings and follows this installation", async ({
+  page,
+  context,
+}) => {
+  await page.getByRole("button", { name: "Open settings" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: /^Connection/ }).click();
+  const guideLink = dialog.getByRole("link", { name: "Guide", exact: true });
+  await expect(guideLink).toHaveAttribute("href", "/docs");
+  // A new tab, so reading the guide never interrupts a conversation.
+  await expect(guideLink).toHaveAttribute("target", "_blank");
+
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/docs");
+  await expect(page.getByRole("heading", { level: 1, name: "Configuration guide" })).toBeVisible();
+  await expect(page).toHaveTitle("Configuration guide · Kana");
+  // This installation's own path, never a placeholder (and never the contents).
+  await expect(page.getByTestId("config-guide-path")).toHaveText(/^\/.+\/config\.json$/);
+
+  const contents = page.getByRole("navigation", { name: "Contents" });
+  await contents.getByRole("link", { name: "Pollinations" }).click();
+  await expect(contents.getByRole("link", { name: "Pollinations" })).toHaveAttribute("aria-current", "location");
+  const pollinations = page.getByRole("region", { name: "Pollinations" });
+  await expect(pollinations.getByRole("heading", { name: "Pollinations" })).toBeInViewport();
+
+  await pollinations.getByRole("button", { name: "Copy" }).first().click();
+  await expect(pollinations.getByRole("button", { name: "Copied" })).toBeVisible();
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  expect((JSON.parse(copied) as { tts: { provider: string } }).tts.provider).toBe("pollinations");
+
+  // The app locks html/body, so the guide scrolls in its own box; nothing in
+  // it may push the page sideways, even on a phone.
+  const sideways = await page.locator("main").evaluate((main) => {
+    const scroller = main.closest(".overflow-y-auto") as HTMLElement;
+    return scroller.scrollWidth - scroller.clientWidth;
+  });
+  expect(sideways).toBe(0);
 });
 
 test("adjusts the active avatar from the workspace instead of settings", async ({
@@ -880,7 +976,7 @@ test("shows complete background cards and keeps an uploaded image locally", asyn
     ),
   });
   await expect(page.getByText("my-stage is now your stage background.")).toBeVisible();
-  await expect(page.getByRole("radio", { name: "my-stage. Your local background" })).toBeChecked();
+  await expect(page.getByRole("radio", { name: "my-stage", exact: true })).toBeChecked();
   await expect(page.locator(".kana-stage-pattern")).toHaveAttribute(
     "data-background",
     "custom",
@@ -1065,11 +1161,13 @@ test("guides a new browser profile through onboarding onto the workspace", async
   });
   await page.reload();
 
-  // Kana greets first, in view and unblurred, through a dialogue box.
+  // Kana greets first, in view and unblurred, through a dialogue box. The
+  // greeting is always English; the setup screens follow the UI language.
   const greeting = page.getByRole("dialog", { name: "Kana" });
   await expect(greeting).toBeVisible();
-  await expect(greeting).toHaveAccessibleDescription(/^Hai, aku Kana!/);
-  const start = greeting.getByRole("button", { name: "Yuk, mulai" });
+  await expect(greeting).toHaveAccessibleDescription(/^Hi, I'm Kana!/);
+  await expect(greeting).toHaveAttribute("lang", "en");
+  const start = greeting.getByRole("button", { name: "Let's go" });
   await expect(start).toBeFocused();
   await start.click();
 
@@ -1252,7 +1350,7 @@ function testToneWav(): Buffer {
   return wav;
 }
 
-async function enableTestVoice(page: Page, type = "openai-compatible") {
+async function enableTestVoice(page: Page, type = "pollinations") {
   await page.route("**/api/voice/tts/provider", (route) => route.fulfill({ json: {
     provider: { id: type, type, name: "Test voice", configured: true, capabilities: {
       instruction: false, localInstall: type === "irodori-local", upstreamCancellation: true, voiceLibrary: false,
@@ -1265,7 +1363,7 @@ async function enableTestVoice(page: Page, type = "openai-compatible") {
   await page.getByRole("button", { name: "Close settings" }).click();
 }
 
-for (const provider of ["irodori-local", "openai-compatible"]) {
+for (const provider of ["irodori-local", "pollinations"]) {
   test(`TTS holds text until audible playback and runs lip sync for ${provider} without randomUUID`, async ({ page }) => {
     await enableTestVoice(page, provider);
     await page.evaluate(() => {
@@ -1320,7 +1418,7 @@ test("downloads the local voice engine only when asked and shows progress", asyn
   await dialog.getByRole("button", { name: /^Voice/ }).click();
   const engine = dialog.getByRole("region", { name: "Local voice engine" });
   await expect(engine.getByText("Not downloaded")).toBeVisible();
-  await expect(engine.getByText(/3\.3 GB download\. Nothing is downloaded until you ask\./)).toBeVisible();
+  await expect(engine.getByText(/^3\.3 GB download$/)).toBeVisible();
   expect(actions).toEqual([]);
 
   await engine.getByRole("button", { name: "Download voice engine" }).click();

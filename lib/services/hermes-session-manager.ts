@@ -49,6 +49,8 @@ export class HermesSessionManager {
     turnStartedAt: null,
   };
   private agent: AgentClient | null = null;
+  /** A session open under way, so concurrent callers join it instead of creating another. */
+  private opening: { conversationId: string; promise: Promise<unknown> } | null = null;
   private unsubscribe: (() => void) | null = null;
   private readonly eventContext: AgentEventContext;
 
@@ -91,22 +93,56 @@ export class HermesSessionManager {
     const agent = this.agent;
     if (agent.connectionState !== "connected") await agent.connect();
     if (this.tracking.openedId !== conversation.id) {
-      this.tracking.openingId = conversation.id;
-      await agent.openSession({
-        // Automatic titles (the default, or the first message) are left to
-        // Hermes, which names the session itself.
-        title: conversation.titleChosen ? conversation.title : undefined,
-        // A session Hermes never stored cannot be resumed; open a new one.
-        persistentSessionId: resumableSessionId(conversation),
-        cwd: this.deps.preferences.current().hermes.cwd || undefined,
-      });
+      // The model chip and a new conversation can ask at the same time; the
+      // second caller joins the first open rather than creating a session.
+      if (this.opening?.conversationId !== conversation.id) {
+        this.tracking.openingId = conversation.id;
+        const promise = agent
+          .openSession({
+            // Automatic titles (the default, or the first message) are left to
+            // Hermes, which names the session itself.
+            title: conversation.titleChosen ? conversation.title : undefined,
+            // A session Hermes never stored cannot be resumed; open a new one.
+            persistentSessionId: resumableSessionId(conversation),
+            cwd: this.deps.preferences.current().hermes.cwd || undefined,
+          })
+          .finally(() => {
+            if (this.opening?.promise === promise) this.opening = null;
+          });
+        this.opening = { conversationId: conversation.id, promise };
+      }
+      await this.opening.promise;
     }
     return agent;
   }
 
-  /** The next prompt opens the active conversation's session again. */
+  /**
+   * The active conversation no longer matches the open Hermes session; the
+   * next prompt opens its own. Until then no session counts as open, so the
+   * model chip stops showing the previous session's model.
+   */
   forgetOpenedSession(): void {
     this.tracking.openedId = null;
+    if (this.session.getState().openSessionId) this.session.setState({ openSessionId: null });
+  }
+
+  /**
+   * Open the active conversation's Hermes session now, as connect() does for
+   * the first one, so the composer shows that session's own model (Hermes's
+   * default for a new session). Hermes stores nothing until the first prompt;
+   * if this fails, the next prompt opens it.
+   */
+  async openActiveSession(): Promise<void> {
+    const active = this.deps.conversations.active();
+    if (!active || this.agent?.connectionState !== "connected" || this.session.getState().busy) return;
+    await this.ensure(active).catch(() => undefined);
+  }
+
+  /** Model reads and switches act on the active conversation's own session, opening it first. */
+  private async activeAgent(): Promise<AgentClient> {
+    if (!this.agent) throw new Error("Hermes is not connected.");
+    const active = this.deps.conversations.active();
+    return active ? this.ensure(active) : this.agent;
   }
 
   /**
@@ -237,8 +273,8 @@ export class HermesSessionManager {
   }
 
   async listModels(refresh = false): Promise<AgentModelCatalog> {
-    if (!this.agent) throw new Error("Hermes is not connected.");
-    return this.agent.listModels({ refresh });
+    const agent = await this.activeAgent();
+    return agent.listModels({ refresh });
   }
 
   async selectModel(provider: string, model: string, confirm = false): Promise<AgentModelSwitchResult> {
@@ -246,7 +282,8 @@ export class HermesSessionManager {
     if (this.session.getState().busy) {
       throw new Error("Wait for the current Hermes turn to finish before changing models.");
     }
-    return this.agent.selectModel({ provider, model }, { confirm });
+    const agent = await this.activeAgent();
+    return agent.selectModel({ provider, model }, { confirm });
   }
 
   // ---- Conversation switches that involve the Hermes session ----
@@ -263,8 +300,9 @@ export class HermesSessionManager {
     }
     const conversation = conversations.persist(conversations.create(), false);
     conversations.activate(conversation);
-    this.tracking.openedId = null;
+    this.forgetOpenedSession();
     stores.errors.getState().dismiss();
+    await this.openActiveSession();
   }
 
   /** Open a Kana session another browser or surface created. */
@@ -287,7 +325,7 @@ export class HermesSessionManager {
     if (!target) return;
     voice.flushHeld();
     conversations.activate(target);
-    this.tracking.openedId = null;
+    this.forgetOpenedSession();
     stores.errors.getState().dismiss();
     voice.release();
     avatar.presentEmotion("neutral");
@@ -316,7 +354,7 @@ export class HermesSessionManager {
       const next = conversations.all()[0];
       if (next) conversations.activate(next);
       else conversations.clearActive();
-      this.tracking.openedId = null;
+      this.forgetOpenedSession();
     }
   }
 
@@ -325,6 +363,7 @@ export class HermesSessionManager {
     this.unsubscribe = null;
     const agent = this.agent;
     this.agent = null;
+    this.opening = null;
     this.tracking.openedId = null;
     this.tracking.openingId = null;
     this.tracking.turnId = null;

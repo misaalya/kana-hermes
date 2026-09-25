@@ -5,7 +5,7 @@ import { useDialogFocus } from "@/lib/accessibility/use-dialog-focus";
 import { OFFICIAL_LIVE2D_SAMPLES } from "@/lib/avatar/defaults";
 import type { KanaPreferences } from "@/lib/preferences/types";
 import type { DependencyFindings } from "@/lib/store/workspace-store";
-import { getCopy, type UiLocale } from "@/lib/ui/copy";
+import { getCopy, KANA_GREETING, type UiLocale } from "@/lib/ui/copy";
 import { CheckIcon, ChevronRightIcon } from "./icons";
 import { SettingsRow, SettingsRows, SettingsSegmented, StatusPill, settingsButton } from "./settings-layout";
 import { btnGhost, btnPrimary, Toggle } from "./ui";
@@ -88,6 +88,7 @@ function Greeting({ name, line, start, instant, dialogRef, startRef, onKeyDown, 
         onKeyDown={onKeyDown}
         onClick={() => setShown(line.length)}
         className="kana-greeting relative w-full max-w-[640px]"
+        lang="en"
       >
         <p id="kana-greeting-name" className="kana-greeting-name">{name}</p>
         <p id="kana-greeting-line" className="sr-only">{line}</p>
@@ -224,9 +225,9 @@ export function OnboardingWizard({
   if (greeting) {
     return (
       <Greeting
-        name={text.greetingName}
-        line={text.greetingText}
-        start={text.greetingStart}
+        name={KANA_GREETING.name}
+        line={KANA_GREETING.text}
+        start={KANA_GREETING.start}
         instant={greeted}
         dialogRef={dialogRef}
         startRef={startRef}
@@ -239,7 +240,7 @@ export function OnboardingWizard({
   return (
     <div className="fixed inset-0 z-40 grid place-items-center overflow-y-auto bg-[var(--backdrop)] p-6 backdrop-blur-md max-sm:p-0">
       <section
-        className="kana-settings-shell relative flex h-[min(580px,92dvh)] w-[min(560px,100%)] flex-col overflow-hidden rounded-[36px] bg-raised max-sm:h-dvh max-sm:rounded-none"
+        className="kana-settings-shell relative flex h-[min(580px,92dvh)] w-[min(560px,100%)] flex-col overflow-hidden bg-raised max-sm:h-dvh"
         ref={dialogRef}
         role="dialog"
         aria-modal="true"

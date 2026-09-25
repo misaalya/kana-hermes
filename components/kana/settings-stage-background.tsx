@@ -26,7 +26,6 @@ export const STAGE_BACKGROUND_OPTIONS: Array<{
 
 export function StageBackgroundChoice({
   active,
-  hint,
   label,
   onRemove,
   onSelect,
@@ -35,7 +34,6 @@ export function StageBackgroundChoice({
   copy,
 }: {
   active: boolean;
-  hint: string;
   label: string;
   onRemove?: () => void;
   onSelect(): void;
@@ -51,7 +49,7 @@ export function StageBackgroundChoice({
         type="button"
         role="radio"
         aria-checked={active}
-        aria-label={`${label}. ${hint}`}
+        aria-label={label}
         className="kana-focus block w-full text-left"
         onClick={onSelect}
       >
@@ -64,10 +62,7 @@ export function StageBackgroundChoice({
           } : undefined}
         />
         <span className="flex items-center justify-between gap-2 px-3 py-3">
-          <span className="min-w-0">
-            <span className="block truncate text-[13px] font-extrabold text-ink">{label}</span>
-            <span className="mt-0.5 block truncate text-[10px] font-medium text-muted">{hint}</span>
-          </span>
+          <span className="min-w-0 truncate text-[13px] font-extrabold text-ink">{label}</span>
           <span className={`shrink-0 text-[10px] font-extrabold ${active ? "rounded-full bg-accent px-2.5 py-1 text-on-accent" : "text-faint"}`}>
             {active ? copy.selected : copy.choose}
           </span>
@@ -121,7 +116,6 @@ export function StoredStageBackgroundChoice({
     <StageBackgroundChoice
       active={active}
       label={background.name}
-      hint={copy.localBackground}
       previewUrl={previewUrl}
       onSelect={onSelect}
       onRemove={onRemove}

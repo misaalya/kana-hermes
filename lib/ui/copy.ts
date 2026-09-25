@@ -25,10 +25,6 @@ export type Copy = {
   onboarding: {
     checkup: string;
     saveFailed: string;
-    /** Name tag over Kana's first-run greeting box. */
-    greetingName: string;
-    greetingText: string;
-    greetingStart: string;
     stepOf(step: number, total: number): string;
     officialSample: string;
     statusReady: string;
@@ -122,7 +118,6 @@ export type Copy = {
   };
   panels: {
     hermesTitle: string;
-    hermesSubtitle: string;
     states: Record<string, string>;
     start: string;
     starting: string;
@@ -190,6 +185,10 @@ export type Copy = {
     hermesNote: string;
     latestAria: string;
     latest: string;
+    download: string;
+    downloadAria(name: string): string;
+    openImage(name: string): string;
+    mediaUnavailable: string;
   };
   history: {
     aria: string;
@@ -201,7 +200,6 @@ export type Copy = {
     newConversation: string;
     newLabel: string;
     found(count: number): string;
-    recent: string;
     sessionUnavailable: string;
     startMoment: string;
     moreOptions(title: string): string;
@@ -281,58 +279,38 @@ export type Copy = {
     subtitle: string;
     personal: string;
     system: string;
-    sections: Record<string, { label: string; hint: string }>;
+    sections: Record<string, { label: string }>;
     sectionsAria: string;
     saveError: string;
     saved: string;
-    logoutDescription: string;
     savingChanges: string;
     close: string;
     interfaceTitle: string;
-    interfaceDescription: string;
-    subtitleTitle: string;
-    subtitleDescription: string;
     voiceTitle: string;
-    voiceOn: string;
-    voiceOff: string;
     voiceToggle: string;
     stageTitle: string;
-    stageDescription: string;
-    backgroundOptions: Record<string, { label: string; hint: string }>;
-    backgrounds(count: number): string;
+    backgroundOptions: Record<string, { label: string }>;
     carouselControls: string;
     previousBackgrounds: string;
     nextBackgrounds: string;
     stageAria: string;
     choose: string;
     selected: string;
-    localBackground: string;
     removeLabel(label: string): string;
     customBackgroundTitle: string;
-    customBackgroundHint: string;
     adding: string;
     uploadImage: string;
     avatarLibrary: string;
-    avatarLibraryBody: string;
-    currentAvatar: string;
-    selectedAvatar: string;
-    yourAvatar: string;
-    included: string;
     includedAvatars: string;
-    live2dSample: string;
     yourAvatars: string;
-    storedBrowserOnly: string;
     rename: string;
     remove: string;
     preparingAvatar: string;
     importLive2d: string;
-    importLive2dHint: string;
     avatarBehaviorTitle: string;
-    avatarBehaviorDescription: string;
     avatarBehaviorReady(mapped: number, total: number): string;
     avatarBehaviorLoading: string;
     avatarBehaviorFailed: string;
-    avatarBehaviorBuiltin: string;
     avatarLayoutDescription: string;
     avatarLayoutAutomatic: string;
     avatarLayoutAdjusted: string;
@@ -347,7 +325,6 @@ export type Copy = {
     avatarLayoutClose: string;
     avatarLayoutSurface: string;
     avatarMouthParameter: string;
-    avatarMouthHint: string;
     avatarMouthReady: string;
     avatarMouthManual: string;
     avatarMouthAdvanced: string;
@@ -369,7 +346,6 @@ export type Copy = {
     hermesTitle: string;
     hermesDescription: string;
     modelTitle: string;
-    modelDescription: string;
     modelLoading: string;
     modelLoadFailed: string;
     modelEmpty: string;
@@ -389,24 +365,18 @@ export type Copy = {
     modelInUse: string;
     modelUse: string;
     modelRefreshList: string;
-    modelScope: string;
     voiceEngineTitle: string;
     voiceEngineDescription: string;
     accessTitle: string;
-    accessDescription: string;
     avatarNamePrompt: string;
     removeAvatarConfirm(name: string): string;
     removeBackgroundConfirm(name: string): string;
     advancedTitle: string;
+    configGuide: string;
     advancedSuffix: string;
-    advancedBody: string;
     advancedMode: string;
     advancedModeLocal: string;
     advancedModeDeployment: string;
-    advancedModeSourceEnvironment: string;
-    advancedModeSourceConfig: string;
-    advancedModeSourceDefault: string;
-    advancedRestart: string;
     advancedConfigError: string;
     checkingAccess: string;
     currentPassword: string;
@@ -422,7 +392,6 @@ export type Copy = {
   };
   voiceLibrary: {
     title: string;
-    body: string;
     chooseAria: string;
     available: string;
     loading: string;
@@ -430,20 +399,14 @@ export type Copy = {
     selected: string;
     choose: string;
     remove: string;
-    included: string;
-    yours: string;
-    modelVoice: string;
-    externalProvider(name: string): string;
     externalReady: string;
     externalUnavailable: string;
     externalChecking: string;
     externalRefresh: string;
     addTitle: string;
-    addBody: string;
     addSample: string;
     formAria: string;
     formTitle: string;
-    formBody: string;
     cancel: string;
     name: string;
     namePlaceholder: string;
@@ -466,7 +429,6 @@ export type Copy = {
   voiceEngine: {
     title: string;
     aria: string;
-    body(model: string): string;
     states: Record<"ready" | "installing" | "not_installed" | "failed" | "unsupported" | "checking", string>;
     downloadNote(size: string): string;
     diskNote(needed: string, free: string): string;
@@ -484,7 +446,6 @@ export type Copy = {
     confirmRemove: string;
     refresh: string;
     failedCheck: string;
-    notInstalledHint: string;
   };
   status: Record<string, string>;
 };
@@ -506,9 +467,6 @@ const id: Copy = {
   onboarding: {
     checkup: "Pemeriksaan",
     saveFailed: "Pengaturan awal tidak dapat disimpan.",
-    greetingName: "Kana",
-    greetingText: "Hai, aku Kana! Aku yang akan menemanimu selama Hermes bekerja. Sebelum mulai, kita atur beberapa hal dulu, ya. Tidak sampai semenit, kok.",
-    greetingStart: "Yuk, mulai",
     stepOf: (step, total) => `Langkah ${step} dari ${total}`,
     officialSample: "Sampel resmi Live2D",
     statusReady: "Siap",
@@ -537,7 +495,7 @@ const id: Copy = {
     voiceNeedsAttention: "Perlu diperiksa dari Pengaturan.",
     voicePreparedOnUse: "Akan disiapkan saat pertama digunakan.",
     voiceNotInstalled: "Mesin suara belum diunduh. Unduh dari Pengaturan → Suara.",
-    voiceUnsupported: "Mesin suara lokal tidak bisa berjalan di perangkat ini. Pakai penyedia suara OpenAI-compatible di config.json.",
+    voiceUnsupported: "Mesin suara lokal tidak bisa berjalan di perangkat ini. Pakai Pollinations di config.json.",
     voiceInstalling: "Mesin suara sedang diunduh.",
     openConnectionSettings: "Buka pengaturan koneksi",
   },
@@ -607,8 +565,7 @@ const id: Copy = {
     action: "Periksa",
   },
   panels: {
-    hermesTitle: "Hermes — otak asisten",
-    hermesSubtitle: "Proses resmi di mesin ini, tanpa dimodifikasi.",
+    hermesTitle: "Hermes",
     states: {
       checking: "memeriksa…",
       running: "menyala",
@@ -684,6 +641,10 @@ const id: Copy = {
     hermesNote: "Catatan Hermes",
     latestAria: "Lompat ke pesan terbaru",
     latest: "Terbaru",
+    download: "Unduh",
+    downloadAria: (name) => `Unduh ${name}`,
+    openImage: (name) => `Buka ${name} di tab baru`,
+    mediaUnavailable: "File ini sudah tidak tersedia.",
   },
   history: {
     aria: "Riwayat percakapan",
@@ -695,7 +656,6 @@ const id: Copy = {
     newConversation: "Percakapan baru",
     newLabel: "Baru",
     found: (count) => `${count} ditemukan`,
-    recent: "Terkini",
     sessionUnavailable: "Sesi Hermes tidak tersedia",
     startMoment: "Mulai momen baru",
     moreOptions: (title) => `Opsi lainnya untuk ${title}`,
@@ -776,72 +736,52 @@ const id: Copy = {
     personal: "Pribadi",
     system: "Sistem",
     sections: {
-      experience: { label: "Pengalaman", hint: "Bahasa dan subtitle" },
-      voice: { label: "Suara", hint: "Cara Kana berbicara" },
-      avatar: { label: "Avatar", hint: "Avatar dan panggung" },
-      model: { label: "Model AI", hint: "Provider dan model percakapan" },
-      system: { label: "Koneksi", hint: "Hermes dan mesin suara" },
-      privacy: { label: "Privasi", hint: "Akses dan keamanan" },
+      experience: { label: "Pengalaman" },
+      voice: { label: "Suara" },
+      avatar: { label: "Avatar" },
+      model: { label: "Model AI" },
+      system: { label: "Koneksi" },
+      privacy: { label: "Privasi" },
     },
     sectionsAria: "Bagian pengaturan",
     saveError: "Tidak dapat menyimpan",
     saved: "Tersimpan otomatis",
-    logoutDescription: "Keluar dari browser ini. Browser lain tetap masuk sampai kata sandi diganti.",
     savingChanges: "Menyimpan…",
     close: "Tutup pengaturan",
     interfaceTitle: "Bahasa antarmuka",
-    interfaceDescription: "Pilih bahasa yang digunakan oleh kontrol dan menu Kana.",
-    subtitleTitle: "Subtitle",
-    subtitleDescription: "Kana selalu berbicara dalam bahasa Jepang. Subtitle otomatis memakai bahasa yang kamu pakai saat menulis, dan subtitle lama tetap seperti saat pertama ditampilkan.",
     voiceTitle: "Suara Kana",
-    voiceOn: "Kana membacakan balasan baru dalam bahasa Jepang.",
-    voiceOff: "Balasan tetap tersedia sebagai teks saat suara dimatikan.",
     voiceToggle: "Suara Jepang",
     stageTitle: "Latar panggung",
-    stageDescription: "Pilih panggung untuk Kana. Geser carousel atau gunakan tombol panah.",
     backgroundOptions: {
-      plain: { label: "Polos", hint: "Panggung datar yang tenang" },
-      room: { label: "Kamar Kana", hint: "Kamar ilustrasi yang nyaman" },
-      "pattern-sakura": { label: "Sakura", hint: "Kelopak yang berguguran pelan" },
-      "pattern-sparkle": { label: "Kilau", hint: "Kilau yang naik perlahan" },
-      "pattern-clouds": { label: "Awan", hint: "Awan empuk yang melayang" },
-      "pattern-seigaiha": { label: "Seigaiha", hint: "Pola ombak tradisional Jepang" },
-      "pattern-ribbon": { label: "Pita", hint: "Pita dan hati kecil" },
+      plain: { label: "Polos" },
+      room: { label: "Kamar Kana" },
+      "pattern-sakura": { label: "Sakura" },
+      "pattern-sparkle": { label: "Kilau" },
+      "pattern-clouds": { label: "Awan" },
+      "pattern-seigaiha": { label: "Seigaiha" },
+      "pattern-ribbon": { label: "Pita" },
     },
-    backgrounds: (count) => `${count} latar · tersimpan di perangkat ini`,
     carouselControls: "Kontrol carousel latar",
     previousBackgrounds: "Latar sebelumnya",
     nextBackgrounds: "Latar berikutnya",
     stageAria: "Latar panggung",
     choose: "Pilih",
     selected: "Dipilih",
-    localBackground: "Latar lokalmu",
     removeLabel: (label) => `Hapus ${label}`,
     customBackgroundTitle: "Gunakan latarmu sendiri",
-    customBackgroundHint: "PNG, JPEG, WebP, GIF, AVIF, atau BMP · hingga 25 MB · disimpan di browser ini",
     adding: "Menambahkan…",
     uploadImage: "Unggah gambar",
     avatarLibrary: "Koleksi avatar",
-    avatarLibraryBody: "Pilih karakter bawaan atau impor avatar Live2D milikmu.",
-    currentAvatar: "Avatar saat ini",
-    selectedAvatar: "Avatar terpilih",
-    yourAvatar: "Avatarmu",
-    included: "Bawaan",
     includedAvatars: "Avatar bawaan",
-    live2dSample: "Contoh Live2D",
     yourAvatars: "Avatarmu",
-    storedBrowserOnly: "Hanya tersimpan di browser ini.",
     rename: "Ganti nama",
     remove: "Hapus",
     preparingAvatar: "Menyiapkan avatar…",
     importLive2d: "Impor folder Live2D",
-    importLive2dHint: "Pilih satu folder model lengkap. Kana menyimpannya di perangkat ini.",
     avatarBehaviorTitle: "Ekspresi avatar",
-    avatarBehaviorDescription: "Hubungkan emosi Kana dengan ekspresi dan gerakan yang memang tersedia pada avatar ini.",
     avatarBehaviorReady: (mapped, total) => `${mapped} dari ${total} emosi terhubung`,
     avatarBehaviorLoading: "Membaca kemampuan avatar…",
     avatarBehaviorFailed: "Kemampuan avatar tidak dapat dibaca.",
-    avatarBehaviorBuiltin: "Avatar bawaan sudah memiliki pemetaan ekspresi yang disiapkan oleh Kana.",
     avatarLayoutDescription: "Kana menyesuaikan model otomatis dari bounds Live2D-nya. Koreksi ini disimpan khusus untuk avatar yang sedang dipilih.",
     avatarLayoutAutomatic: "Posisi otomatis",
     avatarLayoutAdjusted: "Disesuaikan",
@@ -856,7 +796,6 @@ const id: Copy = {
     avatarLayoutClose: "Tutup pengaturan posisi avatar",
     avatarLayoutSurface: "Panggung avatar. Seret untuk memindahkan, tombol panah untuk menggeser, plus atau minus untuk ukuran.",
     avatarMouthParameter: "Lip-sync otomatis",
-    avatarMouthHint: "Kana mendeteksi kontrol mulut saat avatar dimuat. Jika model tidak menyediakannya, avatar tetap berfungsi tanpa lip-sync.",
     avatarMouthReady: "Diatur otomatis",
     avatarMouthManual: "Pilihan manual",
     avatarMouthAdvanced: "Ubah secara manual",
@@ -887,7 +826,6 @@ const id: Copy = {
     hermesTitle: "Hermes",
     hermesDescription: "Otak agen di balik Kana. Kana menemukan dan menghubungkannya secara otomatis.",
     modelTitle: "Model AI",
-    modelDescription: "Pilih provider dan model Hermes untuk percakapan yang sedang dibuka.",
     modelLoading: "Memuat model dari Hermes…",
     modelLoadFailed: "Model tidak dapat dimuat.",
     modelEmpty: "Hermes belum melaporkan provider dengan model yang siap digunakan.",
@@ -907,24 +845,18 @@ const id: Copy = {
     modelInUse: "Sedang digunakan",
     modelUse: "Gunakan model ini",
     modelRefreshList: "Segarkan daftar",
-    modelScope: "Pilihan berlaku untuk percakapan Hermes ini. Provider dan model selalu dikirim sebagai dua nilai terpisah.",
     voiceEngineTitle: "Mesin suara",
     voiceEngineDescription: "Layanan lokal yang mengubah teks Jepang Kana menjadi suara.",
     accessTitle: "Perlindungan akses",
-    accessDescription: "Atur siapa yang dapat membuka instalasi Kana ini.",
     avatarNamePrompt: "Nama avatar",
     removeAvatarConfirm: (name) => `Hapus “${name}” dari browser ini?`,
     removeBackgroundConfirm: (name) => `Hapus ${name} dari perangkat ini?`,
     advancedTitle: "Konfigurasi lanjutan",
+    configGuide: "Panduan",
     advancedSuffix: "untuk instalasi mandiri",
-    advancedBody: "Path runtime dan port dapat dikonfigurasi di luar antarmuka. Kana membaca file ini saat menjalankan layanannya:",
     advancedMode: "Mode instalasi",
-    advancedModeLocal: "Lokal — hanya digunakan dari mesin yang sama",
-    advancedModeDeployment: "Deployment — diakses lewat VPS, Nginx, atau jaringan",
-    advancedModeSourceEnvironment: "Mode ini sedang ditentukan oleh KANA_DEPLOYMENT_MODE dan mengesampingkan file JSON.",
-    advancedModeSourceConfig: "Mode ini dibaca dari file JSON di atas.",
-    advancedModeSourceDefault: "Mode lokal bawaan digunakan karena belum ada pilihan eksplisit.",
-    advancedRestart: "Perubahan TTS dan mode dibaca otomatis; port Hermes berlaku setelah Kana dimulai ulang.",
+    advancedModeLocal: "Lokal",
+    advancedModeDeployment: "Deployment",
     advancedConfigError: "File ini tidak valid, jadi Kana memakai pengaturan bawaan:",
     checkingAccess: "Memeriksa perlindungan akses…",
     currentPassword: "Kata sandi saat ini",
@@ -940,7 +872,6 @@ const id: Copy = {
   },
   voiceLibrary: {
     title: "Koleksi suara",
-    body: "Kana memakai suara ini untuk setiap balasan Jepang baru. Suara berbasis sampel lebih konsisten, suara Irodori lebih cepat.",
     chooseAria: "Pilih suara Kana",
     available: "Suara yang tersedia",
     loading: "Memuat suara…",
@@ -948,20 +879,14 @@ const id: Copy = {
     selected: "Dipilih",
     choose: "Pilih",
     remove: "Hapus",
-    included: "Bawaan Kana",
-    yours: "Suaramu",
-    modelVoice: "Suara asli model · tercepat",
-    externalProvider: (name) => `Kana memakai ${name}. Suara, model, dan kredensial provider ini diatur melalui config.json.`,
     externalReady: "Siap digunakan",
     externalUnavailable: "Konfigurasi belum siap",
     externalChecking: "Memeriksa provider…",
     externalRefresh: "Periksa ulang",
     addTitle: "Tambahkan suaramu",
-    addBody: "Gunakan satu sampel audio jelas yang boleh kamu gunakan.",
     addSample: "Tambah sampel",
     formAria: "Tambahkan sampel suara",
     formTitle: "Tambahkan suara",
-    formBody: "Sampel bersih dengan satu pembicara memberikan hasil terbaik.",
     cancel: "Batal",
     name: "Nama suara",
     namePlaceholder: "Contoh: Suaraku",
@@ -984,7 +909,6 @@ const id: Copy = {
   voiceEngine: {
     title: "Mesin suara lokal",
     aria: "Mesin suara lokal",
-    body: (model) => `${model} lewat mesin irodori-c, berjalan di CPU mesin ini tanpa Python atau GPU.`,
     states: {
       ready: "Terpasang",
       installing: "Mengunduh…",
@@ -993,8 +917,8 @@ const id: Copy = {
       unsupported: "Tidak didukung",
       checking: "Memeriksa…",
     },
-    downloadNote: (size) => `Unduhan ${size}. Tidak ada yang diunduh sampai kamu memintanya.`,
-    diskNote: (needed, free) => `Butuh ${needed} ruang disk · tersedia ${free}.`,
+    downloadNote: (size) => `Unduhan ${size}`,
+    diskNote: (needed, free) => `Disk: butuh ${needed} · tersedia ${free}`,
     lowDisk: (needed, free) => `Ruang disk tidak cukup: butuh ${needed}, tersedia ${free}.`,
     progress: (step, percent) => `${step} · ${percent}%`,
     steps: { engine: "Mesin", assets: "Aset suara", model: "Model" },
@@ -1009,7 +933,6 @@ const id: Copy = {
     confirmRemove: "Yakin hapus?",
     refresh: "Perbarui",
     failedCheck: "Status mesin suara tidak dapat diperiksa.",
-    notInstalledHint: "Kana baru bisa bersuara setelah mesin suara diunduh. Sampai itu, balasan tetap tampil sebagai teks.",
   },
   status: {
     ready: "Siap kapan pun kamu siap",
@@ -1054,9 +977,6 @@ const en: Copy = {
   onboarding: {
     checkup: "Checkup",
     saveFailed: "Could not save setup.",
-    greetingName: "Kana",
-    greetingText: "Hi, I'm Kana! I'll keep you company while Hermes does the work. Let's set a few things up first. It takes less than a minute.",
-    greetingStart: "Let's go",
     stepOf: (step, total) => `Step ${step} of ${total}`,
     officialSample: "Official Live2D sample",
     statusReady: "Ready",
@@ -1085,7 +1005,7 @@ const en: Copy = {
     voiceNeedsAttention: "Needs attention in Settings.",
     voicePreparedOnUse: "Will be prepared on first use.",
     voiceNotInstalled: "The voice engine is not downloaded yet. Download it in Settings → Voice.",
-    voiceUnsupported: "The local voice engine cannot run on this device. Use an OpenAI-compatible voice provider in config.json.",
+    voiceUnsupported: "The local voice engine cannot run on this device. Use Pollinations in config.json.",
     voiceInstalling: "The voice engine is downloading.",
     openConnectionSettings: "Open connection settings",
   },
@@ -1155,8 +1075,7 @@ const en: Copy = {
     action: "Check",
   },
   panels: {
-    hermesTitle: "Hermes — the assistant's brain",
-    hermesSubtitle: "The official, unmodified process on this machine.",
+    hermesTitle: "Hermes",
     states: {
       checking: "checking…",
       running: "running",
@@ -1232,6 +1151,10 @@ const en: Copy = {
     hermesNote: "Hermes note",
     latestAria: "Jump to latest message",
     latest: "Latest",
+    download: "Download",
+    downloadAria: (name) => `Download ${name}`,
+    openImage: (name) => `Open ${name} in a new tab`,
+    mediaUnavailable: "This file is no longer available.",
   },
   history: {
     aria: "Conversation history",
@@ -1243,7 +1166,6 @@ const en: Copy = {
     newConversation: "New conversation",
     newLabel: "New",
     found: (count) => `${count} found`,
-    recent: "Recent",
     sessionUnavailable: "Hermes session unavailable",
     startMoment: "Start a new moment",
     moreOptions: (title) => `More options for ${title}`,
@@ -1324,72 +1246,52 @@ const en: Copy = {
     personal: "Personal",
     system: "System",
     sections: {
-      experience: { label: "Experience", hint: "Language and subtitles" },
-      voice: { label: "Voice", hint: "How Kana sounds" },
-      avatar: { label: "Avatar", hint: "Avatar and stage" },
-      model: { label: "AI model", hint: "Conversation provider and model" },
-      system: { label: "Connection", hint: "Hermes and voice engine" },
-      privacy: { label: "Privacy", hint: "Access and security" },
+      experience: { label: "Experience" },
+      voice: { label: "Voice" },
+      avatar: { label: "Avatar" },
+      model: { label: "AI model" },
+      system: { label: "Connection" },
+      privacy: { label: "Privacy" },
     },
     sectionsAria: "Settings sections",
     saveError: "Could not save",
     saved: "Saved automatically",
-    logoutDescription: "Sign out of this browser. Other browsers stay signed in until the password changes.",
     savingChanges: "Saving…",
     close: "Close settings",
     interfaceTitle: "Interface language",
-    interfaceDescription: "Choose the language used by Kana's controls and menus.",
-    subtitleTitle: "Subtitles",
-    subtitleDescription: "Kana always speaks Japanese. Subtitles automatically use the language you write in, and earlier subtitles stay exactly as you first saw them.",
     voiceTitle: "Kana's voice",
-    voiceOn: "Kana speaks new replies in Japanese.",
-    voiceOff: "Replies remain available as text while voice is off.",
     voiceToggle: "Japanese voice",
     stageTitle: "Stage background",
-    stageDescription: "Choose a stage for Kana. Swipe the carousel or use the arrow buttons.",
     backgroundOptions: {
-      plain: { label: "Plain", hint: "A quiet flat stage" },
-      room: { label: "Kana's room", hint: "A cozy illustrated room" },
-      "pattern-sakura": { label: "Sakura", hint: "Softly falling petals" },
-      "pattern-sparkle": { label: "Sparkle", hint: "Slowly rising sparkles" },
-      "pattern-clouds": { label: "Clouds", hint: "Puffy clouds drifting by" },
-      "pattern-seigaiha": { label: "Seigaiha", hint: "Traditional Japanese wave scales" },
-      "pattern-ribbon": { label: "Ribbon", hint: "Bows and little hearts" },
+      plain: { label: "Plain" },
+      room: { label: "Kana's room" },
+      "pattern-sakura": { label: "Sakura" },
+      "pattern-sparkle": { label: "Sparkle" },
+      "pattern-clouds": { label: "Clouds" },
+      "pattern-seigaiha": { label: "Seigaiha" },
+      "pattern-ribbon": { label: "Ribbon" },
     },
-    backgrounds: (count) => `${count} backgrounds · stored on this device`,
     carouselControls: "Background carousel controls",
     previousBackgrounds: "Previous backgrounds",
     nextBackgrounds: "Next backgrounds",
     stageAria: "Stage background",
     choose: "Choose",
     selected: "Selected",
-    localBackground: "Your local background",
     removeLabel: (label) => `Remove ${label}`,
     customBackgroundTitle: "Use your own background",
-    customBackgroundHint: "PNG, JPEG, WebP, GIF, AVIF, or BMP · up to 25 MB · kept in this browser",
     adding: "Adding…",
     uploadImage: "Upload image",
     avatarLibrary: "Avatar library",
-    avatarLibraryBody: "Choose an included character or import your own Live2D avatar.",
-    currentAvatar: "Current avatar",
-    selectedAvatar: "Selected avatar",
-    yourAvatar: "Your avatar",
-    included: "Included",
     includedAvatars: "Included avatars",
-    live2dSample: "Live2D sample",
     yourAvatars: "Your avatars",
-    storedBrowserOnly: "Stored only in this browser.",
     rename: "Rename",
     remove: "Remove",
     preparingAvatar: "Preparing avatar…",
     importLive2d: "Import Live2D folder",
-    importLive2dHint: "Select one complete model folder. Kana keeps it on this device.",
     avatarBehaviorTitle: "Avatar expressions",
-    avatarBehaviorDescription: "Connect Kana's emotions to expressions and motions that are actually available in this avatar.",
     avatarBehaviorReady: (mapped, total) => `${mapped} of ${total} emotions connected`,
     avatarBehaviorLoading: "Reading avatar capabilities…",
     avatarBehaviorFailed: "Could not read this avatar's capabilities.",
-    avatarBehaviorBuiltin: "Included avatars already have expression mappings prepared by Kana.",
     avatarLayoutDescription: "Kana fits the model automatically from its Live2D bounds. These corrections are stored only for the selected avatar.",
     avatarLayoutAutomatic: "Automatic position",
     avatarLayoutAdjusted: "Adjusted",
@@ -1404,7 +1306,6 @@ const en: Copy = {
     avatarLayoutClose: "Close avatar position",
     avatarLayoutSurface: "Avatar stage. Drag to move, arrow keys to nudge, plus or minus to resize.",
     avatarMouthParameter: "Automatic lip sync",
-    avatarMouthHint: "Kana detects the mouth control when the avatar loads. If the model does not provide one, the avatar still works without lip sync.",
     avatarMouthReady: "Automatic",
     avatarMouthManual: "Manual selection",
     avatarMouthAdvanced: "Change manually",
@@ -1435,7 +1336,6 @@ const en: Copy = {
     hermesTitle: "Hermes",
     hermesDescription: "The agent brain behind Kana. Kana finds and connects it automatically.",
     modelTitle: "AI model",
-    modelDescription: "Choose the Hermes provider and model for the open conversation.",
     modelLoading: "Loading models from Hermes…",
     modelLoadFailed: "Could not load models.",
     modelEmpty: "Hermes did not report any configured provider with usable models.",
@@ -1455,24 +1355,18 @@ const en: Copy = {
     modelInUse: "In use",
     modelUse: "Use this model",
     modelRefreshList: "Refresh list",
-    modelScope: "The choice applies to this Hermes conversation. Provider and model are always sent as separate values.",
     voiceEngineTitle: "Voice engine",
     voiceEngineDescription: "The local service that turns Kana's Japanese text into speech.",
     accessTitle: "Access protection",
-    accessDescription: "Control who can open this Kana installation.",
     avatarNamePrompt: "Avatar name",
     removeAvatarConfirm: (name) => `Remove “${name}” from this browser?`,
     removeBackgroundConfirm: (name) => `Remove ${name} from this device?`,
     advancedTitle: "Advanced configuration",
+    configGuide: "Guide",
     advancedSuffix: "for self-hosted setups",
-    advancedBody: "Runtime paths and ports can be configured outside the interface. Kana reads this file when starting its services:",
     advancedMode: "Installation mode",
-    advancedModeLocal: "Local — used only from the same machine",
-    advancedModeDeployment: "Deployment — accessed through a VPS, Nginx, or network",
-    advancedModeSourceEnvironment: "This mode is currently set by KANA_DEPLOYMENT_MODE and overrides the JSON file.",
-    advancedModeSourceConfig: "This mode is read from the JSON file above.",
-    advancedModeSourceDefault: "The local default is used because no explicit mode is configured.",
-    advancedRestart: "TTS and mode changes are picked up automatically; Hermes port changes apply after restarting Kana.",
+    advancedModeLocal: "Local",
+    advancedModeDeployment: "Deployment",
     advancedConfigError: "This file is invalid, so Kana is using defaults:",
     checkingAccess: "Checking access protection…",
     currentPassword: "Current password",
@@ -1488,7 +1382,6 @@ const en: Copy = {
   },
   voiceLibrary: {
     title: "Voice library",
-    body: "Kana uses this voice for every new Japanese reply. Sample-based voices stay more consistent; the Irodori voice is faster.",
     chooseAria: "Choose Kana's voice",
     available: "Available voices",
     loading: "Loading voices…",
@@ -1496,20 +1389,14 @@ const en: Copy = {
     selected: "Selected",
     choose: "Choose",
     remove: "Remove",
-    included: "Included with Kana",
-    yours: "Your voice",
-    modelVoice: "The model's own voice · fastest",
-    externalProvider: (name) => `Kana is using ${name}. Its voice, model, and credentials are managed in config.json.`,
     externalReady: "Ready to use",
     externalUnavailable: "Configuration is not ready",
     externalChecking: "Checking provider…",
     externalRefresh: "Check again",
     addTitle: "Add your own voice",
-    addBody: "Use one clear audio sample that you have permission to use.",
     addSample: "Add sample",
     formAria: "Add a voice sample",
     formTitle: "Add your voice",
-    formBody: "A clean sample with one speaker gives the best result.",
     cancel: "Cancel",
     name: "Voice name",
     namePlaceholder: "For example: My voice",
@@ -1532,7 +1419,6 @@ const en: Copy = {
   voiceEngine: {
     title: "Local voice engine",
     aria: "Local voice engine",
-    body: (model) => `${model} on the irodori-c engine, running on this machine's CPU with no Python or GPU.`,
     states: {
       ready: "Installed",
       installing: "Downloading…",
@@ -1541,8 +1427,8 @@ const en: Copy = {
       unsupported: "Not supported",
       checking: "Checking…",
     },
-    downloadNote: (size) => `${size} download. Nothing is downloaded until you ask.`,
-    diskNote: (needed, free) => `Needs ${needed} of disk · ${free} free.`,
+    downloadNote: (size) => `${size} download`,
+    diskNote: (needed, free) => `Disk: ${needed} needed · ${free} free`,
     lowDisk: (needed, free) => `Not enough disk space: ${needed} needed, ${free} free.`,
     progress: (step, percent) => `${step} · ${percent}%`,
     steps: { engine: "Engine", assets: "Voice assets", model: "Model" },
@@ -1557,7 +1443,6 @@ const en: Copy = {
     confirmRemove: "Remove it?",
     refresh: "Refresh",
     failedCheck: "Could not check the voice engine.",
-    notInstalledHint: "Kana can speak once the voice engine is downloaded. Until then, replies still appear as text.",
   },
   status: {
     ready: "Ready when you are",
@@ -1586,6 +1471,16 @@ const en: Copy = {
 };
 
 const dictionaries: Record<UiLocale, Copy> = { id, en };
+
+/**
+ * Kana's first-run greeting box: always English, whatever the UI language.
+ * The setup screens after it follow the UI language.
+ */
+export const KANA_GREETING = {
+  name: "Kana",
+  text: "Hi, I'm Kana! I'll keep you company while Hermes does the work. Let's set a few things up first. It takes less than a minute.",
+  start: "Let's go",
+} as const;
 
 export function getCopy(locale: UiLocale): Copy {
   return dictionaries[locale];

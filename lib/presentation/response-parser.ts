@@ -1,6 +1,8 @@
 import { EMOTIONS, type Emotion, type KanaResponse } from "./types";
 
 const JAPANESE_SCRIPT = /[\u3040-\u30ff\u3400-\u9fff]/u;
+const JAPANESE_CHARACTERS = /[\u3040-\u30ff\u3400-\u9fff]/gu;
+const LETTERS = /\p{L}/gu;
 
 export class KanaProtocolError extends Error {
   constructor(
@@ -149,13 +151,9 @@ function validateKanaEnvelope(
   const value = candidate;
   const subtitle = isRecord(value.subtitle) ? value.subtitle : undefined;
 
-  if (
-    typeof value.speech_ja !== "string" ||
-    !value.speech_ja.trim() ||
-    !JAPANESE_SCRIPT.test(value.speech_ja)
-  ) {
+  if (value.speech_ja !== undefined && typeof value.speech_ja !== "string") {
     throw new KanaProtocolError(
-      "Kana speech must be non-empty conversational Japanese.",
+      "Kana speech must be text.",
       rawResponse,
     );
   }
@@ -181,7 +179,7 @@ function validateKanaEnvelope(
   }
 
   return {
-    speech_ja: value.speech_ja.trim(),
+    speech_ja: japaneseSpeech(value.speech_ja ?? ""),
     subtitle: {
       text: subtitle.text.trim(),
       language: subtitle.language.trim().toLowerCase(),
@@ -190,9 +188,168 @@ function validateKanaEnvelope(
   };
 }
 
+/**
+ * Speech the voice may read: Japanese only. Anything else becomes "", which
+ * shows the reply without a voice instead of reading another language in a
+ * Japanese voice.
+ */
+function japaneseSpeech(text: string): string {
+  // A file tag is never read aloud (see lib/presentation/media.ts).
+  const speech = text.replace(/MEDIA:\s*\S+/g, "").replace(/\[\[(?:audio_as_voice|as_document)\]\]/g, "").trim();
+  return JAPANESE_SCRIPT.test(speech) ? speech : "";
+}
+
+/** A plain reply is spoken only when most of its letters are Japanese. */
+function isMostlyJapanese(text: string): boolean {
+  const japanese = text.match(JAPANESE_CHARACTERS)?.length ?? 0;
+  const letters = text.match(LETTERS)?.length ?? 0;
+  return japanese > 0 && japanese * 2 >= letters;
+}
+
+type HeaderField = "speech" | "emotion" | "language";
+
+const HEADER_FIELDS: Record<string, HeaderField> = {
+  ja: "speech",
+  speech: "speech",
+  speech_ja: "speech",
+  emotion: "emotion",
+  lang: "language",
+  language: "language",
+};
+
+const HEADER_LINE = /^\s*([a-z_]+)\s*:\s?(.*)$/i;
+const FENCE_LINE = /^\s*(?:```|~~~)/;
+
+function headerField(line: string): HeaderField | undefined {
+  const match = HEADER_LINE.exec(line);
+  return match ? HEADER_FIELDS[match[1].toLowerCase()] : undefined;
+}
+
+function isRule(line: string | undefined): boolean {
+  return line?.trim() === "---";
+}
+
+function unquote(value: string): string {
+  const trimmed = value.trim();
+  const quoted = /^(["'])([\s\S]*)\1$/.exec(trimmed);
+  return (quoted ? quoted[2] : trimmed).trim();
+}
+
+/**
+ * The protocol 3 reply: a header of `ja`, `emotion` and `lang` lines between
+ * `---` rules, then the answer as Markdown. Tolerates what models commonly
+ * do: wrap the whole reply in a code fence, drop the opening rule, quote a
+ * value, or wrap `ja` onto a second line. Prose before the header is kept
+ * as part of the answer.
+ */
+function parseHeaderReply(rawResponse: string): KanaResponse | undefined {
+  let lines = rawResponse.replace(/\r\n?/g, "\n").split("\n");
+  const first = lines.findIndex((line) => line.trim());
+  if (first === -1) return undefined;
+
+  // A whole reply wrapped in a fence: drop the opening fence and its closing
+  // twin, but never a fence that belongs to a code block in the answer.
+  let wrapped = false;
+  if (FENCE_LINE.test(lines[first])) {
+    const next = lines.slice(first + 1).find((line) => line.trim());
+    if (isRule(next) || (next !== undefined && headerField(next) === "speech")) {
+      lines = lines.slice(first + 1);
+      wrapped = true;
+    }
+  }
+
+  // `start` is the first header line; `proseEnd` is where text before the
+  // header (and its opening rule, when there is one) ends.
+  let start = -1;
+  let proseEnd = 0;
+  let bodyFrom = -1;
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (isRule(line)) {
+      const next = lines.slice(index + 1).find((candidate) => candidate.trim());
+      if (next !== undefined && headerField(next)) {
+        start = index + 1;
+        proseEnd = index;
+        break;
+      }
+    } else if (line.trim()) {
+      // Without an opening rule, only a reply that starts with `ja:` counts,
+      // so a "Speech:" line inside an ordinary answer is left alone.
+      if (index === lines.findIndex((candidate) => candidate.trim()) && headerField(line) === "speech") {
+        start = index;
+        proseEnd = index;
+        break;
+      }
+    }
+  }
+  if (start === -1) return undefined;
+
+  const fields: Partial<Record<HeaderField, string>> = {};
+  let current: HeaderField | undefined;
+  let index = start;
+  for (; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (isRule(line)) {
+      bodyFrom = index + 1;
+      break;
+    }
+    const field = headerField(line);
+    if (field) {
+      current = field;
+      fields[field] = HEADER_LINE.exec(line)?.[2] ?? "";
+    } else if (!line.trim()) {
+      // A blank line ends a header that has no closing rule.
+      if (fields.speech !== undefined) {
+        bodyFrom = index + 1;
+        break;
+      }
+    } else if (current === "speech") {
+      fields.speech = `${fields.speech ?? ""} ${line.trim()}`;
+    } else if (HEADER_LINE.test(line)) {
+      current = undefined; // an unknown key, such as a model's own note
+    } else {
+      bodyFrom = index;
+      break;
+    }
+  }
+  if (fields.speech === undefined) return undefined;
+  if (bodyFrom === -1) bodyFrom = index;
+
+  const prose = lines.slice(0, proseEnd).join("\n").trim();
+  const bodyLines = lines.slice(bodyFrom);
+  if (wrapped) {
+    // An odd number of fences means the last one closes the outer wrapper.
+    const fences = bodyLines.filter((line) => FENCE_LINE.test(line)).length;
+    const last = bodyLines.findLastIndex((line) => line.trim());
+    if (fences % 2 === 1 && last !== -1 && FENCE_LINE.test(bodyLines[last])) {
+      bodyLines.splice(last, 1);
+    }
+  }
+  const body = [prose, bodyLines.join("\n").trim()].filter(Boolean).join("\n\n");
+  const speech = japaneseSpeech(unquote(fields.speech));
+  const emotion = unquote(fields.emotion ?? "").replace(/^<|>$/g, "").toLowerCase();
+  const language = unquote(fields.language ?? "").replace(/^<|>$/g, "").toLowerCase();
+
+  if (!body && !speech) {
+    throw new KanaProtocolError("Hermes returned an empty Kana reply.", rawResponse);
+  }
+  return {
+    speech_ja: speech,
+    subtitle: body
+      ? { text: body, language: /^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$/.test(language) ? language : "und" }
+      : { text: speech, language: "ja" },
+    emotion: isEmotion(emotion) ? emotion : "neutral",
+  };
+}
+
 export function parseKanaResponse(rawResponse: string): KanaResponse {
   const trimmed = rawResponse.trim();
 
+  const header = parseHeaderReply(rawResponse);
+  if (header !== undefined) return header;
+
+  // Protocol 1 and 2 replies (a JSON envelope) still arrive from restored
+  // history and from models that keep the older habit.
   const embedded = parseEmbeddedEnvelope(rawResponse);
   if (embedded !== undefined) {
     return validateKanaEnvelope(embedded, rawResponse);
@@ -203,23 +360,21 @@ export function parseKanaResponse(rawResponse: string): KanaResponse {
     return validateKanaEnvelope(loose, rawResponse);
   }
 
-  // Graceful degradation: when Hermes answers in plain text instead of the
-  // Kana JSON envelope (the persona contract is advisory to the model), wrap
-  // it so the user still sees the answer instead of a silent failure.
-  // The language is only known when the caller asked for one; restored
-  // history uses BCP 47 "und" rather than inventing a language.
-  if (!trimmed.startsWith("{") && !trimmed.startsWith("```")) {
-    return {
-      speech_ja: trimmed,
-      subtitle: { text: trimmed, language: "und" },
-      emotion: "neutral",
-    };
-  }
-
   // JSON-looking output that cannot be recovered must fail explicitly. Never
   // display the protocol envelope itself as a chat bubble.
-  throw new KanaProtocolError(
-    "Hermes returned a malformed Kana response envelope.",
-    rawResponse,
-  );
+  if (/^(?:\{|```)/.test(trimmed) && /\b(?:speech_ja|subtitle)\b/.test(trimmed)) {
+    throw new KanaProtocolError(
+      "Hermes returned a malformed Kana response envelope.",
+      rawResponse,
+    );
+  }
+
+  // Graceful degradation: a model that ignored the contract still gets its
+  // answer shown. It is spoken only when it is already Japanese; the voice
+  // never reads another language. The language is unknown, so BCP 47 "und".
+  return {
+    speech_ja: isMostlyJapanese(trimmed) ? trimmed : "",
+    subtitle: { text: trimmed, language: "und" },
+    emotion: "neutral",
+  };
 }

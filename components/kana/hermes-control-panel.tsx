@@ -99,7 +99,7 @@ export function HermesControlPanel({
     <section aria-label={copy.hermesAria}>
       <SettingsRow
         label={copy.hermesTitle}
-        description={<>{copy.hermesSubtitle}{message ? <span className="mt-1 block text-ink-dim">{message}</span> : null}</>}
+        description={message ? <span className="text-ink-dim">{message}</span> : undefined}
       >
         <StatusPill tone={tone}>{stateLabel}</StatusPill>
         {status?.controlAvailable && status.state === "running" && status.managed ? (

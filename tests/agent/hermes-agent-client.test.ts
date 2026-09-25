@@ -143,11 +143,7 @@ function latestStream(): FakeEventSource {
 }
 
 function responseText(language = "en"): string {
-  return JSON.stringify({
-    speech_ja: "こんにちは。",
-    subtitle: { text: "Hello.", language },
-    emotion: "happy",
-  });
+  return `---\nja: こんにちは。\nemotion: happy\nlang: ${language}\n---\nHello.`;
 }
 
 async function tick(): Promise<void> {
@@ -303,8 +299,49 @@ describe("HermesAgentClient (relay transport)", () => {
     assert.equal(create.params.source, "kana");
     assert.equal(create.params.close_on_disconnect, false);
     assert.equal(create.params.cwd, "/tmp/project");
-    assert.match(JSON.stringify(create.params.messages), /speech_ja/);
-    assert.match(JSON.stringify(create.params.messages), /subtitle/);
+    assert.equal(create.params.messages, undefined, "the contract rides in the user turn, not a system seed");
+  });
+
+  it("sends the full contract on the first prompt after every open and the short one after that", async () => {
+    let failNext = false;
+    const client = await connectedClient((request) => {
+      if (request.method === "session.create") {
+        return { session_id: "runtime-1", stored_session_id: "stored-1" };
+      }
+      if (request.method === "session.resume") {
+        return { session_id: "runtime-2", session_key: "stored-1", resumed: "stored-1", running: false, messages: [] };
+      }
+      if (request.method === "prompt.submit") {
+        if (failNext) {
+          failNext = false;
+          throw new Error("busy");
+        }
+        return { accepted: true };
+      }
+      return {};
+    });
+    const complete = async () => {
+      latestStream().emitEvent("message.complete", { status: "complete", text: responseText() });
+      await tick();
+    };
+    const prompts = () =>
+      FakeRelay.requests.filter((request) => request.method === "prompt.submit").map((request) => String(request.params.text));
+
+    await openSession(client);
+    await client.sendMessage({ text: "Halo" });
+    await complete();
+    await client.sendMessage({ text: "Lagi" });
+    await complete();
+    await client.openSession({ persistentSessionId: "stored-1" });
+    failNext = true;
+    await assert.rejects(client.sendMessage({ text: "Gagal" }));
+    await client.sendMessage({ text: "Setelah resume" });
+
+    const sent = prompts();
+    assert.equal(sent.length, 4);
+    assert.ok(sent[0].startsWith("Halo\n\n<kana>\n") && /response protocol 3/.test(sent[0]));
+    assert.ok(sent[1].startsWith("Lagi\n\n<kana>\n") && !/response protocol 3/.test(sent[1]));
+    assert.match(sent[3], /response protocol 3/, "a resumed session and a failed submit both get the full contract");
   });
 
   it("uses the live catalog and marks surface-only commands honestly", async () => {
@@ -883,6 +920,34 @@ describe("HermesAgentClient (relay transport)", () => {
       FakeRelay.requests.findLast((request) => request.method === "config.set")?.params?.value,
       "cx/gpt-5.6-luna --provider custom:9router --session",
     );
+  });
+
+  it("drops Hermes's model-listing notes from a switch that succeeded, keeping real warnings", async () => {
+    let warning = "";
+    const client = await connectedClient((request) => {
+      if (request.method === "session.create") return { session_id: "runtime-1", stored_session_id: "stored-1" };
+      if (request.method === "config.set") return { value: "cx/gpt-5.6-luna", warning, confirm_required: false };
+      return {};
+    });
+    await openSession(client);
+    const select = () => client.selectModel({ provider: "custom:9router", model: "cx/gpt-5.6-luna" });
+
+    // A slow /models endpoint times out Hermes's check; the switch still happened.
+    warning =
+      "Note: could not reach this custom endpoint's model listing at `http://203.0.113.10:20128/v1/models`. " +
+      "Hermes will still save `cx/gpt-5.6-luna`, but the endpoint should expose `/models` for verification.\n" +
+      "  If this server expects `/v1`, try base URL: `http://203.0.113.10:20128`";
+    assert.equal((await select()).message, undefined);
+
+    warning = "Note: `cx/gpt-5.6-luna` was not found in this custom endpoint's model listing (x). It may still work.";
+    assert.equal((await select()).message, undefined);
+
+    const agentic = "Nous Research Hermes 3 & 4 models are NOT agentic and are not designed for use with Hermes Agent.";
+    warning = `Note: could not reach this custom endpoint's model listing at \`x\`. | ${agentic}`;
+    assert.equal((await select()).message, agentic);
+
+    warning = "Auto-corrected `gpt-5.6-lun` → `cx/gpt-5.6-luna`";
+    assert.equal((await select()).message, warning);
   });
 
   it("preserves Hermes approval choices and sends the selected session decision", async () => {

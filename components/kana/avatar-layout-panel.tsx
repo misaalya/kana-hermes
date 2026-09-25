@@ -82,7 +82,7 @@ export function AvatarLayoutPanel({
 
   return (
     <section
-      className="kana-popover w-[min(310px,calc(100vw-1.5rem))] rounded-[28px] bg-raised px-5 pb-5 pt-3 animate-kana-in max-sm:w-full"
+      className="kana-popover w-[min(310px,calc(100vw-1.5rem))] bg-raised px-5 pb-5 pt-3 animate-kana-in max-sm:w-full"
       aria-label={copy.avatarLayoutAria}
     >
       <div className="-mr-1.5 -mt-1 flex items-center justify-end">

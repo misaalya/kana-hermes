@@ -191,9 +191,6 @@ export function ModelControlPanel({ locale, catalog: cachedCatalog, onList, onSe
           {copy.modelRefreshList}
         </button>
       </div>
-      <p className="text-[11px] leading-relaxed text-faint">
-        {copy.modelScope}
-      </p>
     </div>
   );
 }
