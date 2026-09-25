@@ -27,6 +27,28 @@ describe("HermesSessionManager", () => {
     assert.equal(readActiveConversationPointer(harness.storage)?.persistentSessionId, undefined);
   });
 
+  it("makes the session resumable as soon as Hermes accepts the first prompt", async () => {
+    const harness = createHarness();
+    harness.conversations.initialize();
+    await harness.send("carikan aku berita kebakaran hutan");
+    // Still working on the first turn: a refresh now must resume this session,
+    // not start a blank conversation next to it.
+    assert.equal(harness.stores.agentSession.getState().busy, true);
+    assert.equal(readActiveConversationPointer(harness.storage)?.persistentSessionId, "hermes-session-1");
+    assert.equal(harness.active().agent?.durable, true);
+    assert.equal(harness.agent.opened[0].title, undefined, "Hermes names the session itself");
+    assert.equal(harness.active().title, "carikan aku berita kebakaran hutan");
+  });
+
+  it("gives Hermes only a title the user chose", async () => {
+    const harness = createHarness();
+    harness.conversations.initialize();
+    await harness.send("/new Plans");
+    await harness.send("Draft the plan");
+    assert.equal(harness.active().title, "Plans");
+    assert.equal(harness.agent.opened.at(-1)?.title, "Plans");
+  });
+
   it("keeps the session link when the first message is a command", async () => {
     for (const commandResult of [
       { type: "output" as const, output: "ok" },
@@ -65,6 +87,40 @@ describe("HermesSessionManager", () => {
     assert.deepEqual(harness.active().messages.map((message) => message.role), ["user", "assistant"]);
     const put = harness.fetchCalls.find((call) => call.init?.method === "PUT");
     assert.equal(JSON.parse(String(put?.init?.body)).turnIndex, 0);
+  });
+
+  it("keeps a running turn's tools after a refresh and files them under its reply", async () => {
+    const storage = new MemoryStorage();
+    storage.setItem(
+      "kana.active-conversation.v1",
+      JSON.stringify({ version: 1, conversationId: "c1", title: "Kept", createdAt: 1, persistentSessionId: "durable-1" }),
+    );
+    const harness = createHarness({ storage });
+    harness.conversations.initialize();
+    await harness.sessions.ensure(harness.active());
+    harness.agent.emit({
+      type: "history.restored",
+      sessionId: "runtime-1",
+      persistentSessionId: "durable-1",
+      running: true,
+      messages: [
+        { role: "user", text: "Find the news" },
+        { role: "tool", name: "web_search", context: "news today" },
+      ],
+    });
+    harness.agent.emit({ type: "agent.started", resumed: true });
+    const live = () => harness.stores.activity.getState().activities.map((activity) => activity.tool);
+    assert.deepEqual(live(), ["web_search"], "the finished tool is still shown");
+    assert.equal(harness.stores.agentSession.getState().busy, true);
+
+    harness.agent.emit({ type: "tool.started", id: "t2", tool: "web_extract", kind: "tool" });
+    assert.deepEqual(live(), ["web_extract", "web_search"]);
+    harness.agent.emit({ type: "tool.finished", id: "t2", tool: "web_extract", kind: "tool" });
+    harness.agent.emit({ type: "assistant.message", response: envelope("Here is the news"), rawResponse: "" });
+    harness.agent.emit({ type: "agent.finished" });
+    const reply = harness.active().messages.at(-1);
+    assert.equal(reply?.role, "assistant");
+    assert.deepEqual(reply?.activities?.map((activity) => activity.tool), ["web_search", "web_extract"]);
   });
 
   it("ignores a restored transcript for another session", async () => {

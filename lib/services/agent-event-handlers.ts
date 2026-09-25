@@ -292,12 +292,13 @@ export function handleAgentEvent(context: AgentEventContext, event: AgentEvent):
         event.persistentSessionId,
         event.messages,
         context.fetchHistory,
+        event.running === true,
       );
       return;
     }
     case "agent.started":
       tracking.turnStartedAt = monotonicNow();
-      stores.activity.getState().startTurn();
+      if (!event.resumed) stores.activity.getState().startTurn();
       session.setState({ busy: true, status: statusCopy(locale(context)).thinking });
       stores.errors.getState().dismiss();
       context.avatar.presentEmotion("thinking");

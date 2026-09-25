@@ -21,7 +21,8 @@ export type ActivityState = {
   sessionKey: string | null;
   add(activity: ActivityItem): void;
   finish(finished: Pick<ActivityItem, "id" | "tool" | "kind" | "durationMs"> & { title: string }): void;
-  startTurn(): void;
+  /** Begin a turn's log, seeded with tools it already finished (a resumed turn). */
+  startTurn(finished?: ActivityItem[]): void;
   reset(): void;
 };
 
@@ -69,8 +70,11 @@ export function createActivityStore(): ActivityStore {
         return { turnLog, activities };
       });
     },
-    startTurn() {
-      set({ turnLog: [], activities: [] });
+    startTurn(finished = []) {
+      set({
+        turnLog: [...finished],
+        activities: [...finished].reverse().slice(0, LIVE_ACTIVITY_LIMIT),
+      });
     },
     reset() {
       set({ sessionKey: null, turnLog: [], activities: [], serverActivityTurns: [] });

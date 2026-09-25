@@ -137,8 +137,8 @@ button,
   background: var(--bg);
 }
 
-/* Drifting polka dots for full-screen states (sign-in, loading), in the
-   brand pattern ink. */
+/* Drifting polka dots for the full-screen loading state, in the brand
+   pattern ink. The sign-in page stays plain. */
 .kana-dots {
   position: relative;
   isolation: isolate;
@@ -182,31 +182,98 @@ button,
 }
 
 /* Built-in patterns (public/backgrounds/kana-pattern-*.svg) are alpha masks
-   painted with a theme token, so one tile works in light and dark themes. */
+   painted with theme tokens, so one tile works in light and dark themes. All
+   use the blue ink. Sakura, sparkle, and ribbon have two layers: base shapes
+   and a "-detail" mask in a deeper tone drawn over them (flower centres, the
+   larger sparkles, bow folds). Tiles are generated seamless
+   (scripts/generate-stage-patterns.py). */
 :root {
   --kana-pattern-blue: rgb(131 193 229 / 18%);
+  --kana-pattern-blue-deep: rgb(131 193 229 / 32%);
   --kana-pattern-blue-soft: rgb(131 193 229 / 13%);
-  --kana-pattern-pink: rgb(231 150 176 / 18%);
+  --kana-pattern-tint-blue: #83c1e5;
+  --kana-pattern-tint-amount: 7%;
 }
 
 [data-theme="light"] {
   --kana-pattern-blue: rgb(89 157 198 / 28%);
+  --kana-pattern-blue-deep: rgb(89 157 198 / 46%);
   --kana-pattern-blue-soft: rgb(89 157 198 / 20%);
-  --kana-pattern-pink: rgb(229 138 164 / 30%);
+  --kana-pattern-tint-blue: #599dc6;
+  --kana-pattern-tint-amount: 9%;
 }
 
 .kana-pattern-sakura,
-.kana-stage-pattern[data-background="pattern-sakura"] { --kana-pattern: url("/backgrounds/kana-pattern-sakura.svg"); --kana-pattern-size: 136px; --kana-pattern-ink: var(--kana-pattern-pink); }
-.kana-pattern-sparkle,
-.kana-stage-pattern[data-background="pattern-sparkle"] { --kana-pattern: url("/backgrounds/kana-pattern-sparkle.svg"); --kana-pattern-size: 112px; --kana-pattern-ink: var(--kana-pattern-blue); }
-.kana-pattern-clouds,
-.kana-stage-pattern[data-background="pattern-clouds"] { --kana-pattern: url("/backgrounds/kana-pattern-clouds.svg"); --kana-pattern-size: 176px; --kana-pattern-ink: var(--kana-pattern-blue); }
-.kana-pattern-seigaiha,
-.kana-stage-pattern[data-background="pattern-seigaiha"] { --kana-pattern: url("/backgrounds/kana-pattern-seigaiha.svg"); --kana-pattern-size: 72px; --kana-pattern-ink: var(--kana-pattern-blue-soft); }
-.kana-pattern-ribbon,
-.kana-stage-pattern[data-background="pattern-ribbon"] { --kana-pattern: url("/backgrounds/kana-pattern-ribbon.svg"); --kana-pattern-size: 136px; --kana-pattern-ink: var(--kana-pattern-blue); }
+.kana-stage-pattern[data-background="pattern-sakura"] {
+  --kana-pattern: url("/backgrounds/kana-pattern-sakura.svg");
+  --kana-pattern-detail: url("/backgrounds/kana-pattern-sakura-detail.svg");
+  --kana-pattern-size: 360px;
+  --kana-pattern-ink: var(--kana-pattern-blue);
+  --kana-pattern-detail-ink: var(--kana-pattern-blue-deep);
+  --kana-pattern-tint: var(--kana-pattern-tint-blue);
+  /* Petals fall slowly down and to the left. */
+  --kana-pattern-drift-x: -1;
+  --kana-pattern-drift-y: 1;
+  --kana-pattern-drift-duration: 90s;
+}
 
+.kana-pattern-sparkle,
+.kana-stage-pattern[data-background="pattern-sparkle"] {
+  --kana-pattern: url("/backgrounds/kana-pattern-sparkle.svg");
+  --kana-pattern-detail: url("/backgrounds/kana-pattern-sparkle-detail.svg");
+  --kana-pattern-size: 340px;
+  --kana-pattern-ink: var(--kana-pattern-blue);
+  --kana-pattern-detail-ink: var(--kana-pattern-blue-deep);
+  --kana-pattern-tint: var(--kana-pattern-tint-blue);
+  --kana-pattern-drift-x: 0;
+  --kana-pattern-drift-y: -1;
+  --kana-pattern-drift-duration: 110s;
+}
+
+.kana-pattern-clouds,
+.kana-stage-pattern[data-background="pattern-clouds"] {
+  --kana-pattern: url("/backgrounds/kana-pattern-clouds.svg");
+  --kana-pattern-size: 380px;
+  --kana-pattern-ink: var(--kana-pattern-blue-soft);
+  --kana-pattern-tint: var(--kana-pattern-tint-blue);
+  --kana-pattern-drift-x: 1;
+  --kana-pattern-drift-y: 0;
+  --kana-pattern-drift-duration: 120s;
+}
+
+.kana-pattern-seigaiha,
+.kana-stage-pattern[data-background="pattern-seigaiha"] {
+  --kana-pattern: url("/backgrounds/kana-pattern-seigaiha.svg");
+  --kana-pattern-size: 72px;
+  --kana-pattern-ink: var(--kana-pattern-blue-soft);
+}
+
+.kana-pattern-ribbon,
+.kana-stage-pattern[data-background="pattern-ribbon"] {
+  --kana-pattern: url("/backgrounds/kana-pattern-ribbon.svg");
+  --kana-pattern-detail: url("/backgrounds/kana-pattern-ribbon-detail.svg");
+  --kana-pattern-size: 400px;
+  --kana-pattern-ink: var(--kana-pattern-blue);
+  --kana-pattern-detail-ink: var(--kana-pattern-blue-deep);
+  --kana-pattern-tint: var(--kana-pattern-tint-blue);
+  --kana-pattern-drift-x: 1;
+  --kana-pattern-drift-y: 1;
+  --kana-pattern-drift-duration: 130s;
+}
+
+/* A faint wash of the pattern's colour from the top gives each one a mood. */
+.kana-stage-pattern[data-background^="pattern-"] .kana-stage-backdrop,
+.kana-background-preview-pattern {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--kana-pattern-tint, var(--bg)) var(--kana-pattern-tint-amount), var(--bg)) 0%,
+    var(--bg) 80%
+  );
+}
+
+.kana-stage-pattern[data-background^="pattern-"] .kana-stage-backdrop::before,
 .kana-stage-pattern[data-background^="pattern-"] .kana-stage-backdrop::after,
+.kana-background-preview-pattern::before,
 .kana-background-preview-pattern::after {
   position: absolute;
   inset: 0;
@@ -218,6 +285,33 @@ button,
   mask-size: var(--kana-pattern-size) auto;
   -webkit-mask-repeat: repeat;
   mask-repeat: repeat;
+  pointer-events: none;
+}
+
+.kana-stage-pattern[data-background^="pattern-"] .kana-stage-backdrop::after,
+.kana-background-preview-pattern::after {
+  background-color: var(--kana-pattern-detail-ink, transparent);
+  -webkit-mask-image: var(--kana-pattern-detail, none);
+  mask-image: var(--kana-pattern-detail, none);
+}
+
+/* The stage drifts very slowly, one tile per cycle, so the loop is seamless.
+   The layers overhang by a tile to cover the gap the movement opens up. */
+.kana-stage-pattern[data-background^="pattern-"] .kana-stage-backdrop::before,
+.kana-stage-pattern[data-background^="pattern-"] .kana-stage-backdrop::after {
+  inset: calc(var(--kana-pattern-size) * -1);
+  animation: kana-pattern-drift var(--kana-pattern-drift-duration, 0s) linear infinite;
+  will-change: transform;
+}
+
+@keyframes kana-pattern-drift {
+  from { transform: translate(0, 0); }
+  to {
+    transform: translate(
+      calc(var(--kana-pattern-size) * var(--kana-pattern-drift-x, 0)),
+      calc(var(--kana-pattern-size) * var(--kana-pattern-drift-y, 0))
+    );
+  }
 }
 
 .kana-avatar-content {
@@ -278,8 +372,8 @@ button,
 }
 
 .kana-workspace-action svg {
-  width: 20px;
-  height: 20px;
+  width: 23px;
+  height: 23px;
 }
 
 .kana-workspace-action:hover {
@@ -546,19 +640,22 @@ button,
   background: var(--surface-strong);
   padding-inline: 14px;
   color: var(--accent);
-  transition: border-color 150ms ease;
+  transition: background-color 150ms ease, border-color 150ms ease;
 }
 
 .kana-select-search:focus-within {
   border-color: var(--accent);
+  background: var(--surface);
 }
 
 .kana-select-search input {
   min-width: 0;
   flex: 1;
+  appearance: none;
   border: 0;
   background: transparent;
   color: var(--ink);
+  caret-color: var(--accent);
   font: 700 13px/1.2 var(--kana-font);
   outline: none;
 }
@@ -898,6 +995,119 @@ details[open] > .kana-plus-summary::before {
   color: var(--chat-text);
 }
 
+/* Hermes replies rendered from Markdown, sized for chat bubbles. Long words
+   and URLs wrap; code blocks and tables scroll inside the bubble instead. */
+.kana-markdown {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6em;
+  overflow-wrap: anywhere;
+}
+
+.kana-markdown :is(h3, h4, h5, h6) {
+  font-size: 1.08em;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.kana-markdown h3 {
+  font-size: 1.18em;
+}
+
+.kana-markdown strong {
+  font-weight: 800;
+}
+
+.kana-markdown a {
+  color: var(--accent-strong);
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 2px;
+}
+
+.kana-markdown :is(ul, ol) {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35em;
+  padding-left: 1.35em;
+}
+
+.kana-markdown ul {
+  list-style: disc;
+}
+
+.kana-markdown ol {
+  list-style: decimal;
+}
+
+.kana-markdown li::marker {
+  color: var(--accent);
+  font-weight: 800;
+}
+
+.kana-markdown li > * + * {
+  margin-top: 0.35em;
+}
+
+.kana-markdown code {
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--chat-text) 9%, transparent);
+  padding: 0.1em 0.35em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.kana-markdown pre {
+  overflow-x: auto;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--chat-text) 8%, transparent);
+  padding: 10px 12px;
+  line-height: 1.5;
+  overflow-wrap: normal;
+  white-space: pre;
+}
+
+.kana-markdown pre code {
+  background: none;
+  padding: 0;
+}
+
+.kana-markdown blockquote {
+  border-left: 3px solid var(--accent);
+  padding-left: 10px;
+  color: color-mix(in srgb, var(--chat-text) 78%, transparent);
+}
+
+.kana-markdown hr {
+  border: 0;
+  border-top: 3px dotted var(--line-strong);
+}
+
+.kana-md-table {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.kana-md-table table {
+  border-collapse: collapse;
+  font-size: 0.92em;
+}
+
+.kana-md-table :is(th, td) {
+  min-width: 5em;
+  border: 1px solid var(--line-strong);
+  padding: 4px 8px;
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: normal;
+}
+
+.kana-md-table th {
+  background: color-mix(in srgb, var(--chat-text) 6%, transparent);
+  font-weight: 800;
+}
+
 .kana-background-preview-plain {
   background: var(--bg);
 }
@@ -911,13 +1121,13 @@ details[open] > .kana-plus-summary::before {
 .kana-background-preview-pattern {
   position: relative;
   overflow: hidden;
-  background: var(--bg);
 }
 
 /* Previews are small: shrink the tile so several motifs stay visible. */
+.kana-background-preview-pattern::before,
 .kana-background-preview-pattern::after {
-  -webkit-mask-size: calc(var(--kana-pattern-size) * 0.7) auto;
-  mask-size: calc(var(--kana-pattern-size) * 0.7) auto;
+  -webkit-mask-size: calc(var(--kana-pattern-size) * 0.5) auto;
+  mask-size: calc(var(--kana-pattern-size) * 0.5) auto;
 }
 
 .kana-background-carousel {
@@ -962,6 +1172,73 @@ details[open] > .kana-plus-summary::before {
 
 .kana-settings-nav::-webkit-scrollbar {
   display: none;
+}
+
+/* Text, number, and password fields: a soft grey pill at rest that turns
+   white with one solid accent ring while active, like a picked Clara card.
+   None of the browser's own field chrome shows: no focus ring, no search
+   clear button (Kana draws its own), no number spinners, no password reveal,
+   no autofill tint. */
+.kana-field {
+  appearance: none;
+  border: 2px solid transparent;
+  background: var(--surface-strong);
+  color: var(--ink);
+  caret-color: var(--accent);
+  outline: none;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.kana-field::placeholder {
+  color: var(--faint);
+  opacity: 1;
+}
+
+.kana-field:hover:not(:focus):not(:disabled) {
+  border-color: var(--line-strong);
+}
+
+.kana-field:focus,
+.kana-field:focus-visible {
+  border-color: var(--accent);
+  background: var(--surface);
+  outline: none;
+}
+
+.kana-field:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.kana-field[type="number"] {
+  appearance: textfield;
+}
+
+.kana-field::-webkit-search-decoration,
+.kana-field::-webkit-search-cancel-button,
+.kana-field::-webkit-inner-spin-button,
+.kana-field::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+.kana-field::-ms-reveal,
+.kana-field::-ms-clear {
+  display: none;
+}
+
+/* Chrome and Safari paint autofilled fields their own blue and ignore
+   background-color there; an inset fill in the field's own colour covers it.
+   It is a flat fill, not a shadow. */
+.kana-field:-webkit-autofill {
+  -webkit-text-fill-color: var(--ink);
+  box-shadow: inset 0 0 0 100px var(--surface-strong);
+  caret-color: var(--accent);
+  filter: none;
+}
+
+.kana-field:-webkit-autofill:focus {
+  box-shadow: inset 0 0 0 100px var(--surface);
 }
 
 .kana-focus:focus-visible {
@@ -1041,47 +1318,49 @@ details[open] > .kana-plus-summary::before {
   border: 2px solid var(--line-strong);
 }
 
+/* The avatar layout sliders: a thick pill that fills with the accent and has
+   no knob, like a console volume bar. The input paints the fill itself, so
+   the track and the zero-width thumb stay invisible in every engine. */
 .kana-range {
-  height: 24px;
+  display: block;
+  height: 28px;
   appearance: none;
-  background: transparent;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--accent) var(--kana-range-fill, 50%),
+    var(--surface-strong) var(--kana-range-fill, 50%)
+  );
   cursor: pointer;
 }
 
 .kana-range::-webkit-slider-runnable-track {
-  height: 8px;
-  border-radius: 999px;
-  background: linear-gradient(to right, var(--accent) var(--kana-range-fill, 50%), var(--surface-strong) var(--kana-range-fill, 50%));
+  height: 100%;
+  background: transparent;
 }
 
 .kana-range::-moz-range-track {
-  height: 8px;
-  border-radius: 999px;
-  background: var(--surface-strong);
+  height: 100%;
+  background: transparent;
 }
 
 .kana-range::-moz-range-progress {
-  height: 8px;
-  border-radius: 999px;
-  background: var(--accent);
+  background: transparent;
 }
 
 .kana-range::-webkit-slider-thumb {
-  width: 20px;
-  height: 20px;
-  margin-top: -6px;
+  width: 0;
+  height: 100%;
   appearance: none;
-  border: 3px solid var(--accent);
-  border-radius: 999px;
-  background: #ffffff;
+  border: 0;
+  background: transparent;
 }
 
 .kana-range::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
-  border: 3px solid var(--accent);
-  border-radius: 999px;
-  background: #ffffff;
+  width: 0;
+  height: 0;
+  border: 0;
+  background: transparent;
 }
 
 .kana-layout-surface {

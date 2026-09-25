@@ -13,7 +13,7 @@ export const btnDangerGhost =
   "kana-focus inline-flex min-h-9 items-center justify-center gap-1.5 rounded-full px-3 text-xs font-bold text-muted transition-colors hover:bg-danger/10 hover:text-danger disabled:cursor-not-allowed disabled:opacity-40";
 
 export const inputBase =
-  "kana-focus min-h-10 w-full rounded-[20px] border-2 border-transparent bg-surface-strong px-4 py-2 text-[13px] font-medium text-ink placeholder:text-faint transition-colors focus:border-accent focus:outline-none disabled:opacity-50";
+  "kana-field min-h-10 w-full rounded-[20px] px-4 py-2 text-[13px] font-medium";
 
 export const bentoCard = "rounded-[28px] border-2 border-line bg-surface p-4";
 

@@ -4,6 +4,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ActivityItem } from "@/lib/agent/types";
 import type { KanaMessage } from "@/lib/conversation/types";
 import { ActivityStack } from "./activity-stack";
+import { ChatMarkdown } from "./chat-markdown";
 import { getCopy, type UiLocale } from "@/lib/ui/copy";
 import {
   buildLiveFeedTimeline,
@@ -49,9 +50,10 @@ export const LiveChatFeed = memo(function LiveChatFeed({
     if (node) node.scrollTo({ top: node.scrollHeight, behavior });
   }, []);
 
+  // New tools grow the open activity block without adding an entry.
   useEffect(() => {
     if (pinnedToBottom) scrollToBottom();
-  }, [entries.length, typing, pinnedToBottom, scrollToBottom]);
+  }, [entries.length, activities.length, typing, pinnedToBottom, scrollToBottom]);
 
   const handleScroll = useCallback(() => {
     const node = scrollRef.current;
@@ -60,7 +62,8 @@ export const LiveChatFeed = memo(function LiveChatFeed({
   }, []);
 
   return (
-    <div className="kana-chat-feed relative flex min-h-0 flex-1 flex-col">
+    // min-w-0: one long unbroken word must not widen the feed past the panel.
+    <div className="kana-chat-feed relative flex min-h-0 min-w-0 flex-1 flex-col">
       <div
         ref={scrollRef}
         onScroll={handleScroll}
@@ -78,9 +81,9 @@ export const LiveChatFeed = memo(function LiveChatFeed({
           </div>
         ) : null}
 
-        {entries.map((entry, index) => {
+        {entries.map((entry) => {
           if (entry.kind === "activity") {
-            return <ActivityStack key={`activity-${index}`} activities={entry.activities} locale={locale} />;
+            return <ActivityStack key={entry.key} activities={entry.activities} live={entry.live} locale={locale} />;
           }
           const message = entry.message;
           const isAssistant = message.role === "assistant";
@@ -95,7 +98,7 @@ export const LiveChatFeed = memo(function LiveChatFeed({
                   <strong className="kana-label-bubble">{copy.chat.hermesNote}</strong>
                   <span className="text-[9px] tabular-nums text-faint">{dateFormatter.format(message.timestamp)}</span>
                 </div>
-                <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-ink-dim max-sm:text-[10px]">{messageCopy}</p>
+                <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-ink-dim [overflow-wrap:anywhere] max-sm:text-[10px]">{messageCopy}</p>
               </article>
             );
           }
@@ -103,13 +106,19 @@ export const LiveChatFeed = memo(function LiveChatFeed({
           return (
             <article
               key={message.id}
-              className={`max-w-[88%] rounded-[24px] border-2 px-4 py-3 max-sm:max-w-[90%] max-sm:rounded-[20px] max-sm:px-3 max-sm:py-2 ${
+              className={`min-w-0 max-w-[88%] rounded-[24px] border-2 px-4 py-3 max-sm:max-w-[90%] max-sm:rounded-[20px] max-sm:px-3 max-sm:py-2 ${
                 isAssistant
                   ? "kana-message-assistant self-start"
                   : "kana-message-user self-end"
               }`}
             >
-              <p className="whitespace-pre-wrap text-[13px] font-medium leading-relaxed max-sm:text-[11px] max-sm:leading-[1.5]">{messageCopy}</p>
+              <div className="text-[13px] font-medium leading-relaxed max-sm:text-[11px] max-sm:leading-[1.5]">
+                {isAssistant ? (
+                  <ChatMarkdown text={messageCopy} />
+                ) : (
+                  <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{messageCopy}</p>
+                )}
+              </div>
               <span className="mt-1.5 block text-right text-[9px] tabular-nums opacity-50 max-sm:text-[8px]">
                 {dateFormatter.format(message.timestamp)}
               </span>

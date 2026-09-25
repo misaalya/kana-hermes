@@ -57,7 +57,7 @@ export function AvatarLayoutControl({
         onClick={() => onOpenChange(!open)}
       >
         <AvatarPositionIcon />
-        <span className="kana-tip">{copy.workspace.avatar}</span>
+        <span className="kana-tip">{copy.workspace.scale}</span>
       </button>
 
       {open ? (

@@ -48,10 +48,14 @@ export type RestoredTurn = {
  * preserve transcript order, and every turn is numbered by its
  * assistant-reply ordinal — the cross-browser identity used by the
  * server-side activity store.
+ *
+ * Hermes stores each tool as it finishes, so the tools after the last reply
+ * are a turn still being worked on: they come back as `unfinished`.
  */
 export function parseHermesTranscript(rows: AgentHistoryRow[]): {
   messages: KanaMessage[];
   turns: RestoredTurn[];
+  unfinished: ActivityItem[];
 } {
   const messages: KanaMessage[] = [];
   const turns: RestoredTurn[] = [];
@@ -133,7 +137,7 @@ export function parseHermesTranscript(rows: AgentHistoryRow[]): {
     });
   });
 
-  return { messages, turns };
+  return { messages, turns, unfinished: pendingActivities };
 }
 
 function restoredMessageMatches(

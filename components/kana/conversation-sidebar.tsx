@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { Conversation } from "@/lib/conversation/types";
 import { CheckIcon, CloseIcon, MoreIcon, PlusIcon, SearchIcon } from "./icons";
 import { getCopy, type UiLocale } from "@/lib/ui/copy";
@@ -61,6 +61,7 @@ export const ConversationSidebar = memo(function ConversationSidebar({
     (session) => !localKeys.has(session.hermesSessionKey),
   );
   const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
   const [menuId, setMenuId] = useState<string | null>(null);
   const visibleConversations = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
@@ -144,17 +145,33 @@ export const ConversationSidebar = memo(function ConversationSidebar({
       </header>
 
       <div className="px-5 pb-3 pt-1.5">
-        <label className="relative block">
-          <span className="sr-only">{copy.search}</span>
-          <SearchIcon className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-accent" />
-          <input
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder={copy.search}
-            className="kana-focus min-h-10 w-full rounded-full border-2 border-transparent bg-surface-strong pl-10 pr-4 text-[13px] font-medium text-ink placeholder:text-faint focus:border-accent focus:outline-none"
-          />
-        </label>
+        <div className="relative">
+          <label className="block">
+            <span className="sr-only">{copy.search}</span>
+            <SearchIcon className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-accent" />
+            <input
+              ref={searchRef}
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={copy.search}
+              className="kana-field min-h-10 w-full rounded-full pl-10 pr-10 text-[13px] font-medium"
+            />
+          </label>
+          {query ? (
+            <button
+              type="button"
+              aria-label={copy.clearSearch}
+              className="kana-focus absolute right-1.5 top-1/2 grid size-7 -translate-y-1/2 place-items-center rounded-full text-muted transition-colors hover:bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] hover:text-accent"
+              onClick={() => {
+                setQuery("");
+                searchRef.current?.focus();
+              }}
+            >
+              <CloseIcon className="size-3.5" />
+            </button>
+          ) : null}
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-1">

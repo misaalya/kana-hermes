@@ -19,18 +19,24 @@ function sameCatalog(a: AgentModelCatalog, b: AgentModelCatalog): boolean {
  * provider keys on every model.options call, and the active model belongs to
  * the open session. Pickers therefore show the cached catalog and refresh it
  * in the background; switching models, a new session, or a lost connection
- * drops it.
+ * drops it. Once anything has asked for the catalog (the composer's model
+ * chip does on connect), a drop also reloads it for the open session, so
+ * the chip never stays on "Choose model" after the session changes under a
+ * load in flight.
  */
 export class ModelCatalogService {
   private inflight: { key: string; refresh: boolean; promise: Promise<AgentModelCatalog> } | null = null;
   /** Bumped by invalidate(); responses from an older generation are not stored. */
   private generation = 0;
   private unsubscribe: (() => void) | null = null;
+  /** Something shows the catalog, so it is kept loaded for the open session. */
+  private wanted = false;
 
   constructor(private readonly deps: ModelCatalogServiceDependencies) {}
 
   /** Cached catalog for the open session, loading it only on a miss. For per-keystroke completion. */
   async get(): Promise<AgentModelCatalog> {
+    this.wanted = true;
     const entry = this.deps.store.getState().entry;
     if (entry?.key === this.key()) return entry.catalog;
     return this.fetch(false);
@@ -38,6 +44,7 @@ export class ModelCatalogService {
 
   /** For pickers: the cached catalog at once, refreshed in the background. `refresh` waits for a full reload. */
   async list(refresh = false): Promise<AgentModelCatalog> {
+    this.wanted = true;
     const entry = this.deps.store.getState().entry;
     if (!refresh && entry?.key === this.key()) {
       void this.fetch(false).catch(() => undefined);
@@ -46,29 +53,33 @@ export class ModelCatalogService {
     return this.fetch(refresh);
   }
 
+  /**
+   * Drop the cached catalog and any load in flight (their answer may be for
+   * another session or the old model), then load the open session's catalog
+   * again if something shows it.
+   */
   invalidate(): void {
     this.generation += 1;
     this.inflight = null;
     if (this.deps.store.getState().entry) this.deps.store.setState({ entry: null });
+    const { openSessionId, connectionState } = this.deps.agentSession.getState();
+    if (this.wanted && openSessionId && connectionState === "connected") {
+      void this.fetch(false).catch(() => undefined);
+    }
   }
 
   /** Follow the open session: another session or a lost connection drops the catalog. */
   start(): void {
     if (this.unsubscribe) return;
     this.unsubscribe = this.deps.agentSession.subscribe((state, previous) => {
-      if (state.openSessionId === previous.openSessionId) return;
-      const hadCatalog = Boolean(this.deps.store.getState().entry);
-      this.invalidate();
-      // Someone is showing the catalog; load the new session's one.
-      if (hadCatalog && state.openSessionId && state.connectionState === "connected") {
-        void this.fetch(false).catch(() => undefined);
-      }
+      if (state.openSessionId !== previous.openSessionId) this.invalidate();
     });
   }
 
   dispose(): void {
     this.unsubscribe?.();
     this.unsubscribe = null;
+    this.wanted = false;
     this.invalidate();
   }
 

@@ -247,6 +247,18 @@ Kana should feel like another first-class Hermes client:
   Hermes RPCs rather than parsing terminal text.
 - `/new`, `/sessions`, and `/resume` are surface-aware Kana conversation
   actions. Each Kana conversation retains its linked durable Hermes session.
+- Hermes writes a session's row when `prompt.submit` accepts the first
+  prompt, so Kana marks the link durable right then (not when the reply
+  lands): a refresh during the first turn resumes that session instead of
+  opening a blank conversation beside it.
+- `session.create` gets a title only when the user chose one (`/new <title>`).
+  Hermes keeps a create-time title as the user's choice and reapplies it on
+  `session.title`, which would overwrite the name Hermes gives the session;
+  automatic titles (the default, or the first message) stay local.
+- Model switches send `<model> --provider <slug> --session` unquoted, to
+  `config.set` and in `/model` completions. Hermes splits `/model` arguments
+  on whitespace and never unquotes, so `'custom:9router'` would be an unknown
+  provider.
 - Command prompts returned while Hermes is already running are queued for the
   next turn rather than submitted concurrently.
 - Telegram replaces hyphens with underscores because of Telegram command-name
@@ -332,8 +344,18 @@ product direction, not a temporary theme.
     and the list is `position: fixed` so dialogs never clip it;
   - Log out and other leave-the-app actions use the red `kana-pill-danger`
     with an icon;
-  - Settings icons: globe, waveform, smile, bot (AI model, never a sparkle),
-    server, shield.
+  - icons are two-tone solid SVGs (`DuoIcon`): the main part in the current
+    colour, the supporting part in the soft tone. Header: sun/moon, avatar
+    layout ("Scale": a small box growing into a big one), history clock,
+    settings hexagon. Settings sections: globe, waveform, avatar figure, bot
+    (AI model, never a sparkle), server, shield;
+  - text, number, and password fields use `kana-field`: a grey pill at rest
+    that turns white with one solid accent ring while active. No browser
+    field chrome at all (focus ring, search clear button, spinners, password
+    reveal, autofill tint); a search field draws its own clear button;
+  - the avatar layout popover has no title or hint, just reset/close and the
+    Size, X, and Y sliders. Sliders are `kana-range`: a thick accent-filled
+    pill with no knob, like a console volume bar.
 - First-run setup opens with Kana herself, not a modal: the header and chat
   step away, the stage clears (full screen on phones too), the avatar smiles,
   and her line types out in a game-style dialogue box (`kana-greeting`) with a
@@ -347,8 +369,23 @@ product direction, not a temporary theme.
   typing bubble (`kana-typing`, three hopping dots) with the status beside
   it. Voice generation has no short time limit on the client; slow machines
   simply keep the bubble up longer.
+- Hermes replies are Markdown. `ChatMarkdown` renders them through the small
+  reader in `lib/presentation/markdown.ts` as React elements, never as HTML;
+  links survive only for http(s) and mailto and open in a new tab, and images
+  become links (Kana does not load remote pictures into chat). Long words and
+  URLs wrap inside the bubble; code blocks and tables scroll inside it. The
+  feed keeps `min-w-0` so one unbroken string cannot widen it past the panel.
+- A turn's Hermes activity block stays open while the turn runs, even
+  between tools, unless the reader closes it, and collapses when the reply
+  lands (the feed remounts it under the reply's key). Finished turns start
+  collapsed.
 - Motion is springy (`--spring`): lift on hover, small press on click, a pop
   for check badges. Global reduced-motion rules must keep working.
+- Built-in stage patterns come from `scripts/generate-stage-patterns.py`
+  (edit the generator, not the SVGs). All use the blue ink. Sakura, sparkle,
+  clouds, and ribbon sit on a faint blue wash and drift one tile per
+  90–130 s; sakura, sparkle, and ribbon add a deeper `-detail` mask layer.
+  Seigaiha stays static. Keep them calm and simple: they sit behind the avatar.
 - Desktop keeps the workspace hierarchy: a thin header, the avatar as the
   centred visual focus of the stage, and the conversation tray on the right
   with the transcript and the composer at the bottom. Do not push the avatar
@@ -387,6 +424,10 @@ product direction, not a temporary theme.
 - Per-turn tool activity logs in SQLite (schema v2, `turn_index` ordinal with
   idempotent v1 migration), reconstructed from restored history and mirrored
   by live turns; `LiveChatFeed` splices them by ordinal across browsers.
+  Hermes stores each tool as it finishes, so when `session.resume` reports a
+  turn still running, the tools after the last reply seed the live log
+  (`history.restored.running`, `agent.started.resumed`): a refresh mid-turn
+  keeps them on screen and they land on the reply.
 - Live categorized Hermes slash catalog, command search, argument completion,
   command execution, aliases, skill/send directives, dedicated approval/title/
   branch handling, and busy-turn prompt queuing.
@@ -524,6 +565,7 @@ Hermes mode and successfully connects to `hermes serve`.
 app/page.tsx                              App entry
 components/kana/kana-app.tsx             Main composition, gate/auto-connect
 components/kana/live-chat-feed.tsx        Chronological message+activity feed
+components/kana/chat-markdown.tsx         Markdown reply renderer (elements only)
 components/kana/agent-input-dialog.tsx   Approval and secure Hermes input UI
 components/kana/slash-command-menu.tsx   Slash catalog/completion UI
 components/kana/kana-select.tsx          Custom dropdown (replaces native <select>)
@@ -536,7 +578,7 @@ lib/services/hermes-session-manager.ts    Hermes client lifecycle and session sw
 lib/services/agent-event-handlers.ts      AgentEvent -> store updates
 lib/services/conversation-service.ts      Working set, pointer, transcript restore
 lib/services/send-message.ts              Prompt, Kana command, and slash submission
-lib/services/model-catalog-service.ts     Cached Hermes model list (stale-while-revalidate)
+lib/services/model-catalog-service.ts     Cached Hermes model list (stale-while-revalidate, reloads on drop once shown)
 lib/agent/types.ts                        Stable agent contracts/events
 lib/agent/hermes/hermes-agent-client.ts   Hermes relay adapter (SSE + JSON-RPC)
 lib/agent/hermes/gateway-types.ts         Hermes wire response types
@@ -553,6 +595,7 @@ lib/server/auth/*                         Password store, JWT session, login lim
 proxy.ts                                  Deny-by-default auth proxy (Next 16)
 lib/presentation/persona.ts               Persona and response instructions
 lib/presentation/response-parser.ts       Structured response validation
+lib/presentation/markdown.ts              Safe Markdown subset reader for replies
 lib/backup/kana-backup.ts                  Versioned credential-free backup format
 lib/avatar/avatar-controller.ts           Provider-independent avatar control
 lib/avatar/defaults.ts                     Official Haru/Mao URLs and bindings

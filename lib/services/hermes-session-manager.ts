@@ -93,7 +93,9 @@ export class HermesSessionManager {
     if (this.tracking.openedId !== conversation.id) {
       this.tracking.openingId = conversation.id;
       await agent.openSession({
-        title: conversation.title,
+        // Automatic titles (the default, or the first message) are left to
+        // Hermes, which names the session itself.
+        title: conversation.titleChosen ? conversation.title : undefined,
         // A session Hermes never stored cannot be resumed; open a new one.
         persistentSessionId: resumableSessionId(conversation),
         cwd: this.deps.preferences.current().hermes.cwd || undefined,

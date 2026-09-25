@@ -66,11 +66,37 @@ describe("ModelCatalogService", () => {
     assert.deepEqual(harness.agent.modelLists, [false, true]);
   });
 
-  it("drops the catalog when /model changes the session's model", async () => {
+  it("drops the catalog when /model changes the session's model and reloads it", async () => {
     const harness = await connectedHarness();
     await harness.models.list();
+    const before = harness.stores.models.getState().entry;
+    harness.agent.models = catalog("m2");
     await harness.send("/model m2 --provider openrouter --session");
-    assert.equal(harness.stores.models.getState().entry, null);
+    await tick();
+    const after = harness.stores.models.getState().entry;
+    assert.notEqual(after, before, "the old model's catalog is not kept");
+    assert.equal(after?.catalog.model, "m2");
+  });
+
+  it("loads the new session's catalog when a load races the session opening", async () => {
+    // A load that was still in flight when the session changed used to be
+    // dropped and never redone, so the composer stayed on "Choose model".
+    const harness = await connectedHarness();
+    const pending = harness.models.list();
+    harness.agent.models = catalog("m2");
+    harness.agent.emit({ type: "session.opened", sessionId: "runtime-9", persistentSessionId: "hermes-session-9", resumed: false });
+    await pending;
+    await tick();
+    const entry = harness.stores.models.getState().entry;
+    assert.equal(entry?.key, "runtime-9");
+    assert.equal(entry?.catalog.model, "m2");
+  });
+
+  it("does not load a catalog nothing has asked for", async () => {
+    const harness = await connectedHarness();
+    harness.agent.emit({ type: "session.opened", sessionId: "runtime-9", persistentSessionId: "hermes-session-9", resumed: false });
+    await tick();
+    assert.deepEqual(harness.agent.modelLists, []);
   });
 
   it("drops the catalog when the connection is lost and reloads for a new session", async () => {
@@ -91,8 +117,10 @@ describe("ModelCatalogService", () => {
   it("ignores a response that arrives after the catalog was dropped", async () => {
     const harness = await connectedHarness();
     const pending = harness.models.list();
+    harness.agent.models = catalog("m2");
     harness.models.invalidate();
     await pending;
-    assert.equal(harness.stores.models.getState().entry, null);
+    await tick();
+    assert.equal(harness.stores.models.getState().entry?.catalog.model, "m2", "only the reload is kept");
   });
 });
