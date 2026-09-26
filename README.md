@@ -1,10 +1,12 @@
 <div align="center">
 
+<img src="public/kana-hermes.png" width="120" height="120" alt="Kana's logo: a blue line portrait of Kana">
+
 # Kana Hermes Waifu Assistant
 
 **A waifu assistant for your [Hermes Agent](https://github.com/NousResearch/hermes-agent): a living, talking anime face for the Hermes you already run.**
 
-Kana turns Hermes into a Hermes waifu: a Live2D character who speaks in Japanese, lip-syncs, and subtitles every reply in the language you write in.
+Kana turns Hermes into a Hermes waifu: a Live2D character who answers in the language you write in and, with her voice on, speaks every reply in Japanese with lip sync.
 Hermes stays the only agent: its tools, files, memory, and sessions work exactly as before.
 
 [![npm](https://img.shields.io/npm/v/kana-alya?label=npm%20kana-alya)](https://www.npmjs.com/package/kana-alya)
@@ -12,7 +14,7 @@ Hermes stays the only agent: its tools, files, memory, and sessions work exactly
 ![Node.js 22.13+](https://img.shields.io/badge/node-%3E%3D22.13-339933)
 ![Linux x64](https://img.shields.io/badge/platform-Linux%20x64-lightgrey)
 
-![Kana workspace with a Live2D avatar, a room background, and a conversation with Hermes](.github/readme/workspace-v2.jpg)
+![Kana with Haru on the illustrated room stage, next to a conversation where Hermes added a model to its config](.github/readme/workspace-v3.jpg)
 
 </div>
 
@@ -78,19 +80,19 @@ Your data (password hash, settings, voice profiles, model cache) lives in
 
 <table>
   <tr>
-    <td width="50%"><img src=".github/readme/workspace-dark-v2.jpg" alt="Kana in dark theme"></td>
-    <td width="50%"><img src=".github/readme/slash-commands-v2.jpg" alt="The slash command menu listing live Hermes commands"></td>
+    <td width="50%"><img src=".github/readme/workspace-dark-v3.jpg" alt="Kana in the dark theme on the Seigaiha pattern, with an audio player and a PDF that Hermes sent"></td>
+    <td width="50%"><img src=".github/readme/slash-commands-v3.jpg" alt="The slash menu completing /re with Kana's /restart and Hermes's /retry, /refine, /reasoning, and /reload"></td>
   </tr>
   <tr>
-    <td align="center"><sub>Dark theme and built-in stage backgrounds</sub></td>
+    <td align="center"><sub>Dark theme, stage patterns, and files Hermes sends</sub></td>
     <td align="center"><sub>Hermes slash commands, read live from your installation</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src=".github/readme/settings-avatar-v2.png" alt="Avatar settings with stage backgrounds and the Live2D avatar library"></td>
-    <td width="50%"><img src=".github/readme/mobile-v2.jpg" alt="Kana on a phone: the chat fills the screen with Kana in a small call-style tile, next to the conversation list"></td>
+    <td width="50%"><img src=".github/readme/settings-avatar-v3.png" alt="Settings, Avatar: Haru and Mao as portrait cards, an Import Live2D card, and a grid of stage backgrounds"></td>
+    <td width="50%"><img src=".github/readme/mobile-v3.jpg" alt="Kana on two phones, light and dark: the chat fills the screen and Kana sits in a small call-style tile"></td>
   </tr>
   <tr>
-    <td align="center"><sub>Avatars, stages, and per-model bindings</sub></td>
+    <td align="center"><sub>An avatar wardrobe and stage backgrounds</sub></td>
     <td align="center"><sub>Chat-first on phones, with Kana in a call-style tile</sub></td>
   </tr>
 </table>
@@ -98,11 +100,13 @@ Your data (password hash, settings, voice profiles, model cache) lives in
 ## Features
 
 **Conversation**
-- Japanese speech with subtitles in the language you write in — no setting to
-  pick. Switching language affects new replies only; old subtitles stay exactly
-  as you saw them.
+- Replies in the language you write in, as Markdown (lists, code, links), with
+  no language setting to pick. With the voice on, Kana also speaks each reply
+  in Japanese; switching language affects new replies only.
 - History comes from Hermes, so conversations follow you to other browsers.
 - The Hermes activity log shows which tools ran for each reply.
+- Files Hermes sends (audio, video, images, documents) appear as a player, a
+  preview, or a Download button instead of a file path.
 - Composer with [file attachments, voice dictation, and a model picker](docs/COMPOSER.md).
   The picker opens with the last Hermes model list at once and refreshes it in
   the background.
@@ -115,10 +119,14 @@ Your data (password hash, settings, voice profiles, model cache) lives in
 - Dedicated dialogs for approvals and clarifications. Sudo passwords and secrets
   are never stored.
 - `/new`, `/sessions`, `/resume`, `/branch`, `/title`, `/status`, `/compress`, and more.
+- `/restart` restarts the `hermes serve` Kana started and brings you back to
+  the same conversation; `/reload` applies `~/.hermes/.env` changes. Models
+  added to Hermes's `config.yaml` appear in the model picker without either.
 
 **Character**
-- Live2D avatars: the official Haru and Mao samples, any hosted `.model3.json`,
-  or a model folder imported into your browser.
+- Live2D avatars: the official Haru and Mao samples, or a model folder
+  imported into your browser. Settings → Avatar is a wardrobe of portrait
+  cards.
 - Emotions, motions, lip sync, and cursor-following gaze.
 - Stage backgrounds (an illustrated room, soft patterns, or your own image), plus
   light and dark themes.
@@ -133,6 +141,7 @@ Your data (password hash, settings, voice profiles, model cache) lives in
   does not depend on IP addresses (safe behind shared home internet).
 - Cross-site request protection, server-side logout, and an owner-only data folder.
 - Installable app shell, credential-free backup and restore, and safe diagnostics.
+- A configuration guide inside Kana at `/docs`, in English and Indonesian.
 
 ## Deploy on a VPS
 
@@ -177,6 +186,15 @@ To start Hermes yourself, give it a token Kana can discover:
 HERMES_DASHBOARD_SESSION_TOKEN="a-long-random-token" hermes serve --host 127.0.0.1 --port 9119
 ```
 
+After you change Hermes's configuration, you rarely need to leave Kana:
+
+| Change | What to do |
+|---|---|
+| A model or provider added to `config.yaml` | Nothing. It appears in the model picker right away. |
+| `~/.hermes/.env` (API keys) | Type `/reload`. |
+| MCP servers | Type `/reload-mcp now`. |
+| Anything else Hermes reads at startup | Type `/restart`. Kana restarts the `hermes serve` it started and resumes the conversation. A Hermes you started yourself is restarted where you started it. |
+
 ## Voice
 
 Voice is optional and off on new installs. Turn Kana's voice on or off in
@@ -201,11 +219,13 @@ AVX-512 VNNI.
 
 ## Live2D avatars
 
-Choose **Haru** or **Mao** in **Settings → Avatar**, paste a hosted
-`.model3.json` URL, or import a model folder. Imported folders stay in your
-browser (IndexedDB) and are never uploaded. Each model has its own bindings for
-the mouth parameter, emotion expressions, and motion groups, which you can
-preview before saving.
+Choose **Haru** or **Mao** in **Settings → Avatar**, or import a model folder
+with the **Import Live2D** card. Each avatar is a card with its portrait, which
+Kana takes from the stage and keeps in your browser. Imported folders stay in
+your browser (IndexedDB) and are never uploaded. An imported avatar's ⋯ menu
+has its size, Rename, and Remove, and it has its own bindings for the mouth
+parameter, emotion expressions, and motion groups, which you can preview before
+saving.
 
 The official samples load from Live2D's pinned sample repository and are not
 redistributed by Kana.
@@ -228,8 +248,9 @@ Kana server (Next.js)
 ```
 
 Hermes events are translated into a stable internal model that drives the
-transcript, activity log, avatar emotion, and audio. Each reply carries Japanese
-speech, a subtitle, and an emotion in one structured Hermes response. In the
+transcript, activity log, avatar emotion, and audio. Hermes starts each reply
+with a short header (the emotion, the language, and the Japanese speech while
+the voice is on) and then writes the answer in Markdown. In the
 browser, each workspace keeps its shared state in small per-concern
 [zustand](https://github.com/pmndrs/zustand) stores, and plain service classes
 talk to Hermes, voice, and the avatar, so typing re-renders only the composer.
@@ -270,6 +291,7 @@ Contributor rules are in [AGENTS.md](AGENTS.md).
 
 | Topic | Guide |
 |---|---|
+| Every `config.json` setting, inside Kana | Open `/docs` in Kana (English and Indonesian) |
 | Installing locally or on a server | [INSTALLATION.md](docs/INSTALLATION.md) |
 | `config.json`, TTS providers, deployment mode | [CONFIGURATION.md](docs/CONFIGURATION.md) |
 | VPS, systemd, Nginx, supported platforms | [SUPPORTED_ENVIRONMENT.md](docs/SUPPORTED_ENVIRONMENT.md) |
