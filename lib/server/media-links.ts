@@ -31,10 +31,24 @@ import { MEDIA_ROUTE } from "@/lib/presentation/media";
  * gateway/platforms/base.py (validate_media_delivery_path): any existing
  * regular file, symlinks resolved, except system and credential locations.
  * Kana's own data directory (password store, session secret, config.json
- * with API keys) is added to the list.
+ * with API keys) and the home-folder secrets below are added to the list.
  */
 const DENIED_SYSTEM_PATHS = ["/etc", "/proc", "/sys", "/dev", "/root", "/boot", "/var/log", "/var/lib", "/var/run"];
 const DENIED_HOME_PATHS = [".ssh", ".aws", ".gnupg", ".kube", ".docker", ".config", ".azure", ".gcloud", "Library/Keychains"];
+/**
+ * Kana's additions to Hermes's list: files in the home folder that hold
+ * tokens and passwords (package registries, git, netrc, keyrings, browser
+ * profiles) and shell histories, where typed secrets end up. A prompt
+ * injection that names one of them gets text, never a download link.
+ */
+const DENIED_HOME_SECRETS = [
+  ".netrc", ".git-credentials", ".npmrc", ".yarnrc", ".yarnrc.yml", ".pypirc", ".pgpass", ".my.cnf",
+  ".vault-token", ".terraform.d", ".cargo/credentials", ".cargo/credentials.toml", ".gem/credentials",
+  ".m2/settings.xml", ".gradle/gradle.properties", ".password-store", ".pki", ".local/share/keyrings",
+  ".mozilla", ".thunderbird", ".bash_history", ".zsh_history", ".histfile", ".python_history",
+  ".node_repl_history", ".psql_history", ".mysql_history", ".sqlite_history", ".lesshst", ".viminfo",
+  ".local/share/fish/fish_history",
+];
 const HERMES_SECRET_PATHS = [
   ".env",
   "auth.json",
@@ -64,7 +78,7 @@ function deniedPaths(home: string): string[] {
   const hermesRoots = new Set([path.join(home, ".hermes"), ...(process.env.HERMES_HOME ? [process.env.HERMES_HOME] : [])]);
   return [
     ...DENIED_SYSTEM_PATHS,
-    ...DENIED_HOME_PATHS.map((sub) => path.join(home, sub)),
+    ...[...DENIED_HOME_PATHS, ...DENIED_HOME_SECRETS].map((sub) => path.join(home, sub)),
     ...[...hermesRoots].flatMap((root) => HERMES_SECRET_PATHS.map((sub) => path.join(root, sub))),
     resolveKanaDataDir(),
   ].map(realOrResolved);

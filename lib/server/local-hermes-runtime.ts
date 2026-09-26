@@ -110,6 +110,24 @@ async function discoverProcessTokenByPort(port: number): Promise<string | null> 
   return null;
 }
 
+/**
+ * The environment `hermes serve` starts with: this server's, without Kana's
+ * own settings, plus the session token. Hermes hands its environment to the
+ * commands and code it runs, so KANA_JWT_SECRET (which signs Kana logins)
+ * would otherwise be one `env` away from the model and its provider.
+ */
+export function hermesServeEnvironment(
+  env: Record<string, string | undefined>,
+  token: string,
+): Record<string, string | undefined> {
+  const child: Record<string, string | undefined> = {};
+  for (const [key, value] of Object.entries(env)) {
+    if (!key.startsWith("KANA_") && !key.startsWith("__NEXT_PRIVATE")) child[key] = value;
+  }
+  child[HERMES_TOKEN_ENV] = token;
+  return child;
+}
+
 function mintSessionToken(): string {
   return randomBytes(24).toString("hex");
 }
@@ -313,10 +331,7 @@ export async function startLocalHermesRuntime(options: {
     ["serve", "--host", "127.0.0.1", "--port", String(port)],
     {
       cwd: workingDirectory,
-      env: {
-        ...process.env,
-        [HERMES_TOKEN_ENV]: token,
-      },
+      env: hermesServeEnvironment(process.env, token) as NodeJS.ProcessEnv,
       stdio: ["ignore", "pipe", "pipe"],
     },
   );

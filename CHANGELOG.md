@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+### Security
+
+- A web page can no longer reach a local Kana through DNS rebinding. In local
+  mode Kana answers only at `localhost`, `127.0.0.1`, and `[::1]`; a request
+  addressed to any other name gets 421. To open a local Kana under another
+  name, add it to `KANA_TRUSTED_ORIGINS`. Deployment mode is unchanged.
+- An approval can no longer be given by accident. The dialog opens with focus
+  on itself instead of **Run once**, so Enter or Space pressed as it appears
+  does nothing, and the approve buttons stay disabled for 0.6 seconds (Deny
+  works at once).
+- The approval dialog shows the whole command. Long commands wrap instead of
+  scrolling sideways, and long runs of spaces, stacked blank lines, and
+  invisible or bidirectional-control characters are marked in red with a
+  warning, so none of them can hide part of the command.
+- Wrong current passwords on a password change count against the login
+  limiter, like failed logins.
+- `hermes serve` started by Kana no longer inherits Kana's own `KANA_*`
+  settings, `KANA_JWT_SECRET` included.
+- Files Hermes names with `MEDIA:` are no longer delivered from credential
+  files and shell histories in the home folder (`.npmrc`, `.git-credentials`,
+  `.netrc`, keyrings, browser profiles, `.bash_history`, and similar).
+
 ## 0.4.0 — 2026-09-26
 
 ### Removed

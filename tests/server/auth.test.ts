@@ -284,6 +284,27 @@ describe("login limiter", () => {
     }
   });
 
+  it("counts wrong current passwords on a password change against the login limiter", async () => {
+    await changeAccessPassword("oracle-secret");
+    try {
+      const session = cookieValue(await login(loginRequest("oracle-secret")), SESSION_COOKIE);
+      const change = (currentPassword: string) =>
+        changePassword(new Request("http://localhost/api/auth/password", {
+          method: "POST",
+          headers: { cookie: `${SESSION_COOKIE}=${session}` },
+          body: JSON.stringify({ currentPassword, newPassword: "oracle-replaced" }),
+        }));
+      const statuses: number[] = [];
+      for (let i = 0; i < 6; i += 1) statuses.push((await change(`guess-${i}-password`)).status);
+      assert.deepEqual(statuses, [403, 403, 403, 403, 429, 429]);
+      // Locked out, even the right password is not checked until the lock ends.
+      assert.equal((await change("oracle-secret")).status, 429);
+      assert.equal(await verifyAccessPassword("oracle-secret"), true);
+    } finally {
+      clearPersistedPassword();
+    }
+  });
+
   it("limits a known device's own failures without touching other buckets", async () => {
     await changeAccessPassword("device-secret");
     try {

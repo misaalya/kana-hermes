@@ -208,7 +208,7 @@ The `deployment` section describes how Kana is reached.
 
 | `mode` | Use when |
 | --- | --- |
-| `"local"` (default) | Kana is opened on the computer it runs on. |
+| `"local"` (default) | Kana is opened on the computer it runs on, at `localhost`, `127.0.0.1`, or `[::1]`. Other addresses are refused. |
 | `"deployment"` | Kana is reached through a VPS, Nginx, or a network, for example from a phone. |
 
 ```json
@@ -231,7 +231,7 @@ For server installations. Set these in the environment that runs `kana`, not in 
 | `KANA_PORT` | Port for Kana's web page. Defaults to `3000`; equivalent to `kana --port`. |
 | `KANA_DEPLOYMENT_MODE` | `local` or `deployment`. Overrides `deployment.mode`. |
 | `KANA_HERMES_BIN` | Path to the Hermes program. Overrides `hermes.executable`. |
-| `KANA_TRUSTED_ORIGINS` | Additional trusted origins, comma-separated. Needed only when a proxy rewrites the `Host` header without forwarding `X-Forwarded-Host`. |
+| `KANA_TRUSTED_ORIGINS` | Additional trusted origins, comma-separated. Needed only when a proxy rewrites the `Host` header without forwarding `X-Forwarded-Host`, or to open Kana in local mode under another address. |
 | `KANA_DEV_ALLOWED_ORIGINS` | Development only: additional hosts allowed to reach `next dev`. |
 
 ```sh

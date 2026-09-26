@@ -91,3 +91,58 @@ export function checkRequestOrigin(
     ? { allowed: true }
     : { allowed: false, reason: `origin ${parsed.origin} does not match this server` };
 }
+
+// DNS-rebinding guard for local mode.
+//
+// A local Kana listens only on this computer, yet a web page can still reach
+// it: the attacker points their own domain at 127.0.0.1 (DNS rebinding), and
+// the browser then sends that domain as Host and as Origin. They match, so
+// the check above lets the page try passwords and, with the right one, drive
+// Hermes. A browser never resolves the loopback names below through DNS, so
+// in local mode Kana answers only to those, plus hosts the operator lists.
+// Deployment mode answers to any name: it is reached by its public host.
+
+const LOOPBACK_NAMES = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+/** The name part of a Host value (no port), lowercased; IPv6 keeps brackets. */
+function hostName(host: string): string {
+  const value = host.trim().toLowerCase();
+  if (value.startsWith("[")) return value.slice(0, value.indexOf("]") + 1);
+  const colon = value.lastIndexOf(":");
+  return colon === -1 ? value : value.slice(0, colon);
+}
+
+function isLoopbackName(name: string): boolean {
+  return LOOPBACK_NAMES.has(name) || name.endsWith(".localhost") || /^127(?:\.\d{1,3}){3}$/.test(name);
+}
+
+/** Host names from KANA_TRUSTED_ORIGINS and, for `next dev`, KANA_DEV_ALLOWED_ORIGINS (`*.suffix` allowed). */
+export function allowedHostsFromEnv(env: NodeJS.ProcessEnv = process.env): string[] {
+  const hosts = trustedOriginsFromEnv(env).map((origin) => hostName(new URL(origin).host));
+  for (const value of (env.KANA_DEV_ALLOWED_ORIGINS ?? "").split(",")) {
+    const entry = value.trim().toLowerCase();
+    if (!entry) continue;
+    try {
+      hosts.push(entry.includes("://") ? hostName(new URL(entry).host) : hostName(entry));
+    } catch {
+      // Not a host; ignored like an invalid trusted origin.
+    }
+  }
+  return hosts;
+}
+
+export function checkRequestHost(
+  headers: Headers,
+  { local, allowedHosts = allowedHostsFromEnv() }: { local: boolean; allowedHosts?: readonly string[] },
+): OriginCheck {
+  if (!local) return { allowed: true };
+  const host = headers.get("host");
+  if (!host) return { allowed: false, reason: "missing Host header" };
+  const name = hostName(host);
+  const listed = allowedHosts.some((allowed) =>
+    allowed.startsWith("*.") ? name.endsWith(allowed.slice(1)) : allowed === name,
+  );
+  return isLoopbackName(name) || listed
+    ? { allowed: true }
+    : { allowed: false, reason: `host ${name} is not this computer` };
+}

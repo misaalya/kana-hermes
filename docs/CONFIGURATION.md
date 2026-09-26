@@ -181,14 +181,17 @@ running `hermes serve` keeps its own working directory.
 `deployment.mode` is deliberately independent from Next.js' `NODE_ENV`:
 
 - `local` means the browser reaches Kana only on the same machine. This is
-  the default used by the global `kana` launcher.
+  the default used by the global `kana` launcher. Kana then answers only at
+  `localhost`, `127.0.0.1`, and `[::1]` (421 for any other host name), which
+  keeps web pages from reaching it through DNS rebinding.
 - `deployment` means Kana is exposed through Nginx, a public/private network,
   a VPS, or another remote host. Authentication is mandatory for Hermes
   process controls and the voice engine download in this mode. Local mode also requires authentication.
 
 `KANA_DEPLOYMENT_MODE=local|deployment` remains an operator-level deployment
 override. `KANA_TRUSTED_ORIGINS` (comma-separated origins) is only needed when
-a reverse proxy rewrites `Host` without forwarding `X-Forwarded-Host`.
+a reverse proxy rewrites `Host` without forwarding `X-Forwarded-Host`, or to
+open a local-mode Kana under a name other than the loopback ones.
 `KANA_DEV_ALLOWED_ORIGINS` lists extra hosts allowed to reach `next dev`. `KANA_DATA_DIR` selects the single data root, and
 `KANA_HERMES_BIN` can override Hermes discovery. TTS provider and local voice
 settings intentionally have no environment-variable override; edit this JSON

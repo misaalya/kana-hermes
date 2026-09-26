@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   AgentInputRequest,
   AgentInputResponse,
 } from "@/lib/agent/types";
 import { useDialogFocus } from "@/lib/accessibility/use-dialog-focus";
+import { revealCommand } from "@/lib/presentation/command-text";
 import { btnPrimary, btnSecondary, bentoCard, inputBase } from "./ui";
 import { getCopy, type UiLocale } from "@/lib/ui/copy";
 
@@ -15,6 +16,13 @@ type AgentInputDialogProps = {
   onRespond(response: AgentInputResponse): Promise<void>;
   locale: UiLocale;
 };
+
+/**
+ * An approval that appears while the user is typing or clicking must not take
+ * that input: the dialog opens with focus on itself, and for this long after
+ * it opens only Deny is enabled (browsers guard permission prompts the same way).
+ */
+const APPROVAL_ARM_DELAY_MS = 600;
 
 function approvalLabel(choice: string, copy: ReturnType<typeof getCopy>["agentInput"]): string {
   if (choice === "once") return copy.runOnce;
@@ -89,7 +97,17 @@ export function AgentInputDialog({
   };
   const { dialogRef, onDialogKeyDown } = useDialogFocus(() => {
     void cancel();
-  });
+  }, { initialFocus: request.kind === "approval" ? "dialog" : "first" });
+  const [armed, setArmed] = useState(request.kind !== "approval");
+  useEffect(() => {
+    if (armed) return;
+    const timer = window.setTimeout(() => setArmed(true), APPROVAL_ARM_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [armed]);
+  const command = useMemo(
+    () => (request.kind === "approval" && request.command ? revealCommand(request.command) : []),
+    [request],
+  );
 
   return (
     <div
@@ -100,8 +118,9 @@ export function AgentInputDialog({
       }}
     >
       <section
-        className="w-[min(480px,100%)] border-2 border-line bg-bg p-4"
+        className="max-h-[calc(100dvh-1.5rem)] w-[min(480px,100%)] overflow-y-auto border-2 border-line bg-bg p-4 outline-none"
         ref={dialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="agent-input-title"
@@ -117,8 +136,26 @@ export function AgentInputDialog({
                 <p className="mt-0.5 text-xs leading-relaxed break-words text-ink-dim">{request.description}</p>
               </div>
             </div>
-            {request.command ? (
-              <pre className="mb-2 overflow-x-auto rounded-2xl border border-line bg-surface p-3 font-mono text-xs text-accent-strong">{request.command}</pre>
+            {command.length ? (
+              <>
+                {/* Wrapped, never scrolled sideways: every part of the command is in view. */}
+                <pre className="mb-2 rounded-2xl border border-line bg-surface p-3 font-mono text-xs break-all whitespace-pre-wrap text-accent-strong">
+                  {command.map((segment, index) =>
+                    segment.type === "text" ? (
+                      segment.text
+                    ) : (
+                      <span key={index} className="mx-0.5 rounded bg-danger/15 px-1 font-sans font-semibold text-danger">
+                        {segment.label}
+                      </span>
+                    ),
+                  )}
+                </pre>
+                {command.some((segment) => segment.type === "hidden") ? (
+                  <p className="mb-2 rounded-2xl border border-danger/40 px-3.5 py-2.5 text-xs font-semibold text-danger">
+                    {copy.hiddenCharacters}
+                  </p>
+                ) : null}
+              </>
             ) : null}
             {request.smartDenied ? (
               <p className="mb-2 rounded-2xl border border-danger/40 px-3.5 py-2.5 text-xs font-semibold text-danger">
@@ -129,7 +166,7 @@ export function AgentInputDialog({
               {approvalChoices.map((choice) => (
                 <button
                   className={choice === "deny" ? btnSecondary : `${btnPrimary} grow`}
-                  disabled={submitting}
+                  disabled={submitting || (!armed && choice !== "deny")}
                   key={choice}
                   onClick={() => void onRespond({ kind: "approval", choice })}
                   type="button"

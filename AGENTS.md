@@ -202,8 +202,12 @@ RPC  POST /api/hermes/rpc    ->  allow-listed JSON-RPC forward
   `shared/app-state-db.mjs`); legacy bcrypt/`auth.json` hashes still verify and
   are upgraded. Every process-control route requires a session.
 - The proxy rejects cross-site state-changing requests (Origin vs Host, see
-  `lib/server/request-origin.ts`). Login lockout is per signed device cookie
-  plus one shared bucket for unknown clients — never per IP.
+  `lib/server/request-origin.ts`). In local mode it also answers only to the
+  loopback names `localhost`, `127.0.0.1`, `[::1]` (plus hosts listed in
+  `KANA_TRUSTED_ORIGINS`), which stops DNS rebinding: a rebound page sends a
+  Host and Origin that match each other. Login lockout is per signed device
+  cookie plus one shared bucket for unknown clients — never per IP; a password
+  change's current-password check counts against the same bucket.
 - Route handlers use `withSession`/`jsonError` from `lib/server/api-response.ts`
   and bounded body readers; request-size limits live only in `lib/limits.ts`.
 - Password changes atomically rotate the session version stored with the hash.
@@ -227,7 +231,9 @@ RPC  POST /api/hermes/rpc    ->  allow-listed JSON-RPC forward
     in gateway/platforms/base.py): an existing regular file with symlinks
     resolved, outside system paths, home credential folders (`~/.ssh`,
     `~/.config`, ...), Hermes's secret files (`.env`, `config.yaml`,
-    `auth.json`, ...), and Kana's own data root. Any other path, and any tag
+    `auth.json`, ...), and Kana's own data root. Kana also denies home-folder
+    credential files and shell histories (`.npmrc`, `.git-credentials`,
+    `.netrc`, keyrings, `.bash_history`, ...). Any other path, and any tag
     inside code, stays as text. The route checks the file again on every
     request;
   - `GET`/`HEAD /api/media/<token>/<name>` streams the file with byte ranges

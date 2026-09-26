@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { checkRequestOrigin, trustedOriginsFromEnv } from "@/lib/server/request-origin";
+import {
+  allowedHostsFromEnv,
+  checkRequestHost,
+  checkRequestOrigin,
+  trustedOriginsFromEnv,
+} from "@/lib/server/request-origin";
 
 function check(method: string, headers: Record<string, string>, trusted: string[] = []) {
   return checkRequestOrigin({ method, headers: new Headers(headers) }, trusted);
@@ -53,5 +58,36 @@ describe("CSRF origin guard", () => {
     const trusted = trustedOriginsFromEnv({ KANA_TRUSTED_ORIGINS: "https://kana.example:8443/, nonsense" } as unknown as NodeJS.ProcessEnv);
     assert.deepEqual(trusted, ["https://kana.example:8443"]);
     assert.equal(check("POST", { origin: "https://kana.example:8443", host: "internal:3000" }, trusted).allowed, true);
+  });
+});
+
+describe("local-mode Host guard (DNS rebinding)", () => {
+  const local = (host: string | undefined, allowedHosts: string[] = []) =>
+    checkRequestHost(new Headers(host === undefined ? {} : { host }), { local: true, allowedHosts }).allowed;
+
+  it("answers only to this computer's loopback names in local mode", () => {
+    for (const host of ["127.0.0.1:3000", "localhost:3000", "LOCALHOST", "[::1]:3000", "kana.localhost:3000", "127.0.0.2:3000"]) {
+      assert.equal(local(host), true, host);
+    }
+  });
+
+  it("refuses a page whose own domain was re-pointed at 127.0.0.1", () => {
+    for (const host of ["rebind.attacker.example:3000", "attacker.example", "localhost.attacker.example", "127.0.0.1.nip.io:3000", "192.168.1.20:3000"]) {
+      assert.equal(local(host), false, host);
+    }
+    assert.equal(local(undefined), false);
+  });
+
+  it("allows hosts the operator lists, and every host in deployment mode", () => {
+    const allowed = allowedHostsFromEnv({
+      KANA_TRUSTED_ORIGINS: "https://kana.example:8443",
+      KANA_DEV_ALLOWED_ORIGINS: "192.168.1.20, *.lan, http://laptop.local:3000",
+    } as unknown as NodeJS.ProcessEnv);
+    assert.deepEqual(allowed, ["kana.example", "192.168.1.20", "*.lan", "laptop.local"]);
+    assert.equal(local("kana.example:8443", allowed), true);
+    assert.equal(local("192.168.1.20:3000", allowed), true);
+    assert.equal(local("pc.lan:3000", allowed), true);
+    assert.equal(local("evil.example", allowed), false);
+    assert.equal(checkRequestHost(new Headers({ host: "kana.example" }), { local: false, allowedHosts: [] }).allowed, true);
   });
 });

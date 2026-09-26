@@ -32,6 +32,11 @@ before(() => {
     path.join(home, ".hermes", "config.yaml"),
     path.join(home, ".hermes", ".env"),
     path.join(home, ".config", "app", "token"),
+    path.join(home, ".npmrc"),
+    path.join(home, ".git-credentials"),
+    path.join(home, ".netrc"),
+    path.join(home, ".bash_history"),
+    path.join(home, ".local", "share", "keyrings", "login.keyring"),
     path.join(root, "kana-data", "jwt-secret"),
   ]) {
     mkdirSync(path.dirname(file), { recursive: true });
@@ -61,6 +66,11 @@ describe("media delivery rule", () => {
       path.join(home, ".hermes", "config.yaml"),
       path.join(home, ".hermes", ".env"),
       path.join(home, ".config", "app", "token"),
+      path.join(home, ".npmrc"),
+      path.join(home, ".git-credentials"),
+      path.join(home, ".netrc"),
+      path.join(home, ".bash_history"),
+      path.join(home, ".local", "share", "keyrings", "login.keyring"),
       path.join(root, "kana-data", "jwt-secret"),
       path.join(files, "innocent.png"),
       "/etc/hostname",

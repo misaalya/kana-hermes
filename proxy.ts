@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/server/auth/session";
-import { checkRequestOrigin } from "@/lib/server/request-origin";
+import { checkRequestHost, checkRequestOrigin } from "@/lib/server/request-origin";
+import { resolveKanaDeploymentMode } from "@/lib/server/user-config";
 
 // Deny-by-default guard for every request:
+// - in local mode, only requests addressed to this computer's loopback names
+//   (DNS-rebinding guard, see request-origin.ts);
 // - state-changing requests must come from Kana's own origin (CSRF guard,
 //   including the public login/logout endpoints);
 // - auth APIs needed to bootstrap a session stay public;
@@ -23,6 +26,18 @@ async function hasValidSession(request: NextRequest): Promise<boolean> {
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  const host = checkRequestHost(request.headers, { local: resolveKanaDeploymentMode().mode === "local" });
+  if (!host.allowed) {
+    return NextResponse.json(
+      {
+        error:
+          "Kana is in local mode and answers only at localhost, 127.0.0.1, or [::1]. To reach it under another address, add that address to KANA_TRUSTED_ORIGINS or use deployment mode.",
+        reason: host.reason,
+      },
+      { status: 421 },
+    );
+  }
 
   const origin = checkRequestOrigin(request);
   if (!origin.allowed) {

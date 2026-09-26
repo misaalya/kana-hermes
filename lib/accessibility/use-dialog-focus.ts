@@ -9,8 +9,17 @@ const FOCUSABLE = [
   "[tabindex]:not([tabindex='-1'])",
 ].join(",");
 
+type DialogFocusOptions = {
+  /**
+   * "dialog" focuses the dialog itself instead of its first control, so a key
+   * the user was already pressing (Enter in the composer) cannot activate a
+   * button that appeared under it. The dialog element needs tabIndex={-1}.
+   */
+  initialFocus?: "first" | "dialog";
+};
+
 /** Traps keyboard focus inside a modal and restores the opener on unmount. */
-export function useDialogFocus(onEscape?: () => void) {
+export function useDialogFocus(onEscape?: () => void, { initialFocus = "first" }: DialogFocusOptions = {}) {
   const dialogRef = useRef<HTMLElement | null>(null);
   const escapeRef = useRef(onEscape);
 
@@ -23,7 +32,9 @@ export function useDialogFocus(onEscape?: () => void) {
       ? document.activeElement
       : null;
     const dialog = dialogRef.current;
-    const first = dialog?.querySelector<HTMLElement>("[autofocus], " + FOCUSABLE);
+    const first = initialFocus === "dialog"
+      ? dialog
+      : dialog?.querySelector<HTMLElement>("[autofocus], " + FOCUSABLE);
     window.requestAnimationFrame(() => first?.focus());
     return () => {
       window.requestAnimationFrame(() => {
@@ -34,6 +45,8 @@ export function useDialogFocus(onEscape?: () => void) {
         if (!current || current === document.body || !current.isConnected) opener?.focus();
       });
     };
+    // Focus is placed once, when the dialog opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {

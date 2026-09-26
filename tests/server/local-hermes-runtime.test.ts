@@ -78,3 +78,26 @@ describe("Kana-managed hermes serve restart", () => {
     await assert.rejects(runtime.restartLocalHermesRuntime(), /not started by Kana/);
   });
 });
+
+describe("hermes serve environment", () => {
+  it("keeps Kana's own settings, and its session secret, out of Hermes", async () => {
+    const { hermesServeEnvironment } = await import("@/lib/server/local-hermes-runtime");
+    const env = hermesServeEnvironment(
+      {
+        PATH: "/usr/bin",
+        HOME: "/home/you",
+        OPENROUTER_API_KEY: "kept-for-hermes",
+        KANA_JWT_SECRET: "x".repeat(40),
+        KANA_DATA_DIR: "/var/lib/kana",
+        __NEXT_PRIVATE_STANDALONE_CONFIG: "{}",
+      },
+      "minted-token",
+    );
+    assert.deepEqual(env, {
+      PATH: "/usr/bin",
+      HOME: "/home/you",
+      OPENROUTER_API_KEY: "kept-for-hermes",
+      HERMES_DASHBOARD_SESSION_TOKEN: "minted-token",
+    });
+  });
+});
