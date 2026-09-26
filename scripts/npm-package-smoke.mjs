@@ -94,7 +94,7 @@ if (args.includes("--version")) {
 if (args[0] !== "serve") process.exit(2);
 const portIndex = args.indexOf("--port");
 const port = Number(args[portIndex + 1]);
-writeFileSync(process.env.KANA_FAKE_HERMES_PID_FILE, String(process.pid));
+writeFileSync(process.env.FAKE_HERMES_PID_FILE, String(process.pid));
 const server = createServer((request, response) => {
   response.setHeader("Content-Type", "application/json");
   if (request.url === "/api/health") {
@@ -123,7 +123,8 @@ process.once("SIGINT", stop);
     XDG_DATA_HOME: path.join(home, ".local", "share"),
     XDG_CACHE_HOME: path.join(home, ".cache"),
     PATH: `${fakeBin}${path.delimiter}${process.env.PATH ?? ""}`,
-    KANA_FAKE_HERMES_PID_FILE: fakeHermesPidFile,
+    // Not KANA_*: Kana keeps its own settings out of the Hermes it starts.
+    FAKE_HERMES_PID_FILE: fakeHermesPidFile,
   };
 
   const help = run(executable, ["--help"], root, environment);
