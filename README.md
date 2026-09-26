@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="public/kana-hermes.png" width="120" height="120" alt="Kana's logo: a blue line portrait of Kana">
+<img src=".github/readme/kana-hermes.png" width="120" height="120" alt="Kana's logo: a blue line portrait of Kana">
 
 # Kana Hermes Waifu Assistant
 
@@ -14,7 +14,7 @@ Hermes stays the only agent: its tools, files, memory, and sessions work exactly
 ![Node.js 22.13+](https://img.shields.io/badge/node-%3E%3D22.13-339933)
 ![Linux x64](https://img.shields.io/badge/platform-Linux%20x64-lightgrey)
 
-![Kana with Haru on the illustrated room stage, next to a conversation where Hermes added a model to its config](.github/readme/workspace-v3.jpg)
+![Kana with Haru on the Seigaiha pattern, next to a conversation where Hermes added a model to its config](.github/readme/workspace-v4.jpg)
 
 </div>
 
@@ -81,15 +81,15 @@ Your data (password hash, settings, voice profiles, model cache) lives in
 <table>
   <tr>
     <td width="50%"><img src=".github/readme/workspace-dark-v3.jpg" alt="Kana in the dark theme on the Seigaiha pattern, with an audio player and a PDF that Hermes sent"></td>
-    <td width="50%"><img src=".github/readme/slash-commands-v3.jpg" alt="The slash menu completing /re with Kana's /restart and Hermes's /retry, /refine, /reasoning, and /reload"></td>
+    <td width="50%"><img src=".github/readme/slash-commands-v4.jpg" alt="The slash menu completing /re with Kana's /restart and Hermes's /retry, /refine, /reasoning, and /reload"></td>
   </tr>
   <tr>
     <td align="center"><sub>Dark theme, stage patterns, and files Hermes sends</sub></td>
     <td align="center"><sub>Hermes slash commands, read live from your installation</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src=".github/readme/settings-avatar-v3.png" alt="Settings, Avatar: Haru and Mao as portrait cards, an Import Live2D card, and a grid of stage backgrounds"></td>
-    <td width="50%"><img src=".github/readme/mobile-v3.jpg" alt="Kana on two phones, light and dark: the chat fills the screen and Kana sits in a small call-style tile"></td>
+    <td width="50%"><img src=".github/readme/settings-avatar-v4.png" alt="Settings, Avatar: Haru and Mao as portrait cards, an Import Live2D card, and a grid of stage backgrounds"></td>
+    <td width="50%"><img src=".github/readme/mobile-v4.jpg" alt="Kana on two phones, light and dark, on the Seigaiha pattern: the chat fills the screen and Kana sits in a small call-style tile"></td>
   </tr>
   <tr>
     <td align="center"><sub>An avatar wardrobe and stage backgrounds</sub></td>
