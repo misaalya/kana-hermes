@@ -9,6 +9,7 @@ import {
 import { AvatarLoadSupersededError, type ManagedAvatarProvider } from "@/lib/avatar/managed-avatar-provider";
 import { live2DModelBindings, live2DModelLayout } from "@/lib/avatar/model-bindings";
 import { PixiLive2DRuntimeAdapter } from "@/lib/avatar/pixi-live2d-runtime-adapter";
+import { PORTRAIT_SIZE, withPortrait, type AvatarPortraitArchive } from "@/lib/avatar/portrait";
 import type { KanaMessage } from "@/lib/conversation/types";
 import type { KanaPreferences } from "@/lib/preferences/types";
 import type { AvatarStore } from "@/lib/store/avatar-store";
@@ -31,7 +32,15 @@ export type AvatarServiceDependencies = {
   provider: ManagedAvatarProvider;
   controller: AvatarController;
   models: AvatarModelLibrary;
+  /** Where stage portraits persist; without it they last until reload. */
+  portraits?: Pick<AvatarPortraitArchive, "load" | "save">;
 };
+
+/**
+ * How long a new model settles on stage (idle motion, the neutral face)
+ * before its portrait is taken.
+ */
+const PORTRAIT_DELAY_MS = 1_200;
 
 /** Live2D stage: loads the configured model onto the canvas and manages the model library. */
 export class AvatarService {
@@ -40,6 +49,7 @@ export class AvatarService {
   private loadedKey = "";
   private lastLoadError: Error | null = null;
   private previewTimers: Array<ReturnType<typeof setTimeout>> = [];
+  private portraitTimer: ReturnType<typeof setTimeout> | null = null;
   private unsubscribe: (() => void) | null = null;
 
   constructor(private readonly deps: AvatarServiceDependencies) {}
@@ -50,6 +60,8 @@ export class AvatarService {
 
   start(): void {
     if (this.unsubscribe) return;
+    const portraits = this.deps.portraits?.load();
+    if (portraits) this.deps.avatar.setState({ portraits });
     this.deps.avatar.getState().apply(this.deps.provider.getSnapshot());
     this.unsubscribe = this.deps.provider.subscribe((snapshot) => this.deps.avatar.getState().apply(snapshot));
   }
@@ -99,6 +111,7 @@ export class AvatarService {
       this.loadedKey = key;
       this.lastLoadError = null;
       this.deps.controller.presentEmotion("neutral");
+      this.schedulePortrait(provider, key, next.live2d.modelId || next.live2d.modelUrl.trim());
       this.deps.errors.getState().accumulateMetrics({
         lastAvatarLoadDurationMs: Math.round(performance.now() - startedAt),
       });
@@ -206,6 +219,7 @@ export class AvatarService {
       throw new Error("Switch to another avatar before deleting the active model.");
     }
     await this.deps.models.delete(id);
+    this.storePortrait(id, null);
     const sourceKey = `import:${id}`;
     if (preferences.live2d.bindingProfiles?.[sourceKey] || preferences.live2d.layoutProfiles?.[sourceKey]) {
       const bindingProfiles = { ...preferences.live2d.bindingProfiles };
@@ -242,8 +256,30 @@ export class AvatarService {
     this.unsubscribe?.();
     this.unsubscribe = null;
     this.clearPreviewTimers();
+    if (this.portraitTimer) globalThis.clearTimeout(this.portraitTimer);
+    this.portraitTimer = null;
     this.loadedKey = "";
     this.deps.provider.unload();
+  }
+
+  /** Take the model's portrait once it has settled, if it is still on stage. */
+  private schedulePortrait(provider: Live2DAvatarProvider, loadedKey: string, portraitKey: string): void {
+    if (this.portraitTimer) globalThis.clearTimeout(this.portraitTimer);
+    this.portraitTimer = null;
+    if (!portraitKey) return;
+    this.portraitTimer = globalThis.setTimeout(() => {
+      this.portraitTimer = null;
+      if (this.loadedKey !== loadedKey) return;
+      const portrait = provider.capturePortrait(PORTRAIT_SIZE);
+      if (portrait) this.storePortrait(portraitKey, portrait);
+    }, PORTRAIT_DELAY_MS);
+  }
+
+  private storePortrait(key: string, url: string | null): void {
+    const current = this.deps.avatar.getState().portraits;
+    if (!url && !(key in current)) return;
+    const next = withPortrait(current, key, url);
+    this.deps.avatar.setState({ portraits: this.deps.portraits?.save(next) ?? next });
   }
 
   private clearPreviewTimers(): void {

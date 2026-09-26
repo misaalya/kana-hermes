@@ -239,7 +239,7 @@ function onAgentError(context: AgentEventContext, event: Extract<AgentEvent, { t
   tracking.turnStartedAt = null;
   clearInput(context);
   stores.agentSession.setState({ busy: false });
-  const sessionMissing = /session (?:not found|no longer exists)/i.test(event.message);
+  const sessionMissing = /no longer exists|session not found/i.test(event.message);
   const conversation = context.conversations.get(eventConversationId(context));
   if (sessionMissing && conversation?.agent?.durable === false) {
     // Hermes restarted before this session's first prompt, so it was never

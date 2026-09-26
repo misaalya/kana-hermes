@@ -247,6 +247,7 @@ Pengaturan suara tidak memiliki variabel lingkungan dan hanya dapat diubah melal
 | **Pengaturan → Koneksi** melaporkan kesalahan pada `config.json` | Perbaiki kunci yang disebutkan dalam pesan, lalu simpan file. |
 | Hermes tidak ditemukan | Jalankan `kana doctor`. Apabila masalah berlanjut, isi `hermes.executable` atau `KANA_HERMES_BIN`. |
 | Port 9119 sudah digunakan program lain | Ubah `hermes.port`, lalu mulai ulang Kana. |
+| Perubahan pada `~/.hermes/.env` atau server MCP Hermes belum berlaku | Ketik `/reload` (untuk `.env`) atau `/reload-mcp now` (untuk server MCP) di Kana. Untuk perubahan lain yang hanya dibaca Hermes saat dijalankan, ketik `/restart`; perintah ini hanya berlaku untuk Hermes yang dijalankan oleh Kana. Model baru di `config.yaml` Hermes langsung muncul tanpa memulai ulang. |
 | Suara untuk balasan panjang gagal karena batas waktu habis | Naikkan `tts.timeoutSeconds` serta batas waktu proxy, apabila ada. |
 | Pesan `Pollinations returned HTTP 401` | API key kosong atau tidak valid. Periksa `tts.pollinations.apiKey`. |
 | Pesan `Pollinations returned HTTP 402` | Saldo pollen tidak mencukupi. Isi ulang saldo di [enter.pollinations.ai](https://enter.pollinations.ai). |

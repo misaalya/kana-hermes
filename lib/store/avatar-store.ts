@@ -1,4 +1,5 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
+import type { AvatarPortraits } from "@/lib/avatar/portrait";
 import type { AvatarSnapshot } from "@/lib/avatar/types";
 
 export const EMPTY_AVATAR: AvatarSnapshot = {
@@ -17,6 +18,8 @@ export type AvatarState = {
    * speech; only the fields the UI shows replace the stored snapshot.
    */
   apply(snapshot: AvatarSnapshot): void;
+  /** Stage portraits for the Settings avatar cards, by model id or URL. */
+  portraits: AvatarPortraits;
 };
 
 export type AvatarStore = StoreApi<AvatarState>;
@@ -24,6 +27,7 @@ export type AvatarStore = StoreApi<AvatarState>;
 export function createAvatarStore(): AvatarStore {
   return createStore<AvatarState>()((set, get) => ({
     snapshot: EMPTY_AVATAR,
+    portraits: {},
     apply(snapshot) {
       const previous = get().snapshot;
       if (

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { AttachmentUploadError } from "@/lib/agent/attachments";
 import { readActiveConversationPointer } from "@/lib/conversation/active-conversation";
+import type { HermesRuntimeStatus } from "@/lib/runtime/hermes-control-client";
 import { getCopy } from "@/lib/ui/copy";
 import { createHarness, envelope, MemoryStorage, tick } from "./workspace-harness";
 
@@ -242,6 +243,55 @@ describe("HermesSessionManager", () => {
     assert.equal(harness.active().id, blank);
     assert.equal(harness.active().title, "Plans");
     assert.equal(harness.conversations.all().length, 1);
+  });
+
+  it("restarts the Hermes Kana runs for /restart and resumes this conversation", async () => {
+    const restarts: boolean[] = [];
+    const running = { managed: true, state: "running" } as HermesRuntimeStatus;
+    const harness = createHarness({
+      hermes: {
+        inspect: async () => running,
+        start: async (options) => {
+          restarts.push(options?.restart === true);
+          return running;
+        },
+      },
+    });
+    harness.conversations.initialize();
+    await harness.sessions.ensure(harness.active());
+    await harness.send("/restart");
+
+    const slash = getCopy(harness.preferences.current().uiLocale).slash;
+    assert.deepEqual(restarts, [true]);
+    assert.equal(harness.agent.reconnects, 1);
+    assert.deepEqual(harness.agent.commands, [], "never sent to Hermes, whose /restart is its messaging gateway");
+    assert.deepEqual(harness.active().messages.map((message) => message.text), ["/restart", slash.restarted]);
+    assert.equal(harness.stores.agentSession.getState().busy, false);
+  });
+
+  it("leaves a Hermes Kana did not start alone, and never restarts mid-turn", async () => {
+    const restarts: boolean[] = [];
+    const harness = createHarness({
+      hermes: {
+        inspect: async () => ({ managed: false, state: "running" }) as HermesRuntimeStatus,
+        start: async () => {
+          restarts.push(true);
+          return {} as HermesRuntimeStatus;
+        },
+      },
+    });
+    const slash = getCopy(harness.preferences.current().uiLocale).slash;
+    harness.conversations.initialize();
+    await harness.sessions.ensure(harness.active());
+    await harness.send("/restart");
+    assert.equal(harness.active().messages.at(-1)?.text, slash.restartNotManaged);
+
+    await harness.send("hello");
+    harness.agent.emit({ type: "agent.started" });
+    await harness.send("/restart");
+    assert.equal(harness.active().messages.at(-1)?.text, slash.restartBusy);
+    assert.deepEqual(restarts, []);
+    assert.equal(harness.agent.reconnects, 0);
   });
 
   it("returns a prefilled draft and releases the turn", async () => {

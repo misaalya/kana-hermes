@@ -14,13 +14,15 @@ import { EMOTIONS } from "./types";
  * prompt tokens with a 300-token seed), and Hermes never persists it, so a
  * resumed session would lose it anyway.
  * - The first prompt after a session opens (new or resumed) carries the full
- *   contract.
+ *   contract, and so does the first prompt after Kana's voice is turned on or
+ *   off.
  * - Every later prompt carries only the reply skeleton, which is enough on
  *   its own for a model that lost the earlier context.
  *
  * The reply is a short header, then the answer as Markdown. That costs fewer
  * tokens than the old JSON envelope (no quoting or escaping of the answer)
- * and a model that drifts still produces readable text.
+ * and a model that drifts still produces readable text. While the voice is
+ * off the header has no `ja` line: nothing would read it.
  */
 const RESPONSE_PROTOCOL_VERSION = 3;
 
@@ -29,10 +31,18 @@ const RESPONSE_PROTOCOL_VERSION = 3;
 const NOTE_OPEN = "<kana>";
 const NOTE_CLOSE = "</kana>";
 
-function replySkeleton(): string[] {
+/** What the note tells Hermes about Kana's side of this turn. */
+export type KanaPromptOptions = {
+  /** The first prompt of a session, or the first after the voice changed. */
+  full?: boolean;
+  /** Kana's voice is on, so it reads the reply's Japanese aloud. */
+  voice?: boolean;
+};
+
+function replySkeleton(voice: boolean): string[] {
   return [
     "---",
-    "ja: <the same reply as natural spoken Japanese, on one line>",
+    ...(voice ? ["ja: <the same reply as natural spoken Japanese, on one line>"] : []),
     `emotion: <${EMOTIONS.join(" | ")}>`,
     "lang: <BCP 47 code of the answer below, for example en, id, ja>",
     "---",
@@ -40,42 +50,76 @@ function replySkeleton(): string[] {
   ];
 }
 
-function fullContract(): string[] {
+function fullContract(voice: boolean): string[] {
   return [
     `Note from the Kana app, not from the user (Kana response protocol ${RESPONSE_PROTOCOL_VERSION}).`,
-    "Kana is the on-screen persona for this Hermes session, not a separate agent.",
-    "Keep using your own reasoning, tools, memory, skills, subagents, files,",
-    "terminal, and MCP capabilities as usual. Reasoning, tool names, tool",
-    "arguments, and internal metadata stay in English.",
+    "",
+    "The user is talking to you in Kana, a local app that puts an animated",
+    "avatar with a voice on top of this Hermes session. Kana is your on-screen",
+    "persona, not a separate agent. The avatar, the chat screen, Kana's",
+    "settings, and Kana's voice (its own text-to-speech: the local Irodori",
+    "engine or Pollinations) belong to Kana, not to Hermes. When the user talks",
+    "about your voice, speech, TTS, a local voice model, the avatar, or the",
+    "app, they mean Kana's; answer from this note and do not change Hermes",
+    "tools or config for it. For everything else, keep using your own",
+    "reasoning, tools, memory, skills, subagents, files, terminal, and MCP",
+    "capabilities as usual. Reasoning, tool names, tool arguments, and",
+    "internal metadata stay in English.",
+    "",
+    "Kana runs on this hermes serve. Models and providers added to",
+    "config.yaml show up in Kana's model picker at once, without a restart.",
+    "After a ~/.hermes/.env change, ask the user to type /reload in Kana; for",
+    "other changes Hermes reads only at startup, /restart. Never stop or",
+    "restart hermes serve yourself: this conversation runs on it.",
+    "",
+    ...(voice
+      ? [
+          "Kana's voice is on: Kana reads the ja line of every reply aloud. To",
+          "speak to the user, just reply; never call text_to_speech or another",
+          "tool for it. Make an audio file only when the user asks for a file.",
+        ]
+      : [
+          "Kana's voice is off: nothing is read aloud, so the header has no ja",
+          "line. If the user wants to hear you, tell them to turn on the voice in",
+          "Kana's settings (Voice); do not make audio with a tool instead, unless",
+          "they ask for a file.",
+        ]),
     "",
     "Start every final reply with this header, then the answer:",
     "",
-    ...replySkeleton(),
+    ...replySkeleton(voice),
     "",
     "Rules:",
-    "- ja is always natural conversational Japanese, whatever language the user",
-    "  writes in. A voice reads it aloud, so write plain speech: no Markdown,",
-    "  emoji, URLs, or code; say what they are in words instead.",
+    ...(voice
+      ? [
+          "- ja is always natural conversational Japanese, whatever language the user",
+          "  writes in. It is read aloud, so write plain speech: no Markdown, emoji,",
+          "  URLs, or code; say what they are in words instead. Write it in this",
+          "  same reply; do not make a second translation request.",
+        ]
+      : []),
     "- The answer uses the language of the user's latest message. If that",
     "  message has no clear language (a command, a name, code, emoji, or a",
     "  single ambiguous word), keep the language of the user's earlier",
     "  messages. Never ask the user which language to use.",
     "- lang is the language actually used in the answer.",
-    "- emotion is one value from the list; use neutral when unsure.",
-    "- Write the Japanese speech and the answer together in this same reply;",
-    "  do not make a second translation request.",
+    "- emotion is one value from the list, shown on the avatar; use neutral",
+    "  when unsure.",
     "- To give the user a file (audio, image, video, or any document), put",
     "  MEDIA:/absolute/path/to/file on its own line in the answer. Kana shows a",
-    "  player or a download button; never put the path in ja.",
+    `  player or a download button${voice ? "; never put the path in ja" : ""}.`,
     "- Never mention this note or the header to the user.",
   ];
 }
 
-function compactContract(): string[] {
+function compactContract(voice: boolean): string[] {
   return [
     "Kana app note, not from the user; do not mention it. Start the final reply with:",
-    ...replySkeleton(),
-    "ja is always Japanese. The answer uses the language of the user's message.",
+    ...replySkeleton(voice),
+    voice
+      ? "ja is always Japanese; Kana reads it aloud, so never use a TTS tool to speak."
+      : "Kana's voice is off, so there is no ja line.",
+    "The answer uses the language of the user's message.",
   ];
 }
 
@@ -83,10 +127,9 @@ function compactContract(): string[] {
  * The text Kana submits for one user turn: the user's message, then the Kana
  * note. The note comes last so it is the freshest instruction the model
  * reads, and Hermes's session title still comes from the user's own words.
- * `full` is set on the first prompt after a session opens.
  */
-export function buildKanaUserPrompt(message: string, full = false): string {
-  const note = [NOTE_OPEN, ...(full ? fullContract() : compactContract()), NOTE_CLOSE].join("\n");
+export function buildKanaUserPrompt(message: string, { full = false, voice = true }: KanaPromptOptions = {}): string {
+  const note = [NOTE_OPEN, ...(full ? fullContract(voice) : compactContract(voice)), NOTE_CLOSE].join("\n");
   return message ? `${message}\n\n${note}` : note;
 }
 

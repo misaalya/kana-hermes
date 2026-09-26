@@ -3,6 +3,8 @@ export type AuthStatus = {
   authenticated: boolean;
   /** False until the owner runs `kana password` on the server. */
   passwordConfigured: boolean;
+  /** The command that sets it on this install; present only until then. */
+  passwordCommand?: string;
   deploymentMode: "local" | "deployment";
   /** Present only for an authenticated session. */
   deploymentModeSource?: "environment" | "config" | "default";

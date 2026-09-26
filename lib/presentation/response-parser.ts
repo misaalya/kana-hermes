@@ -229,6 +229,18 @@ function isRule(line: string | undefined): boolean {
   return line?.trim() === "---";
 }
 
+/**
+ * A line that can open a header with no `---` before it: `ja:`, or, as a
+ * reply written while Kana's voice is off starts, `emotion:` with a real
+ * emotion. An ordinary answer that begins "Speech: ..." is left alone.
+ */
+function opensHeader(line: string): boolean {
+  const field = headerField(line);
+  if (field === "speech") return true;
+  if (field !== "emotion") return false;
+  return isEmotion(unquote(HEADER_LINE.exec(line)?.[2] ?? "").replace(/^<|>$/g, "").toLowerCase());
+}
+
 function unquote(value: string): string {
   const trimmed = value.trim();
   const quoted = /^(["'])([\s\S]*)\1$/.exec(trimmed);
@@ -237,7 +249,7 @@ function unquote(value: string): string {
 
 /**
  * The protocol 3 reply: a header of `ja`, `emotion` and `lang` lines between
- * `---` rules, then the answer as Markdown. Tolerates what models commonly
+ * `---` rules (no `ja` while Kana's voice is off), then the answer as Markdown. Tolerates what models commonly
  * do: wrap the whole reply in a code fence, drop the opening rule, quote a
  * value, or wrap `ja` onto a second line. Prose before the header is kept
  * as part of the answer.
@@ -252,7 +264,7 @@ function parseHeaderReply(rawResponse: string): KanaResponse | undefined {
   let wrapped = false;
   if (FENCE_LINE.test(lines[first])) {
     const next = lines.slice(first + 1).find((line) => line.trim());
-    if (isRule(next) || (next !== undefined && headerField(next) === "speech")) {
+    if (isRule(next) || (next !== undefined && opensHeader(next))) {
       lines = lines.slice(first + 1);
       wrapped = true;
     }
@@ -273,9 +285,9 @@ function parseHeaderReply(rawResponse: string): KanaResponse | undefined {
         break;
       }
     } else if (line.trim()) {
-      // Without an opening rule, only a reply that starts with `ja:` counts,
-      // so a "Speech:" line inside an ordinary answer is left alone.
-      if (index === lines.findIndex((candidate) => candidate.trim()) && headerField(line) === "speech") {
+      // Without an opening rule, only a reply that starts with the header
+      // counts, so a "Speech:" line inside an ordinary answer is left alone.
+      if (index === lines.findIndex((candidate) => candidate.trim()) && opensHeader(line)) {
         start = index;
         proseEnd = index;
         break;
@@ -299,7 +311,7 @@ function parseHeaderReply(rawResponse: string): KanaResponse | undefined {
       fields[field] = HEADER_LINE.exec(line)?.[2] ?? "";
     } else if (!line.trim()) {
       // A blank line ends a header that has no closing rule.
-      if (fields.speech !== undefined) {
+      if (fields.speech !== undefined || fields.emotion !== undefined) {
         bodyFrom = index + 1;
         break;
       }
@@ -312,7 +324,9 @@ function parseHeaderReply(rawResponse: string): KanaResponse | undefined {
       break;
     }
   }
-  if (fields.speech === undefined) return undefined;
+  // No `ja` is a reply written while Kana's voice was off; it still needs a
+  // header field of its own to count as a header.
+  if (fields.speech === undefined && fields.emotion === undefined) return undefined;
   if (bodyFrom === -1) bodyFrom = index;
 
   const prose = lines.slice(0, proseEnd).join("\n").trim();
@@ -326,7 +340,7 @@ function parseHeaderReply(rawResponse: string): KanaResponse | undefined {
     }
   }
   const body = [prose, bodyLines.join("\n").trim()].filter(Boolean).join("\n\n");
-  const speech = japaneseSpeech(unquote(fields.speech));
+  const speech = fields.speech === undefined ? "" : japaneseSpeech(unquote(fields.speech));
   const emotion = unquote(fields.emotion ?? "").replace(/^<|>$/g, "").toLowerCase();
   const language = unquote(fields.language ?? "").replace(/^<|>$/g, "").toLowerCase();
 

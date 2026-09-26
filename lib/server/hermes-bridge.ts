@@ -25,6 +25,8 @@ type BridgeState = {
   socket: WebSocket | null;
   connectPromise: Promise<WebSocket> | null;
   listeners: Set<(frame: unknown) => void>;
+  /** Told when the gateway connection drops (Hermes stopped or restarted). */
+  lostListeners: Set<() => void>;
   pending: Map<string, { resolve: (value: unknown) => void; reject: (reason: Error) => void; timer: ReturnType<typeof setTimeout> }>;
   requestId: number;
 };
@@ -38,9 +40,12 @@ function bridge(): BridgeState {
     socket: null,
     connectPromise: null,
     listeners: new Set(),
+    lostListeners: new Set(),
     pending: new Map(),
     requestId: 0,
   };
+  // A bridge created by an older build (dev hot reload) lacks newer fields.
+  shared[bridgeKey].lostListeners ??= new Set();
   return shared[bridgeKey];
 }
 
@@ -87,6 +92,17 @@ function resetSocket(state: BridgeState): void {
     pending.reject(error);
   }
   state.pending.clear();
+  for (const listener of [...state.lostListeners]) listener();
+}
+
+/**
+ * Called once when the gateway connection drops. Every Hermes session opened
+ * on it is gone, so event streams end and their browsers reconnect and resume.
+ */
+export function onHermesConnectionLost(listener: () => void): () => void {
+  const state = bridge();
+  state.lostListeners.add(listener);
+  return () => state.lostListeners.delete(listener);
 }
 
 export function subscribeHermesEvents(listener: (frame: unknown) => void): () => void {

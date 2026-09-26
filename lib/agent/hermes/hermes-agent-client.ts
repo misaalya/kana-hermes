@@ -52,9 +52,20 @@ type HermesRelayOptions = {
   requestTimeoutMs?: number;
   connectTimeoutMs?: number;
   reconnectDelaysMs?: readonly number[];
+  /**
+   * Whether Kana's voice is on, read when each prompt is sent: the Kana note
+   * asks for Japanese speech only while something will read it. Defaults to
+   * on.
+   */
+  voiceEnabled?: () => boolean;
 };
 
 const DEFAULT_RECONNECT_DELAYS_MS = [500, 1_000, 2_000, 5_000, 10_000] as const;
+
+/** Hermes's "session not found", or Kana's refusal to replace a missing session. */
+function isMissingSession(error: unknown): boolean {
+  return /no longer exists|session not found/i.test(error instanceof Error ? error.message : String(error));
+}
 
 /**
  * A session-scoped `/model` switch as Hermes reads it. Its parser splits on
@@ -179,10 +190,18 @@ export class HermesAgentClient implements AgentClient {
   // One-shot flag: the first prompt after a session opens (new or resumed)
   // carries the full response contract; later prompts carry the short one.
   private needsFullContract = false;
+  // The voice state the last full contract described; turning the voice on
+  // or off sends the full contract again.
+  private contractVoice: boolean | null = null;
   private intentionallyClosing = false;
   private running = false;
   private attachmentUpload: AbortController | null = null;
   private recoveringTurn = false;
+  // Whether Hermes has stored the open session: it was resumed, or took a
+  // prompt. One it never stored does not survive a Hermes restart.
+  private sessionStored = false;
+  // The reconnect in progress; a second request joins it instead of resuming twice.
+  private restoring: Promise<void> | null = null;
   private readonly queuedPrompts: Array<{ message: string }> = [];
 
   constructor(private readonly options: HermesRelayOptions = {}) {}
@@ -317,6 +336,7 @@ export class HermesAgentClient implements AgentClient {
     this.cancelReconnect();
     this.session = null;
     this.sessionOptions = null;
+    this.sessionStored = false;
     this.running = false;
     this.recoveringTurn = false;
     this.connectedOnce = false;
@@ -387,6 +407,7 @@ export class HermesAgentClient implements AgentClient {
       ...options,
       persistentSessionId,
     };
+    this.sessionStored = Boolean(options.persistentSessionId);
     this.emit({ type: "session.opened", ...this.session });
     if (options.persistentSessionId) {
       // session.resume already carries the full display transcript — no
@@ -825,6 +846,9 @@ export class HermesAgentClient implements AgentClient {
         persistentSessionId: response.stored_session_id,
         resumed: false,
       };
+      // A reconnect resumes the branch, which Hermes stored with its history.
+      this.sessionOptions = { ...this.sessionOptions, persistentSessionId: response.stored_session_id };
+      this.sessionStored = true;
       return {
         type: "session",
         action: "branch",
@@ -957,6 +981,46 @@ export class HermesAgentClient implements AgentClient {
       };
     }
 
+    // The reload commands act on the gateway process, as Hermes's own TUI runs
+    // them. slash.exec would run them in its separate command worker, which
+    // reports success while hermes serve keeps the old keys, servers, skills.
+    if (name === "reload") {
+      const response = await this.request<{ updated?: number }>("reload.env", {});
+      const updated = Number(response.updated ?? 0);
+      return {
+        type: "output",
+        output: `Reloaded ~/.hermes/.env into Hermes (${updated} ${updated === 1 ? "variable" : "variables"} updated).`,
+      };
+    }
+
+    if (name === "reload-mcp") {
+      const choice = arg.trim().toLowerCase();
+      const confirm = ["now", "approve", "once", "yes", "always"].includes(choice);
+      const response = await this.request<{ status?: string; message?: string }>(
+        "reload.mcp",
+        {
+          session_id: this.session.sessionId,
+          ...(confirm ? { confirm: true } : {}),
+          ...(choice === "always" ? { always: true } : {}),
+        },
+        180_000,
+      );
+      return {
+        type: "output",
+        output:
+          response.status === "confirm_required"
+            ? response.message || "Reply /reload-mcp now to reload Hermes's MCP servers."
+            : choice === "always"
+              ? "Reloaded Hermes's MCP servers. /reload-mcp will not ask again."
+              : "Reloaded Hermes's MCP servers.",
+      };
+    }
+
+    if (name === "reload-skills") {
+      const response = await this.request<{ output?: string }>("skills.reload", {});
+      return { type: "output", output: response.output || "Reloaded Hermes's skills." };
+    }
+
     let raw: HermesSlashExecResponse;
     try {
       raw = await this.request<HermesSlashExecResponse>("slash.exec", {
@@ -1050,7 +1114,9 @@ export class HermesAgentClient implements AgentClient {
     if (!this.session) {
       throw new Error("Open a Hermes session before sending a message.");
     }
-    const text = buildKanaUserPrompt(message, this.needsFullContract);
+    const voice = this.options.voiceEnabled?.() ?? true;
+    const full = this.needsFullContract || this.contractVoice !== voice;
+    const text = buildKanaUserPrompt(message, { full, voice });
     this.running = true;
     this.emit({ type: "agent.started" });
     try {
@@ -1064,6 +1130,8 @@ export class HermesAgentClient implements AgentClient {
       // Cleared only once Hermes took the prompt, so a failed submit retries
       // with the full contract.
       this.needsFullContract = false;
+      this.sessionStored = true;
+      if (full) this.contractVoice = voice;
     } catch (error) {
       this.running = false;
       throw error;
@@ -1357,17 +1425,50 @@ export class HermesAgentClient implements AgentClient {
     }, delay);
   }
 
-  private async reconnectAndRestore(): Promise<void> {
+  /**
+   * Reconnect and reopen the open session now instead of after the reconnect
+   * delay, for when Kana has just restarted hermes serve. Resolves once the
+   * attempt is over; `connectionState` says whether it worked.
+   */
+  async reconnectNow(): Promise<void> {
+    if (this.intentionallyClosing || !this.connectedOnce) return;
+    this.cancelReconnect();
+    if (this.state === "connected") {
+      // The relay stream may not have ended yet; its sessions are gone either way.
+      this.closeEventStream();
+      this.setConnection("reconnecting", "Hermes restarted.");
+    }
+    await this.reconnectAndRestore();
+  }
+
+  private reconnectAndRestore(): Promise<void> {
+    this.restoring ??= this.restore().finally(() => {
+      this.restoring = null;
+    });
+    return this.restoring;
+  }
+
+  private async restore(): Promise<void> {
     const resume = this.sessionOptions
       ? { ...this.sessionOptions }
       : this.session
         ? { persistentSessionId: this.session.persistentSessionId }
         : null;
+    const stored = this.sessionStored;
 
     try {
       await this.connect();
       if (resume?.persistentSessionId && this.state === "connected") {
-        await this.openSession(resume);
+        try {
+          await this.openSession(resume);
+        } catch (error) {
+          if (stored || !isMissingSession(error)) throw error;
+          // Hermes restarted before this session's first prompt, so it never
+          // stored it and nothing was lost. Stay connected; the next prompt
+          // opens a new session.
+          this.session = null;
+          this.sessionOptions = null;
+        }
       }
     } catch (error) {
       if (
@@ -1378,7 +1479,7 @@ export class HermesAgentClient implements AgentClient {
         return;
       }
       const message = error instanceof Error ? error.message : String(error);
-      if (/session (?:not found|no longer exists)/i.test(message)) {
+      if (isMissingSession(error)) {
         this.setConnection("error", message);
         this.emit({ type: "agent.error", message });
         return;

@@ -235,6 +235,12 @@ export type Copy = {
     approveDescription: string;
     denyDescription: string;
     commandsDescription: string;
+    restartDescription: string;
+    restarted: string;
+    restartReconnecting: string;
+    restartBusy: string;
+    restartNotManaged: string;
+    restartFailed(message: string): string;
   };
   agentInput: {
     approvalTitle: string;
@@ -269,8 +275,10 @@ export type Copy = {
     unreachable: string;
     setupTitle: string;
     setupBody: string;
-    setupSource: string;
     setupRefresh: string;
+    setupChecking: string;
+    copy: string;
+    copied: string;
     themeToggle(nextTheme: "dark" | "light"): string;
     themeLabel(nextTheme: "dark" | "light"): string;
   };
@@ -290,19 +298,12 @@ export type Copy = {
     voiceToggle: string;
     stageTitle: string;
     backgroundOptions: Record<string, { label: string }>;
-    carouselControls: string;
-    previousBackgrounds: string;
-    nextBackgrounds: string;
     stageAria: string;
-    choose: string;
-    selected: string;
     removeLabel(label: string): string;
-    customBackgroundTitle: string;
     adding: string;
     uploadImage: string;
     avatarLibrary: string;
-    includedAvatars: string;
-    yourAvatars: string;
+    avatarOptions(name: string): string;
     rename: string;
     remove: string;
     preparingAvatar: string;
@@ -691,6 +692,12 @@ const id: Copy = {
     approveDescription: "Setujui permintaan Hermes yang tertunda",
     denyDescription: "Tolak permintaan Hermes yang tertunda",
     commandsDescription: "Tampilkan perintah dan keahlian yang terpasang",
+    restartDescription: "Mulai ulang Hermes (hermes serve), lalu sambung lagi ke percakapan ini",
+    restarted: "Hermes sudah dimulai ulang. Kana tersambung lagi ke percakapan ini.",
+    restartReconnecting: "Hermes sudah dimulai ulang. Kana sedang menyambung lagi…",
+    restartBusy: "Tunggu Kana selesai menjawab, lalu ketik /restart lagi.",
+    restartNotManaged: "Hermes ini tidak dijalankan oleh Kana, jadi Kana tidak bisa memulai ulangnya. Mulai ulang dari tempat Hermes dijalankan, misalnya terminal.",
+    restartFailed: (message) => `Hermes tidak dapat dimulai ulang: ${message}`,
   },
   agentInput: {
     approvalTitle: "Hermes memerlukan persetujuan",
@@ -724,9 +731,11 @@ const id: Copy = {
     failed: "Gagal masuk.",
     unreachable: "Server login tidak dapat dihubungi.",
     setupTitle: "Buat kata sandi dulu",
-    setupBody: "Kana belum punya kata sandi. Demi keamanan, kata sandi pertama hanya bisa dibuat dari terminal di mesin yang menjalankan Kana:",
-    setupSource: "Dari source checkout, jalankan `npm run password`. Setelah itu muat ulang halaman ini.",
+    setupBody: "Jalankan perintah ini di terminal komputer yang menjalankan Kana.",
     setupRefresh: "Periksa lagi",
+    setupChecking: "Memeriksa…",
+    copy: "Salin",
+    copied: "Tersalin",
     themeToggle: (next) => `Ganti ke tema ${next === "dark" ? "gelap" : "terang"}`,
     themeLabel: (next) => (next === "dark" ? "Gelap" : "Terang"),
   },
@@ -761,23 +770,16 @@ const id: Copy = {
       "pattern-seigaiha": { label: "Seigaiha" },
       "pattern-ribbon": { label: "Pita" },
     },
-    carouselControls: "Kontrol carousel latar",
-    previousBackgrounds: "Latar sebelumnya",
-    nextBackgrounds: "Latar berikutnya",
     stageAria: "Latar panggung",
-    choose: "Pilih",
-    selected: "Dipilih",
     removeLabel: (label) => `Hapus ${label}`,
-    customBackgroundTitle: "Gunakan latarmu sendiri",
     adding: "Menambahkan…",
     uploadImage: "Unggah gambar",
     avatarLibrary: "Koleksi avatar",
-    includedAvatars: "Avatar bawaan",
-    yourAvatars: "Avatarmu",
+    avatarOptions: (name) => `Opsi untuk ${name}`,
     rename: "Ganti nama",
     remove: "Hapus",
     preparingAvatar: "Menyiapkan avatar…",
-    importLive2d: "Impor folder Live2D",
+    importLive2d: "Impor Live2D",
     avatarBehaviorTitle: "Ekspresi avatar",
     avatarBehaviorReady: (mapped, total) => `${mapped} dari ${total} emosi terhubung`,
     avatarBehaviorLoading: "Membaca kemampuan avatar…",
@@ -948,6 +950,7 @@ const id: Copy = {
     newReady: "Percakapan baru siap",
     opening: "Membuka percakapan",
     commandComplete: "Perintah selesai",
+    restarting: "Memulai ulang Hermes…",
     continuing: "Hermes sedang melanjutkan",
     draftReady: "Perintah menyiapkan draf",
     stillWorking: "Hermes masih bekerja",
@@ -1201,6 +1204,12 @@ const en: Copy = {
     approveDescription: "Approve a pending Hermes request",
     denyDescription: "Deny a pending Hermes request",
     commandsDescription: "Show commands and installed skills",
+    restartDescription: "Restart Hermes (hermes serve) and reconnect to this conversation",
+    restarted: "Hermes restarted. Kana is back on this conversation.",
+    restartReconnecting: "Hermes restarted. Kana is reconnecting…",
+    restartBusy: "Wait for Kana to finish answering, then type /restart again.",
+    restartNotManaged: "This Hermes was not started by Kana, so Kana cannot restart it. Restart it where it runs, for example in a terminal.",
+    restartFailed: (message) => `Hermes could not restart: ${message}`,
   },
   agentInput: {
     approvalTitle: "Hermes needs approval",
@@ -1234,9 +1243,11 @@ const en: Copy = {
     failed: "Login failed.",
     unreachable: "Could not reach the login server.",
     setupTitle: "Set a password first",
-    setupBody: "Kana has no password yet. For safety, the first password can only be created from a terminal on the machine running Kana:",
-    setupSource: "From a source checkout, run `npm run password`. Then reload this page.",
+    setupBody: "Run this in a terminal on the computer running Kana.",
     setupRefresh: "Check again",
+    setupChecking: "Checking…",
+    copy: "Copy",
+    copied: "Copied",
     themeToggle: (next) => `Switch to ${next} theme`,
     themeLabel: (next) => (next === "dark" ? "Dark" : "Light"),
   },
@@ -1271,23 +1282,16 @@ const en: Copy = {
       "pattern-seigaiha": { label: "Seigaiha" },
       "pattern-ribbon": { label: "Ribbon" },
     },
-    carouselControls: "Background carousel controls",
-    previousBackgrounds: "Previous backgrounds",
-    nextBackgrounds: "Next backgrounds",
     stageAria: "Stage background",
-    choose: "Choose",
-    selected: "Selected",
     removeLabel: (label) => `Remove ${label}`,
-    customBackgroundTitle: "Use your own background",
     adding: "Adding…",
     uploadImage: "Upload image",
     avatarLibrary: "Avatar library",
-    includedAvatars: "Included avatars",
-    yourAvatars: "Your avatars",
+    avatarOptions: (name) => `Options for ${name}`,
     rename: "Rename",
     remove: "Remove",
     preparingAvatar: "Preparing avatar…",
-    importLive2d: "Import Live2D folder",
+    importLive2d: "Import Live2D",
     avatarBehaviorTitle: "Avatar expressions",
     avatarBehaviorReady: (mapped, total) => `${mapped} of ${total} emotions connected`,
     avatarBehaviorLoading: "Reading avatar capabilities…",
@@ -1458,6 +1462,7 @@ const en: Copy = {
     newReady: "New conversation ready",
     opening: "Opening the conversation",
     commandComplete: "Command complete",
+    restarting: "Restarting Hermes…",
     continuing: "Hermes is continuing",
     draftReady: "Command prepared a draft",
     stillWorking: "Hermes is still working",

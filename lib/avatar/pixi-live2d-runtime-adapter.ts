@@ -9,8 +9,9 @@ import type {
   Live2DRuntimeAdapter,
 } from "./live2d-avatar-provider";
 import { normalizeCubismCoreUrl, normalizeLive2DModelUrl } from "./defaults";
+import { drawPortrait, portraitCrop } from "./portrait";
 import { assertSupportedMoc3 } from "./live2d/moc3-version";
-import { fitLive2DModel, type Live2DModelBounds } from "./live2d/fit-model";
+import { classifyLive2DFraming, fitLive2DModel, type Live2DModelBounds } from "./live2d/fit-model";
 import {
   normalizeLive2DModelLayout,
   type Live2DModelLayout,
@@ -702,6 +703,7 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
         };
     let activeLayout = normalizeLive2DModelLayout(layout);
     let appliedMaskSize = -1;
+    let fittedScale = 1;
 
     const applyFit = () => {
       const bounds = host.getBoundingClientRect();
@@ -717,6 +719,7 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
         },
       );
       model.scale.set(fit.scale, fit.scale);
+      fittedScale = fit.scale;
       model.x = fit.x;
       model.y = fit.y;
       // Raising the clipping-mask buffer keeps masked edges crisp. The
@@ -853,8 +856,10 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
     // The old model is destroyed after the new one has rendered once.
     flushRetiredModels(runtime);
 
+    let destroyed = false;
     return {
       destroy() {
+        destroyed = true;
         host.removeEventListener("pointermove", handlePointerMove);
         host.removeEventListener("pointerleave", handlePointerLeave);
         runtime.app.ticker.remove(updateModel);
@@ -894,6 +899,26 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
       setLayout(nextLayout) {
         activeLayout = normalizeLive2DModelLayout(nextLayout);
         applyFit();
+      },
+      capturePortrait(size) {
+        // Not `runtime.currentModel`: a superseded load that settles later
+        // clears it while this model is still the one on stage.
+        if (destroyed) return null;
+        const crop = portraitCrop(classifyLive2DFraming(geometry).head, {
+          x: model.x,
+          y: model.y,
+          scale: fittedScale,
+          resolution: runtime.resolution,
+        });
+        if (!crop) return null;
+        try {
+          // The canvas keeps no drawing buffer between frames, so render one
+          // now and read it in the same task.
+          runtime.app.render();
+          return drawPortrait(canvas, crop, size);
+        } catch {
+          return null;
+        }
       },
     };
   }

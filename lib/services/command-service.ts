@@ -17,6 +17,7 @@ export function kanaCommandSuggestions(locale: KanaPreferences["uiLocale"]): Age
     { text: "/approve", display: "/approve", description: copy.approveDescription, group: copy.hermesControlsGroup, kind: "command" },
     { text: "/deny", display: "/deny", description: copy.denyDescription, group: copy.hermesControlsGroup, kind: "command" },
     { text: "/commands", display: "/commands", description: copy.commandsDescription, group: copy.hermesControlsGroup, kind: "command" },
+    { text: "/restart", display: "/restart", description: copy.restartDescription, group: copy.hermesControlsGroup, kind: "command" },
   ];
 }
 

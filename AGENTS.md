@@ -166,10 +166,19 @@ RPC  POST /api/hermes/rpc    ->  allow-listed JSON-RPC forward
 
 - The browser authenticates with its Kana session cookie; the Hermes session
   token stays inside the server process (`lib/server/hermes-bridge.ts`).
+- Each SSE stream ends when the shared gateway socket closes
+  (`onHermesConnectionLost`), so every tab reconnects and resumes after a
+  Hermes restart instead of keeping a stream that no longer delivers events.
+  Hermes stores a session only once it accepts a prompt; a session it never
+  stored cannot be resumed after a restart, and the client opens a new one
+  on the next message rather than reporting it lost.
 - Transcript authority is Hermes: restoring a conversation parses the
   `messages` returned by `session.resume` (emitted to the UI as the
   `history.restored` agent event). `session.history` accepts only the RUNTIME
   session id, never the durable key, and is a fallback only.
+  Restored rows get synthetic timestamps and the chat is time-ordered, so
+  `mergeRestoredMessages` re-times Kana's own rows (command notes such as
+  `/restart`) to stay after the restored row they followed.
 - Per-turn tool activity logs live in SQLite (`activities.db`) keyed by the
   durable Hermes session plus a zero-based assistant-reply ordinal
   (`turn_index`, schema v2). They are reconstructed from restored history and
@@ -181,7 +190,14 @@ RPC  POST /api/hermes/rpc    ->  allow-listed JSON-RPC forward
 - Login is password-based with a deny-by-default proxy. There is NO default
   password: logins are refused until the owner sets one on the server with
   `kana password` (the first `kana`/`kana serve` start prompts for it). Never
-  add a web flow that sets the first password. The scrypt hash lives in the
+  add a web flow that sets the first password. Until one exists the login
+  page shows the one command for this install in the /docs code block
+  (`components/kana/code-block.tsx`) and switches to the form by itself. The
+  launcher passes it as `KANA_PASSWORD_COMMAND` (`kana password` for the npm
+  package, `node bin/kana.mjs password` for a standalone deployment); a
+  server started without the launcher is a checkout, `npm run password`.
+  `/api/auth/status` names it only while no password exists, and only one of
+  those three (`lib/server/auth/password-command.ts`). The scrypt hash lives in the
   `auth.password` row of `appstate.db` (format shared with the launcher via
   `shared/app-state-db.mjs`); legacy bcrypt/`auth.json` hashes still verify and
   are upgraded. Every process-control route requires a session.
@@ -278,6 +294,26 @@ Kana should feel like another first-class Hermes client:
   their dedicated session RPCs.
 - `/save`, `/status`, `/compress`, `/steer`, and `/handoff` use dedicated
   Hermes RPCs rather than parsing terminal text.
+- `/reload`, `/reload-mcp`, and `/reload-skills` use `reload.env`,
+  `reload.mcp`, and `skills.reload`, as the Hermes TUI does. Through
+  `slash.exec` they would run in Hermes's slash worker, a separate process,
+  and never reach the `hermes serve` Kana talks to. `/reload-mcp` asks first
+  (`confirm_required`); `/reload-mcp now` or `always` confirms. Every method
+  the browser calls must be on the relay allow-list
+  (`app/api/hermes/rpc/route.ts`), or it fails as "Unsupported Hermes method."
+- `/restart` is Kana's own command. Hermes's `/restart` is `gateway_only`: it
+  restarts the messaging gateway, not `hermes serve`. Kana's restarts the
+  `hermes serve` Kana started, on the same port with a new token
+  (`restartLocalHermesRuntime`, `POST /api/local-runtime/hermes`
+  `{"action":"restart"}`), then resumes the open conversation. It leaves a
+  Hermes Kana adopted or did not start alone, and waits for a reply to
+  finish. Discovery is off while a restart runs, so Kana never adopts
+  another Hermes on the briefly free port.
+- What each Hermes change needs (verified with Hermes 0.20.1): models and
+  providers added to `config.yaml` appear in `model.options` at once, because
+  Hermes rereads the file when its mtime changes (an open session keeps its
+  model until switched); `~/.hermes/.env` is read at startup, so `/reload`;
+  anything else Hermes reads only at startup, `/restart`.
 - `/new`, `/sessions`, and `/resume` are surface-aware Kana conversation
   actions. Each Kana conversation retains its linked durable Hermes session.
 - Hermes writes a session's row when `prompt.submit` accepts the first
@@ -321,6 +357,10 @@ lang: <BCP 47 code of the answer below>
 <the answer shown on screen; Markdown allowed>
 ```
 
+While Kana's voice is off (the `voiceEnabled` preference) the header has no
+`ja` line: nothing would read it, so the model does not spend tokens on it.
+The parser reads such a reply as `speech_ja: ""`.
+
 `parseKanaResponse` turns it into:
 
 ```ts
@@ -337,8 +377,9 @@ type KanaResponse = {
 The header costs fewer tokens than the protocol 1/2 JSON envelope because
 the answer is not quoted or escaped. The parser still reads JSON envelopes
 (restored history, models with the old habit) and tolerates a fenced reply,
-a missing opening rule, quoted values, a wrapped `ja` line, and unknown
-emotions (neutral).
+a missing opening rule (only when the reply starts with `ja:`, or with
+`emotion:` and a real emotion), quoted values, a wrapped `ja` line, and
+unknown emotions (neutral).
 
 Delivery (verified with `hermes serve` and 9router, 2026-09-26):
 
@@ -347,6 +388,22 @@ Delivery (verified with `hermes serve` and 9router, 2026-09-26):
   session opens, new or resumed, carries the full contract; later prompts
   carry a short skeleton that is enough on its own. A failed submit keeps the
   full contract for the retry.
+- The full contract tells Hermes what Kana is: an app with an avatar and its
+  own voice on top of the session. The avatar, the chat screen, Kana's
+  settings, and Kana's text-to-speech (Irodori or Pollinations) belong to
+  Kana, so a question about "your voice" or "the local TTS model" is about
+  Kana, not a Hermes tool or setting. Without this, Hermes answered "speak
+  cutely" by calling its own `text_to_speech` tool.
+- The note follows the voice (`HermesRelayOptions.voiceEnabled`, read on
+  every submit). Voice on: Kana reads `ja` aloud, so Hermes must never call a
+  TTS tool to speak, and makes an audio file only when asked for a file.
+  Voice off: no `ja` line; a user who wants to hear Kana is pointed to
+  Settings → Voice. Turning the voice on or off sends the full contract on
+  the next prompt.
+- The full contract also says how Hermes's config changes reach Kana
+  (`config.yaml` models at once, `.env` after `/reload`, the rest after
+  `/restart`) and that Hermes must never stop or restart `hermes serve`
+  itself: the conversation runs on it.
 - Do not send the contract as a system-role seed on `session.create`. Hermes
   sends a seed as a second system message, which some routes drop before the
   model sees it (9router + `cx/gpt-5.6-luna` counted 99 prompt tokens with a
@@ -408,6 +465,13 @@ product direction, not a temporary theme.
     hop up on hover;
   - choices are rounded cards (`kana-choice`); the selection is a blue ring
     plus a round check badge (`kana-check`) on the corner;
+  - Settings → Avatar is Clara's wardrobe (`kana-wardrobe`,
+    `settings-avatar-cards.tsx`): cards wrap in a grid, never a carousel or
+    rows of buttons. An avatar card is its stage portrait on a soft blue disc
+    over its name; an imported one keeps its size, Rename and Remove in a ⋯
+    menu on its top-left corner. Background cards are a 16:10 preview over
+    the name. Each grid ends with a dashed card with a blue "+" disc that adds
+    one (import Live2D, upload an image);
   - segmented controls are a pill track with a sliding blue thumb;
   - in-content section labels are small rounded bubbles
     (`kana-label-bubble`), but the Settings sidebar group labels ("Personal",
@@ -644,6 +708,15 @@ product direction, not a temporary theme.
   sizes, selectable/renameable/deletable, and have emotion/motion/talking
   preview controls. Cubism Core executable URLs are restricted to Live2D's
   official SDK distribution path.
+- Avatar cards show a portrait taken from the stage: 1.2 s after a model
+  loads, `AvatarService` renders a frame and cuts the head and shoulders out
+  of the canvas (`lib/avatar/portrait.ts`, head box from
+  `classifyLive2DFraming`) into a 192 px WebP. Portraits stay in this browser
+  (localStorage `kana.avatar.portraits.v1`, the 16 newest, keyed by imported
+  model id or sample URL) and are never shipped or uploaded, so a sample shows
+  the placeholder figure until it has been on stage once. Deleting an
+  imported model deletes its portrait. A model replaced before it settles
+  gets no portrait that time.
 - Hosted model URLs can also be saved/renamed/selected/deleted in the model
   library. Per-model bindings have a separate versioned export/import format
   that never copies `.moc3`, textures, or other licensed avatar assets.
@@ -752,6 +825,7 @@ app/api/kana/sessions                     session.list filtered to source "kana"
 app/api/kana/activities                   Activity turn store GET/PUT
 app/api/media/[token]/[name]             Delivered file download/stream
 lib/server/auth/*                         Password store, JWT session, login limiter
+lib/server/auth/password-command.ts       The one password command this install shows
 proxy.ts                                  Deny-by-default auth proxy (Next 16)
 lib/presentation/persona.ts               Persona and response instructions
 lib/presentation/response-parser.ts       Structured response validation
@@ -763,6 +837,7 @@ lib/avatar/defaults.ts                     Official Haru/Mao URLs and bindings
 lib/avatar/live2d-avatar-provider.ts       Live2D integration boundary
 lib/avatar/managed-avatar-provider.ts      Stable runtime/fallback delegation
 lib/avatar/pixi-live2d-runtime-adapter.ts  Pixi/Cubism canvas implementation
+lib/avatar/portrait.ts                     Stage portrait crop, capture, and local archive
 lib/avatar/indexed-db-avatar-model-store.ts Imported model persistence
 lib/avatar/model-bindings.ts               Per-source binding resolution
 lib/avatar/binding-backup.ts               Asset-free binding import/export
@@ -774,6 +849,8 @@ lib/server/tts-provider/                   Server synthesis provider boundary,
                                           local Irodori and Pollinations adapters
 components/kana/voice-engine-panel.tsx     Download size/progress/remove UI
 components/kana/config-guide.tsx           /docs config guide (content: content/docs/*.md)
+components/kana/code-block.tsx             /docs code block and Copy button (also the login screen)
+components/kana/settings-avatar-cards.tsx  Wardrobe grid, avatar card with ⋯ menu, dashed add card
 components/kana/material-symbol.tsx        Material Symbols subset font (app/fonts) for /docs
 lib/voice/audio-lip-sync.ts                Web Audio lip-sync mechanism
 lib/preferences/local-preferences-store.ts Local settings persistence

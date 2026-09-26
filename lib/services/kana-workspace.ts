@@ -3,6 +3,7 @@ import { HermesAgentClient } from "@/lib/agent/hermes/hermes-agent-client";
 import { AvatarController } from "@/lib/avatar/avatar-controller";
 import { IndexedDbAvatarModelStore } from "@/lib/avatar/indexed-db-avatar-model-store";
 import { ManagedAvatarProvider } from "@/lib/avatar/managed-avatar-provider";
+import { AvatarPortraitArchive } from "@/lib/avatar/portrait";
 import { IndexedDbStageBackgroundStore } from "@/lib/background/indexed-db-stage-background-store";
 import { classifyKanaError } from "@/lib/diagnostics/safe-diagnostics";
 import { LocalPreferencesStore } from "@/lib/preferences/local-preferences-store";
@@ -55,7 +56,7 @@ function createActions(parts: {
     savePreferences({ preferences, agentSession: stores.agentSession, voice, avatar }, next);
   return {
     send: (text: string, attachments?: AgentAttachment[]) =>
-      sendMessage({ stores, conversations, sessions, preferences, models }, text, attachments),
+      sendMessage({ stores, conversations, sessions, preferences, models, hermes: hermesControl }, text, attachments),
     savePreferences: save,
     async completeOnboarding(next: KanaPreferences) {
       // Server flag first: it is the source other browsers read.
@@ -96,7 +97,12 @@ function createActions(parts: {
     loadStageBackground: (id: string) => stageBackgrounds.load(id),
     deleteStageBackground: (id: string) => stageBackgrounds.delete(id),
     inspectHermesControl: (preferredPort?: number) => hermesControl.inspect(preferredPort),
-    startHermesControl: (options: { port?: number; restart?: boolean } = {}) => hermesControl.start(options),
+    async startHermesControl(options: { port?: number; restart?: boolean } = {}) {
+      const status = await hermesControl.start(options);
+      // Like /restart: back on the open conversation now, not after the reconnect delay.
+      if (options.restart) await sessions.reconnect();
+      return status;
+    },
     stopHermesControl: () => hermesControl.stop(),
     connectHermes: () => setup.connectHermes(),
     dismissConnectionGate: () => setup.dismissGate(),
@@ -147,6 +153,7 @@ export function createKanaWorkspace(): KanaWorkspace {
     provider: avatarProvider,
     controller: avatarController,
     models: new IndexedDbAvatarModelStore(),
+    portraits: new AvatarPortraitArchive(),
   });
   const conversations = new ConversationService({ stores, fetch: (...args) => fetch(...args) });
   const sessions = new HermesSessionManager({
@@ -155,7 +162,7 @@ export function createKanaWorkspace(): KanaWorkspace {
     voice,
     avatar: avatarController,
     preferences,
-    createAgent: () => new HermesAgentClient(),
+    createAgent: () => new HermesAgentClient({ voiceEnabled: () => preferences.current().voiceEnabled }),
   });
   const models = new ModelCatalogService({
     store: stores.models,

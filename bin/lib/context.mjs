@@ -23,6 +23,17 @@ export const runtimeRoot = isPublishedPackage
     ? packageRoot
     : path.join(packageRoot, ".next", "standalone");
 
+/**
+ * The command that sets the access password on this kind of install; the
+ * login page shows it until a password exists. docs/SECURITY.md lists the
+ * same three.
+ */
+export const passwordCommand = isPublishedPackage
+  ? "kana password"
+  : runtimeRoot === packageRoot
+    ? "node bin/kana.mjs password"
+    : "npm run password";
+
 export const userHome = process.env.HOME?.trim() || homedir();
 
 export const defaultConfig = JSON.parse(

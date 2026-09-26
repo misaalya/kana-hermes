@@ -152,10 +152,11 @@ async function tick(): Promise<void> {
 
 let activeClients: HermesAgentClient[] = [];
 
-async function connectedClient(handler: RpcHandler): Promise<HermesAgentClient> {
+async function connectedClient(handler: RpcHandler, voiceEnabled?: () => boolean): Promise<HermesAgentClient> {
   FakeRelay.handler = handler;
   const client = new HermesAgentClient({
     requestTimeoutMs: 500,
+    voiceEnabled,
   });
   activeClients.push(client);
   await client.connect();
@@ -342,6 +343,40 @@ describe("HermesAgentClient (relay transport)", () => {
     assert.ok(sent[0].startsWith("Halo\n\n<kana>\n") && /response protocol 3/.test(sent[0]));
     assert.ok(sent[1].startsWith("Lagi\n\n<kana>\n") && !/response protocol 3/.test(sent[1]));
     assert.match(sent[3], /response protocol 3/, "a resumed session and a failed submit both get the full contract");
+  });
+
+  it("asks for Japanese only while the voice is on, and resends the full contract when it changes", async () => {
+    let voice = true;
+    const client = await connectedClient((request) => {
+      if (request.method === "session.create") return { session_id: "runtime-1", stored_session_id: "stored-1" };
+      if (request.method === "prompt.submit") return { accepted: true };
+      return {};
+    }, () => voice);
+    const complete = async () => {
+      latestStream().emitEvent("message.complete", { status: "complete", text: responseText() });
+      await tick();
+    };
+    await openSession(client);
+    for (const [text, on] of [["Satu", true], ["Dua", true], ["Tiga", false], ["Empat", false], ["Lima", true]] as const) {
+      voice = on;
+      await client.sendMessage({ text });
+      await complete();
+    }
+
+    const sent = FakeRelay.requests
+      .filter((request) => request.method === "prompt.submit")
+      .map((request) => String(request.params.text));
+    assert.deepEqual(
+      sent.map((prompt) => [/response protocol 3/.test(prompt), /\nja: /.test(prompt)]),
+      [
+        [true, true],
+        [false, true],
+        [true, false],
+        [false, false],
+        [true, true],
+      ],
+    );
+    assert.match(sent[2], /Kana's voice is off/);
   });
 
   it("uses the live catalog and marks surface-only commands honestly", async () => {
@@ -825,6 +860,102 @@ describe("HermesAgentClient (relay transport)", () => {
       }),
       /will not silently replace the missing history/i,
     );
+  });
+
+  it("runs the reload commands on the gateway itself, never in the slash worker", async () => {
+    let mcpConfirmed = false;
+    const client = await connectedClient((request) => {
+      if (request.method === "session.create") return { session_id: "runtime-1", stored_session_id: "stored-1" };
+      if (request.method === "reload.env") return { updated: 2 };
+      if (request.method === "reload.mcp") {
+        if (!request.params.confirm) return { status: "confirm_required", message: "Reply `/reload-mcp now` to proceed." };
+        mcpConfirmed = true;
+        return { status: "reloaded" };
+      }
+      if (request.method === "skills.reload") return { output: "Reloading skills...\n3 skill(s) available" };
+      throw new Error(`unexpected RPC ${request.method}`);
+    });
+    await openSession(client);
+
+    const env = await client.executeCommand({ command: "/reload" });
+    assert.equal(env.type === "output" && env.output, "Reloaded ~/.hermes/.env into Hermes (2 variables updated).");
+
+    const ask = await client.executeCommand({ command: "/reload-mcp" });
+    assert.match(ask.type === "output" ? ask.output : "", /reload-mcp now/);
+    assert.equal(mcpConfirmed, false);
+    const mcp = await client.executeCommand({ command: "/reload_mcp now" });
+    assert.equal(mcp.type === "output" && mcp.output, "Reloaded Hermes's MCP servers.");
+    assert.deepEqual(FakeRelay.requests.filter((r) => r.method === "reload.mcp").at(-1)?.params, {
+      session_id: "runtime-1",
+      confirm: true,
+    });
+
+    const skills = await client.executeCommand({ command: "/reload-skills" });
+    assert.match(skills.type === "output" ? skills.output : "", /3 skill\(s\) available/);
+    assert.equal(FakeRelay.requests.filter((request) => request.method === "slash.exec").length, 0);
+  });
+
+  it("reconnects and resumes at once after Kana restarts Hermes, once even when asked twice", async () => {
+    let resumes = 0;
+    const client = await connectedClient((request) => {
+      if (request.method === "session.create") return { session_id: "runtime-1", stored_session_id: "stored-1" };
+      if (request.method === "prompt.submit") return { accepted: true };
+      if (request.method === "session.resume") {
+        resumes += 1;
+        return { session_id: "runtime-2", session_key: "stored-1", running: false, messages: [] };
+      }
+      return {};
+    });
+    await openSession(client);
+    await client.sendMessage({ text: "Hello" });
+    latestStream().emitEvent("message.complete", { text: responseText() });
+
+    await Promise.all([client.reconnectNow(), client.reconnectNow()]);
+    assert.equal(client.connectionState, "connected");
+    assert.equal(resumes, 1);
+    assert.equal(FakeEventSource.instances.length, 2);
+    assert.equal(FakeEventSource.instances[0]?.closed, true);
+    assert.deepEqual(FakeRelay.requests.find((r) => r.method === "session.resume")?.params, {
+      session_id: "stored-1",
+      source: "kana",
+      close_on_disconnect: false,
+    });
+  });
+
+  it("stays connected when Hermes restarted before the session's first prompt", async () => {
+    const events: AgentEvent[] = [];
+    const client = await connectedClient((request) => {
+      if (request.method === "session.create") return { session_id: "runtime-1", stored_session_id: "stored-1" };
+      if (request.method === "session.resume") throw new Error("session not found");
+      return {};
+    });
+    await openSession(client);
+    client.subscribe((event) => events.push(event));
+
+    await client.reconnectNow();
+    assert.equal(client.connectionState, "connected");
+    assert.equal(events.some((event) => event.type === "agent.error"), false);
+    // The next prompt needs a new session; the unstored one is not reused.
+    await assert.rejects(client.sendMessage({ text: "Hi" }), /Open a Hermes session/);
+  });
+
+  it("reports a stored session Hermes lost across a restart instead of retrying forever", async () => {
+    const events: AgentEvent[] = [];
+    const client = await connectedClient((request) => {
+      if (request.method === "session.create") return { session_id: "runtime-1", stored_session_id: "stored-1" };
+      if (request.method === "prompt.submit") return { accepted: true };
+      if (request.method === "session.resume") throw new Error("session not found");
+      return {};
+    });
+    await openSession(client);
+    await client.sendMessage({ text: "Hello" });
+    latestStream().emitEvent("message.complete", { text: responseText() });
+    client.subscribe((event) => events.push(event));
+
+    await client.reconnectNow();
+    assert.equal(client.connectionState, "error");
+    const error = events.find((event) => event.type === "agent.error");
+    assert.match(error?.type === "agent.error" ? error.message : "", /no longer exists/);
   });
 
   it("returns explicit explanations for messaging and presentation-only commands", async () => {

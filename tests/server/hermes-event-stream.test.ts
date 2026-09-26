@@ -69,6 +69,37 @@ describe("Hermes event stream lifecycle", () => {
     while (!(await reader.read()).done) { /* Drain already queued frames. */ }
   });
 
+  it("says the gateway is unreachable and ends, so the browser retries", async () => {
+    let subscriptions = 0;
+    const stream = createHermesEventStream(new AbortController().signal, {
+      connect: async () => { throw new Error("Hermes is restarting."); },
+      subscribe: () => { subscriptions++; return () => {}; },
+      authorized: async () => true,
+    });
+    const text = await new Response(stream).text();
+    assert.match(text, /event: gateway\ndata: \{"connected":false,"message":"Hermes is restarting\."\}/);
+    assert.equal(subscriptions, 0);
+  });
+
+  it("ends when the gateway connection drops, so the browser resumes on the next", async () => {
+    let lost: () => void = () => {};
+    let unsubscribed = 0;
+    let unwatched = 0;
+    const stream = createHermesEventStream(new AbortController().signal, {
+      connect: async () => {},
+      subscribe: () => () => { unsubscribed++; },
+      onConnectionLost: (listener) => { lost = listener; return () => { unwatched++; }; },
+      authorized: async () => true,
+    });
+    await setImmediate();
+    lost();
+    const text = await new Response(stream).text();
+    assert.match(text, /"connected":true/);
+    assert.match(text, /"connected":false,"message":"Hermes gateway disconnected\."/);
+    assert.equal(unsubscribed, 1);
+    assert.equal(unwatched, 1);
+  });
+
   it("disconnects slow readers instead of buffering events indefinitely", async () => {
     let emit: (params: unknown) => void = () => {};
     let unsubscribed = false;

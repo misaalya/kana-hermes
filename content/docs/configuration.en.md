@@ -247,6 +247,7 @@ Voice settings have no environment variables; change them in `config.json`.
 | **Settings → Connection** reports an error in `config.json` | Correct the key named in the message and save the file. |
 | Hermes cannot be found | Run `kana doctor`. If the problem remains, set `hermes.executable` or `KANA_HERMES_BIN`. |
 | Port 9119 is used by another program | Change `hermes.port`, then restart Kana. |
+| A change to `~/.hermes/.env` or to Hermes's MCP servers has no effect | Type `/reload` (for `.env`) or `/reload-mcp now` (for MCP servers) in Kana. For other changes Hermes reads only at startup, type `/restart`; it works only for a Hermes that Kana started. New models in Hermes's `config.yaml` appear without a restart. |
 | Speech for long replies fails because the time limit runs out | Raise `tts.timeoutSeconds`, and your proxy's timeout if you use one. |
 | `Pollinations returned HTTP 401` | The API key is missing or invalid. Check `tts.pollinations.apiKey`. |
 | `Pollinations returned HTTP 402` | Your pollen balance is too low. Top it up at [enter.pollinations.ai](https://enter.pollinations.ai). |
