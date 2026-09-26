@@ -1,6 +1,6 @@
 import { access, mkdtemp, rm } from "node:fs/promises";
 import { createServer, Socket } from "node:net";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { randomBytes } from "node:crypto";
@@ -14,7 +14,7 @@ import { managedRuntimeToken } from "@/lib/server/local-hermes-runtime";
 // must reconnect and resume the durable session.
 
 const HERMES_BINARY =
-  process.env.KANA_HERMES_BINARY || "/home/you/.local/bin/hermes";
+  process.env.KANA_HERMES_BINARY || path.join(homedir(), ".local", "bin", "hermes");
 
 function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
