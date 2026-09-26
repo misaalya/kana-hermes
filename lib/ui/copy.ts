@@ -249,6 +249,7 @@ export type Copy = {
     alwaysAllow: string;
     deny: string;
     smartDenied: string;
+    hiddenCharacters: string;
     questionTitle: string;
     answerLabel: string;
     answerPlaceholder: string;
@@ -706,6 +707,7 @@ const id: Copy = {
     alwaysAllow: "Selalu izinkan",
     deny: "Tolak",
     smartDenied: "Pemeriksaan keamanan Hermes menyarankan agar tindakan ini ditolak.",
+    hiddenCharacters: "Perintah ini berisi spasi panjang, baris kosong bertumpuk, atau karakter tak terlihat yang dapat menyembunyikan sebagian perintah. Bagian tersebut ditandai merah.",
     questionTitle: "Hermes memiliki pertanyaan",
     answerLabel: "Jawabanmu",
     answerPlaceholder: "Ketik jawaban untuk Hermes…",
@@ -1218,6 +1220,7 @@ const en: Copy = {
     alwaysAllow: "Always allow",
     deny: "Deny",
     smartDenied: "Hermes safety checks recommended denying this action.",
+    hiddenCharacters: "This command contains long runs of spaces, stacked blank lines, or invisible characters that can hide part of it. They are marked in red.",
     questionTitle: "Hermes has a question",
     answerLabel: "Your answer",
     answerPlaceholder: "Type a response for Hermes…",

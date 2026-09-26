@@ -208,7 +208,7 @@ Bagian `deployment` menyatakan cara Kana diakses.
 
 | `mode` | Digunakan apabila |
 | --- | --- |
-| `"local"` (bawaan) | Kana dibuka dari komputer yang menjalankannya. |
+| `"local"` (bawaan) | Kana dibuka dari komputer yang menjalankannya, melalui `localhost`, `127.0.0.1`, atau `[::1]`. Alamat lain ditolak. |
 | `"deployment"` | Kana dibuka melalui VPS, Nginx, atau jaringan, misalnya dari ponsel. |
 
 ```json
@@ -231,7 +231,7 @@ Ditujukan untuk pemasangan di server. Variabel ditetapkan pada lingkungan yang m
 | `KANA_PORT` | Port halaman web Kana. Nilai bawaannya `3000`, setara dengan opsi `kana --port`. |
 | `KANA_DEPLOYMENT_MODE` | `local` atau `deployment`; menggantikan `deployment.mode`. |
 | `KANA_HERMES_BIN` | Path program Hermes; menggantikan `hermes.executable`. |
-| `KANA_TRUSTED_ORIGINS` | Alamat tambahan yang dipercaya, dipisahkan dengan koma. Hanya diperlukan apabila proxy mengubah header `Host` tanpa meneruskan `X-Forwarded-Host`. |
+| `KANA_TRUSTED_ORIGINS` | Alamat tambahan yang dipercaya, dipisahkan dengan koma. Hanya diperlukan apabila proxy mengubah header `Host` tanpa meneruskan `X-Forwarded-Host`, atau untuk membuka Kana dalam mode local melalui alamat lain. |
 | `KANA_DEV_ALLOWED_ORIGINS` | Khusus pengembangan: alamat tambahan yang diizinkan mengakses `next dev`. |
 
 ```sh
