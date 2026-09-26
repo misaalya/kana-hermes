@@ -1,6 +1,8 @@
 type EventStreamDependencies = {
   connect: () => Promise<unknown>;
   subscribe: (listener: (params: unknown) => void) => () => void;
+  /** Called when the gateway connection drops; the stream then ends. */
+  onConnectionLost?: (listener: () => void) => () => void;
   authorized: () => Promise<boolean>;
 };
 
@@ -18,12 +20,14 @@ export function createHermesEventStream(
     start(controller) {
       let closed = false;
       let unsubscribe: (() => void) | undefined;
+      let stopWatching: (() => void) | undefined;
       let heartbeat: ReturnType<typeof setInterval> | undefined;
       cleanup = () => {
         if (closed) return;
         closed = true;
         signal.removeEventListener("abort", cleanup);
         unsubscribe?.();
+        stopWatching?.();
         if (heartbeat) clearInterval(heartbeat);
         try { controller.close(); } catch { /* Already cancelled by the reader. */ }
       };
@@ -51,6 +55,9 @@ export function createHermesEventStream(
       send("open", { ok: true });
       // Do not make start() await the shared connection: reader cancellation
       // must be handled immediately, even when discovery takes many seconds.
+      // The stream lives as long as one gateway connection. When there is
+      // none, or it drops (Hermes stopped or restarted), the stream says so
+      // and ends; the browser reconnects and resumes its session on the next.
       void (async () => {
         try {
           await dependencies.connect();
@@ -62,8 +69,14 @@ export function createHermesEventStream(
             connected: false,
             message: error instanceof Error ? error.message : "Hermes gateway is unreachable.",
           });
+          cleanup();
+          return;
         }
         if (closed) return;
+        stopWatching = dependencies.onConnectionLost?.(() => {
+          send("gateway", { connected: false, message: "Hermes gateway disconnected." });
+          cleanup();
+        });
         unsubscribe = dependencies.subscribe((params) =>
           send("hermes", { jsonrpc: "2.0", method: "event", params }),
         );

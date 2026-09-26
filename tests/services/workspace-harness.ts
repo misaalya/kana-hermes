@@ -20,6 +20,7 @@ import { ModelCatalogService } from "@/lib/services/model-catalog-service";
 import { PreferencesAccess } from "@/lib/services/preferences-service";
 import { sendMessage } from "@/lib/services/send-message";
 import { VoiceService } from "@/lib/services/voice-service";
+import type { HermesControl } from "@/lib/services/workspace-setup";
 import { createKanaStores } from "@/lib/store/kana-stores";
 import type { VoiceProvider, VoiceSpeakOptions } from "@/lib/voice/types";
 
@@ -127,6 +128,12 @@ export class FakeAgent implements AgentClient {
     this.responses.push(response);
   }
   async abort() {}
+  /** reconnectNow calls, as after Kana restarted Hermes. */
+  reconnects = 0;
+  async reconnectNow() {
+    this.reconnects += 1;
+    this.connectionState = "connected";
+  }
   subscribe(callback: (event: AgentEvent) => void) {
     this.listeners.add(callback);
     return () => this.listeners.delete(callback);
@@ -171,6 +178,8 @@ export function createHarness(
     storage?: MemoryStorage;
     /** Configure each fake agent when it is created. */
     setupAgent?: (agent: FakeAgent) => void;
+    /** The hermes serve control /restart uses. */
+    hermes?: Pick<HermesControl, "inspect" | "start">;
   } = {},
 ) {
   const stores = createKanaStores();
@@ -223,7 +232,8 @@ export function createHarness(
   });
   models.start();
   const commands = new CommandService({ stores, conversations, sessions, preferences, models });
-  const send = (text: string) => sendMessage({ stores, conversations, sessions, preferences, models }, text);
+  const send = (text: string) =>
+    sendMessage({ stores, conversations, sessions, preferences, models, hermes: options.hermes }, text);
 
   return {
     stores,

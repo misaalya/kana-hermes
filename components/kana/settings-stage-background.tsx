@@ -7,7 +7,7 @@ import type {
 } from "@/lib/background/indexed-db-stage-background-store";
 import type { StageBackground } from "@/lib/preferences/types";
 import type { Copy } from "@/lib/ui/copy";
-import { CloseIcon } from "./icons";
+import { CheckIcon, CloseIcon } from "./icons";
 
 // Stage-background choices shown in Settings → Avatar.
 
@@ -42,36 +42,30 @@ export function StageBackgroundChoice({
   copy: Copy["settings"];
 }) {
   return (
-    <div className={`kana-choice min-w-0 shrink-0 basis-full snap-start overflow-hidden rounded-[26px] sm:basis-[calc((100%_-_1.5rem)/3)] ${
-      active ? "is-selected" : ""
-    }`}>
+    <div className={`kana-choice kana-wardrobe-card rounded-[26px] ${active ? "is-selected" : ""}`}>
       <button
         type="button"
         role="radio"
         aria-checked={active}
         aria-label={label}
-        className="kana-focus block w-full text-left"
+        className="kana-focus flex w-full flex-col gap-2 rounded-[23px] p-2 pb-2.5 text-left"
         onClick={onSelect}
       >
         <span
-          className={`block aspect-[16/9] ${previewClass ?? "bg-bg"}`}
+          className={`kana-background-swatch block aspect-[16/10] w-full ${previewClass ?? "bg-bg"}`}
           style={previewUrl ? {
             backgroundImage: `url("${previewUrl}")`,
             backgroundPosition: "center",
             backgroundSize: "cover",
           } : undefined}
         />
-        <span className="flex items-center justify-between gap-2 px-3 py-3">
-          <span className="min-w-0 truncate text-[13px] font-extrabold text-ink">{label}</span>
-          <span className={`shrink-0 text-[10px] font-extrabold ${active ? "rounded-full bg-accent px-2.5 py-1 text-on-accent" : "text-faint"}`}>
-            {active ? copy.selected : copy.choose}
-          </span>
-        </span>
+        <span className="block truncate px-1 text-center text-[12.5px] font-extrabold text-ink">{label}</span>
       </button>
+      {active ? <span className="kana-check" aria-hidden="true"><CheckIcon className="size-3.5" /></span> : null}
       {onRemove ? (
         <button
           type="button"
-          className="kana-focus absolute top-2 right-2 flex size-8 items-center justify-center rounded-full bg-raised/95 text-muted transition-colors hover:text-danger"
+          className="kana-focus absolute left-3.5 top-3.5 z-[2] grid size-7 place-items-center rounded-full bg-raised text-muted transition-colors hover:text-danger"
           aria-label={copy.removeLabel(label)}
           onClick={onRemove}
         >

@@ -11,6 +11,7 @@ import { isFreshConversation, type ConversationService } from "./conversation-se
 import type { HermesSessionManager } from "./hermes-session-manager";
 import type { ModelCatalogService } from "./model-catalog-service";
 import type { PreferencesAccess } from "./preferences-service";
+import type { HermesControl } from "./workspace-setup";
 
 export type SendMessageDependencies = {
   stores: KanaStores;
@@ -18,6 +19,8 @@ export type SendMessageDependencies = {
   sessions: HermesSessionManager;
   preferences: PreferencesAccess;
   models: Pick<ModelCatalogService, "invalidate">;
+  /** The hermes serve process Kana runs; /restart restarts it. */
+  hermes?: Pick<HermesControl, "inspect" | "start">;
 };
 
 export function shortTitle(text: string): string {
@@ -27,7 +30,7 @@ export function shortTitle(text: string): string {
 
 /**
  * Send what the user typed in the active conversation: a prompt, a Kana
- * conversation command (/new, /sessions, /resume), or a Hermes slash command.
+ * command (/new, /sessions, /resume, /restart), or a Hermes slash command.
  * Resolves to a draft when a command prefills the composer.
  */
 export async function sendMessage(
@@ -136,6 +139,39 @@ export async function sendMessage(
     return;
   }
 
+  // Hermes's own /restart restarts its messaging gateway. In Kana it restarts
+  // the hermes serve Kana is connected to, for what Hermes reads only at
+  // startup, then resumes this conversation's session on the new process.
+  if (commandName === "restart") {
+    const copy = getCopy(preferences.current().uiLocale).slash;
+    const note = (output: string) => {
+      const latest = conversations.get(conversation.id) ?? conversation;
+      conversations.save({ ...latest, messages: [...latest.messages, createSystemMessage(output, cleanText)] });
+    };
+    clearSuggestions();
+    conversations.save({ ...conversation, messages: [...conversation.messages, createUserMessage(cleanText)] });
+    // Hermes drains running turns before it restarts; Kana waits for its own.
+    if (wasBusy) {
+      note(copy.restartBusy);
+      return;
+    }
+    session.setState({ busy: true, status: status().restarting });
+    try {
+      const hermes = deps.hermes;
+      if (!hermes || !(await hermes.inspect()).managed) {
+        note(copy.restartNotManaged);
+        return;
+      }
+      await hermes.start({ restart: true });
+      note((await sessions.reconnect()) ? copy.restarted : copy.restartReconnecting);
+    } catch (error) {
+      note(copy.restartFailed(error instanceof Error ? error.message : String(error)));
+    } finally {
+      session.setState({ busy: false, status: status().commandComplete });
+    }
+    return;
+  }
+
   session.setState({ busy: true, status: status().opening });
 
   const pendingUserMessage = createUserMessage(displayText);
@@ -153,8 +189,9 @@ export async function sendMessage(
     const agent = await sessions.ensure(nextConversation);
     if (commandName) {
       const result = await agent.executeCommand({ command: cleanText });
-      // /model changes the session's model; the cached catalog names the old one.
-      if (commandName === "model") models.invalidate();
+      // /model changes the session's model, and /reload can add providers with
+      // new keys: the cached catalog is out of date either way.
+      if (commandName === "model" || commandName === "reload") models.invalidate();
       // Opening the session linked it to the conversation; saving the snapshot
       // taken before that would drop the link.
       const opened = conversations.get(nextConversation.id) ?? nextConversation;

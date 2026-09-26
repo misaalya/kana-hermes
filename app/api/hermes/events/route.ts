@@ -1,5 +1,5 @@
 import { createHermesEventStream } from "@/lib/server/hermes-event-stream";
-import { subscribeHermesEvents, ensureHermesConnection } from "@/lib/server/hermes-bridge";
+import { ensureHermesConnection, onHermesConnectionLost, subscribeHermesEvents } from "@/lib/server/hermes-bridge";
 import { withSession } from "@/lib/server/api-response";
 import { isSessionValid } from "@/lib/server/auth/session";
 import { rewriteMediaInEvent } from "@/lib/server/media-links";
@@ -17,6 +17,7 @@ export const GET = withSession(async (request) => {
     connect: ensureHermesConnection,
     // Files Hermes delivers leave as signed links, never as local paths.
     subscribe: (listener) => subscribeHermesEvents((params) => listener(rewriteMediaInEvent(params))),
+    onConnectionLost: onHermesConnectionLost,
     authorized: () => isSessionValid(request),
   });
 

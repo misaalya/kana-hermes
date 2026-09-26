@@ -39,6 +39,8 @@ type ManagedRuntime = {
   port: number;
   token: string | null;
   lastMessage: string;
+  /** A restart in progress; another request joins it. */
+  restarting?: Promise<LocalHermesRuntimeStatus> | null;
 };
 
 const PROBE_TIMEOUT_MS = 750;
@@ -161,6 +163,8 @@ export async function inspectLocalHermesRuntime(
   preferredPort?: number,
 ): Promise<LocalHermesRuntimeStatus> {
   const current = runtime();
+  // Mid-restart the port is briefly free: never adopt another Hermes then.
+  if (current.restarting) return publicStatus(current, true);
   const configuredPort = configuredHermesPort();
   if (!current.child && current.state === "stopped") current.port = configuredPort;
   current.executable ??= (await resolveHermesExecutable()) ?? undefined;
@@ -377,6 +381,31 @@ export async function stopLocalHermesRuntime(): Promise<LocalHermesRuntimeStatus
   current.state = "stopped";
   current.lastMessage = "Hermes stopped.";
   return publicStatus(current, true);
+}
+
+export const NOT_STARTED_BY_KANA_MESSAGE =
+  "This Hermes server was not started by Kana, so Kana cannot restart it. Restart it where it was started.";
+
+/**
+ * Restart the `hermes serve` Kana started, on the same port, for changes
+ * Hermes reads only at startup (an update, plugins, toolsets). Every session
+ * on it closes; browsers reconnect and resume theirs. A Hermes that Kana did
+ * not start is left alone.
+ */
+export function restartLocalHermesRuntime(): Promise<LocalHermesRuntimeStatus> {
+  const current = runtime();
+  if (current.restarting) return current.restarting;
+  if (!current.child || current.child.exitCode !== null) {
+    return Promise.reject(new Error(NOT_STARTED_BY_KANA_MESSAGE));
+  }
+  const port = current.port;
+  current.restarting = (async () => {
+    await stopLocalHermesRuntime();
+    return startLocalHermesRuntime({ port });
+  })().finally(() => {
+    current.restarting = null;
+  });
+  return current.restarting;
 }
 
 /**

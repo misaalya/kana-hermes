@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { tokenizeJson } from "@/lib/presentation/json-highlight";
 import { parseMarkdown } from "@/lib/presentation/markdown";
 import { LocalPreferencesStore } from "@/lib/preferences/local-preferences-store";
@@ -17,6 +17,7 @@ import {
 } from "@/lib/ui/config-guide";
 import { getCopy, type UiLocale } from "@/lib/ui/copy";
 import { renderMarkdownBlocks, renderMarkdownInline, type MarkdownRenderers } from "./chat-markdown";
+import { CodeBlock, CopyButton } from "./code-block";
 import { MaterialSymbol, type MaterialSymbolName } from "./material-symbol";
 
 // Real icons here (Material Symbols), not the app's two-tone drawn glyphs.
@@ -41,42 +42,6 @@ const CODE_LABELS: Record<string, string> = {
 /** Where a section counts as "being read": just below the top edge. */
 const SPY_OFFSET = 120;
 
-function CopyButton({ text, label, doneLabel, target }: {
-  text: string;
-  label: string;
-  doneLabel: string;
-  /** Selected instead when the clipboard is unavailable (plain-http LAN). */
-  target: React.RefObject<HTMLElement | null>;
-}) {
-  const [copied, setCopied] = useState(false);
-  useEffect(() => {
-    if (!copied) return;
-    const timer = setTimeout(() => setCopied(false), 1600);
-    return () => clearTimeout(timer);
-  }, [copied]);
-
-  const copy = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-    } catch {
-      if (target.current) window.getSelection()?.selectAllChildren(target.current);
-    }
-  }, [target, text]);
-
-  return (
-    <button
-      type="button"
-      className="kana-focus inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-[12px] font-bold text-muted transition-colors hover:bg-surface hover:text-ink"
-      onClick={() => void copy()}
-      aria-live="polite"
-    >
-      <MaterialSymbol name={copied ? "check" : "content_copy"} className="text-[15px]" />
-      {copied ? doneLabel : label}
-    </button>
-  );
-}
-
 function JsonCode({ code }: { code: string }) {
   return tokenizeJson(code).map((token, index) =>
     token.kind === "plain" ? token.text : (
@@ -87,19 +52,11 @@ function JsonCode({ code }: { code: string }) {
   );
 }
 
-function CodeBlock({ language, code, copy }: { language: string; code: string; copy: ConfigGuideCopy }) {
-  const codeRef = useRef<HTMLElement>(null);
-  const label = CODE_LABELS[language] ?? language;
+function GuideCode({ language, code, copy }: { language: string; code: string; copy: ConfigGuideCopy }) {
   return (
-    <figure className="kana-code-surface overflow-hidden bg-surface-strong">
-      <figcaption className="flex min-h-11 items-center justify-between gap-3 py-1.5 pl-4 pr-1.5">
-        <span className="text-[12px] font-bold text-muted">{label}</span>
-        <CopyButton text={code} label={copy.copy} doneLabel={copy.copied} target={codeRef} />
-      </figcaption>
-      <pre className="overflow-x-auto px-4 pb-4 pt-0.5 font-mono text-[13px] leading-relaxed text-ink">
-        <code ref={codeRef}>{language === "json" ? <JsonCode code={code} /> : code}</code>
-      </pre>
-    </figure>
+    <CodeBlock label={CODE_LABELS[language] ?? language} code={code} copyLabel={copy.copy} copiedLabel={copy.copied}>
+      {language === "json" ? <JsonCode code={code} /> : code}
+    </CodeBlock>
   );
 }
 
@@ -189,7 +146,7 @@ export function ConfigGuide({
         node.language === CONFIG_GUIDE_PATH_BLOCK ? (
           <ConfigFile key={key} fallback={node.text.trim()} copy={copy} />
         ) : (
-          <CodeBlock key={key} language={node.language} code={node.text} copy={copy} />
+          <GuideCode key={key} language={node.language} code={node.text} copy={copy} />
         ),
     }),
     [copy],

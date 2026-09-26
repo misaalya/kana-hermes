@@ -20,6 +20,8 @@ export interface Live2DModelInstance {
   /** Optional speech boundary so runtimes can own the mouth via a plugin. */
   setTalking?(value: boolean): void;
   setLayout?(layout: Live2DModelLayout): void;
+  /** The head and shoulders as a small image data URL, taken from the stage. */
+  capturePortrait?(size: number): string | null;
 }
 
 export interface Live2DRuntimeAdapter {
@@ -104,5 +106,9 @@ export class Live2DAvatarProvider implements AvatarProvider {
   setLayout(layout: Live2DModelLayout): void {
     this.layout = layout;
     this.model?.setLayout?.(layout);
+  }
+
+  capturePortrait(size: number): string | null {
+    return this.model?.capturePortrait?.(size) ?? null;
   }
 }

@@ -13,10 +13,10 @@ const UNAVAILABLE_COMMANDS = new Map<string, KanaUnavailableCommandReason>([
   ["start", "messaging"],
   ["topic", "messaging"],
 
-  // These operate the separate `hermes gateway` supervisor, not the
-  // independently started `hermes serve` process Kana is connected to.
+  // This operates the separate `hermes gateway` supervisor, not the
+  // `hermes serve` process Kana is connected to. Kana answers /restart
+  // itself: it restarts that hermes serve (see send-message.ts).
   ["pause", "gateway"],
-  ["restart", "gateway"],
 
   // These mutate or inspect terminal-only presentation state. Kana has its own
   // transcript, composer, and responsive shell instead of a hidden TUI.

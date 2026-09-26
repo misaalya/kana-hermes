@@ -39,9 +39,14 @@ const ALLOWED_METHODS = new Set([
   "sudo.respond",
   "secret.respond",
   "handoff.request",
+  // /reload, /reload-mcp, /reload-skills: they act on the gateway process,
+  // as in Hermes's TUI; slash.exec would reload only its command worker.
+  "reload.env",
+  "reload.mcp",
+  "skills.reload",
 ]);
 
-const LONG_RUNNING_METHODS = new Set(["session.compress", "model.options"]);
+const LONG_RUNNING_METHODS = new Set(["session.compress", "model.options", "reload.mcp"]);
 
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 

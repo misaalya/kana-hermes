@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { KanaPreferences } from "@/lib/preferences/types";
 import type { AvatarModelSummary } from "@/lib/avatar/indexed-db-avatar-model-store";
+import type { AvatarPortraits } from "@/lib/avatar/portrait";
 import type { Live2DModelBindings } from "@/lib/avatar/live2d-avatar-provider";
 import {
   suggestLive2DModelBindings,
@@ -31,6 +32,7 @@ import { VoicePanel } from "./voice-panel";
 import { AvatarExpressionPanel } from "./avatar-expression-panel";
 import { ModelControlPanel } from "./model-control-panel";
 import { AdvancedConfigCard, SecuritySection } from "./settings-access-section";
+import { AddCard, AvatarCard, WardrobeGrid } from "./settings-avatar-cards";
 import {
   STAGE_BACKGROUND_OPTIONS,
   StageBackgroundChoice,
@@ -39,8 +41,6 @@ import {
 import {
   AvatarIcon,
   CheckIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
   BotIcon,
   CloseIcon,
   GlobeIcon,
@@ -48,9 +48,8 @@ import {
   ShieldIcon,
   WaveformIcon,
 } from "./icons";
-import { btnDangerGhost, btnGhost, Toggle } from "./ui";
+import { Toggle } from "./ui";
 import {
-  settingsButton,
   SettingsGroup,
   SettingsRow,
   SettingsRows,
@@ -79,6 +78,8 @@ type SettingsDialogProps = {
   onSelectAgentModel(provider: string, model: string, confirm?: boolean): Promise<AgentModelSwitchResult>;
   onPreviewAvatarEmotion(preferences: KanaPreferences, emotion: Emotion): Promise<void>;
   onPreviewAvatarTalking(preferences: KanaPreferences): Promise<void>;
+  /** Stage portraits for the avatar cards, by imported model id or model URL. */
+  avatarPortraits?: AvatarPortraits;
   onClose(): void;
 };
 
@@ -122,6 +123,7 @@ export function SettingsDialog({
   onSelectAgentModel,
   onPreviewAvatarEmotion,
   onPreviewAvatarTalking,
+  avatarPortraits = {},
 }: SettingsDialogProps) {
   const { dialogRef, onDialogKeyDown } = useDialogFocus(onClose);
   const [draft, setDraft] = useState(() => structuredClone(preferences));
@@ -147,7 +149,6 @@ export function SettingsDialog({
   const [backgroundNotice, setBackgroundNotice] = useState<string | null>(null);
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const backgroundInputRef = useRef<HTMLInputElement | null>(null);
-  const backgroundCarouselRef = useRef<HTMLDivElement | null>(null);
   const initialDraftRef = useRef(true);
   const lastDraftRef = useRef(draft);
   const saveRevisionRef = useRef(0);
@@ -269,16 +270,6 @@ export function SettingsDialog({
     };
     setDraft(next);
     setAvatarNotice(notices.avatarSelected(sample.name));
-  };
-
-  const scrollBackgroundCarousel = (direction: -1 | 1) => {
-    const carousel = backgroundCarouselRef.current;
-    if (!carousel) return;
-    const gap = Number.parseFloat(getComputedStyle(carousel).columnGap) || 0;
-    carousel.scrollBy({
-      left: direction * (carousel.clientWidth + gap),
-      behavior: "smooth",
-    });
   };
 
   const importStageBackground = async (file: File) => {
@@ -458,12 +449,6 @@ export function SettingsDialog({
       <CloseIcon className="size-4" />
     </button>
   );
-  const carouselButton =
-    "kana-focus kana-pill grid size-9 place-items-center bg-accent text-white";
-  const choiceCard = (active: boolean) =>
-    `kana-focus kana-choice flex min-h-16 items-center justify-between gap-3 rounded-[26px] px-4 py-3 text-left ${
-      active ? "is-selected" : ""
-    }`;
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-[var(--backdrop)] p-5 backdrop-blur-sm max-md:p-0" role="dialog" aria-modal="true" aria-label={settingsCopy.title}>
@@ -554,156 +539,52 @@ export function SettingsDialog({
 
             {section === "avatar" ? (
               <>
-                <SettingsGroup
-                  title={settingsCopy.stageTitle}
-                  action={(
-                    <div className="flex items-center gap-1.5" aria-label={settingsCopy.carouselControls}>
-                      <button type="button" className={carouselButton} aria-label={settingsCopy.previousBackgrounds} onClick={() => scrollBackgroundCarousel(-1)}>
-                        <ChevronLeftIcon className="size-4" />
-                      </button>
-                      <button type="button" className={carouselButton} aria-label={settingsCopy.nextBackgrounds} onClick={() => scrollBackgroundCarousel(1)}>
-                        <ChevronRightIcon className="size-4" />
-                      </button>
-                    </div>
-                  )}
-                >
-                  <div
-                    ref={backgroundCarouselRef}
-                    className="kana-background-carousel flex snap-x snap-mandatory gap-3 overflow-x-auto py-2"
-                    role="radiogroup"
-                    aria-label={settingsCopy.stageAria}
-                  >
-                    {STAGE_BACKGROUND_OPTIONS.map(({ value, previewClass }) => {
-                      const active = draft.stageBackground === value;
-                      const option = settingsCopy.backgroundOptions[value];
-                      return (
-                        <StageBackgroundChoice
-                          key={value}
-                          active={active}
-                          label={option.label}
-                          previewClass={previewClass}
-                          onSelect={() => setDraft((current) => ({
-                            ...current,
-                            stageBackground: value,
-                          }))}
-                          copy={settingsCopy}
-                        />
-                      );
-                    })}
-                    {stageBackgrounds.map((background) => (
-                      <StoredStageBackgroundChoice
-                        key={background.id}
-                        active={draft.stageBackground === "custom" && draft.customBackgroundId === background.id}
-                        background={background}
-                        onLoad={onLoadStageBackground}
-                        onSelect={() => setDraft((current) => ({
-                          ...current,
-                          stageBackground: "custom",
-                          customBackgroundId: background.id,
-                        }))}
-                        onRemove={() => void deleteStageBackground(background)}
-                        copy={settingsCopy}
+                <SettingsGroup title={settingsCopy.avatarLibrary}>
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    multiple
+                    className="sr-only"
+                    onChange={(event) => void importAvatar(Array.from(event.target.files ?? []))}
+                    {...({ webkitdirectory: "", directory: "" } as React.InputHTMLAttributes<HTMLInputElement>)}
+                  />
+                  <WardrobeGrid label={settingsCopy.avatarLibrary}>
+                    {OFFICIAL_LIVE2D_SAMPLES.map((sample, index) => (
+                      <AvatarCard
+                        key={sample.id}
+                        name={sample.name}
+                        portrait={avatarPortraits[sample.modelUrl]}
+                        active={!draft.live2d.modelId && draft.live2d.modelUrl === sample.modelUrl}
+                        disabled={avatarBusy}
+                        onSelect={() => void selectOfficialAvatar(index)}
                       />
                     ))}
-                  </div>
-                  <input
-                    ref={backgroundInputRef}
-                    type="file"
-                    className="sr-only"
-                    accept=".png,.jpg,.jpeg,.webp,.gif,.avif,.bmp,image/png,image/jpeg,image/webp,image/gif,image/avif,image/bmp"
-                    onChange={(event) => {
-                      const file = event.currentTarget.files?.[0];
-                      if (file) void importStageBackground(file);
-                    }}
-                  />
-                  <div className="mt-3">
-                    <SettingsRows>
-                      <SettingsRow label={settingsCopy.customBackgroundTitle}>
-                        <button
-                          type="button"
-                          className={settingsButton}
-                          disabled={backgroundBusy}
-                          onClick={() => backgroundInputRef.current?.click()}
-                        >
-                          {backgroundBusy ? settingsCopy.adding : settingsCopy.uploadImage}
-                        </button>
-                      </SettingsRow>
-                    </SettingsRows>
-                  </div>
-                  {backgroundNotice ? (
-                    <p className="text-[11px] text-muted" role="status">{backgroundNotice}</p>
-                  ) : null}
-                </SettingsGroup>
-
-                <SettingsGroup title={settingsCopy.avatarLibrary}>
-                  <SettingsRows>
-                    <SettingsRow label={settingsCopy.includedAvatars} stacked>
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        {OFFICIAL_LIVE2D_SAMPLES.map((sample, index) => {
-                          const active = !draft.live2d.modelId && draft.live2d.modelUrl === sample.modelUrl;
-                          return (
-                            <button
-                              key={sample.id}
-                              type="button"
-                              className={choiceCard(active)}
-                              onClick={() => void selectOfficialAvatar(index)}
-                            >
-                              <span className="min-w-0 text-[13px] font-semibold text-ink">{sample.name}</span>
-                              {active ? <span className="kana-check" aria-hidden="true"><CheckIcon className="size-3.5" /></span> : (
-                                <span className="text-[11px] font-bold text-faint">{settingsCopy.choose}</span>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </SettingsRow>
-                    <SettingsRow label={settingsCopy.yourAvatars} stacked>
-                      <input
-                        ref={avatarInputRef}
-                        type="file"
-                        multiple
-                        className="sr-only"
-                        onChange={(event) => void importAvatar(Array.from(event.target.files ?? []))}
-                        {...({ webkitdirectory: "", directory: "" } as React.InputHTMLAttributes<HTMLInputElement>)}
+                    {avatarModels.map((model) => (
+                      <AvatarCard
+                        key={model.id}
+                        name={model.name}
+                        portrait={avatarPortraits[model.id]}
+                        active={draft.live2d.modelId === model.id}
+                        disabled={avatarBusy}
+                        onSelect={() => void selectImported(model)}
+                        menu={{
+                          label: settingsCopy.avatarOptions(model.name),
+                          detail: `${(model.sizeBytes / 1024 / 1024).toFixed(1)} MB`,
+                          items: [
+                            { label: settingsCopy.rename, onSelect: () => void renameImported(model) },
+                            { label: settingsCopy.remove, danger: true, onSelect: () => void deleteImported(model) },
+                          ],
+                        }}
                       />
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        {avatarModels.map((model) => {
-                          const active = draft.live2d.modelId === model.id;
-                          return (
-                            <div key={model.id} className={`kana-choice rounded-[26px] ${active ? "is-selected" : ""}`}>
-                              <button type="button" className="kana-focus flex w-full min-w-0 items-center justify-between gap-3 px-4 py-3 text-left" disabled={avatarBusy} onClick={() => void selectImported(model)}>
-                                <span className="min-w-0">
-                                  <span className="block truncate text-[13px] font-semibold text-ink">{model.name}</span>
-                                  <span className="mt-0.5 block text-[11px] text-muted">
-                                    {(model.sizeBytes / 1024 / 1024).toFixed(1)} MB
-                                  </span>
-                                </span>
-                                {active ? <span className="kana-check" aria-hidden="true"><CheckIcon className="size-3.5" /></span> : (
-                                  <span className="text-[11px] font-bold text-faint">{settingsCopy.choose}</span>
-                                )}
-                              </button>
-                              <div className="flex justify-end gap-1 border-t-[3px] border-dotted border-line px-2 py-1">
-                                <button type="button" className={btnGhost} onClick={() => void renameImported(model)}>{settingsCopy.rename}</button>
-                                <button type="button" className={btnDangerGhost} onClick={() => void deleteImported(model)}>{settingsCopy.remove}</button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                        <button
-                          type="button"
-                          className="kana-focus min-h-16 rounded-[26px] border-[3px] border-dashed border-line-strong px-4 py-3 text-left transition-colors hover:border-accent"
-                          disabled={avatarBusy}
-                          onClick={() => avatarInputRef.current?.click()}
-                        >
-                          <span className="block text-[13px] font-semibold text-ink">
-                            {avatarBusy ? settingsCopy.preparingAvatar : settingsCopy.importLive2d}
-                          </span>
-                        </button>
-                      </div>
-                      {avatarNotice ? <p className="mt-3 text-[11px] leading-relaxed text-muted" role="status">{avatarNotice}</p> : null}
-                    </SettingsRow>
-                  </SettingsRows>
-                  <details className="mt-1 text-[11px] leading-relaxed text-faint">
+                    ))}
+                    <AddCard
+                      label={avatarBusy ? settingsCopy.preparingAvatar : settingsCopy.importLive2d}
+                      busy={avatarBusy}
+                      onClick={() => avatarInputRef.current?.click()}
+                    />
+                  </WardrobeGrid>
+                  {avatarNotice ? <p className="mt-3 text-[11px] leading-relaxed text-muted" role="status">{avatarNotice}</p> : null}
+                  <details className="mt-3 text-[11px] leading-relaxed text-faint">
                     <summary className="kana-details-summary kana-focus kana-plus-summary cursor-pointer font-extrabold text-muted hover:text-ink">
                       {settingsCopy.includedAvatarAbout}
                     </summary>
@@ -733,6 +614,58 @@ export function SettingsDialog({
                     </SettingsGroup>
                   )
                 ) : null}
+
+                <SettingsGroup title={settingsCopy.stageTitle}>
+                  <input
+                    ref={backgroundInputRef}
+                    type="file"
+                    className="sr-only"
+                    accept=".png,.jpg,.jpeg,.webp,.gif,.avif,.bmp,image/png,image/jpeg,image/webp,image/gif,image/avif,image/bmp"
+                    onChange={(event) => {
+                      const file = event.currentTarget.files?.[0];
+                      if (file) void importStageBackground(file);
+                    }}
+                  />
+                  <WardrobeGrid label={settingsCopy.stageAria} wide>
+                    {STAGE_BACKGROUND_OPTIONS.map(({ value, previewClass }) => (
+                      <StageBackgroundChoice
+                        key={value}
+                        active={draft.stageBackground === value}
+                        label={settingsCopy.backgroundOptions[value].label}
+                        previewClass={previewClass}
+                        onSelect={() => setDraft((current) => ({
+                          ...current,
+                          stageBackground: value,
+                        }))}
+                        copy={settingsCopy}
+                      />
+                    ))}
+                    {stageBackgrounds.map((background) => (
+                      <StoredStageBackgroundChoice
+                        key={background.id}
+                        active={draft.stageBackground === "custom" && draft.customBackgroundId === background.id}
+                        background={background}
+                        onLoad={onLoadStageBackground}
+                        onSelect={() => setDraft((current) => ({
+                          ...current,
+                          stageBackground: "custom",
+                          customBackgroundId: background.id,
+                        }))}
+                        onRemove={() => void deleteStageBackground(background)}
+                        copy={settingsCopy}
+                      />
+                    ))}
+                    <AddCard
+                      label={backgroundBusy ? settingsCopy.adding : settingsCopy.uploadImage}
+                      busy={backgroundBusy}
+                      wide
+                      onClick={() => backgroundInputRef.current?.click()}
+                    />
+                  </WardrobeGrid>
+                  {backgroundNotice ? (
+                    <p className="mt-3 text-[11px] text-muted" role="status">{backgroundNotice}</p>
+                  ) : null}
+                </SettingsGroup>
               </>
             ) : null}
 

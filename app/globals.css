@@ -1160,13 +1160,78 @@ video.kana-media-preview {
   mask-size: calc(var(--kana-pattern-size) * 0.5) auto;
 }
 
-.kana-background-carousel {
-  overscroll-behavior-inline: contain;
-  scrollbar-width: none;
+/* Settings → Avatar: the Clara wardrobe. Cards keep one width and wrap; the
+   chosen card gets the blue ring and the check badge on its corner. */
+.kana-wardrobe {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 14px;
+  padding-top: 10px;
 }
 
-.kana-background-carousel::-webkit-scrollbar {
-  display: none;
+.kana-wardrobe.is-wide {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+}
+
+@media (max-width: 639px) {
+  .kana-wardrobe {
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    gap: 12px;
+  }
+
+  .kana-wardrobe.is-wide {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.kana-wardrobe-card > button:disabled {
+  cursor: progress;
+}
+
+/* A card holding its open ⋯ menu stays still and above its neighbours. */
+.kana-choice.kana-wardrobe-card:has([aria-expanded="true"]) {
+  z-index: 3;
+  transform: none;
+}
+
+/* The avatar's picture: its stage portrait on a soft blue disc. */
+.kana-portrait {
+  display: grid;
+  width: clamp(60px, 64%, 80px);
+  aspect-ratio: 1;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 16%, var(--raised));
+  color: var(--accent);
+}
+
+.kana-portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  user-select: none;
+}
+
+.kana-background-swatch {
+  overflow: hidden;
+  border-radius: 18px;
+}
+
+.kana-wardrobe-add {
+  min-height: 100%;
+  border: 3px dashed var(--line-strong);
+  transition: transform 250ms var(--spring), border-color 150ms ease;
+}
+
+.kana-wardrobe-add:not(:disabled):hover {
+  border-color: var(--accent);
+  transform: translateY(-3px) rotate(-0.6deg);
+}
+
+.kana-wardrobe-add:disabled {
+  cursor: progress;
+  opacity: 0.6;
 }
 
 /* Square corners in both Settings and the /docs sidebar. */

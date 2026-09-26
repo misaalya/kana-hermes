@@ -14,6 +14,7 @@ function SettingsHost() {
   const open = useKanaStore("workspace", (state) => state.settingsOpen);
   const preferences = useKanaStore("preferences", (state) => state.preferences);
   const modelCatalog = useKanaStore("models", (state) => state.entry?.catalog ?? null);
+  const avatarPortraits = useKanaStore("avatar", (state) => state.portraits);
   if (!open) return null;
   return (
     <SettingsDialog
@@ -37,6 +38,7 @@ function SettingsHost() {
       onSelectAgentModel={actions.selectAgentModel}
       onPreviewAvatarEmotion={actions.previewAvatarEmotion}
       onPreviewAvatarTalking={actions.previewAvatarTalking}
+      avatarPortraits={avatarPortraits}
       onClose={() => {
         workspace.stores.workspace.setState({ settingsOpen: false });
         void actions.inspectDependencies();

@@ -31,7 +31,7 @@ describe("Hermes transcript projection", () => {
 
   it("restores protocol 3 turns: the user's words without the Kana note, and the header reply", () => {
     const { messages } = parseHermesTranscript([
-      { role: "user", text: `${buildKanaUserPrompt("Halo Kana", true)}\n\n@file:"attachments/a.txt"` },
+      { role: "user", text: `${buildKanaUserPrompt("Halo Kana", { full: true })}\n\n@file:"attachments/a.txt"` },
       { role: "assistant", text: "---\nja: こんにちは。\nemotion: happy\nlang: id\n---\nHalo! **Aku** di sini." },
       { role: "user", text: buildKanaUserPrompt("Thanks") },
       { role: "assistant", text: "Plain English reply" },
@@ -84,5 +84,31 @@ describe("Hermes transcript projection", () => {
     const merged = mergeRestoredMessages(restored, local);
     assert.deepEqual(merged.map((message) => message.id), [restored[0].id, "notice"]);
     assert.deepEqual(withoutLastUserTurn(merged).map((message) => message.id), []);
+  });
+
+  it("keeps Kana's own commands where they were, between the restored turns", () => {
+    const restored = parseHermesTranscript([
+      { role: "user", text: "halo" },
+      { role: "assistant", text: "---\nemotion: happy\nlang: id\n---\nHai." },
+      { role: "user", text: "lagi" },
+      { role: "assistant", text: "---\nemotion: happy\nlang: id\n---\nYa." },
+    ]).messages;
+    const old = 1_000;
+    const local = [
+      { ...restored[0], id: "u1", timestamp: old },
+      { ...restored[1], id: "a1", timestamp: old + 1 },
+      { id: "status", role: "user" as const, text: "/status", timestamp: old + 2 },
+      { id: "status-note", role: "system" as const, text: "ok", timestamp: old + 3 },
+      { ...restored[2], id: "u2", timestamp: old + 4 },
+      { ...restored[3], id: "a2", timestamp: old + 5 },
+      { id: "restart", role: "user" as const, text: "/restart", timestamp: old + 6 },
+    ];
+    const merged = mergeRestoredMessages(restored, local);
+    assert.deepEqual(merged.map((message) => message.id), [
+      restored[0].id, restored[1].id, "status", "status-note", restored[2].id, restored[3].id, "restart",
+    ]);
+    const timestamps = merged.map((message) => message.timestamp);
+    assert.deepEqual([...timestamps].sort((a, b) => a - b), timestamps, "the time order is the chat order");
+    assert.ok(new Set(timestamps).size === timestamps.length);
   });
 });

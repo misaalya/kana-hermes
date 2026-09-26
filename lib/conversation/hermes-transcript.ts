@@ -149,20 +149,46 @@ function restoredMessageMatches(
 /**
  * Hermes rows are authoritative, but local-only rows must survive the
  * replace: the just-typed message that triggered the session open, queued
- * prompts, and system notices never exist in Hermes display rows. Each
- * restored row consumes at most one matching local copy; leftovers are
- * appended after the restored block.
+ * prompts, and Kana's commands with their notices never exist in Hermes
+ * display rows. Each restored row consumes at most one matching local copy.
+ * A leftover stays right after the restored row its local predecessor
+ * matched, and is re-timed there: restored rows carry synthetic timestamps
+ * and the chat is ordered by time, so an old timestamp would lift it above
+ * the whole restored transcript.
  */
 export function mergeRestoredMessages(
   restored: KanaMessage[],
   local: KanaMessage[],
 ): KanaMessage[] {
-  const kept = [...local];
-  for (const message of restored) {
-    const index = kept.findIndex((candidate) =>
-      restoredMessageMatches(candidate, message),
-    );
-    if (index !== -1) kept.splice(index, 1);
+  if (!restored.length) return local;
+  const matched = new Map<KanaMessage, number>();
+  restored.forEach((row, index) => {
+    const copy = local.find((message) => !matched.has(message) && restoredMessageMatches(message, row));
+    if (copy) matched.set(copy, index);
+  });
+
+  // Local-only rows by the restored row they follow; -1 is before the first.
+  const leftovers = new Map<number, KanaMessage[]>();
+  let after = -1;
+  for (const message of local) {
+    const index = matched.get(message);
+    if (index !== undefined) after = Math.max(after, index);
+    else leftovers.set(after, [...(leftovers.get(after) ?? []), message]);
   }
-  return [...restored, ...kept];
+
+  const merged: KanaMessage[] = [];
+  const place = (slot: number) => {
+    const rows = leftovers.get(slot) ?? [];
+    // Restored rows are at least 1 ms apart, so fractions fit between them.
+    const from = slot >= 0 ? restored[slot].timestamp : restored[0].timestamp - 1;
+    rows.forEach((message, index) =>
+      merged.push({ ...message, timestamp: from + (index + 1) / (rows.length + 1) }),
+    );
+  };
+  place(-1);
+  restored.forEach((row, index) => {
+    merged.push(row);
+    place(index);
+  });
+  return merged;
 }

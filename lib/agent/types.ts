@@ -289,5 +289,7 @@ export interface AgentClient {
   ): Promise<AgentModelSwitchResult>;
   respondToInput(response: AgentInputResponse): Promise<void>;
   abort(): Promise<void>;
+  /** Reconnect and reopen the open session now, after Kana restarted Hermes. */
+  reconnectNow?(): Promise<void>;
   subscribe(callback: (event: AgentEvent) => void): () => void;
 }

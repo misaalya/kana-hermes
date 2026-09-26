@@ -2,13 +2,16 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { btnGhost, btnPrimary, inputBase, fieldLabel } from "@/components/kana/ui";
+import { CodeBlock } from "@/components/kana/code-block";
+import { btnPrimary, btnSecondary, inputBase, fieldLabel } from "@/components/kana/ui";
 import { LocalPreferencesStore } from "@/lib/preferences/local-preferences-store";
 import { fetchAuthStatus } from "@/lib/runtime/auth-client";
 import { useTheme } from "@/lib/state/use-theme";
 import { getCopy, type UiLocale } from "@/lib/ui/copy";
 
-const SETUP_COMMAND = "kana password";
+/** Until a password exists the page looks again this often, and the form
+ * appears on its own once the command has run. */
+const SETUP_POLL_MS = 3_000;
 
 export default function LoginPage() {
   const router = useRouter();
@@ -19,15 +22,22 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   // null while unknown; the form stays usable so a slow status never blocks login.
   const [passwordConfigured, setPasswordConfigured] = useState<boolean | null>(null);
+  // The one command for this install: `kana password`, or the checkout's or
+  // standalone deployment's equivalent (from /api/auth/status).
+  const [passwordCommand, setPasswordCommand] = useState("kana password");
+  const [checking, setChecking] = useState(false);
   const copy = getCopy(locale).login;
   const nextTheme = theme === "dark" ? "light" : "dark";
 
+  /** False when the server could not be reached; the last answer stays. */
   const refreshStatus = useCallback(async () => {
     try {
       const status = await fetchAuthStatus();
       setPasswordConfigured(status.passwordConfigured);
+      if (status.passwordCommand) setPasswordCommand(status.passwordCommand);
+      return true;
     } catch {
-      setPasswordConfigured(null);
+      return false;
     }
   }, []);
 
@@ -37,6 +47,21 @@ export default function LoginPage() {
     setLocale(new LocalPreferencesStore().load().uiLocale);
     void refreshStatus();
   }, [refreshStatus]);
+
+  useEffect(() => {
+    if (passwordConfigured !== false) return;
+    const timer = setInterval(() => {
+      if (!document.hidden) void refreshStatus();
+    }, SETUP_POLL_MS);
+    return () => clearInterval(timer);
+  }, [passwordConfigured, refreshStatus]);
+
+  const checkAgain = useCallback(async () => {
+    setChecking(true);
+    setError(null);
+    if (!(await refreshStatus())) setError(copy.unreachable);
+    setChecking(false);
+  }, [refreshStatus, copy]);
 
   const submit = useCallback(
     async (event: React.FormEvent) => {
@@ -54,7 +79,7 @@ export default function LoginPage() {
         });
         if (!res.ok) {
           const data = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
-          if (data.code === "password_not_configured") setPasswordConfigured(false);
+          if (data.code === "password_not_configured") void refreshStatus();
           setError(data.error ?? copy.failed);
         } else {
           router.push("/");
@@ -65,7 +90,7 @@ export default function LoginPage() {
         setLoading(false);
       }
     },
-    [router, copy],
+    [router, copy, refreshStatus],
   );
 
   return (
@@ -78,15 +103,19 @@ export default function LoginPage() {
         <h1 className="sr-only">Kana</h1>
 
         {passwordConfigured === false ? (
-          <div className="grid gap-3" role="status">
-            <p className="text-xs font-bold text-ink">{copy.setupTitle}</p>
-            <p className="text-xs leading-relaxed text-muted">{copy.setupBody}</p>
-            <code className="block rounded-[20px] bg-surface-strong px-4 py-2.5 text-sm font-bold text-ink">
-              {SETUP_COMMAND}
-            </code>
-            <p className="text-[11px] leading-relaxed text-faint">{copy.setupSource}</p>
-            <button type="button" className={btnGhost} onClick={() => void refreshStatus()}>
-              {copy.setupRefresh}
+          <div className="grid gap-4" role="status">
+            <div className="grid gap-1">
+              <h2 className="text-[15px] font-extrabold text-ink">{copy.setupTitle}</h2>
+              <p className="text-[13px] leading-relaxed text-muted">{copy.setupBody}</p>
+            </div>
+            <CodeBlock label="Terminal" code={passwordCommand} copyLabel={copy.copy} copiedLabel={copy.copied} />
+            {error ? (
+              <p className="text-[11px] font-semibold text-danger" role="alert">
+                {error}
+              </p>
+            ) : null}
+            <button type="button" className={btnSecondary} onClick={() => void checkAgain()} disabled={checking}>
+              {checking ? copy.setupChecking : copy.setupRefresh}
             </button>
           </div>
         ) : (

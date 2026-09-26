@@ -138,6 +138,15 @@ export class HermesSessionManager {
     await this.ensure(active).catch(() => undefined);
   }
 
+  /**
+   * Hermes was restarted under Kana: reconnect and resume the open session at
+   * once instead of after the reconnect delay. True when Kana is connected again.
+   */
+  async reconnect(): Promise<boolean> {
+    await this.agent?.reconnectNow?.();
+    return this.agent?.connectionState === "connected";
+  }
+
   /** Model reads and switches act on the active conversation's own session, opening it first. */
   private async activeAgent(): Promise<AgentClient> {
     if (!this.agent) throw new Error("Hermes is not connected.");

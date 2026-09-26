@@ -2,6 +2,7 @@ import { jsonError, NO_STORE, withSession } from "@/lib/server/api-response";
 import { readJsonObject } from "@/lib/server/request-body";
 import {
   inspectLocalHermesRuntime,
+  restartLocalHermesRuntime,
   startLocalHermesRuntime,
   stopLocalHermesRuntime,
 } from "@/lib/server/local-hermes-runtime";
@@ -47,9 +48,11 @@ export const POST = withSession(async (request) => {
         { status: 400, headers: NO_STORE },
       );
     }
-    const port = optionalPort(value.port);
-    if (value.action === "restart") await stopLocalHermesRuntime();
-    return Response.json(await startLocalHermesRuntime({ port }), { headers: NO_STORE });
+    // A restart keeps the port Hermes is on; only Hermes that Kana started restarts.
+    if (value.action === "restart") {
+      return Response.json(await restartLocalHermesRuntime(), { headers: NO_STORE });
+    }
+    return Response.json(await startLocalHermesRuntime({ port: optionalPort(value.port) }), { headers: NO_STORE });
   } catch (error) {
     return jsonError(error);
   }

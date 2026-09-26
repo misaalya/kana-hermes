@@ -327,9 +327,11 @@ async function installFakeHermes(page: Page): Promise<FakeHermes> {
         // the user wrote in. Kana sends no subtitle setting.
         if (/subtitle_language|kana_request/.test(submitted)) throw new Error("Kana sent the old JSON wrapper.");
         const noteStart = submitted.lastIndexOf("\n\n<kana>\n");
-        if (noteStart === -1 || !/\n---\nja: /.test(submitted.slice(noteStart))) {
+        if (noteStart === -1 || !/\n---\n(?:ja|emotion): /.test(submitted.slice(noteStart))) {
           throw new Error("Kana sent no response contract.");
         }
+        // With Kana's voice off the note asks for no Japanese speech.
+        const speaks = /\n---\nja: /.test(submitted.slice(noteStart));
         const userMessage = submitted.slice(0, noteStart);
         const language = /\b(halo|aku|kamu|apa)\b/i.test(userMessage) ? "id" : "en";
         const subtitles: Record<string, string> = {
@@ -352,7 +354,7 @@ async function installFakeHermes(page: Page): Promise<FakeHermes> {
           : [];
         completedResponse = [
           "---",
-          "ja: こんにちは、ここにいます。",
+          ...(speaks ? ["ja: こんにちは、ここにいます。"] : []),
           "emotion: neutral",
           `lang: ${language}`,
           "---",
@@ -476,6 +478,31 @@ test("never reveals a password and signs in with the operator-set one", async ({
   await page.getByLabel(/^(?:Password|Kata sandi)$/).fill(E2E_ACCESS_PASSWORD);
   await page.getByRole("button", { name: /^(?:Enter Kana|Masuk ke Kana)$/ }).click();
   await expect(page.getByRole("textbox", { name: "Message Kana" })).toBeVisible();
+});
+
+test("shows only this install's password command until a password exists", async ({ page, context }) => {
+  await context.clearCookies();
+  let configured = false;
+  await page.route("**/api/auth/status", (route) =>
+    route.fulfill({
+      json: configured
+        ? { authEnabled: true, authenticated: false, passwordConfigured: true, deploymentMode: "local" }
+        : {
+            authEnabled: true,
+            authenticated: false,
+            passwordConfigured: false,
+            passwordCommand: "kana password",
+            deploymentMode: "local",
+          },
+    }),
+  );
+  await page.goto("/login");
+  await expect(page.locator("pre code")).toHaveText("kana password");
+  await expect(page.getByText("npm run password")).toHaveCount(0);
+  await expect(page.getByLabel(/^(?:Password|Kata sandi)$/)).toHaveCount(0);
+  // Once the command has run, the sign-in form appears without a reload.
+  configured = true;
+  await expect(page.getByLabel(/^(?:Password|Kata sandi)$/)).toBeVisible({ timeout: 10_000 });
 });
 
 test("rejects cross-origin state-changing requests before authentication", async ({ page }) => {
@@ -933,7 +960,7 @@ test("updates workspace, history, chat, and settings copy with the interface lan
   await expect(page.getByPlaceholder("Cari percakapan")).toBeVisible();
 });
 
-test("shows complete background cards and keeps an uploaded image locally", async ({
+test("shows every background card whole and keeps an uploaded image locally", async ({
   page,
 }) => {
   await page.getByRole("button", { name: "Open settings" }).click();
@@ -941,31 +968,23 @@ test("shows complete background cards and keeps an uploaded image locally", asyn
     name: /^Avatar(?: Avatar and stage)?$/,
   }).click();
 
-  const expectedVisibleCards = (page.viewportSize()?.width ?? 0) < 640 ? 1 : 3;
-  const layout = await page.locator(".kana-background-carousel").evaluate(
-    (carousel, visibleCards) => {
-      const viewport = carousel.getBoundingClientRect();
-      const cards = [...carousel.children]
-        .slice(0, visibleCards + 1)
-        .map((card) => {
-          const bounds = card.getBoundingClientRect();
-          return {
-            fullyVisible:
-              bounds.left >= viewport.left - 0.5
-              && bounds.right <= viewport.right + 0.5,
-            width: bounds.width,
-          };
-        });
-      return { cards, viewportWidth: viewport.width };
-    },
-    expectedVisibleCards,
-  );
-  expect(layout.cards.slice(0, expectedVisibleCards).every((card) => card.fullyVisible)).toBe(true);
-  expect(layout.cards[expectedVisibleCards]?.fullyVisible).toBe(false);
-  expect(layout.cards[0]?.width).toBeCloseTo(
-    (layout.viewportWidth - (expectedVisibleCards - 1) * 12) / expectedVisibleCards,
-    0,
-  );
+  const backgrounds = page.getByRole("radiogroup", { name: "Stage background" });
+  const layout = await backgrounds.evaluate((grid) => {
+    const bounds = grid.getBoundingClientRect();
+    const cards = [...grid.children].map((card) => card.getBoundingClientRect());
+    return {
+      inside: cards.every((card) => card.left >= bounds.left - 0.5 && card.right <= bounds.right + 0.5),
+      widths: new Set(cards.map((card) => Math.round(card.width))).size,
+      columns: new Set(cards.map((card) => Math.round(card.left))).size,
+      last: grid.lastElementChild?.textContent,
+    };
+  });
+  // A wrapping wardrobe grid: nothing clipped or scrolled away, one card width.
+  expect(layout.inside).toBe(true);
+  expect(layout.widths).toBe(1);
+  if ((page.viewportSize()?.width ?? 0) < 640) expect(layout.columns).toBe(2);
+  else expect(layout.columns).toBeGreaterThanOrEqual(3);
+  expect(layout.last).toBe("Upload image");
 
   await page.locator('input[type="file"][accept*=".png"]').setInputFiles({
     name: "my-stage.png",

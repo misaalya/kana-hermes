@@ -17,6 +17,15 @@
   browser and streams the file with seeking support. It serves only existing
   files outside credential and system folders (the same rule Hermes uses for
   Telegram and Discord), and never Kana's own data.
+- `/restart` restarts the `hermes serve` Kana started and puts you back on
+  the same conversation, so a change Hermes reads only at startup applies
+  without leaving Kana. (Hermes's own `/restart` restarts its messaging
+  gateway for Telegram or Discord, not the server Kana uses.) Kana does not
+  restart a Hermes it did not start, and waits for a reply to finish. The
+  Restart button in Settings now also reconnects the open conversation at
+  once. Hermes is told that models added to `config.yaml` appear in Kana
+  right away, that `.env` changes need `/reload`, and never to restart the
+  server itself.
 
 ### Changed
 
@@ -31,10 +40,30 @@
   between `---` lines) followed by the answer as Markdown, instead of a JSON
   envelope (response protocol 3). It costs fewer tokens: the answer is no
   longer quoted and escaped. Replies in the old JSON format are still read.
+- Kana now tells Hermes what Kana is and whether its voice is on. Hermes
+  knows the avatar, the chat, the settings, and the voice (Irodori or
+  Pollinations) are Kana's, so "speak cutely" or a question about the local
+  voice model is answered as Kana instead of with Hermes's own
+  `text_to_speech` tool. With the voice off, Hermes no longer writes the
+  Japanese speech line, which saves tokens; turning the voice on or off
+  updates Hermes on the next message.
 - Dialogs and the login card have square corners, Kana's signature; the
   buttons and fields inside them stay rounded. The history list drops its
   "Recent" label for a dotted divider, like the one in Settings. The browser
   tab shows Kana's portrait (`public/kana-hermes.png`, 192 px).
+- The "Set a password first" screen is one sentence and one command: the
+  command for how Kana was installed (`kana password`, `npm run password` in
+  a source checkout, or `node bin/kana.mjs password` in a standalone
+  deployment), in the same code block as /docs with a Copy button. It no
+  longer shows raw backticks, and the sign-in form appears by itself a few
+  seconds after the password is created.
+- Settings → Avatar is a wardrobe, like the Clara dressing room. Every avatar
+  is a card with its portrait and name; the chosen one has a blue ring and a
+  check. Kana takes the portrait from the stage a moment after an avatar
+  appears and keeps it in this browser only. An imported avatar's size,
+  Rename, and Remove are in the card's ⋯ menu. Stage backgrounds are a grid
+  of cards instead of a carousel with arrows, and each grid ends with a
+  dashed "+" card to import a Live2D folder or upload an image.
 
 ### Fixed
 
@@ -55,6 +84,16 @@
   check and read like a failure; the model chooser now says the model was
   changed. Other Hermes warnings, and the reason for a switch that failed,
   are still shown.
+- `/reload`, `/reload-mcp`, and `/reload-skills` now reach the Hermes server
+  Kana uses. They ran in a separate Hermes worker, so a new key in
+  `~/.hermes/.env` or a new MCP server stayed unused, and `/reload` could
+  fail with "Unsupported Hermes method."
+- After Hermes restarted, Kana could retry the lost session forever. It now
+  opens a new session on the next message when Hermes never stored the old
+  one (no message sent yet), and says so when a stored session is gone.
+- Other open Kana tabs now notice a Hermes restart and reconnect.
+- After a conversation was restored, Kana's own notes (a command and its
+  answer) could jump above the restored messages. They stay where they were.
 
 ## 0.3.2 — 2026-09-16
 

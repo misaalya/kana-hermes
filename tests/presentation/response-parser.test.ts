@@ -152,6 +152,26 @@ describe("Kana response parsing, protocol 3 header", () => {
     assert.throws(() => parseKanaResponse("---\nja: \nlang: id\n---\n"), KanaProtocolError);
   });
 
+  it("reads a header without ja, written while Kana's voice is off, as a silent reply", () => {
+    const silent = parseKanaResponse("---\nemotion: happy\nlang: id\n---\n**Siap!** Sudah beres.");
+    assert.deepEqual(silent, {
+      speech_ja: "",
+      subtitle: { text: "**Siap!** Sudah beres.", language: "id" },
+      emotion: "happy",
+    });
+    const bare = parseKanaResponse("emotion: thinking\nlang: en\n---\nLet me check.");
+    assert.equal(bare.subtitle.text, "Let me check.");
+    assert.equal(bare.emotion, "thinking");
+    const fenced = parseKanaResponse("```\nemotion: neutral\nlang: en\n---\nDone.\n```");
+    assert.equal(fenced.subtitle.text, "Done.");
+    assert.throws(() => parseKanaResponse("---\nemotion: happy\nlang: id\n---\n"), KanaProtocolError);
+  });
+
+  it("leaves an answer that opens with the word emotion alone", () => {
+    const raw = "Emotion: it depends on the context.\nMost people feel both.";
+    assert.equal(parseKanaResponse(raw).subtitle.text, raw);
+  });
+
   it("leaves an ordinary answer that merely mentions speech alone", () => {
     const raw = "Two terms:\nspeech: spoken words\nlanguage: the system of words";
     const response = parseKanaResponse(raw);

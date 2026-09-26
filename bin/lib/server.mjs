@@ -6,6 +6,7 @@ import { platform } from "node:os";
 import { ensureConfigFile, ensureSessionSecret } from "./bootstrap.mjs";
 import {
   manifest,
+  passwordCommand,
   readConfigSafely,
   voiceProviderName,
   runtimeRoot,
@@ -141,6 +142,7 @@ export async function runServer({ serving, host, port, open, dataRoot }) {
         PORT: String(port),
         HOME: userHome,
         KANA_DATA_DIR: dataRoot,
+        KANA_PASSWORD_COMMAND: passwordCommand,
         ...(serving ? { KANA_DEPLOYMENT_MODE: "deployment" } : {}),
         ...(hermes.executable ? { KANA_HERMES_BIN: hermes.executable } : {}),
       },
