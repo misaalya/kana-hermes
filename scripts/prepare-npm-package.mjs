@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { access, cp, mkdir, readFile, readdir, rm } from "node:fs/promises";
+import { homedir, userInfo } from "node:os";
 import path from "node:path";
 import { cleanStandalone } from "./clean-standalone.mjs";
 import { copyRuntimeAssets } from "./runtime-assets.mjs";
@@ -10,6 +11,17 @@ const cli = path.join(root, "cli");
 const appManifest = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
 const cliManifest = JSON.parse(await readFile(path.join(cli, "package.json"), "utf8"));
 if (appManifest.version !== cliManifest.version) throw new Error("App and CLI versions must match before packaging.");
+// Next.js records the absolute build folder in server.js and
+// required-server-files.json, so a build inside the maintainer's home directory
+// would publish their user name with the package.
+const username = userInfo().username.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+if (root.startsWith(homedir() + path.sep) || new RegExp(`(^|[^A-Za-z0-9])${username}($|[^A-Za-z0-9])`).test(root)) {
+  const message = `The build folder ${root} names your user account and would be published with the package.`;
+  if (process.argv.includes("--build")) {
+    throw new Error(`${message} Publish from a fresh clone outside your home directory (docs/RELEASE_CHECKLIST.md, step 5).`);
+  }
+  process.stderr.write(`Warning: ${message} Do not publish this build.\n`);
+}
 if (process.argv.includes("--build")) execFileSync("npm", ["run", "build"], { cwd: root, stdio: "inherit" });
 const output = path.join(cli, ".npm-package");
 const runtime = path.join(output, "runtime");

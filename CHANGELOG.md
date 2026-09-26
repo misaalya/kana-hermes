@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 — 2026-09-26
+
+### Removed
+
+- Versions 0.2.0-alpha.1 through 0.3.2 were removed from npm because they
+  contained details of the machine they were built on. Install 0.4.0 or
+  later.
 
 ### Added
 
@@ -29,7 +35,16 @@
 
 ### Changed
 
-- External voice is now a dedicated Pollinations integration
+- A new look in Kana's own white, grey, and blue, with no shadows: rounded
+  M PLUS Rounded 1c type, a pill tab bar, choice cards with a ring and a
+  check, and sliding segmented controls. Every dropdown is Kana's own and
+  can be searched, which helps with long model lists. The first run opens
+  with Kana greeting you in a dialogue box, and a typing bubble shows while
+  Hermes works or the voice is still being made.
+- Hermes's replies are shown as Markdown: headings, lists, tables, code,
+  quotes, and http(s) and mailto links. Kana never renders raw HTML from a
+  reply, and long lines wrap instead of being cut off.
+- **Breaking:** external voice is now a dedicated Pollinations integration
   (`"provider": "pollinations"` with a `tts.pollinations` block: `apiKey`,
   `model`, `voice`, `instructions`, `format`) instead of a preset over a
   generic OpenAI-compatible adapter. Kana sends Pollinations' documented
@@ -67,6 +82,18 @@
 
 ### Fixed
 
+- Refreshing the page while Hermes works keeps the activity list of the
+  running reply. Refreshing during the first reply of a new conversation
+  reopens that conversation instead of a blank chat and a second history
+  entry.
+- Kana no longer replaces the title Hermes gives a conversation, unless you
+  chose one with `/new <title>`.
+- Switching to a model of a custom provider (such as `custom:9router`) no
+  longer fails with an unknown provider.
+- Closing a dialog no longer takes the focus back after you moved on, so an
+  Enter meant for the composer cannot reopen Settings.
+- A reply whose voice is still being made keeps its Stop button and progress
+  when a voice check finishes in the background.
 - Kana's voice spoke Indonesian or English instead of Japanese with some
   models (GPT 5.6 Luna through 9router). Kana's response contract was sent as
   a system message when the session opened; that route dropped it, so the

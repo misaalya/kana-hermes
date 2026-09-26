@@ -11,6 +11,10 @@
    private; package/publish `cli/` through `npm run publish:cli`.
    Stable releases publish under the `latest` dist-tag only after the isolated
    global-install journey passes.
+   Build, pack, and publish from a fresh clone outside your home directory
+   whose path names no account, for example `mktemp -d /tmp/kana-release.XXXXXX`:
+   Next.js records the absolute build folder in the runtime files, and the
+   publish path refuses a build inside your home directory.
 6. Verify Live2D notices and third-party licenses; do not package user avatar
    assets. If the renderer/sample integration changed, run
    `npm run test:live2d:official`.
