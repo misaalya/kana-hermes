@@ -115,13 +115,13 @@ introduce a bypass-2FA token merely to avoid the interactive browser step.
 The user-owned executable is:
 
 ```text
-/home/you/.local/bin/hermes
+~/.local/bin/hermes
 ```
 
 The source currently available for read-only inspection is:
 
 ```text
-/home/you/.hermes/hermes-agent
+~/.hermes/hermes-agent
 ```
 
 Official upstream:

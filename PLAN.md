@@ -6,7 +6,7 @@
 Dokumen ini menggantikan roadmap produk lama. Sumbernya adalah audit menyeluruh
 2026-08-25 atas seluruh codebase (controller, agent client, bridge server,
 runtime Hermes, TTS relay, auth/persistence, React layer) yang diverifikasi
-silang dengan source Hermes terpasang di `/home/you/.hermes/hermes-agent`.
+silang dengan source Hermes terpasang di `~/.hermes/hermes-agent`.
 
 Konteks: pemilik menambal kode sepanjang hari dan banyak bug tersisa, sebagian
 muncul setelah pindah mesin. Aplikasi didesain untuk di-deploy di VPS (satu
@@ -95,8 +95,8 @@ mengembalikan seluruh transcript** (`messages`) dalam responsnya
 
 Sumber lengkap: `AGENTS.md`. Poin kritis untuk pekerjaan ini:
 
-1. Tidak memodifikasi `/home/you/.local/bin/hermes` maupun
-   `/home/you/.hermes/hermes-agent`. Semua fix dilakukan di sisi Kana.
+1. Tidak memodifikasi `~/.local/bin/hermes` maupun
+   `~/.hermes/hermes-agent`. Semua fix dilakukan di sisi Kana.
 2. Hermes tetap satu-satunya agent. Tidak ada LLM/loop/tool runner kedua.
 3. `speech_ja` selalu Jepang; subtitle historis tidak pernah diretranslate.
 4. Integrasi gagal secara jujur saat service eksternal tidak ada.
