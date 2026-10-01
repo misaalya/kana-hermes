@@ -119,14 +119,12 @@ export type Copy = {
   panels: {
     hermesTitle: string;
     states: Record<string, string>;
-    actionsLabel: string;
     start: string;
     starting: string;
     restart: string;
     restartConfirm: string;
     stop: string;
     stopConfirm: string;
-    refresh: string;
     hermesAria: string;
     checkFailed: string;
     controlFailed: string;
@@ -584,14 +582,12 @@ const id: Copy = {
       failed: "Gagal",
       disabled: "Tidak tersedia",
     },
-    actionsLabel: "Tindakan",
     start: "Nyalakan",
     starting: "Menyalakan…",
-    restart: "Mulai ulang",
-    restartConfirm: "Yakin, mulai ulang",
+    restart: "Restart",
+    restartConfirm: "Yakin, restart?",
     stop: "Matikan",
     stopConfirm: "Yakin, matikan",
-    refresh: "Perbarui status",
     hermesAria: "Kontrol proses Hermes",
     checkFailed: "Pemeriksaan kontrol gagal.",
     controlFailed: "Kontrol layanan gagal.",
@@ -1104,14 +1100,12 @@ const en: Copy = {
       failed: "Failed",
       disabled: "Unavailable",
     },
-    actionsLabel: "Actions",
     start: "Start",
     starting: "Starting…",
     restart: "Restart",
-    restartConfirm: "Yes, restart",
+    restartConfirm: "Yes, restart?",
     stop: "Stop",
-    stopConfirm: "Yes, stop",
-    refresh: "Refresh status",
+    stopConfirm: "Yes, stop?",
     hermesAria: "Hermes process control",
     checkFailed: "Control check failed.",
     controlFailed: "Service control failed.",

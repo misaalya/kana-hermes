@@ -220,17 +220,6 @@ export function StopIcon(props: IconProps) {
   );
 }
 
-export function RefreshIcon(props: IconProps) {
-  return (
-    <Icon {...props}>
-      <path d="M20.8 6.6A9 9 0 0 0 3.6 11.4L2 9.8" />
-      <path d="M2 3.2V8.6h5.4" />
-      <path d="M3.2 17.4a9 9 0 0 0 17.2-4.8L22 14.2" />
-      <path d="M22 20.8v-5.4h-5.4" />
-    </Icon>
-  );
-}
-
 export function ServerIcon(props: IconProps) {
   return (
     <DuoIcon {...props}>

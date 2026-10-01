@@ -41,6 +41,8 @@
   --kana-font: "Kana Ellipsis", var(--font-kana-sans), ui-rounded, system-ui, sans-serif;
   /* Springy ease for the game-menu motion (lift, pop, sliding thumbs). */
   --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* How long the phone chat takes to fade while the avatar is positioned. */
+  --kana-chat-fade: 200ms;
   /* White sticker stroke around the phone avatar tile, in both themes. */
   --sticker: #ffffff;
   --bg: #1c1c1c;
@@ -793,14 +795,20 @@ details[open] > .kana-plus-summary::before {
    place instead of sliding it sideways, so no sliver is left at the edge. */
 @media (max-width: 1023px) {
   .kana-chat-dock {
-    transition: opacity 200ms ease, visibility 0s linear 0s;
+    transition: opacity var(--kana-chat-fade) ease, visibility 0s linear 0s;
   }
 
   .kana-chat-dock.is-closed {
     transform: none;
     opacity: 0;
     visibility: hidden;
-    transition: opacity 200ms ease, visibility 0s linear 200ms;
+    transition: opacity var(--kana-chat-fade) ease, visibility 0s linear var(--kana-chat-fade);
+  }
+
+  /* The avatar layout panel takes the composer's place, so it waits for that
+     fade to finish instead of landing on a half-faded composer. */
+  .kana-layout-panel {
+    animation: kana-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1) var(--kana-chat-fade) both;
   }
 }
 
@@ -1584,6 +1592,11 @@ video.kana-media-preview {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+
+  /* Nothing fades here, so the avatar layout panel waits for no one. */
+  .kana-layout-panel {
+    animation-delay: 0s !important;
   }
 }
 

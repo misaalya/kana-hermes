@@ -15,6 +15,12 @@ type AvatarLayoutControlProps = {
   onReset(): void;
 };
 
+/**
+ * Phones fade the chat out in place while the avatar is positioned, and this
+ * panel sits exactly where the composer was. The entrance waits for that fade
+ * (`--kana-chat-fade` in globals.css) instead of landing on a half-faded
+ * composer, so nothing ever overlaps for a few frames.
+ */
 export function AvatarLayoutControl({
   layout,
   copy,
@@ -63,7 +69,7 @@ export function AvatarLayoutControl({
       {open ? (
         <div
           id="kana-avatar-layout-panel"
-          className="fixed right-4 top-[108px] z-30 max-sm:inset-x-3 max-sm:bottom-3 max-sm:top-auto"
+          className="kana-layout-panel fixed right-4 top-[108px] z-30 max-sm:inset-x-3 max-sm:bottom-3 max-sm:top-auto"
         >
           <AvatarLayoutPanel
             layout={layout}
