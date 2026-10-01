@@ -9,6 +9,9 @@ import { useLayoutEffect, useRef, useState } from "react";
 export const settingsButton =
   "kana-focus kana-pill kana-pill-soft min-h-9 shrink-0 whitespace-nowrap px-4 text-xs disabled:cursor-not-allowed disabled:opacity-50";
 
+export const settingsButtonAccent =
+  "kana-focus kana-pill kana-pill-accent min-h-9 shrink-0 whitespace-nowrap px-4 text-xs disabled:cursor-not-allowed disabled:opacity-50";
+
 export const settingsButtonDanger =
   `${settingsButton} hover:border-danger/60 hover:text-danger`;
 
