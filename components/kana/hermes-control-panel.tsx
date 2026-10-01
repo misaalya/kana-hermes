@@ -4,8 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { HermesRuntimeStatus } from "@/lib/runtime/hermes-control-client";
 import type { UiLocale } from "@/lib/ui/copy";
 import { getCopy } from "@/lib/ui/copy";
-import { PowerIcon, RefreshIcon, RestartIcon, StopIcon } from "./icons";
+import { PowerIcon, RestartIcon, StopIcon } from "./icons";
 import {
+  settingsButton,
   settingsButtonAccent,
   settingsButtonDanger,
   SettingsRow,
@@ -152,23 +153,7 @@ export function HermesControlPanel({
     )
     : undefined;
 
-  const refreshButton = (
-    <button
-      type="button"
-      className="kana-focus grid size-9 shrink-0 place-items-center rounded-full bg-surface-strong text-muted transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
-      aria-label={copy.refresh}
-      title={copy.refresh}
-      disabled={busy}
-      onClick={() => {
-        setNotice(null);
-        setConfirm(null);
-        void refresh();
-      }}
-    >
-      <RefreshIcon className="size-4" />
-    </button>
-  );
-
+  // One row: the state chip, then only the action that makes sense right now.
   const actions: React.ReactNode[] = [];
   if (canControl && settled) {
     if (running && status?.managed) {
@@ -177,11 +162,11 @@ export function HermesControlPanel({
         <button
           key="restart"
           type="button"
-          className={settingsButtonAccent}
+          className={settingsButton}
           disabled={busy}
           onClick={() => (armed ? void run("restart") : setConfirm("restart"))}
         >
-          <RestartIcon className="size-4" />
+          <RestartIcon className="size-[15px]" />
           {armed ? copy.restartConfirm : copy.restart}
         </button>,
       );
@@ -194,7 +179,7 @@ export function HermesControlPanel({
           disabled={busy}
           onClick={() => (stopArmed ? void run("stop") : setConfirm("stop"))}
         >
-          <StopIcon className="size-4" />
+          <StopIcon className="size-[15px]" />
           {stopArmed ? copy.stopConfirm : copy.stop}
         </button>,
       );
@@ -207,7 +192,7 @@ export function HermesControlPanel({
           disabled={busy || !status?.executable}
           onClick={() => void run("start")}
         >
-          <PowerIcon className="size-4" />
+          <PowerIcon className="size-[15px]" />
           {busy ? copy.starting : copy.start}
         </button>,
       );
@@ -219,13 +204,8 @@ export function HermesControlPanel({
       <SettingsRows>
         <SettingsRow label={copy.hermesTitle} description={description}>
           <StatusPill tone={tone} capitalize={false}>{stateLabel}</StatusPill>
-          {refreshButton}
+          {actions}
         </SettingsRow>
-        {actions.length > 0 ? (
-          <SettingsRow label={copy.actionsLabel}>
-            {actions}
-          </SettingsRow>
-        ) : null}
       </SettingsRows>
     </section>
   );

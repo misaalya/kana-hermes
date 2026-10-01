@@ -775,8 +775,17 @@ test("Settings → Connection separates Hermes state from its one useful action"
 
   await page.getByRole("button", { name: "Open settings" }).click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByRole("button", { name: /^Connection/ }).click();
-  const hermes = dialog.getByRole("region", { name: "Hermes process control" });
+  const openConnection = async () => {
+    await dialog.getByRole("button", { name: /^Connection/ }).click();
+    return dialog.getByRole("region", { name: "Hermes process control" });
+  };
+  // Settings reads the runtime once per open, so each state is a fresh open.
+  const reopen = async () => {
+    await dialog.getByRole("button", { name: "Close settings" }).click();
+    await page.getByRole("button", { name: "Open settings" }).click();
+    return openConnection();
+  };
+  let hermes = await openConnection();
 
   // One state, in Kana's words, plus plain facts. The server's technical
   // message, its PID, and its endpoint stay out of the browser's reading.
@@ -786,10 +795,9 @@ test("Settings → Connection separates Hermes state from its one useful action"
   await expect(hermes.getByText(runtimeStatus.message)).toHaveCount(0);
   await expect(hermes.getByText("4242")).toHaveCount(0);
 
-  // Refreshing state is a single quiet icon; the actions have their own row.
-  const refresh = hermes.getByRole("button", { name: "Refresh status" });
-  await expect(refresh).toBeVisible();
-  await expect(refresh).not.toContainText("Refresh");
+  // One row: the state chip and the two actions, and no refresh button.
+  await expect(hermes.getByText("Actions", { exact: true })).toHaveCount(0);
+  await expect(hermes.getByRole("button", { name: "Refresh status" })).toHaveCount(0);
   const restart = hermes.getByRole("button", { name: "Restart", exact: true });
   const stop = hermes.getByRole("button", { name: "Stop", exact: true });
   await expect(restart).toBeVisible();
@@ -797,10 +805,10 @@ test("Settings → Connection separates Hermes state from its one useful action"
 
   // Restarting closes every Hermes session, so it asks before it acts.
   await restart.click();
-  await expect(hermes.getByRole("button", { name: "Yes, restart" })).toBeVisible();
+  await expect(hermes.getByRole("button", { name: "Yes, restart?" })).toBeVisible();
   await expect(hermes.getByRole("button", { name: "Restart", exact: true })).toHaveCount(0);
   expect(actions).toEqual([]);
-  await hermes.getByRole("button", { name: "Yes, restart" }).click();
+  await hermes.getByRole("button", { name: "Yes, restart?" }).click();
   await expect.poll(() => actions).toEqual(["restart"]);
   await expect(hermes.getByText("Hermes restarted.")).toBeVisible();
   await page.screenshot({ path: `test-results/connection-${test.info().project.name}.png` });
@@ -809,7 +817,7 @@ test("Settings → Connection separates Hermes state from its one useful action"
   await page.route("**/api/local-runtime/hermes*", (route) =>
     route.fulfill({ json: { ...runtimeStatus, managed: false } }),
   );
-  await refresh.click();
+  hermes = await reopen();
   await expect(hermes.getByText("Started outside Kana, so Kana cannot restart or stop it.")).toBeVisible();
   await expect(hermes.getByRole("button", { name: /restart|stop/i })).toHaveCount(0);
 
@@ -817,7 +825,7 @@ test("Settings → Connection separates Hermes state from its one useful action"
   await page.route("**/api/local-runtime/hermes*", (route) =>
     route.fulfill({ json: { ...runtimeStatus, controlAvailable: false, state: "disabled" } }),
   );
-  await refresh.click();
+  hermes = await reopen();
   await expect(hermes.getByText("Unavailable")).toBeVisible();
   await expect(hermes.getByText("Process control is available only through the Kana launcher (`kana serve`).")).toBeVisible();
   await expect(hermes.getByRole("button", { name: /^(?:Start|Stop|Restart)$/ })).toHaveCount(0);
@@ -826,6 +834,9 @@ test("Settings → Connection separates Hermes state from its one useful action"
 test("adjusts the active avatar from the workspace instead of settings", async ({
   page,
 }) => {
+  // The panel waits for the phone chat fade, and that overlap only shows up
+  // while transitions run.
+  await page.emulateMedia({ reducedMotion: "no-preference" });
   const trigger = page.getByRole("button", {
     name: "Adjust avatar position and size",
   });
@@ -835,6 +846,12 @@ test("adjusts the active avatar from the workspace instead of settings", async (
     name: "Adjust avatar position and size",
   });
   await expect(panel).toBeVisible();
+  if ((page.viewportSize()?.width ?? 0) < 1024) {
+    // The panel takes the composer's place, so the chat is completely gone
+    // before the panel paints: never a half-faded chat under a half-faded
+    // panel for a few frames.
+    await expect(page.locator(".kana-chat-dock")).toHaveCSS("visibility", "hidden");
+  }
   const horizontal = panel.getByRole("slider", { name: /^X$/ });
   await horizontal.evaluate((input) => {
     const slider = input as HTMLInputElement;
