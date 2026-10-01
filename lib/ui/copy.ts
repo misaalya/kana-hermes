@@ -119,18 +119,25 @@ export type Copy = {
   panels: {
     hermesTitle: string;
     states: Record<string, string>;
+    actionsLabel: string;
     start: string;
     starting: string;
     restart: string;
+    restartConfirm: string;
     stop: string;
+    stopConfirm: string;
     refresh: string;
-    advanced: string;
-    portLabel: string;
-    cwdLabel: string;
-    cwdPlaceholder: string;
     hermesAria: string;
     checkFailed: string;
     controlFailed: string;
+    runningOnPort(port: number): string;
+    managedByKana: string;
+    externalHermes: string;
+    controlUnavailable: string;
+    missingExecutable: string;
+    startedNotice: string;
+    restartedNotice: string;
+    stoppedNotice: string;
   };
   gate: {
     connecting: string;
@@ -569,26 +576,33 @@ const id: Copy = {
   panels: {
     hermesTitle: "Hermes",
     states: {
-      checking: "memeriksa…",
-      running: "menyala",
-      external: "menyala",
-      starting: "menyiapkan…",
-      stopping: "mematikan…",
-      failed: "gagal",
-      stopped: "mati",
+      checking: "Memeriksa…",
+      running: "Berjalan",
+      starting: "Memulai…",
+      stopping: "Menghentikan…",
+      stopped: "Terhenti",
+      failed: "Gagal",
+      disabled: "Tidak tersedia",
     },
+    actionsLabel: "Tindakan",
     start: "Nyalakan",
     starting: "Menyalakan…",
     restart: "Mulai ulang",
+    restartConfirm: "Yakin, mulai ulang",
     stop: "Matikan",
+    stopConfirm: "Yakin, matikan",
     refresh: "Perbarui status",
-    advanced: "Pengaturan lanjutan",
-    portLabel: "Port lokal",
-    cwdLabel: "Folder kerja (opsional)",
-    cwdPlaceholder: "/home/user/project",
     hermesAria: "Kontrol proses Hermes",
     checkFailed: "Pemeriksaan kontrol gagal.",
     controlFailed: "Kontrol layanan gagal.",
+    runningOnPort: (port: number) => `Berjalan di port ${port}.`,
+    managedByKana: "Dijalankan oleh Kana.",
+    externalHermes: "Dijalankan di luar Kana, jadi Kana tidak bisa memulai ulang atau mematikannya.",
+    controlUnavailable: "Kontrol proses hanya tersedia lewat launcher Kana (`kana serve`).",
+    missingExecutable: "Hermes belum ditemukan. Jalankan `kana doctor`, lalu atur hermes.executable di config.json.",
+    startedNotice: "Hermes dijalankan.",
+    restartedNotice: "Hermes dimulai ulang.",
+    stoppedNotice: "Hermes dimatikan.",
   },
   gate: {
     connecting: "Menghubungkan…",
@@ -1082,26 +1096,33 @@ const en: Copy = {
   panels: {
     hermesTitle: "Hermes",
     states: {
-      checking: "checking…",
-      running: "running",
-      external: "running",
-      starting: "starting…",
-      stopping: "stopping…",
-      failed: "failed",
-      stopped: "stopped",
+      checking: "Checking…",
+      running: "Running",
+      starting: "Starting…",
+      stopping: "Stopping…",
+      stopped: "Stopped",
+      failed: "Failed",
+      disabled: "Unavailable",
     },
+    actionsLabel: "Actions",
     start: "Start",
     starting: "Starting…",
     restart: "Restart",
+    restartConfirm: "Yes, restart",
     stop: "Stop",
+    stopConfirm: "Yes, stop",
     refresh: "Refresh status",
-    advanced: "Advanced",
-    portLabel: "Local port",
-    cwdLabel: "Working folder (optional)",
-    cwdPlaceholder: "/home/user/project",
     hermesAria: "Hermes process control",
     checkFailed: "Control check failed.",
     controlFailed: "Service control failed.",
+    runningOnPort: (port: number) => `Running on port ${port}.`,
+    managedByKana: "Started by Kana.",
+    externalHermes: "Started outside Kana, so Kana cannot restart or stop it.",
+    controlUnavailable: "Process control is available only through the Kana launcher (`kana serve`).",
+    missingExecutable: "Hermes was not found. Run `kana doctor`, then set hermes.executable in config.json.",
+    startedNotice: "Hermes started.",
+    restartedNotice: "Hermes restarted.",
+    stoppedNotice: "Hermes stopped.",
   },
   gate: {
     connecting: "Connecting…",

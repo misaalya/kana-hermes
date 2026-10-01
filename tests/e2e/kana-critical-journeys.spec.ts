@@ -750,6 +750,79 @@ test("the config guide opens from Settings and follows this installation", async
   expect(sideways).toBe(0);
 });
 
+test("Settings → Connection separates Hermes state from its one useful action", async ({
+  page,
+}) => {
+  const runtimeStatus = {
+    controlAvailable: true,
+    state: "running",
+    managed: true,
+    executable: "/home/user/.local/bin/hermes",
+    pid: 4242,
+    port: 9119,
+    websocketUrl: "ws://127.0.0.1:9119/api/ws",
+    message: "Hermes UI gateway is running under Kana.",
+  };
+  const actions: string[] = [];
+  await page.route("**/api/local-runtime/hermes*", async (route) => {
+    if (route.request().method() === "POST") {
+      actions.push(route.request().postDataJSON().action);
+      await route.fulfill({ json: runtimeStatus });
+      return;
+    }
+    await route.fulfill({ json: runtimeStatus });
+  });
+
+  await page.getByRole("button", { name: "Open settings" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: /^Connection/ }).click();
+  const hermes = dialog.getByRole("region", { name: "Hermes process control" });
+
+  // One state, in Kana's words, plus plain facts. The server's technical
+  // message, its PID, and its endpoint stay out of the browser's reading.
+  await expect(hermes.getByText("Running", { exact: true })).toBeVisible();
+  await expect(hermes.getByText("Running on port 9119.")).toBeVisible();
+  await expect(hermes.getByText("Started by Kana.")).toBeVisible();
+  await expect(hermes.getByText(runtimeStatus.message)).toHaveCount(0);
+  await expect(hermes.getByText("4242")).toHaveCount(0);
+
+  // Refreshing state is a single quiet icon; the actions have their own row.
+  const refresh = hermes.getByRole("button", { name: "Refresh status" });
+  await expect(refresh).toBeVisible();
+  await expect(refresh).not.toContainText("Refresh");
+  const restart = hermes.getByRole("button", { name: "Restart", exact: true });
+  const stop = hermes.getByRole("button", { name: "Stop", exact: true });
+  await expect(restart).toBeVisible();
+  await expect(stop).toBeVisible();
+
+  // Restarting closes every Hermes session, so it asks before it acts.
+  await restart.click();
+  await expect(hermes.getByRole("button", { name: "Yes, restart" })).toBeVisible();
+  await expect(hermes.getByRole("button", { name: "Restart", exact: true })).toHaveCount(0);
+  expect(actions).toEqual([]);
+  await hermes.getByRole("button", { name: "Yes, restart" }).click();
+  await expect.poll(() => actions).toEqual(["restart"]);
+  await expect(hermes.getByText("Hermes restarted.")).toBeVisible();
+  await page.screenshot({ path: `test-results/connection-${test.info().project.name}.png` });
+
+  // A Hermes Kana adopted is left alone, so there is nothing to press.
+  await page.route("**/api/local-runtime/hermes*", (route) =>
+    route.fulfill({ json: { ...runtimeStatus, managed: false } }),
+  );
+  await refresh.click();
+  await expect(hermes.getByText("Started outside Kana, so Kana cannot restart or stop it.")).toBeVisible();
+  await expect(hermes.getByRole("button", { name: /restart|stop/i })).toHaveCount(0);
+
+  // Without process control the panel says so instead of offering dead buttons.
+  await page.route("**/api/local-runtime/hermes*", (route) =>
+    route.fulfill({ json: { ...runtimeStatus, controlAvailable: false, state: "disabled" } }),
+  );
+  await refresh.click();
+  await expect(hermes.getByText("Unavailable")).toBeVisible();
+  await expect(hermes.getByText("Process control is available only through the Kana launcher (`kana serve`).")).toBeVisible();
+  await expect(hermes.getByRole("button", { name: /^(?:Start|Stop|Restart)$/ })).toHaveCount(0);
+});
+
 test("adjusts the active avatar from the workspace instead of settings", async ({
   page,
 }) => {
@@ -834,7 +907,9 @@ test("composer selects the Hermes model and returns keyboard focus", async ({ pa
   await expect(dialog.getByRole("combobox", { name: "Model", exact: true })).toHaveText("deepseek/deepseek-v4");
   await dialog.getByRole("button", { name: "Use this model" }).click();
   // Exact: the model it replaces, deepseek-v4-flash-0731, contains this name.
-  await expect(trigger).toHaveText(/^deepseek-v4\s*⌄$/);
+  await expect(trigger).toHaveText(/^deepseek-v4$/);
+  // The chip carries the model glyph and a real chevron, never a typed "⌄".
+  await expect(trigger.locator("svg")).toHaveCount(2);
   await page.keyboard.press("Escape");
   await expect(dialog).not.toBeVisible();
   await expect(trigger).toBeFocused();

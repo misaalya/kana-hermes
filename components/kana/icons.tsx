@@ -183,6 +183,54 @@ export function BotIcon(props: IconProps) {
   );
 }
 
+/** Start the managed Hermes process: the power glyph on a soft disc. */
+export function PowerIcon(props: IconProps) {
+  return (
+    <DuoIcon {...props}>
+      <circle opacity={SOFT} cx="12" cy="12" r="9.7" />
+      <path d="M12 3.4v8" fill="none" stroke="currentColor" strokeWidth="2.7" strokeLinecap="round" />
+      <path d="M17.7 7.3a8 8 0 1 1-11.4 0" fill="none" stroke="currentColor" strokeWidth="2.7" strokeLinecap="round" />
+    </DuoIcon>
+  );
+}
+
+/** Restart it: an open ring with the corner that starts the turn. */
+export function RestartIcon(props: IconProps) {
+  return (
+    <DuoIcon {...props}>
+      <path
+        opacity={SOFT}
+        d="M19.9 12a7.9 7.9 0 1 1-2.4-5.6"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.7"
+        strokeLinecap="round"
+      />
+      <path d="M19.9 2.9v5.4h-5.4" fill="none" stroke="currentColor" strokeWidth="2.7" strokeLinecap="round" strokeLinejoin="round" />
+    </DuoIcon>
+  );
+}
+
+export function StopIcon(props: IconProps) {
+  return (
+    <DuoIcon {...props}>
+      <rect opacity={SOFT} x="2.6" y="2.6" width="18.8" height="18.8" rx="5.4" />
+      <rect x="7.8" y="7.8" width="8.4" height="8.4" rx="2.2" />
+    </DuoIcon>
+  );
+}
+
+export function RefreshIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M20.8 6.6A9 9 0 0 0 3.6 11.4L2 9.8" />
+      <path d="M2 3.2V8.6h5.4" />
+      <path d="M3.2 17.4a9 9 0 0 0 17.2-4.8L22 14.2" />
+      <path d="M22 20.8v-5.4h-5.4" />
+    </Icon>
+  );
+}
+
 export function ServerIcon(props: IconProps) {
   return (
     <DuoIcon {...props}>

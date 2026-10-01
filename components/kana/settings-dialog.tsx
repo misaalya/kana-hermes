@@ -685,14 +685,12 @@ export function SettingsDialog({
             {section === "system" ? (
               <>
                 <SettingsGroup title={settingsCopy.sections.system.label}>
-                  <SettingsRows>
-                    <HermesControlPanel
-                      locale={draft.uiLocale}
-                      onInspect={() => onInspectHermesControl()}
-                      onStart={onStartHermesControl}
-                      onStop={onStopHermesControl}
-                    />
-                  </SettingsRows>
+                  <HermesControlPanel
+                    locale={draft.uiLocale}
+                    onInspect={() => onInspectHermesControl()}
+                    onStart={onStartHermesControl}
+                    onStop={onStopHermesControl}
+                  />
                 </SettingsGroup>
                 <AdvancedConfigCard locale={draft.uiLocale} />
               </>

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { AgentModelCatalog, AgentModelSwitchResult } from "@/lib/agent/types";
 import { getCopy, type UiLocale } from "@/lib/ui/copy";
+import { BotIcon, ChevronDownIcon } from "./icons";
 import { ModelControlPanel } from "./model-control-panel";
 
 export function ComposerModelChoice({ locale, sessionKey, connected, disabled, catalog, onList, onSelect }: {
@@ -33,7 +34,9 @@ export function ComposerModelChoice({ locale, sessionKey, connected, disabled, c
       aria-haspopup="dialog" aria-expanded={open}
       className="kana-model-pill kana-focus ml-auto flex min-h-10 min-w-0 max-w-[min(55%,260px)] items-center gap-1.5 rounded-full px-4 text-[12.5px]"
       onClick={() => setOpen(true)}>
-      <span className="truncate">{connected && model ? model.split("/").pop() : label}</span><span aria-hidden="true">⌄</span>
+      <BotIcon className="size-[15px] shrink-0" />
+      <span className="truncate">{connected && model ? model.split("/").pop() : label}</span>
+      <ChevronDownIcon className="size-3.5 shrink-0" />
     </button>
     <dialog ref={dialog} aria-label={label} onCancel={() => setOpen(false)} onClose={() => setOpen(false)}
       onClick={(event) => { if (event.target === event.currentTarget) setOpen(false); }}
