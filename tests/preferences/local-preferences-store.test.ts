@@ -226,6 +226,23 @@ describe("LocalPreferencesStore", () => {
     assert.equal(persisted.includes("arbitrary.js"), false);
   });
 
+  it("keeps the stage on unless the user switched it off", () => {
+    const persistent = new MemoryStorage();
+    // A record from a build without the setting, and a tampered value, both
+    // stay a chat-and-avatar workspace.
+    persistent.setItem("kana.preferences.v5", JSON.stringify({ uiLocale: "en" }));
+    assert.equal(new LocalPreferencesStore(persistent).load().avatarVisible, true);
+    persistent.setItem(
+      "kana.preferences.v5",
+      JSON.stringify({ uiLocale: "en", avatarVisible: "no" }),
+    );
+    assert.equal(new LocalPreferencesStore(persistent).load().avatarVisible, true);
+
+    const store = new LocalPreferencesStore(persistent);
+    store.save({ ...DEFAULT_PREFERENCES, avatarVisible: false });
+    assert.equal(store.load().avatarVisible, false);
+  });
+
   it("keeps an unreadable legacy record available for manual recovery", () => {
     const persistent = new MemoryStorage();
     persistent.setItem("kana.preferences.v2", "{not valid JSON");

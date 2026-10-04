@@ -179,6 +179,7 @@ function parsePreferences(value: unknown): KanaPreferences {
         ? value.customBackgroundId.slice(0, 500)
         : undefined,
     voiceEnabled: value.voiceEnabled !== false,
+    avatarVisible: value.avatarVisible !== false,
     hermes: {
       cwd:
         typeof hermes.cwd === "string"

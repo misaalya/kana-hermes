@@ -478,6 +478,15 @@ product direction, not a temporary theme.
     menu on its top-left corner. Background cards are a 16:10 preview over
     the name. Each grid ends with a dashed card with a blue "+" disc that adds
     one (import Live2D, upload an image);
+  - the Avatar section opens with one row, "Show avatar"
+    (`preferences.avatarVisible`, default on, anything but `false` in a stored
+    or restored record). Off is a chat-only workspace: the avatar layer goes
+    `visibility: hidden` so the canvas keeps its box and the WebGL runtime
+    stops its ticker, while the room's pattern stays as the wallpaper; the
+    conversation becomes a centred 720 px column (`is-sole`) instead of an
+    unreadable full-width wall, the phone tile and the hide-chat tab disappear,
+    and the "Scale" header tab is not rendered. Kana's first-run greeting
+    always keeps the stage, because it introduces her face to face;
   - segmented controls are a pill track with a sliding blue thumb;
   - in-content section labels are small rounded bubbles
     (`kana-label-bubble`), but the Settings sidebar group labels ("Personal",

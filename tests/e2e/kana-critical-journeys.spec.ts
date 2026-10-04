@@ -1314,6 +1314,53 @@ test("guides a new browser profile through onboarding onto the workspace", async
   ).toBeVisible();
 });
 
+test("turns the workspace into a chat-only view for a focused conversation", async ({
+  page,
+}) => {
+  const stage = page.getByRole("region", { name: "Kana avatar stage" });
+  const avatarLayer = page.locator(".kana-avatar-viewport");
+  const dock = page.locator(".kana-chat-dock");
+  const canvas = page.getByTestId("live2d-canvas");
+  const scale = page.getByRole("button", { name: "Adjust avatar position and size" });
+  await expect(stage).toBeVisible();
+  await expect(avatarLayer).toBeVisible();
+  const withAvatar = (await dock.boundingBox())?.width ?? 0;
+
+  await page.getByRole("button", { name: "Open settings" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: /^Avatar(?: Avatar and stage)?$/ }).click();
+  await dialog.getByRole("switch", { name: "Show avatar" }).click();
+  await dialog.getByRole("button", { name: "Close settings" }).click();
+
+  // The avatar is gone, the room is still there, and the conversation reads as
+  // a centred column instead of an unreadable wall of text.
+  await expect(avatarLayer).toBeHidden();
+  await expect(stage).toBeVisible();
+  await expect(scale).toHaveCount(0);
+  await expect(dock).toHaveClass(/is-sole/);
+  const solo = await dock.boundingBox();
+  expect(solo?.width ?? 0).toBeGreaterThan(withAvatar * 1.5);
+  expect(solo?.width ?? 0).toBeLessThanOrEqual(721);
+  // A centred column, not a card pinned to one edge.
+  expect(Math.abs((solo?.x ?? 0) - ((page.viewportSize()?.width ?? 0) - (solo?.width ?? 0)) / 2)).toBeLessThan(2);
+  expect((solo?.width ?? 0) <= (page.viewportSize()?.width ?? 0));
+  // The canvas stays mounted, so the model and its WebGL context survive.
+  await expect(canvas).toHaveCount(1);
+  await expect(page.getByRole("textbox", { name: "Message Kana" })).toBeVisible();
+
+  // It survives a reload, because the choice is a local preference.
+  await page.reload();
+  await expect(avatarLayer).toBeHidden();
+  await page.getByRole("button", { name: "Open settings" }).click();
+  await dialog.getByRole("button", { name: /^Avatar(?: Avatar and stage)?$/ }).click();
+  await dialog.getByRole("switch", { name: "Show avatar" }).click();
+  await dialog.getByRole("button", { name: "Close settings" }).click();
+  await expect(stage).toBeVisible();
+  await expect(avatarLayer).toBeVisible();
+  await expect(scale).toBeVisible();
+  await page.screenshot({ path: `test-results/chat-only-restored-${test.info().project.name}.png` });
+});
+
 test("falls back to the placeholder avatar when Live2D cannot load", async ({
   page,
 }) => {

@@ -51,6 +51,7 @@ export const DEFAULT_PREFERENCES: KanaPreferences = {
   voiceEnabled: false,
   voiceMode: "configured",
   avatarMode: "live2d",
+  avatarVisible: true,
   stageBackground: "plain",
   hermes: {
     cwd: "",
@@ -96,6 +97,9 @@ export function normalizeKanaPreferences(
     agentMode: "hermes",
     voiceMode: "configured",
     avatarMode: "live2d",
+    // Anything but an explicit false keeps the stage: stored records from
+    // builds without the setting, and restored values, stay chat-and-avatar.
+    avatarVisible: preferences.avatarVisible !== false,
     stageBackground,
     customBackgroundId,
     uiLocale: isUiLocale(preferences.uiLocale) ? preferences.uiLocale : "id",

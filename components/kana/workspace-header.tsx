@@ -17,6 +17,7 @@ export function WorkspaceHeader() {
   const live2d = useKanaStore("preferences", (state) => state.preferences.live2d);
   const title = useKanaStore("conversations", (state) => selectActiveConversation(state)?.title);
   const avatarLayoutOpen = useKanaStore("workspace", (state) => state.avatarLayoutOpen);
+  const avatarVisible = useKanaStore("preferences", (state) => state.preferences.avatarVisible);
   const greeting = useKanaStore("workspace", (state) => state.greeting);
   const updateAvatarLayout = useUpdateAvatarLayout();
   const copy = getCopy(locale);
@@ -45,14 +46,17 @@ export function WorkspaceHeader() {
           {theme === "dark" ? <SunIcon /> : <MoonIcon />}
           <span className="kana-tip">{theme === "dark" ? text.light : text.dark}</span>
         </button>
-        <AvatarLayoutControl
-          layout={live2DModelLayout(live2d)}
-          copy={copy}
-          open={avatarLayoutOpen}
-          onOpenChange={(open) => setWorkspace({ avatarLayoutOpen: open })}
-          onChange={updateAvatarLayout}
-          onReset={() => updateAvatarLayout({ ...DEFAULT_LIVE2D_MODEL_LAYOUT })}
-        />
+        {/* Positioning an avatar that is not on screen has nothing to show. */}
+        {avatarVisible ? (
+          <AvatarLayoutControl
+            layout={live2DModelLayout(live2d)}
+            copy={copy}
+            open={avatarLayoutOpen}
+            onOpenChange={(open) => setWorkspace({ avatarLayoutOpen: open })}
+            onChange={updateAvatarLayout}
+            onReset={() => updateAvatarLayout({ ...DEFAULT_LIVE2D_MODEL_LAYOUT })}
+          />
+        ) : null}
         <button
           type="button"
           className="kana-workspace-action kana-focus"

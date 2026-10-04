@@ -302,6 +302,7 @@ export type Copy = {
     interfaceTitle: string;
     voiceTitle: string;
     voiceToggle: string;
+    avatarVisible: string;
     stageTitle: string;
     backgroundOptions: Record<string, { label: string }>;
     stageAria: string;
@@ -772,6 +773,7 @@ const id: Copy = {
     interfaceTitle: "Bahasa antarmuka",
     voiceTitle: "Suara Kana",
     voiceToggle: "Suara Jepang",
+    avatarVisible: "Tampilkan avatar",
     stageTitle: "Latar panggung",
     backgroundOptions: {
       plain: { label: "Polos" },
@@ -1290,6 +1292,7 @@ const en: Copy = {
     interfaceTitle: "Interface language",
     voiceTitle: "Kana's voice",
     voiceToggle: "Japanese voice",
+    avatarVisible: "Show avatar",
     stageTitle: "Stage background",
     backgroundOptions: {
       plain: { label: "Plain" },

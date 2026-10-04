@@ -37,6 +37,8 @@ export type KanaPreferences = {
   voiceEnabled: boolean;
   voiceMode: VoiceMode;
   avatarMode: AvatarMode;
+  /** Off means a plain chat workspace: the stage, its pattern, and its canvas stay unmounted. */
+  avatarVisible: boolean;
   stageBackground: StageBackground;
   customBackgroundId?: string;
   hermes: {
