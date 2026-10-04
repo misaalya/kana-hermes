@@ -23,13 +23,16 @@ export function useUpdateAvatarLayout() {
 /**
  * Phones are chat-first; while the avatar is being positioned the stage fills
  * the screen. Kana's first-run greeting clears the stage on every width.
+ * Without the avatar there is nothing left to hide, so the conversation stays.
  */
 export function useChatVisible(): boolean {
   const usesMobileChat = useKanaStore("workspace", (state) => state.usesMobileChat);
   const avatarLayoutOpen = useKanaStore("workspace", (state) => state.avatarLayoutOpen);
   const greeting = useKanaStore("workspace", (state) => state.greeting);
+  const avatarVisible = useKanaStore("preferences", (state) => state.preferences.avatarVisible);
   const chatOpen = useKanaStore("workspace", (state) => state.chatOpen);
   if (greeting) return false;
+  if (!avatarVisible) return true;
   return usesMobileChat ? !avatarLayoutOpen : chatOpen;
 }
 
@@ -40,6 +43,7 @@ export function WorkspaceStage() {
   const customBackgroundId = useKanaStore("preferences", (state) => state.preferences.customBackgroundId);
   const locale = useKanaStore("preferences", (state) => state.preferences.uiLocale);
   const live2d = useKanaStore("preferences", (state) => state.preferences.live2d);
+  const avatarVisible = useKanaStore("preferences", (state) => state.preferences.avatarVisible);
   const usesMobileChat = useKanaStore("workspace", (state) => state.usesMobileChat);
   const avatarLayoutOpen = useKanaStore("workspace", (state) => state.avatarLayoutOpen);
   const greeting = useKanaStore("workspace", (state) => state.greeting);
@@ -82,11 +86,13 @@ export function WorkspaceStage() {
           customBackground && customBackground.id === customBackgroundId ? customBackground.url : undefined
         }
         chatOpen={chatVisible}
-        compact={usesMobileChat && !avatarLayoutOpen && !greeting}
+        compact={usesMobileChat && avatarVisible && !avatarLayoutOpen && !greeting}
+        // Kana introduces herself face to face, so the greeting keeps the stage.
+        visible={avatarVisible || greeting}
         locale={locale}
         onCanvasReady={workspace.actions.attachAvatarCanvas}
       />
-      {avatarLayoutOpen && avatar.renderMode === "live2d" ? (
+      {avatarVisible && avatarLayoutOpen && avatar.renderMode === "live2d" ? (
         <AvatarLayoutSurface
           layout={live2DModelLayout(live2d)}
           label={getCopy(locale).settings.avatarLayoutSurface}

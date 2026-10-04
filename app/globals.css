@@ -43,6 +43,8 @@
   --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   /* How long the phone chat takes to fade while the avatar is positioned. */
   --kana-chat-fade: 200ms;
+  /* The strip the header bar needs, so chat and panels clear it. */
+  --kana-header-clear: 84px;
   /* White sticker stroke around the phone avatar tile, in both themes. */
   --sticker: #ffffff;
   --bg: #1c1c1c;
@@ -779,6 +781,22 @@ details[open] > .kana-plus-summary::before {
   transform: translateX(calc(100% - 2px));
 }
 
+/* With the avatar switched off the conversation is the whole workspace: it
+   becomes a centred reading column on the room's wallpaper, and there is
+   nothing left for the hide-chat tab to hide. */
+@media (min-width: 1024px) {
+  .kana-chat-dock.is-sole {
+    right: auto;
+    left: 50%;
+    width: min(720px, calc(100vw - 2rem));
+    transform: translateX(-50%);
+  }
+}
+
+.kana-chat-dock.is-sole .kana-chat-toggle {
+  display: none;
+}
+
 /* Kana's first-run greeting clears the stage: chat and header step away. */
 .kana-workspace-header {
   transition: opacity 250ms ease;
@@ -803,6 +821,12 @@ details[open] > .kana-plus-summary::before {
     opacity: 0;
     visibility: hidden;
     transition: opacity var(--kana-chat-fade) ease, visibility 0s linear var(--kana-chat-fade);
+  }
+
+  /* Phones keep the full-bleed chat; only the band the avatar tile reserved
+     goes away, so the wallpaper reaches the header. */
+  .kana-chat-dock.is-sole {
+    top: var(--kana-header-clear);
   }
 
   /* The avatar layout panel takes the composer's place, so it waits for that

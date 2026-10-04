@@ -539,6 +539,17 @@ export function SettingsDialog({
 
             {section === "avatar" ? (
               <>
+                <SettingsGroup>
+                  <SettingsRows>
+                    <SettingsRow label={settingsCopy.avatarVisible}>
+                      <Toggle
+                        checked={draft.avatarVisible}
+                        label={settingsCopy.avatarVisible}
+                        onChange={() => setDraft((current) => ({ ...current, avatarVisible: !current.avatarVisible }))}
+                      />
+                    </SettingsRow>
+                  </SettingsRows>
+                </SettingsGroup>
                 <SettingsGroup title={settingsCopy.avatarLibrary}>
                   <input
                     ref={avatarInputRef}

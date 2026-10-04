@@ -10,6 +10,13 @@ type AvatarStageProps = {
   chatOpen: boolean;
   /** Phones show the avatar as a small call-style tile beside a full-screen chat. */
   compact?: boolean;
+  /**
+   * Off hides the avatar layer only: the room's pattern stays as the
+   * wallpaper, and the canvas keeps its box so the WebGL runtime and the
+   * loaded model survive. `visibility: hidden` stops the runtime's ticker
+   * (it pauses on an off-screen canvas) without resizing it to nothing.
+   */
+  visible?: boolean;
   locale: UiLocale;
   onCanvasReady(canvas: HTMLCanvasElement | null): void;
 };
@@ -20,6 +27,7 @@ export const AvatarStage = memo(function AvatarStage({
   customBackgroundUrl,
   chatOpen,
   compact = false,
+  visible = true,
   locale,
   onCanvasReady,
 }: AvatarStageProps) {
@@ -40,8 +48,9 @@ export const AvatarStage = memo(function AvatarStage({
         aria-hidden="true"
       />
       <div
-        className="kana-avatar-viewport absolute inset-0 overflow-hidden"
+        className={`kana-avatar-viewport absolute inset-0 overflow-hidden ${visible ? "" : "invisible pointer-events-none"}`}
         data-chat-open={chatOpen}
+        aria-hidden={visible ? undefined : true}
       >
         <div className="kana-avatar-content absolute inset-0">
           <canvas
