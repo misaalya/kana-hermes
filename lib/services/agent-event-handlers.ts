@@ -357,7 +357,7 @@ export function handleAgentEvent(context: AgentEventContext, event: AgentEvent):
           event.request.kind === "approval"
             ? event.request.description
             : event.request.kind === "clarification"
-              ? event.request.question
+              ? event.request.questions.map((entry) => entry.question).join(" / ")
               : copy.secureInputWaiting,
         state: "attention",
         timestamp: Date.now(),
