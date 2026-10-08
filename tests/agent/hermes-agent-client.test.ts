@@ -539,7 +539,8 @@ describe("HermesAgentClient (relay transport)", () => {
     await client.respondToInput({
       kind: "clarification",
       requestId: "clarify-1",
-      answer: "Use option A",
+      answers: [{ qid: "q0", answer: "Use option A" }],
+      cancelled: false,
     });
     await client.respondToInput({ kind: "sudo", requestId: "sudo-1", password: "secret" });
     await client.respondToInput({ kind: "secret", requestId: "secret-1", value: "token" });
@@ -613,6 +614,128 @@ describe("HermesAgentClient (relay transport)", () => {
     });
     assert.equal(resumed.sessionId, "runtime-2");
     assert.ok(FakeRelay.requests.some((request) => request.method === "session.resume"));
+  });
+
+  it("answers batch clarify requests with per-question locks", async () => {
+    const events: AgentEvent[] = [];
+    const client = await connectedClient((request) => {
+      if (request.method === "session.create") {
+        return { session_id: "runtime-1", stored_session_id: "stored-1" };
+      }
+      return {};
+    });
+    await openSession(client);
+    client.subscribe((event) => events.push(event));
+
+    // Hermes 0.21+ batch shape: questions array plus request_id.
+    latestStream().emitEvent("clarify.request", {
+      request_id: "batch-1",
+      questions: [
+        { qid: "q0", question: "Mau aku tanya tentang apa?", choices: ["Kabar", "Hobi"], multi_select: false },
+        { qid: "q1", question: "Seberapa sering?", choices: null, multi_select: false },
+      ],
+    });
+    const requested = events.find((event) => event.type === "input.requested");
+    assert.ok(requested?.type === "input.requested" && requested.request.kind === "clarification");
+    assert.equal(requested.request.batch, true);
+    assert.deepEqual(
+      requested.request.questions.map((entry) => [entry.qid, entry.question]),
+      [["q0", "Mau aku tanya tentang apa?"], ["q1", "Seberapa sering?"]],
+    );
+    assert.deepEqual(requested.request.questions[0].choices, ["Kabar", "Hobi"]);
+
+    await client.respondToInput({
+      kind: "clarification",
+      requestId: "batch-1",
+      answers: [
+        { qid: "q0", answer: "Hobi" },
+        { qid: "q1", answer: "Setiap hari" },
+      ],
+      cancelled: false,
+    });
+    const locks = FakeRelay.requests.filter((request) => request.method === "clarify.respond");
+    assert.deepEqual(
+      locks.map((request) => request.params),
+      [
+        { request_id: "batch-1", question_id: "q0", answer: "Hobi" },
+        { request_id: "batch-1", question_id: "q1", answer: "Setiap hari" },
+      ],
+    );
+
+    // Skip cancels the whole call with a plain empty answer and no question_id.
+    await client.respondToInput({ kind: "clarification", requestId: "batch-1", answers: [], cancelled: true });
+    assert.deepEqual(FakeRelay.requests.at(-1)?.params, { request_id: "batch-1", answer: "" });
+  });
+
+  it("keeps answering legacy flat clarify requests and surfaces clarify expiry", async () => {
+    const events: AgentEvent[] = [];
+    const client = await connectedClient((request) => {
+      if (request.method === "session.create") {
+        return { session_id: "runtime-1", stored_session_id: "stored-1" };
+      }
+      return {};
+    });
+    await openSession(client);
+    client.subscribe((event) => events.push(event));
+
+    latestStream().emitEvent("clarify.request", {
+      request_id: "legacy-1",
+      question: "Which option?",
+      choices: ["A", "B"],
+    });
+    const requested = events.find((event) => event.type === "input.requested");
+    assert.ok(requested?.type === "input.requested" && requested.request.kind === "clarification");
+    assert.equal(requested.request.batch, false);
+    assert.equal(requested.request.questions.length, 1);
+
+    await client.respondToInput({
+      kind: "clarification",
+      requestId: "legacy-1",
+      answers: [{ qid: "q0", answer: "A" }],
+      cancelled: false,
+    });
+    assert.deepEqual(FakeRelay.requests.find((request) => request.method === "clarify.respond")?.params, {
+      request_id: "legacy-1",
+      question_id: "q0",
+      answer: "A",
+    });
+
+    // A malformed batch (no usable questions) stays silent instead of
+    // opening an empty dialog.
+    latestStream().emitEvent("clarify.request", { request_id: "bad-1", questions: [] });
+    latestStream().emitEvent("clarify.request", { request_id: "bad-2" });
+    assert.equal(events.filter((event) => event.type === "input.requested").length, 1);
+
+    latestStream().emitEvent("clarify.expire", { request_id: "legacy-1" });
+    const expired = events.find((event) => event.type === "input.expired");
+    assert.deepEqual(expired, { type: "input.expired", kind: "clarification", requestId: "legacy-1" });
+  });
+
+  it("restores a still-blocking clarify prompt from session.resume", async () => {
+    const events: AgentEvent[] = [];
+    const client = await connectedClient((request) => {
+      if (request.method === "session.resume") {
+        return {
+          session_id: "runtime-2",
+          stored_session_id: "stored-1",
+          resumed: "stored-1",
+          running: true,
+          messages: [],
+          pending_clarify: {
+            request_id: "replay-1",
+            questions: [{ qid: "q0", question: "Lanjut yang mana?", choices: ["X", "Y"], multi_select: false }],
+            answers: { q0: "X" },
+          },
+        };
+      }
+      return {};
+    });
+    client.subscribe((event) => events.push(event));
+    await client.openSession({ persistentSessionId: "stored-1" });
+    const requested = events.find((event) => event.type === "input.requested");
+    assert.ok(requested?.type === "input.requested" && requested.request.kind === "clarification");
+    assert.equal(requested.request.requestId, "replay-1");
+    assert.deepEqual(requested.request.lockedAnswers, { q0: "X" });
   });
 
   it("handles delayed, duplicate, out-of-order, foreign-session, and error events deterministically", async () => {

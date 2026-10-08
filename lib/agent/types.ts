@@ -44,6 +44,19 @@ export type AgentInputRequestKind =
   | "sudo"
   | "secret";
 
+export type ClarificationQuestion = {
+  /** Stable wire id (Hermes `qid`, e.g. "q0"). */
+  qid: string;
+  question: string;
+  choices: string[] | null;
+  multiSelect: boolean;
+};
+
+export type ClarificationAnswer = {
+  qid: string;
+  answer: string;
+};
+
 export type AgentInputRequest =
   | {
       kind: "approval";
@@ -56,8 +69,15 @@ export type AgentInputRequest =
   | {
       kind: "clarification";
       requestId: string;
-      question: string;
-      choices: string[] | null;
+      questions: ClarificationQuestion[];
+      /**
+       * True when Hermes sent the batch (`questions`) shape (0.21+): answers
+       * go back as per-question locks. False for the legacy flat shape,
+       * answered with one plain response.
+       */
+      batch: boolean;
+      /** Answers already locked before a reconnect replayed this request. */
+      lockedAnswers?: Record<string, string>;
     }
   | {
       kind: "sudo";
@@ -79,7 +99,9 @@ export type AgentInputResponse =
   | {
       kind: "clarification";
       requestId: string;
-      answer: string;
+      answers: ClarificationAnswer[];
+      /** True when the user dismissed every question: a plain cancel. */
+      cancelled: boolean;
     }
   | {
       kind: "sudo";
@@ -165,7 +187,7 @@ export type AgentEvent =
     }
   | {
       type: "input.expired";
-      kind: "sudo" | "secret";
+      kind: "clarification" | "sudo" | "secret";
       requestId: string;
     }
   | { type: "agent.finished" }

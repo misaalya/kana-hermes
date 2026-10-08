@@ -16,6 +16,7 @@ import type {
   AgentModelSwitchResult,
   AgentSession,
   AgentSessionOptions,
+  ClarificationQuestion,
 } from "@/lib/agent/types";
 import {
   buildKanaUserPrompt,
@@ -95,6 +96,70 @@ function switchWarning(warning: unknown): string | undefined {
   return kept.length ? kept.join(" | ") : undefined;
 }
 
+function stringChoices(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null;
+  const choices = value.filter((choice): choice is string => typeof choice === "string");
+  return choices;
+}
+
+/**
+ * Normalize a Hermes clarify payload into Kana's clarification request.
+ *
+ * Two wire shapes exist: the legacy flat `{request_id, question, choices}`
+ * (Hermes ≤ 0.20, one question) and the batch `{request_id, questions:
+ * [{qid, question, choices, multi_select}]}` (Hermes 0.21+, up to five
+ * questions answered with per-question locks). A reconnect replay may also
+ * carry `answers` already locked server-side, used to prefill the dialog.
+ */
+function clarifyRequest(payload: Record<string, unknown>): {
+  requestId: string;
+  questions: ClarificationQuestion[];
+  batch: boolean;
+  lockedAnswers?: Record<string, string>;
+} | null {
+  if (typeof payload.request_id !== "string" || !payload.request_id) return null;
+  const requestId = payload.request_id;
+
+  let lockedAnswers: Record<string, string> | undefined;
+  if (payload.answers && typeof payload.answers === "object" && !Array.isArray(payload.answers)) {
+    const entries = Object.entries(payload.answers as Record<string, unknown>)
+      .filter((entry): entry is [string, string] => typeof entry[1] === "string")
+      .map(([qid, answer]): [string, string] => [qid, answer]);
+    if (entries.length) lockedAnswers = Object.fromEntries(entries);
+  }
+
+  if (Array.isArray(payload.questions)) {
+    const questions: ClarificationQuestion[] = [];
+    payload.questions.forEach((item, index) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return;
+      const entry = item as Record<string, unknown>;
+      if (typeof entry.question !== "string" || !entry.question.trim()) return;
+      questions.push({
+        qid: typeof entry.qid === "string" && entry.qid ? entry.qid : `q${index}`,
+        question: entry.question,
+        choices: stringChoices(entry.choices),
+        multiSelect: entry.multi_select === true && Array.isArray(entry.choices),
+      });
+    });
+    if (!questions.length) return null;
+    return { requestId, questions, batch: true, ...(lockedAnswers ? { lockedAnswers } : {}) };
+  }
+
+  if (typeof payload.question !== "string" || !payload.question.trim()) return null;
+  return {
+    requestId,
+    questions: [
+      {
+        qid: "q0",
+        question: payload.question,
+        choices: stringChoices(payload.choices),
+        multiSelect: false,
+      },
+    ],
+    batch: false,
+  };
+}
+
 function inputRequest(
   type: string,
   payload: Record<string, unknown>,
@@ -115,19 +180,11 @@ function inputRequest(
     };
   }
   if (type === "clarify.request") {
-    if (
-      typeof payload.request_id !== "string" ||
-      typeof payload.question !== "string"
-    ) {
-      return null;
-    }
+    const request = clarifyRequest(payload);
+    if (!request) return null;
     return {
       kind: "clarification",
-      requestId: payload.request_id,
-      question: payload.question,
-      choices: Array.isArray(payload.choices)
-        ? payload.choices.filter((choice): choice is string => typeof choice === "string")
-        : null,
+      ...request,
     };
   }
   if (type === "sudo.request" && typeof payload.request_id === "string") {
@@ -437,6 +494,15 @@ export class HermesAgentClient implements AgentClient {
         // Title synchronization is non-critical; the resumed session itself is
         // already usable and future session.title events still update Kana.
       }
+      if (response.pending_clarify && typeof response.pending_clarify === "object") {
+        // Hermes replays a still-blocking clarify prompt on resume so a
+        // refresh mid-question restores the dialog instead of stranding the
+        // agent until its clarify timeout.
+        const pending = clarifyRequest(response.pending_clarify as Record<string, unknown>);
+        if (pending) {
+          this.emit({ type: "input.requested", request: { kind: "clarification", ...pending } });
+        }
+      }
     }
     this.recoverResumedTurn(response);
     return this.session;
@@ -688,10 +754,25 @@ export class HermesAgentClient implements AgentClient {
       return;
     }
     if (response.kind === "clarification") {
-      await this.request("clarify.respond", {
-        request_id: response.requestId,
-        answer: response.answer,
-      });
+      if (response.cancelled || response.answers.length === 0) {
+        // Cancel-all: no question_id resolves the whole batch as a plain
+        // cancel instead of a partial per-question result.
+        await this.request("clarify.respond", {
+          request_id: response.requestId,
+          answer: "",
+        });
+        return;
+      }
+      // Batch locks (Hermes 0.21+): each answer lands under its qid and the
+      // final lock unblocks the agent. Locked answers stay editable
+      // server-side until the batch completes, so order does not matter.
+      for (const answer of response.answers) {
+        await this.request("clarify.respond", {
+          request_id: response.requestId,
+          question_id: answer.qid,
+          answer: answer.answer,
+        });
+      }
       return;
     }
     if (response.kind === "sudo") {
@@ -1185,12 +1266,17 @@ export class HermesAgentClient implements AgentClient {
     }
 
     if (
-      (event.type === "sudo.expire" || event.type === "secret.expire") &&
+      (event.type === "sudo.expire" || event.type === "secret.expire" || event.type === "clarify.expire") &&
       typeof payload.request_id === "string"
     ) {
       this.emit({
         type: "input.expired",
-        kind: event.type === "sudo.expire" ? "sudo" : "secret",
+        kind:
+          event.type === "sudo.expire"
+            ? "sudo"
+            : event.type === "secret.expire"
+              ? "secret"
+              : "clarification",
         requestId: payload.request_id,
       });
       return;
