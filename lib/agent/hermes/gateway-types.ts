@@ -33,9 +33,14 @@ export type HermesSessionResponse = {
    * A clarify prompt still blocking the session (Hermes 0.21+ replays the
    * `clarify.request` payload, plus `answers` locked so far). Same payload
    * shape as the live event, so a refresh restores the dialog instead of
-   * stranding the agent until timeout.
+   * stranding the agent until its clarify timeout.
    */
   pending_clarify?: Record<string, unknown>;
+  /**
+   * A still-unresolved approval (Hermes 0.21+ replays the `approval.request`
+   * payload). Same shape as the live event.
+   */
+  pending_approval?: Record<string, unknown>;
   inflight?: {
     assistant?: string;
     error?: string;

@@ -19,6 +19,11 @@ import type {
   ClarificationQuestion,
 } from "@/lib/agent/types";
 import {
+  clearPendingInput,
+  readPendingInput,
+  rememberPendingInput,
+} from "@/lib/agent/pending-input-cache";
+import {
   buildKanaUserPrompt,
 } from "@/lib/presentation/persona";
 import {
@@ -494,18 +499,66 @@ export class HermesAgentClient implements AgentClient {
         // Title synchronization is non-critical; the resumed session itself is
         // already usable and future session.title events still update Kana.
       }
-      if (response.pending_clarify && typeof response.pending_clarify === "object") {
-        // Hermes replays a still-blocking clarify prompt on resume so a
-        // refresh mid-question restores the dialog instead of stranding the
-        // agent until its clarify timeout.
-        const pending = clarifyRequest(response.pending_clarify as Record<string, unknown>);
-        if (pending) {
-          this.emit({ type: "input.requested", request: { kind: "clarification", ...pending } });
-        }
-      }
     }
     this.recoverResumedTurn(response);
+    if (options.persistentSessionId) {
+      this.restorePendingInput(response, persistentSessionId);
+    }
     return this.session;
+  }
+
+  /**
+   * Re-show the input dialog after a refresh while Hermes is still waiting.
+   * Server replays come first (`pending_approval`/`pending_clarify` on Hermes
+   * 0.21+); when Hermes replays nothing — sudo/secret prompts, or older
+   * Hermes with no replay at all — the client's own memory of the request
+   * fills in, since a blocked agent thread survives a browser refresh. When
+   * the turn is no longer running, anything remembered is stale and dropped.
+   */
+  private restorePendingInput(response: HermesSessionResponse, persistentSessionId: string): void {
+    if (response.running !== true) {
+      clearPendingInput(persistentSessionId);
+      return;
+    }
+    let replayed = false;
+    const replay = (request: AgentInputRequest | null) => {
+      if (!request) return;
+      this.emit({ type: "input.requested", request });
+      replayed = true;
+    };
+    const pendingApproval = response.pending_approval;
+    if (pendingApproval && typeof pendingApproval === "object" && !Array.isArray(pendingApproval)) {
+      const payload = pendingApproval as Record<string, unknown>;
+      const command = typeof payload.command === "string" ? payload.command : "";
+      const description = typeof payload.description === "string" ? payload.description : "";
+      if (command.trim() || description.trim()) {
+        replay(inputRequest("approval.request", payload));
+      }
+    }
+    if (response.pending_clarify && typeof response.pending_clarify === "object") {
+      const pending = clarifyRequest(response.pending_clarify as Record<string, unknown>);
+      if (pending) {
+        replay({ kind: "clarification", ...pending });
+      }
+    }
+    if (!replayed) {
+      replay(readPendingInput(persistentSessionId));
+    }
+  }
+
+  /** The durable session id behind the open session, for pending-input memory. */
+  private pendingInputKey(): string | null {
+    return this.sessionOptions?.persistentSessionId ?? this.session?.persistentSessionId ?? null;
+  }
+
+  private rememberPending(request: AgentInputRequest): void {
+    const key = this.pendingInputKey();
+    if (key) rememberPendingInput(key, request);
+  }
+
+  private forgetPending(): void {
+    const key = this.pendingInputKey();
+    if (key) clearPendingInput(key);
   }
 
   async sendMessage(input: AgentMessageInput): Promise<void> {
@@ -751,41 +804,83 @@ export class HermesAgentClient implements AgentClient {
         choice: response.choice,
         all: response.all ?? false,
       });
+      this.forgetPending();
       return;
     }
     if (response.kind === "clarification") {
       if (response.cancelled || response.answers.length === 0) {
         // Cancel-all: no question_id resolves the whole batch as a plain
         // cancel instead of a partial per-question result.
-        await this.request("clarify.respond", {
-          request_id: response.requestId,
-          answer: "",
-        });
+        await this.checkResponded(
+          "clarify.respond",
+          {
+            request_id: response.requestId,
+            answer: "",
+          },
+          "clarification",
+        );
         return;
       }
       // Batch locks (Hermes 0.21+): each answer lands under its qid and the
       // final lock unblocks the agent. Locked answers stay editable
       // server-side until the batch completes, so order does not matter.
       for (const answer of response.answers) {
-        await this.request("clarify.respond", {
-          request_id: response.requestId,
-          question_id: answer.qid,
-          answer: answer.answer,
-        });
+        await this.checkResponded(
+          "clarify.respond",
+          {
+            request_id: response.requestId,
+            question_id: answer.qid,
+            answer: answer.answer,
+          },
+          "clarification",
+        );
       }
       return;
     }
     if (response.kind === "sudo") {
-      await this.request("sudo.respond", {
-        request_id: response.requestId,
-        password: response.password,
-      });
+      await this.checkResponded(
+        "sudo.respond",
+        {
+          request_id: response.requestId,
+          password: response.password,
+        },
+        "sudo password",
+      );
       return;
     }
-    await this.request("secret.respond", {
-      request_id: response.requestId,
-      value: response.value,
-    });
+    await this.checkResponded(
+      "secret.respond",
+      {
+        request_id: response.requestId,
+        value: response.value,
+      },
+      "secret",
+    );
+  }
+
+  /**
+   * One blocking answer round-trip. Hermes answers `{status: "expired"}` when
+   * the prompt timed out while the dialog was still open (e.g. answered after
+   * a refresh restored a dead request): that must surface as a failure, never
+   * as a delivered answer, and the remembered request is dropped either way.
+   */
+  private async checkResponded(
+    method: string,
+    params: Record<string, unknown>,
+    label: string,
+  ): Promise<void> {
+    try {
+      const result = await this.request<{ status?: string }>(method, params);
+      if (result && typeof result === "object" && result.status === "expired") {
+        throw new Error(`That Hermes ${label} request already expired before the answer arrived.`);
+      }
+      this.forgetPending();
+    } catch (error) {
+      if (error instanceof Error && /already expired/.test(error.message)) {
+        this.forgetPending();
+      }
+      throw error;
+    }
   }
 
   private catalogSuggestions(
@@ -1262,6 +1357,7 @@ export class HermesAgentClient implements AgentClient {
     const pendingInput = inputRequest(event.type, payload);
     if (pendingInput) {
       this.emit({ type: "input.requested", request: pendingInput });
+      this.rememberPending(pendingInput);
       return;
     }
 
@@ -1269,6 +1365,7 @@ export class HermesAgentClient implements AgentClient {
       (event.type === "sudo.expire" || event.type === "secret.expire" || event.type === "clarify.expire") &&
       typeof payload.request_id === "string"
     ) {
+      this.forgetPending();
       this.emit({
         type: "input.expired",
         kind:
@@ -1355,6 +1452,7 @@ export class HermesAgentClient implements AgentClient {
 
     if (event.type === "error") {
       this.running = false;
+      this.forgetPending();
       this.emit({
         type: "agent.error",
         message:
@@ -1373,6 +1471,7 @@ export class HermesAgentClient implements AgentClient {
 
     if (status === "interrupted") {
       this.running = false;
+      this.forgetPending();
       this.emit({ type: "agent.aborted" });
       this.drainQueuedPrompt();
       return;
@@ -1380,6 +1479,7 @@ export class HermesAgentClient implements AgentClient {
 
     if (status === "error") {
       this.running = false;
+      this.forgetPending();
       this.emit({
         type: "agent.error",
         message:
@@ -1392,11 +1492,13 @@ export class HermesAgentClient implements AgentClient {
     try {
       const response = parseKanaResponse(rawResponse);
       this.running = false;
+      this.forgetPending();
       this.emit({ type: "assistant.message", response, rawResponse });
       this.emit({ type: "agent.finished" });
       this.drainQueuedPrompt();
     } catch (error) {
       this.running = false;
+      this.forgetPending();
       this.emit({
         type: "agent.error",
         message:
