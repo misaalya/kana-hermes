@@ -136,6 +136,18 @@ function restoreBrowserGlobals(): void {
   });
 }
 
+function installMemoryStorage(): void {
+  const values = new Map<string, string>();
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (key: string) => (values.has(key) ? values.get(key)! : null),
+      setItem: (key: string, value: string) => void values.set(key, String(value)),
+      removeItem: (key: string) => void values.delete(key),
+    },
+  });
+}
+
 function latestStream(): FakeEventSource {
   const stream = FakeEventSource.instances.at(-1);
   assert.ok(stream);
@@ -170,6 +182,11 @@ async function openSession(client: HermesAgentClient): Promise<void> {
 describe("HermesAgentClient (relay transport)", () => {
   beforeEach(() => {
     installBrowserGlobals();
+    try {
+      delete (globalThis as { localStorage?: unknown }).localStorage;
+    } catch {
+      // No storage stub installed.
+    }
     FakeRelay.reset();
     FakeEventSource.instances = [];
     activeClients = [];
@@ -736,6 +753,117 @@ describe("HermesAgentClient (relay transport)", () => {
     assert.ok(requested?.type === "input.requested" && requested.request.kind === "clarification");
     assert.equal(requested.request.requestId, "replay-1");
     assert.deepEqual(requested.request.lockedAnswers, { q0: "X" });
+  });
+
+  it("restores a still-blocking approval prompt from session.resume", async () => {
+    const events: AgentEvent[] = [];
+    const client = await connectedClient((request) => {
+      if (request.method === "session.resume") {
+        return {
+          session_id: "runtime-2",
+          stored_session_id: "stored-1",
+          resumed: "stored-1",
+          running: true,
+          messages: [],
+          pending_approval: {
+            command: "rm -rf /tmp/x",
+            description: "Delete a directory",
+            choices: ["once", "deny"],
+            allow_permanent: false,
+          },
+        };
+      }
+      return {};
+    });
+    client.subscribe((event) => events.push(event));
+    await client.openSession({ persistentSessionId: "stored-1" });
+    const requested = events.find((event) => event.type === "input.requested");
+    assert.ok(requested?.type === "input.requested" && requested.request.kind === "approval");
+    assert.equal(requested.request.command, "rm -rf /tmp/x");
+  });
+
+  it("remembers sudo prompts across a refresh and reports expired answers honestly", async () => {
+    installMemoryStorage();
+    const client = await connectedClient((request) => {
+      if (request.method === "session.create") {
+        return { session_id: "runtime-1", stored_session_id: "stored-1" };
+      }
+      if (request.method === "sudo.respond") return { status: "ok" };
+      return {};
+    });
+    await openSession(client);
+    const live: AgentEvent[] = [];
+    client.subscribe((event) => live.push(event));
+    latestStream().emitEvent("sudo.request", { request_id: "sudo-9" });
+    assert.ok(live.some((event) => event.type === "input.requested"));
+    await client.disconnect();
+
+    // Refresh mid-prompt: resume replays nothing for sudo, the turn still
+    // runs, so the remembered request restores the dialog.
+    const refreshed: AgentEvent[] = [];
+    const revived = await connectedClient((request) => {
+      if (request.method === "session.resume") {
+        return {
+          session_id: "runtime-2",
+          stored_session_id: "stored-1",
+          resumed: "stored-1",
+          running: true,
+          messages: [],
+        };
+      }
+      if (request.method === "sudo.respond") return { status: "ok" };
+      return {};
+    });
+    revived.subscribe((event) => refreshed.push(event));
+    await revived.openSession({ persistentSessionId: "stored-1" });
+    const restored = refreshed.find((event) => event.type === "input.requested");
+    assert.ok(restored?.type === "input.requested" && restored.request.kind === "sudo");
+    await revived.disconnect();
+
+    // Answering a request that expired while away rejects instead of
+    // reporting a delivery that never happened.
+    const expiredClient = await connectedClient((request) => {
+      if (request.method === "session.create") {
+        return { session_id: "runtime-3", stored_session_id: "stored-3" };
+      }
+      if (request.method === "sudo.respond") return { status: "expired" };
+      return {};
+    });
+    await openSession(expiredClient);
+    await assert.rejects(
+      expiredClient.respondToInput({ kind: "sudo", requestId: "sudo-9", password: "x" }),
+      /already expired/,
+    );
+  });
+
+  it("drops remembered prompts once the turn is over", async () => {
+    installMemoryStorage();
+    const client = await connectedClient((request) => {
+      if (request.method === "session.create") {
+        return { session_id: "runtime-1", stored_session_id: "stored-1" };
+      }
+      return {};
+    });
+    await openSession(client);
+    latestStream().emitEvent("secret.request", { request_id: "sec-1", env_var: "TOKEN", prompt: "Value?" });
+    await client.disconnect();
+
+    const events: AgentEvent[] = [];
+    const revived = await connectedClient((request) => {
+      if (request.method === "session.resume") {
+        return {
+          session_id: "runtime-2",
+          stored_session_id: "stored-1",
+          resumed: "stored-1",
+          running: false,
+          messages: [],
+        };
+      }
+      return {};
+    });
+    revived.subscribe((event) => events.push(event));
+    await revived.openSession({ persistentSessionId: "stored-1" });
+    assert.equal(events.some((event) => event.type === "input.requested"), false);
   });
 
   it("handles delayed, duplicate, out-of-order, foreign-session, and error events deterministically", async () => {

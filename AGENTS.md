@@ -110,6 +110,36 @@ For unattended future releases, prefer npm Trusted Publishing from the
 repository's GitHub Actions workflow. Do not weaken or disable 2FA and do not
 introduce a bypass-2FA token merely to avoid the interactive browser step.
 
+## npm release must build outside the home directory
+
+A release build can never run from this checkout. Next.js records the absolute
+build folder in the runtime files, so a build under the maintainer's home
+directory would publish their account name with the package.
+`scripts/prepare-npm-package.mjs` enforces this: with `--build` it throws, so
+`npm run publish:cli`, `npm run test:package:npm`, and every `npm pack` of
+`cli/` fail from here; without `--build` it only warns.
+
+When the owner asks to publish, do not run the release commands in this
+directory. Clone the committed revision to a fresh path outside the home
+directory whose path names no account, and run the release there:
+
+```bash
+git status --porcelain        # must be empty; the guard refuses a dirty tree
+release=$(mktemp -d /tmp/kana-release.XXXXXX)
+git clone <this checkout> "$release" && cd "$release"
+git checkout <tag-or-commit>
+npm install
+npm run test:package:npm      # build, pack, install, and boot the real tarball
+npm run publish:cli           # lint, typecheck, unit tests, guard, publish
+```
+
+Step 10 of `docs/RELEASE_CHECKLIST.md` has the same rule for smoke tests: start
+`.next/standalone/server.js` from outside the source checkout. The full release
+checklist (version bump in both `package.json` files, changelog, migration
+notes, `npm audit --omit=dev`, Live2D notices, `npm run quality`, the Hermes
+audits, artifact checksums, and rollback notes) stays in
+`docs/RELEASE_CHECKLIST.md` and applies on top of this.
+
 ## Hermes environment and safety
 
 The user-owned executable is:
