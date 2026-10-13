@@ -829,8 +829,8 @@ details[open] > .kana-plus-summary::before {
   transition: transform 300ms ease-out, opacity 250ms ease, visibility 0s linear 250ms;
 }
 
-/* Phones hide the chat only while the avatar is positioned: fade it out in
-   place instead of sliding it sideways, so no sliver is left at the edge. */
+/* Phones hide the chat only while the avatar is positioned: it leaves in place
+   instead of sliding sideways, so no sliver is left at the edge. */
 @media (max-width: 1023px) {
   .kana-chat-dock {
     transition: opacity var(--kana-chat-fade) ease, visibility 0s linear 0s;
@@ -840,7 +840,10 @@ details[open] > .kana-plus-summary::before {
     transform: none;
     opacity: 0;
     visibility: hidden;
-    transition: opacity var(--kana-chat-fade) ease, visibility 0s linear var(--kana-chat-fade);
+    /* Out in the same frame the panel opens, so a chat is never seen ghosting
+       over the stage between the tap and the sliders; only the way back
+       fades. */
+    transition: opacity 0s linear 0s, visibility 0s linear 0s;
   }
 
   /* Phones keep the full-bleed chat; only the band the avatar tile reserved
@@ -849,11 +852,19 @@ details[open] > .kana-plus-summary::before {
     top: var(--kana-header-clear);
   }
 
-  /* The avatar layout panel takes the composer's place, so it waits for that
-     fade to finish instead of landing on a half-faded composer. */
-  .kana-layout-panel {
-    animation: kana-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1) var(--kana-chat-fade) both;
+  /* Positioning on a phone grows the avatar from its tile to the whole stage.
+     Watching it stretch reads as a glitch, so it steps through the change
+     instead: fade out at the old size, swap while invisible, fade back in at
+     the new one and stay visible for the dragging itself. */
+  .kana-avatar-viewport[data-layout="positioning"] .kana-avatar-content {
+    animation: kana-avatar-restage 340ms linear both;
   }
+}
+
+@keyframes kana-avatar-restage {
+  0%, 20% { opacity: 1; }
+  38%, 52% { opacity: 0; }
+  100% { opacity: 1; }
 }
 
 .kana-chat-toggle:focus-visible {
@@ -1638,10 +1649,6 @@ video.kana-media-preview {
     transition-duration: 0.01ms !important;
   }
 
-  /* Nothing fades here, so the avatar layout panel waits for no one. */
-  .kana-layout-panel {
-    animation-delay: 0s !important;
-  }
 }
 
 @media (max-width: 639px) {

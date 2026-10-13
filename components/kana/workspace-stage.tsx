@@ -89,6 +89,7 @@ export function WorkspaceStage() {
         compact={usesMobileChat && avatarVisible && !avatarLayoutOpen && !greeting}
         // Kana introduces herself face to face, so the greeting keeps the stage.
         visible={avatarVisible || greeting}
+        positioning={usesMobileChat && avatarVisible && avatarLayoutOpen}
         locale={locale}
         onCanvasReady={workspace.actions.attachAvatarCanvas}
       />
