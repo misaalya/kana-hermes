@@ -1043,6 +1043,44 @@ test("shows Hermes approval choices and resolves a session approval", async ({ p
   await expect(page.getByRole("heading", { name: "Hermes needs approval" })).toBeHidden();
 });
 
+test("arms the approval before Enter can run, and Deny stays immediately available", async ({
+  page,
+}) => {
+  const raise = () =>
+    page.evaluate(() => {
+      const target = window as Window & { __kanaE2eEmit?: (event: string, data: unknown) => void };
+      target.__kanaE2eEmit?.("hermes", {
+        jsonrpc: "2.0",
+        method: "event",
+        params: {
+          type: "approval.request",
+          payload: {
+            command: "rm -rf /tmp/build",
+            description: "Delete a build directory",
+            choices: ["once", "deny"],
+            allow_permanent: false,
+          },
+        },
+      });
+    });
+
+  await raise();
+  const heading = page.getByRole("heading", { name: "Hermes needs approval" });
+  await expect(heading).toBeVisible();
+
+  // The approving action is held down at first: an Enter that arrives with the
+  // dialog (the user was typing) must not run the command. Deny never waits.
+  await expect(page.getByRole("button", { name: "Run once" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Deny" })).toBeEnabled();
+  await page.keyboard.press("Enter");
+  await expect(heading).toBeVisible();
+
+  // Once armed, Enter runs the command the same key would run in a terminal.
+  await expect(page.getByRole("button", { name: "Run once" })).toBeEnabled();
+  await page.keyboard.press("Enter");
+  await expect(heading).toBeHidden();
+});
+
 test("updates workspace, history, chat, and settings copy with the interface language", async ({
   page,
 }) => {

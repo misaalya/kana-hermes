@@ -243,6 +243,28 @@ export function ShieldIcon(props: IconProps) {
   );
 }
 
+/**
+ * The approval gate: the same shield without the check. Nothing has been
+ * verified yet, so the mark says "stopped here", not "safe".
+ */
+export function GuardIcon(props: IconProps) {
+  return (
+    <DuoIcon {...props}>
+      <path d="M12 21.8c-5-1.7-8.4-5.1-8.4-10.2V5.3L12 2.2l8.4 3.1v6.3c0 5.1-3.4 8.5-8.4 10.2Z" />
+    </DuoIcon>
+  );
+}
+
+/** Refuse this command: the blocked mark, which no other Kana button uses. */
+export function BlockIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M5.7 5.7 18.3 18.3" />
+    </Icon>
+  );
+}
+
 export function LogoutIcon(props: IconProps) {
   return (
     <DuoIcon {...props}>

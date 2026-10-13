@@ -7,6 +7,7 @@
    stylesheet build, taking every page down with it. */
 @source not "../.next/**";
 @source not "../.next-e2e/**";
+@source not "../.next-debug/**";
 @source not "../.npm-package/**";
 @source not "../cli/.npm-package/**";
 @source not "../test-results/**";
@@ -1500,6 +1501,21 @@ video.kana-media-preview {
   --code-string: #a9d18e;
   --code-number: #f0b27a;
   --code-literal: #d7a0e0;
+}
+
+/* A character that draws nothing, or that reorders what is around it, shown
+   as a visible marker inside a command. `.kana-code-surface` redefines the
+   theme tokens for its own subtree, so these are literal values; they are
+   only ever painted on that dark surface, where they stay legible in both
+   themes. */
+.kana-code-hidden {
+  color: #ff9a9a;
+  background: rgba(227, 106, 118, 0.22);
+}
+
+.kana-code-warn {
+  border-color: rgba(227, 106, 118, 0.5);
+  color: #ff9a9a;
 }
 
 .kana-json-key {

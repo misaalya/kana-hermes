@@ -18,6 +18,7 @@
 # next.js
 /.next/
 /.next-e2e/
+/.next-debug/
 /out/
 /.npm-package/
 

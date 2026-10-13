@@ -7,7 +7,7 @@ import type {
 } from "@/lib/agent/types";
 import { useDialogFocus } from "@/lib/accessibility/use-dialog-focus";
 import { revealCommand } from "@/lib/presentation/command-text";
-import { BotIcon, CheckIcon } from "./icons";
+import { BlockIcon, BotIcon, CheckIcon, GuardIcon, ReturnIcon } from "./icons";
 import { btnPrimary, btnSecondary, bentoCard, inputBase } from "./ui";
 import { getCopy, type UiLocale } from "@/lib/ui/copy";
 
@@ -411,7 +411,9 @@ export function AgentInputDialog({  request,
   const shellClass =
     request.kind === "clarification"
       ? "flex max-h-[calc(100dvh-1.5rem)] w-[min(560px,100%)] flex-col overflow-hidden border-2 border-line bg-bg"
-      : "max-h-[calc(100dvh-1.5rem)] w-[min(480px,100%)] overflow-y-auto border-2 border-line bg-bg p-4";
+      : request.kind === "approval"
+        ? "flex max-h-[calc(100dvh-1.5rem)] w-[min(520px,100%)] flex-col overflow-hidden border-2 border-line bg-bg"
+        : "max-h-[calc(100dvh-1.5rem)] w-[min(480px,100%)] overflow-y-auto border-2 border-line bg-bg p-4";
   const { dialogRef, onDialogKeyDown } = useDialogFocus(() => {
     void cancel();
   }, { initialFocus: request.kind === "approval" ? "dialog" : "first" });
@@ -425,6 +427,25 @@ export function AgentInputDialog({  request,
     () => (request.kind === "approval" && request.command ? revealCommand(request.command) : []),
     [request],
   );
+  // Focusing the dialog rather than a button keeps a stray Enter from
+  // approving; once armed, Enter runs the command the same key would run in
+  // the terminal. Escape already denies through useDialogFocus.
+  useEffect(() => {
+    if (request.kind !== "approval" || !armed || submitting) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Enter" || event.defaultPrevented) return;
+      if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+      if (event.isComposing) return;
+      const active = document.activeElement as HTMLElement | null;
+      const onButton = active?.tagName === "BUTTON" && dialogRef.current?.contains(active);
+      // Enter on Deny is Deny's own activation; do not run the command instead.
+      if (onButton) return;
+      event.preventDefault();
+      void onRespond({ kind: "approval", choice: "once" });
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [armed, dialogRef, onRespond, request.kind, submitting]);
 
   return (
     <div
@@ -447,51 +468,95 @@ export function AgentInputDialog({  request,
       >
         {request.kind === "approval" ? (
           <>
-            <div className={`mb-2 ${bentoCard}`}>
+            <header className="flex shrink-0 items-start gap-3 border-b-[3px] border-dotted border-line-strong px-5 pt-4 pb-3.5">
+              <GuardIcon className="mt-[3px] size-6 shrink-0 text-accent" />
               <div className="min-w-0">
-                <h2 id="agent-input-title" className="text-sm font-bold text-ink">{copy.approvalTitle}</h2>
-                <p className="mt-0.5 text-xs leading-relaxed break-words text-ink-dim">{request.description}</p>
+                <h2 id="agent-input-title" className="text-base font-extrabold break-words text-ink">
+                  {copy.approvalTitle}
+                </h2>
+                <p className="mt-0.5 text-[11.5px] leading-relaxed break-words text-muted">
+                  {request.description || copy.approvalHint}
+                </p>
               </div>
+            </header>
+
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+              {command.length ? (
+                /* The command is read on the dark surface, as in the config
+                   guide: it stays a dark block in both themes, and it wraps
+                   instead of scrolling so no part stays out of sight. */
+                <figure className="kana-code-surface overflow-hidden bg-surface-strong">
+                  <figcaption className="flex min-h-9 items-center py-1.5 pl-4 pr-3">
+                    <span className="text-[11px] font-bold text-muted">{copy.commandLabel}</span>
+                  </figcaption>
+                  <pre className="overflow-x-auto px-4 pb-4 pt-0.5 font-mono text-[12.5px] leading-relaxed break-all whitespace-pre-wrap text-ink">
+                    <code>
+                      {command.map((segment, index) =>
+                        segment.type === "text" ? (
+                          segment.text
+                        ) : (
+                          <span key={index} className="kana-code-hidden mx-0.5 rounded px-1 font-sans font-bold">
+                            {segment.label}
+                          </span>
+                        ),
+                      )}
+                    </code>
+                  </pre>
+                </figure>
+              ) : null}
+              {request.smartDenied ? (
+                <p className="kana-code-warn mt-3 rounded-2xl border-2 px-3.5 py-2.5 text-xs font-semibold">
+                  {copy.smartDenied}
+                </p>
+              ) : null}
+              {command.some((segment) => segment.type === "hidden") ? (
+                <p className="mt-3 rounded-2xl border-2 border-danger/40 px-3.5 py-2.5 text-xs font-semibold text-danger">
+                  {copy.hiddenCharacters}
+                </p>
+              ) : null}
             </div>
-            {command.length ? (
-              <>
-                {/* Wrapped, never scrolled sideways: every part of the command is in view. */}
-                <pre className="mb-2 rounded-2xl border border-line bg-surface p-3 font-mono text-xs break-all whitespace-pre-wrap text-accent-strong">
-                  {command.map((segment, index) =>
-                    segment.type === "text" ? (
-                      segment.text
-                    ) : (
-                      <span key={index} className="mx-0.5 rounded bg-danger/15 px-1 font-sans font-semibold text-danger">
-                        {segment.label}
-                      </span>
-                    ),
-                  )}
-                </pre>
-                {command.some((segment) => segment.type === "hidden") ? (
-                  <p className="mb-2 rounded-2xl border border-danger/40 px-3.5 py-2.5 text-xs font-semibold text-danger">
-                    {copy.hiddenCharacters}
-                  </p>
-                ) : null}
-              </>
-            ) : null}
-            {request.smartDenied ? (
-              <p className="mb-2 rounded-2xl border border-danger/40 px-3.5 py-2.5 text-xs font-semibold text-danger">
-                {copy.smartDenied}
-              </p>
-            ) : null}
-            <div className={`flex flex-wrap gap-2 ${bentoCard}`}>
-              {approvalChoices.map((choice) => (
+
+            <footer className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-stretch gap-2 border-t-[3px] border-dotted border-line-strong px-5 pt-3.5 pb-4 sm:flex sm:flex-wrap">
+              {/* Deny is always enabled and reads as the quiet way out; the
+                  approving actions stay disabled until the dialog is armed.
+                  Phones pair the answers two by two, because four labels in
+                  one 390 px row are unreadable: the lasting choice takes the
+                  wide column, and Deny is its icon at the right edge. Wider
+                  screens keep one row of labelled buttons. */}
+              {approvalChoices.map((choice) => {
+                if (choice === "deny") return null;
+                const primary = choice === "once";
+                const label = approvalLabel(choice, copy);
+                return (
+                  <button
+                    className={`kana-focus kana-pill ${primary ? "kana-pill-accent" : "kana-pill-soft"} min-h-11 max-sm:w-full px-3 text-[12.5px] leading-tight sm:w-auto sm:flex-1 disabled:cursor-not-allowed disabled:opacity-50`}
+                    disabled={submitting || !armed}
+                    key={choice}
+                    onClick={() => void onRespond({ kind: "approval", choice })}
+                    title={primary && armed ? `${label} — Enter ${copy.confirmShortcut}` : undefined}
+                    type="button"
+                  >
+                    {label}
+                    {primary && armed && !submitting ? (
+                      <ReturnIcon aria-hidden="true" className="ml-2 size-4 shrink-0 opacity-70 max-sm:hidden" />
+                    ) : null}
+                  </button>
+                );
+              })}
+              {approvalChoices.includes("deny") ? (
                 <button
-                  className={choice === "deny" ? btnSecondary : `${btnPrimary} grow`}
-                  disabled={submitting || (!armed && choice !== "deny")}
-                  key={choice}
-                  onClick={() => void onRespond({ kind: "approval", choice })}
+                  className="kana-focus kana-pill kana-pill-danger min-h-11 w-11 max-sm:justify-self-end px-0 text-[12.5px] sm:w-auto sm:px-5 sm:text-[13px] disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={submitting}
+                  aria-label={copy.deny}
+                  title={copy.deny}
+                  onClick={() => void onRespond({ kind: "approval", choice: "deny" })}
                   type="button"
                 >
-                  {approvalLabel(choice, copy)}
+                  <BlockIcon className="size-[19px] shrink-0" />
+                  <span className="sr-only sm:not-sr-only sm:ml-1.5">{copy.deny}</span>
                 </button>
-              ))}
-            </div>
+              ) : null}
+            </footer>
           </>
         ) : null}
 
