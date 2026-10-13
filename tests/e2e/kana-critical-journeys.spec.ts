@@ -16,6 +16,8 @@ type FakeHermes = {
   advanceHeldTurn(): Promise<void>;
   /** The held research turn replies. */
   finishHeldTurn(): Promise<void>;
+  /** Slash commands Hermes received, in order, as `slash.exec` saw them (no leading slash). */
+  commands: string[];
 };
 
 let hermes: FakeHermes;
@@ -48,6 +50,8 @@ async function installFakeHermes(page: Page): Promise<FakeHermes> {
   };
   const sessions = new Map<string, FakeSession>();
   const runtimeToPersistent = new Map<string, string>();
+  // Slash commands as Hermes received them, so a journey can prove what ran.
+  const receivedCommands: string[] = [];
   let nextSession = 1;
   let activeRuntimeId = "e2e-hermes-runtime-0";
   let activeProvider = "fireworks_ai";
@@ -255,12 +259,20 @@ async function installFakeHermes(page: Page): Promise<FakeHermes> {
           ],
         };
         break;
-      case "complete.slash":
+      case "complete.slash": {
+        // Like Hermes: name-prefix matches, so a partial command arrives with
+        // its nearest real name on screen.
+        const typed = String(body.params?.text ?? "").trim().split(/\s+/, 1)[0].toLowerCase();
+        const names = ["/status", "/new", "/codex-runtime"];
+        const matched = typed.startsWith("/")
+          ? names.filter((name) => name.startsWith(typed))
+          : [];
         result = {
           replace_from: 0,
-          items: [{ text: "/status", display: "/status" }],
+          items: matched.map((name) => ({ text: name, display: name })),
         };
         break;
+      }
       case "session.status":
         result = { output: "fake hermes session status ok" };
         break;
@@ -299,6 +311,7 @@ async function installFakeHermes(page: Page): Promise<FakeHermes> {
       }
       case "slash.exec": {
         const command = String(body.params?.command ?? "");
+        receivedCommands.push(command);
         const target = command.startsWith("model ") ? modelSwitch(command.slice(6)) : null;
         if (target?.provider === "openrouter") {
           activeProvider = "openrouter";
@@ -393,6 +406,7 @@ async function installFakeHermes(page: Page): Promise<FakeHermes> {
   });
 
   return {
+    commands: receivedCommands,
     advanceHeldTurn: () => runTool("web_extract", "bmkg.go.id"),
     async finishHeldTurn() {
       if (!heldTurn) throw new Error("No research turn is running.");
@@ -1244,6 +1258,38 @@ test("supports keyboard slash commands end to end", async ({ page }) => {
     document: document.documentElement.scrollWidth,
   }));
   expect(overflow.document).toBeLessThanOrEqual(overflow.viewport);
+});
+
+test("sends the nearest command Hermes offered when Enter runs an unknown one", async ({
+  page,
+}) => {
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
+  await composer.click();
+  await composer.fill("/codex-run");
+  // Hermes's own completer offers /codex-runtime for the /codex-run prefix.
+  await page.getByRole("option", { name: /\/codex-runtime/ }).first().waitFor();
+  await composer.press("Enter");
+  await expect.poll(() => hermes.commands).toContain("codex-runtime");
+  expect(hermes.commands).not.toContain("codex-run");
+  // The chat shows the command that actually ran, not what was typed. Phones
+  // have no live chat panel, so this reads the restored transcript instead.
+  await openHistory(page);
+  await expect(
+    page.getByText("/codex-runtime", { exact: true }).last(),
+  ).toBeVisible();
+});
+
+test("never rewrites a command that is already real", async ({ page }) => {
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
+  await composer.click();
+  await composer.fill("/new Deal with the report");
+  await page.getByRole("option", { name: /\/new/ }).first().waitFor();
+  await composer.press("Enter");
+  // Kana answers /new itself, so it never reaches Hermes as a slash command:
+  // a name that is already real is still not rewritten.
+  await expect.poll(() => hermes.commands).not.toContain("new");
+  expect(hermes.commands).not.toContain("codex-runtime");
+  await expect(page.getByText("Deal with the report").first()).toBeVisible();
 });
 
 test("guides a new browser profile through onboarding onto the workspace", async ({

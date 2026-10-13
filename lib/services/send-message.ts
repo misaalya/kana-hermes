@@ -1,4 +1,5 @@
 import { AttachmentUploadError, type AgentAttachment } from "@/lib/agent/attachments";
+import type { AgentCommandSuggestion } from "@/lib/agent/types";
 import {
   createSystemMessage,
   createUserMessage,
@@ -28,6 +29,54 @@ export function shortTitle(text: string): string {
   return title.length > 42 ? `${title.slice(0, 42)}…` : title;
 }
 
+/** The catalog text of a suggestion, with the menu's argument trailing space removed. */
+function suggestionCommand(item: AgentCommandSuggestion): string {
+  return item.text.trim();
+}
+
+/**
+ * The command to send for what was typed. Hermes matches slash names itself:
+ * `complete.slash` answers `/codex-run` with `/codex-runtime`, so a partially
+ * typed command arrives at Enter with the nearest name already on screen. When
+ * the typed name is not itself a known command, Enter sends that suggestion —
+ * the reusable match Kana already has — instead of a name Hermes would only
+ * reject.
+ *
+ * A name that is already known is never rewritten, which keeps destructive
+ * confirmations honest: /update is confirmed and then sent as /update, not as
+ * a longer command the confirmation never saw. Only the name token is
+ * replaced, so `/codex-run auto` becomes `/codex-runtime auto`. Commands with
+ * no suggestion at all go as typed, and Hermes reports the outcome.
+ */
+export function resolveTypedCommand(text: string, suggestions: AgentCommandSuggestion[]): string {
+  const typed = text.trim();
+  const match = /^\/([^\s/]+)([\s\S]*)$/.exec(typed);
+  if (!match) return typed;
+  const name = match[1].toLowerCase().replaceAll("_", "-");
+  const rest = match[2];
+  // Telegram spellings reach Kana as underscores; Hermes's names are
+  // hyphenated, so both sides compare in that form.
+  const asCommand = (item: AgentCommandSuggestion) =>
+    suggestionCommand(item).toLowerCase().replaceAll("_", "-");
+  const known = suggestions.find((item) => asCommand(item) === `/${name}`);
+  // An exact hit means the name is real; a longer candidate that merely shares
+  // the prefix is not a correction, so `/model` stays `/model`.
+  if (known) return typed;
+  // Hermes resolves an ambiguous prefix by the shortest name (/qui is /quit,
+  // not /quint-pipeline), so the same rule picks the nearest here instead of
+  // depending on the menu's order.
+  let nearest: string | null = null;
+  for (const item of suggestions) {
+    const candidate = asCommand(item).replace(/\s.*$/, "");
+    if (!candidate.startsWith(`/${name}`) && !`/${name}`.startsWith(candidate)) continue;
+    if (nearest === null || candidate.length < nearest.length) nearest = candidate;
+  }
+  // A completion that fell back to an argument would paste its hint over the
+  // command: /config answering `/config ` is not what /conf meant. Only the
+  // name is used, and the typed arguments are kept.
+  return nearest === null ? typed : `${nearest}${rest}`;
+}
+
 /**
  * Send what the user typed in the active conversation: a prompt, a Kana
  * command (/new, /sessions, /resume, /restart), or a Hermes slash command.
@@ -49,8 +98,15 @@ export async function sendMessage(
     ? `${cleanText}\n\n[Attached files: ${attachments.map((file) => file.name).join(", ")}]`
     : cleanText;
   const commandMatch = /^\/([^\s/]+)(?:\s+([\s\S]*))?$/.exec(cleanText);
-  const commandName = commandMatch?.[1]?.toLowerCase().replaceAll("_", "-");
   const commandArg = commandMatch?.[2]?.trim() || "";
+  // Enter sends the nearest command Hermes already offered for a name it does
+  // not know (/codex-run for /codex-runtime). The rewrite is bare, so the arg
+  // scan above still reads the typed arguments.
+  const commandText = commandMatch
+    ? resolveTypedCommand(cleanText, stores.commands.getState().suggestions)
+    : cleanText;
+  const commandName = /^\/([^\s/]+)/.exec(commandText)?.[1]?.toLowerCase().replaceAll("_", "-");
+  const sentText = commandText === cleanText ? displayText : commandText;
   const activeConversationId = stores.conversations.getState().activeConversationId;
   if (!cleanText || !activeConversationId) return;
   const wasBusy = session.getState().busy;
@@ -88,8 +144,8 @@ export async function sendMessage(
     const next = conversations.save({
       ...conversations.create({ title: commandArg }),
       messages: [
-        createUserMessage(cleanText),
-        createSystemMessage("Fresh Kana conversation created on a new Hermes session.", cleanText),
+        createUserMessage(sentText),
+        createSystemMessage("Fresh Kana conversation created on a new Hermes session.", sentText),
       ],
     });
     conversations.activate(next);
@@ -128,10 +184,10 @@ export async function sendMessage(
       ...conversation,
       messages: [
         ...conversation.messages,
-        createUserMessage(cleanText),
+        createUserMessage(sentText),
         createSystemMessage(
           `${listing || "No Kana conversations found."}\n\nUse /resume <title or id> to switch.`,
-          cleanText,
+          sentText,
         ),
       ],
     });
@@ -146,10 +202,10 @@ export async function sendMessage(
     const copy = getCopy(preferences.current().uiLocale).slash;
     const note = (output: string) => {
       const latest = conversations.get(conversation.id) ?? conversation;
-      conversations.save({ ...latest, messages: [...latest.messages, createSystemMessage(output, cleanText)] });
+      conversations.save({ ...latest, messages: [...latest.messages, createSystemMessage(output, sentText)] });
     };
     clearSuggestions();
-    conversations.save({ ...conversation, messages: [...conversation.messages, createUserMessage(cleanText)] });
+    conversations.save({ ...conversation, messages: [...conversation.messages, createUserMessage(sentText)] });
     // Hermes drains running turns before it restarts; Kana waits for its own.
     if (wasBusy) {
       note(copy.restartBusy);
@@ -174,7 +230,9 @@ export async function sendMessage(
 
   session.setState({ busy: true, status: status().opening });
 
-  const pendingUserMessage = createUserMessage(displayText);
+  const pendingUserMessage = commandMatch
+    ? { ...createUserMessage(sentText), text: sentText }
+    : createUserMessage(displayText);
   const nextConversation = conversations.save({
     ...conversation,
     title:
@@ -188,7 +246,7 @@ export async function sendMessage(
   try {
     const agent = await sessions.ensure(nextConversation);
     if (commandName) {
-      const result = await agent.executeCommand({ command: cleanText });
+      const result = await agent.executeCommand({ command: commandText });
       // /model changes the session's model, and /reload can add providers with
       // new keys: the cached catalog is out of date either way.
       if (commandName === "model" || commandName === "reload") models.invalidate();
@@ -202,7 +260,7 @@ export async function sendMessage(
         }
         const output = result.warning ? `Warning: ${result.warning}\n${result.output}` : result.output;
         const titled = commandName === "title" && commandArg ? { ...opened, title: commandArg } : opened;
-        conversations.save({ ...titled, messages: [...titled.messages, createSystemMessage(output, cleanText)] });
+        conversations.save({ ...titled, messages: [...titled.messages, createSystemMessage(output, sentText)] });
         if (!wasBusy) {
           session.setState({ busy: false, status: status().commandComplete });
           sessions.tracking.turnId = null;
@@ -212,7 +270,7 @@ export async function sendMessage(
       } else if (result.type === "session") {
         const savedBranch = conversations.save({
           ...conversations.create({ title: result.title }),
-          messages: [...nextConversation.messages, createSystemMessage(result.output, cleanText)],
+          messages: [...nextConversation.messages, createSystemMessage(result.output, sentText)],
           agent: {
             provider: "hermes",
             persistentSessionId: result.session.persistentSessionId,
@@ -232,11 +290,11 @@ export async function sendMessage(
         if (result.notice) {
           const baseMessages =
             commandName === "undo"
-              ? [...withoutLastUserTurn(conversation.messages), createUserMessage(cleanText)]
+              ? [...withoutLastUserTurn(conversation.messages), createUserMessage(sentText)]
               : opened.messages;
           conversations.save({
             ...opened,
-            messages: [...baseMessages, createSystemMessage(result.notice, cleanText)],
+            messages: [...baseMessages, createSystemMessage(result.notice, sentText)],
           });
         }
         if (!wasBusy) session.setState({ busy: false });
@@ -246,7 +304,7 @@ export async function sendMessage(
       } else if (result.notice) {
         conversations.save({
           ...opened,
-          messages: [...opened.messages, createSystemMessage(result.notice, cleanText)],
+          messages: [...opened.messages, createSystemMessage(result.notice, sentText)],
         });
       }
     } else {
