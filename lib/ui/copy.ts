@@ -249,10 +249,13 @@ export type Copy = {
   };
   agentInput: {
     approvalTitle: string;
+    approvalHint: string;
+    commandLabel: string;
     runOnce: string;
     allowSession: string;
     alwaysAllow: string;
     deny: string;
+    confirmShortcut: string;
     smartDenied: string;
     hiddenCharacters: string;
     questionTitle: string;
@@ -716,10 +719,13 @@ const id: Copy = {
   },
   agentInput: {
     approvalTitle: "Hermes memerlukan persetujuan",
+    approvalHint: "Hermes berhenti sebelum menjalankan perintah ini.",
+    commandLabel: "Perintah",
     runOnce: "Jalankan sekali",
     allowSession: "Izinkan selama sesi",
     alwaysAllow: "Selalu izinkan",
     deny: "Tolak",
+    confirmShortcut: "untuk menjalankan",
     smartDenied: "Pemeriksaan keamanan Hermes menyarankan agar tindakan ini ditolak.",
     hiddenCharacters: "Perintah ini berisi spasi panjang, baris kosong bertumpuk, atau karakter tak terlihat yang dapat menyembunyikan sebagian perintah. Bagian tersebut ditandai merah.",
     questionTitle: "Pertanyaan dari Hermes",
@@ -1238,10 +1244,13 @@ const en: Copy = {
   },
   agentInput: {
     approvalTitle: "Hermes needs approval",
+    approvalHint: "Hermes stopped before running this command.",
+    commandLabel: "Command",
     runOnce: "Run once",
     allowSession: "Allow for session",
     alwaysAllow: "Always allow",
     deny: "Deny",
+    confirmShortcut: "to run",
     smartDenied: "Hermes safety checks recommended denying this action.",
     hiddenCharacters: "This command contains long runs of spaces, stacked blank lines, or invisible characters that can hide part of it. They are marked in red.",
     questionTitle: "A question from Hermes",
