@@ -196,17 +196,19 @@ export function SettingsDialog({
     );
   }, [draft]);
 
+  // The wardrobe and its model capabilities are only read while the avatar is
+  // on: the section hides them, so nothing should load them either.
   useEffect(() => {
-    if (section !== "avatar") return;
+    if (section !== "avatar" || !draft.avatarVisible) return;
     let active = true;
     void onListAvatarModels()
       .then((models) => { if (active) setAvatarModels(models); })
       .catch((error) => { if (active) setAvatarNotice(error instanceof Error ? error.message : notices.avatarsLoadFailed); });
     return () => { active = false; };
-  }, [notices.avatarsLoadFailed, onListAvatarModels, section]);
+  }, [draft.avatarVisible, notices.avatarsLoadFailed, onListAvatarModels, section]);
 
   useEffect(() => {
-    if (section !== "avatar" || !draft.live2d.modelId) return;
+    if (section !== "avatar" || !draft.avatarVisible || !draft.live2d.modelId) return;
     const modelId = draft.live2d.modelId;
     let active = true;
     void onInspectAvatarModel(modelId).then(
@@ -235,7 +237,7 @@ export function SettingsDialog({
       },
     );
     return () => { active = false; };
-  }, [draft.live2d.modelId, onInspectAvatarModel, section]);
+  }, [draft.avatarVisible, draft.live2d.modelId, onInspectAvatarModel, section]);
 
   useEffect(() => {
     if (section !== "avatar") return;
@@ -550,6 +552,9 @@ export function SettingsDialog({
                     </SettingsRow>
                   </SettingsRows>
                 </SettingsGroup>
+                {/* Nothing to pick while the avatar is off: the wardrobe, its
+                    import, and the model licence only matter once it shows. */}
+                {draft.avatarVisible ? (
                 <SettingsGroup title={settingsCopy.avatarLibrary}>
                   <input
                     ref={avatarInputRef}
@@ -602,8 +607,9 @@ export function SettingsDialog({
                     <p className="mt-2">{LIVE2D_SAMPLE_COPYRIGHT_NOTICE}</p>
                   </details>
                 </SettingsGroup>
+                ) : null}
 
-                {draft.live2d.modelId ? (
+                {draft.avatarVisible && draft.live2d.modelId ? (
                   avatarCapabilitiesLoading ? (
                     <SettingsGroup title={settingsCopy.avatarBehaviorTitle}>
                       <p className="text-[11px] text-muted" role="status">{settingsCopy.avatarBehaviorLoading}</p>
