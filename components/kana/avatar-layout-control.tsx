@@ -16,10 +16,8 @@ type AvatarLayoutControlProps = {
 };
 
 /**
- * Phones fade the chat out in place while the avatar is positioned, and this
- * panel sits exactly where the composer was. The entrance waits for that fade
- * (`--kana-chat-fade` in globals.css) instead of landing on a half-faded
- * composer, so nothing ever overlaps for a few frames.
+ * Phones clear the chat in the same frame this panel opens, so the two never
+ * overlap and nothing ghosts between the tap and the sliders.
  */
 export function AvatarLayoutControl({
   layout,
@@ -69,7 +67,7 @@ export function AvatarLayoutControl({
       {open ? (
         <div
           id="kana-avatar-layout-panel"
-          className="kana-layout-panel fixed right-4 top-[108px] z-30 max-sm:inset-x-3 max-sm:bottom-3 max-sm:top-auto"
+          className="fixed right-4 top-[108px] z-30 max-sm:inset-x-3 max-sm:bottom-3 max-sm:top-auto"
         >
           <AvatarLayoutPanel
             layout={layout}

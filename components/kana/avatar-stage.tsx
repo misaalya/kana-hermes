@@ -17,6 +17,8 @@ type AvatarStageProps = {
    * (it pauses on an off-screen canvas) without resizing it to nothing.
    */
   visible?: boolean;
+  /** Phones are positioning the avatar: it steps through a fade while it grows. */
+  positioning?: boolean;
   locale: UiLocale;
   onCanvasReady(canvas: HTMLCanvasElement | null): void;
 };
@@ -28,6 +30,7 @@ export const AvatarStage = memo(function AvatarStage({
   chatOpen,
   compact = false,
   visible = true,
+  positioning = false,
   locale,
   onCanvasReady,
 }: AvatarStageProps) {
@@ -50,6 +53,7 @@ export const AvatarStage = memo(function AvatarStage({
       <div
         className={`kana-avatar-viewport absolute inset-0 overflow-hidden ${visible ? "" : "invisible pointer-events-none"}`}
         data-chat-open={chatOpen}
+        data-layout={positioning ? "positioning" : undefined}
         aria-hidden={visible ? undefined : true}
       >
         <div className="kana-avatar-content absolute inset-0">
