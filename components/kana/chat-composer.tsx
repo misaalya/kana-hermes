@@ -10,6 +10,7 @@ import {
   type AgentAttachment,
 } from "@/lib/agent/attachments";
 import { isVoiceActive } from "@/lib/store/voice-store";
+import { resolveTypedCommand } from "@/lib/services/send-message";
 import { getCopy, type Copy } from "@/lib/ui/copy";
 import { ComposerDictation } from "./composer-dictation";
 import { ComposerModelChoice } from "./composer-model-choice";
@@ -108,7 +109,10 @@ export function ChatComposer() {
     // Prime Web Audio while Send/Enter still owns a user gesture; the audio
     // arrives too late to unlock autoplay on stricter mobile browsers.
     if (workspace.preferences.current().voiceEnabled) actions.unlockVoice();
-    const confirmation = destructiveCommandPrompt(draft, text);
+    // Confirm the command that will actually run: Enter sends the nearest name
+    // for an unknown command, so `/updat` must be confirmed as /update.
+    const resolved = resolveTypedCommand(draft, suggestions);
+    const confirmation = destructiveCommandPrompt(resolved, text);
     if (confirmation && !window.confirm(confirmation)) return;
     setWorkspace({ submitting: true, composerNotice: "" });
     try {
@@ -121,7 +125,7 @@ export function ChatComposer() {
         return;
       }
       try {
-        const prefill = await actions.send(draft, attachments);
+        const prefill = await actions.send(resolved, attachments);
         setMessage(prefill || "");
         setFiles([]);
       } catch (sendError) {

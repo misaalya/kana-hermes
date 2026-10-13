@@ -319,6 +319,22 @@ Kana should feel like another first-class Hermes client:
 
 - Typing `/` reads the categorized `commands.catalog` response.
 - Typing a command fragment or command arguments uses `complete.slash`.
+- The nearest-command match is Hermes's own: `complete.slash` answers
+  `/codex-run` with `/codex-runtime`, so Kana never reimplements fuzzy matching
+  or keeps a second command list. `resolveTypedCommand` (send-message.ts) only
+  decides when to use the suggestion Kana already has:
+  - a name that is itself one of the suggestions is never rewritten, so a
+    destructive confirmation (`destructiveCommandPrompt`, chat-composer.tsx)
+    always names the command that runs;
+  - an unknown name uses the nearest suggestion's name, shortest first like
+    Hermes's own ambiguous-prefix rule (`/qui` is `/quit`), keeping any typed
+    arguments;
+  - no suggestion, or a name Hermes did not offer, goes to Hermes as typed and
+    Hermes reports the outcome;
+  - only the name is substituted, never a completion's argument fallback
+    (`/config ` for `/conf` would otherwise paste its hint over the command);
+  - the rewritten command is what the transcript shows, so a note and the
+    command it followed always agree.
 - Commands execute through `slash.exec`, falling back to `command.dispatch`
   where required by Hermes.
 - Quick commands, aliases, plugins, bundles, and skills must honor the

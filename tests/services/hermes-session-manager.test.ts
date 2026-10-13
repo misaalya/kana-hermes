@@ -306,6 +306,49 @@ describe("HermesSessionManager", () => {
     assert.equal(harness.active().messages.at(-1)?.role, "system");
   });
 
+  it("runs the nearest command Hermes offered for a name it does not know", async () => {
+    const harness = createHarness();
+    harness.conversations.initialize();
+    await harness.sessions.ensure(harness.active());
+    // What Hermes's own complete.slash answers for /codex-run.
+    harness.agent.completions = [{ text: "/codex-runtime", display: "/codex-runtime", kind: "command" }];
+    await harness.commands.complete("/codex-run");
+    await harness.send("/codex-run");
+    assert.deepEqual(harness.agent.commands, ["/codex-runtime"]);
+    // The transcript shows what ran, so the note pairs with the command.
+    assert.deepEqual(
+      harness.active().messages.map((message) => message.text),
+      ["/codex-runtime", "ok"],
+    );
+  });
+
+  it("never rewrites a known command Enter was already going to run", async () => {
+    const harness = createHarness();
+    harness.conversations.initialize();
+    await harness.sessions.ensure(harness.active());
+    harness.agent.completions = [
+      { text: "/model", display: "/model", kind: "command" },
+      { text: "/model-options", display: "/model-options", kind: "command" },
+    ];
+    await harness.commands.complete("/model");
+    await harness.send("/model");
+    assert.deepEqual(harness.agent.commands, ["/model"]);
+  });
+
+  it("keeps the typed arguments, and an unmatched name with no menu", async () => {
+    const harness = createHarness();
+    harness.conversations.initialize();
+    await harness.sessions.ensure(harness.active());
+    harness.agent.completions = [{ text: "/codex-runtime", display: "/codex-runtime", kind: "command" }];
+    await harness.commands.complete("/codex-run auto");
+    await harness.send("/codex-run auto");
+    assert.deepEqual(harness.agent.commands, ["/codex-runtime auto"]);
+
+    // Nothing matched, so the name reaches Hermes exactly as typed.
+    await harness.send("/perintah-ngawur");
+    assert.deepEqual(harness.agent.commands.at(-1), "/perintah-ngawur");
+  });
+
   it("removes the pending message when an attachment upload fails", async () => {
     const harness = createHarness();
     harness.conversations.initialize();
