@@ -512,6 +512,14 @@ button,
   right: 8px;
 }
 
+/* In a full-width option row the badge sits in the row's own flow, so it can
+   never overhang the card above or beside it. */
+.kana-check.is-inline {
+  position: static;
+  width: 26px;
+  height: 26px;
+}
+
 @keyframes kana-pop {
   from { transform: scale(0); }
 }

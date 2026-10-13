@@ -7,6 +7,7 @@ import type {
 } from "@/lib/agent/types";
 import { useDialogFocus } from "@/lib/accessibility/use-dialog-focus";
 import { revealCommand } from "@/lib/presentation/command-text";
+import { BotIcon, CheckIcon } from "./icons";
 import { btnPrimary, btnSecondary, bentoCard, inputBase } from "./ui";
 import { getCopy, type UiLocale } from "@/lib/ui/copy";
 
@@ -104,69 +105,185 @@ function ClarificationForm({
   };
 
   const single = request.questions.length === 1;
+
+  const hasAnyAnswer = request.questions.some((entry) => {
+    const list = picked[entry.qid] ?? [];
+    return list.length > 0 || (drafts[entry.qid] ?? "").trim().length > 0;
+  });
+
+  // Letters pick a choice without touching the mouse; Enter confirms. While
+  // typing, only Ctrl/Cmd+Enter submits so plain Enter keeps its newline.
+  // Shortcuts target the first question with choices that has no answer yet
+  // (or the first one with choices when all are answered); Escape is already
+  // the dialog-wide cancel via useDialogFocus.
+  useEffect(() => {
+    if (submitting) return;
+    const shortcutTarget = () =>
+      request.questions.find(
+        (entry) => (entry.choices?.length ?? 0) > 0 && (picked[entry.qid] ?? []).length === 0 && !(drafts[entry.qid] ?? "").trim(),
+      ) ?? request.questions.find((entry) => (entry.choices?.length ?? 0) > 0);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+      const active = document.activeElement as HTMLElement | null;
+      const typing =
+        !!active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable);
+      if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+        if (hasAnyAnswer) {
+          event.preventDefault();
+          submit();
+        }
+        return;
+      }
+      if (typing || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.key === "Enter") {
+        if (hasAnyAnswer) {
+          event.preventDefault();
+          submit();
+        }
+        return;
+      }
+      if (/^[a-zA-Z]$/.test(event.key)) {
+        const target = shortcutTarget();
+        if (!target?.choices?.length) return;
+        const index = event.key.toLowerCase().charCodeAt(0) - 97;
+        // The trailing letter jumps into the free-text field instead of a
+        // choice, mirroring Hermes desktop's "Other" row.
+        if (index < 0 || index > target.choices.length) return;
+        event.preventDefault();
+        if (index === target.choices.length) {
+          document.getElementById(`kana-clarify-${target.qid}`)?.focus();
+        } else {
+          toggleChoice(target.qid, target.multiSelect, target.choices[index]);
+        }
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  });
+
   return (
     <form
+      className="flex min-h-0 flex-1 flex-col"
       onSubmit={(event) => {
         event.preventDefault();
         submit();
       }}
     >
-      <div className={`mb-2 ${bentoCard}`}>
-        <div className="min-w-0">
-          <h2 id="agent-input-title" className="text-sm font-bold text-ink">
-            {single ? copy.questionTitle : copy.questionsTitle(request.questions.length)}
-          </h2>
-        </div>
-      </div>
-      {request.questions.map((entry, index) => {
-        const choices = picked[entry.qid] ?? [];
-        return (
-          <div key={entry.qid} className={`mb-2 ${bentoCard}`}>
-            <p className="mb-1.5 text-xs leading-relaxed break-words text-ink-dim">
-              {single ? null : <span className="font-bold text-ink">{`${index + 1}. `}</span>}
-              {entry.question}
-            </p>
-            {entry.choices?.length ? (
-              <div className="mb-1.5 flex flex-wrap gap-1.5 rounded-2xl border border-line bg-surface p-3">
-                {entry.choices.map((choice) => {
-                  const active = choices.includes(choice);
-                  return (
-                    <button
-                      className={`kana-pill px-3.5 py-1.5 text-xs ${active ? "kana-pill-accent" : "kana-pill-soft"}`}
-                      disabled={submitting}
-                      key={choice}
-                      onClick={() => toggleChoice(entry.qid, entry.multiSelect, choice)}
-                      type="button"
-                    >
-                      {choice}
-                    </button>
-                  );
-                })}
+      <header className="flex shrink-0 items-center gap-3 border-b-[3px] border-dotted border-line-strong px-5 pt-4 pb-3.5">
+        <span
+          aria-hidden="true"
+          className="grid size-9 shrink-0 place-items-center rounded-full bg-accent/15 text-accent-strong"
+        >
+          <BotIcon className="size-5" />
+        </span>
+        <h2 id="agent-input-title" className="min-w-0 text-base font-extrabold break-words text-ink">
+          {single ? copy.questionTitle : copy.questionsTitle(request.questions.length)}
+        </h2>
+      </header>
+
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        {request.questions.map((entry, index) => {
+          const selected = picked[entry.qid] ?? [];
+          const choices = entry.choices ?? [];
+          return (
+            <div
+              key={entry.qid}
+              className={index === 0 ? undefined : "mt-4 border-t-[3px] border-dotted border-line-strong pt-4"}
+            >
+              <div className="flex items-start gap-2.5">
+                {single ? null : (
+                  <span
+                    aria-hidden="true"
+                    className="mt-0.5 grid size-6 shrink-0 place-items-center rounded-full bg-accent text-[11px] font-extrabold text-on-accent"
+                  >
+                    {index + 1}
+                  </span>
+                )}
+                <p className="min-w-0 text-[13px] leading-relaxed font-bold break-words text-ink">
+                  {entry.question}
+                </p>
               </div>
-            ) : null}
-            <label className="flex flex-col gap-1.5">
-              <span className="text-[11px] font-semibold text-muted">{copy.answerLabel}</span>
-              <textarea
-                autoFocus={index === 0}
-                disabled={submitting}
-                onChange={(event) => editDraft(entry.qid, event.target.value)}
-                placeholder={copy.answerPlaceholder}
-                rows={single ? 3 : 2}
-                value={drafts[entry.qid] ?? ""}
-                className={`${inputBase} resize-y`}
-              />
-            </label>
-          </div>
-        );
-      })}
-      <div className={`flex justify-end gap-2 ${bentoCard}`}>
+              {entry.multiSelect && choices.length ? (
+                <p className="mt-1.5 text-[10.5px] font-bold text-muted">{copy.multiHint}</p>
+              ) : null}
+              {choices.length ? (
+                /* One full-width row per answer, like a console menu: the
+                   shortcut key cap on the left, the answer in the middle, and
+                   the pick disc on the right. */
+                <div
+                  aria-label={entry.question}
+                  className="mt-3 grid gap-2.5"
+                  role={entry.multiSelect ? "group" : "radiogroup"}
+                >
+                  {choices.map((choice, choiceIndex) => {
+                    const active = selected.includes(choice);
+                    const shortcut = String.fromCharCode(97 + choiceIndex).toUpperCase();
+                    return (
+                      <button
+                        aria-checked={active}
+                        aria-keyshortcuts={shortcut.toLowerCase()}
+                        className={`kana-focus kana-choice flex min-h-12 w-full items-center gap-3 rounded-[20px] px-3 py-2 text-left ${active ? "is-selected" : ""}`}
+                        disabled={submitting}
+                        key={choice}
+                        onClick={() => toggleChoice(entry.qid, entry.multiSelect, choice)}
+                        role={entry.multiSelect ? "checkbox" : "radio"}
+                        title={`Shortcut: ${shortcut}`}
+                        type="button"
+                      >
+                        <span
+                          aria-hidden="true"
+                          className={`grid size-7 shrink-0 place-items-center rounded-full text-[11px] font-extrabold ${
+                            active ? "bg-accent text-on-accent" : "bg-surface-strong text-muted"
+                          }`}
+                        >
+                          {shortcut}
+                        </span>
+                        <span className="min-w-0 flex-1 text-[13px] leading-snug font-semibold text-ink">
+                          {choice}
+                        </span>
+                        {active ? (
+                          <span aria-hidden="true" className="kana-check is-inline">
+                            <CheckIcon className="size-3.5" />
+                          </span>
+                        ) : (
+                          <span
+                            aria-hidden="true"
+                            className="size-6 shrink-0 rounded-full border-[3px] border-line-strong"
+                          />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+              <label className="mt-3 flex flex-col gap-1.5">
+                <span className="text-[10px] font-extrabold tracking-[0.14em] text-muted uppercase">
+                  {copy.answerLabel}
+                </span>
+                <textarea
+                  autoFocus={index === 0}
+                  disabled={submitting}
+                  id={`kana-clarify-${entry.qid}`}
+                  onChange={(event) => editDraft(entry.qid, event.target.value)}
+                  placeholder={copy.answerPlaceholder}
+                  rows={single ? 3 : 2}
+                  value={drafts[entry.qid] ?? ""}
+                  className={`${inputBase} resize-y`}
+                />
+              </label>
+            </div>
+          );
+        })}
+      </div>
+
+      <footer className="flex shrink-0 items-center justify-end gap-2 border-t-[3px] border-dotted border-line-strong px-5 pt-3.5 pb-4">
         <button type="button" className={btnSecondary} disabled={submitting} onClick={onCancel}>
           {copy.skip}
         </button>
-        <button type="submit" className={btnPrimary} disabled={submitting}>
+        <button type="submit" className={btnPrimary} disabled={submitting || !hasAnyAnswer}>
           {single ? copy.sendAnswer : copy.sendAnswers}
         </button>
-      </div>
+      </footer>
     </form>
   );
 }
@@ -288,6 +405,13 @@ export function AgentInputDialog({  request,
       await onRespond({ kind: "secret", requestId: request.requestId, value });
     }
   };
+  // A clarify call gets its own shell: a square panel whose header and footer
+  // stay put while the questions scroll between them, so Send is always in
+  // reach on a five-question form. The other kinds keep the plain card.
+  const shellClass =
+    request.kind === "clarification"
+      ? "flex max-h-[calc(100dvh-1.5rem)] w-[min(560px,100%)] flex-col overflow-hidden border-2 border-line bg-bg"
+      : "max-h-[calc(100dvh-1.5rem)] w-[min(480px,100%)] overflow-y-auto border-2 border-line bg-bg p-4";
   const { dialogRef, onDialogKeyDown } = useDialogFocus(() => {
     void cancel();
   }, { initialFocus: request.kind === "approval" ? "dialog" : "first" });
@@ -311,7 +435,7 @@ export function AgentInputDialog({  request,
       }}
     >
       <section
-        className="max-h-[calc(100dvh-1.5rem)] w-[min(480px,100%)] overflow-y-auto border-2 border-line bg-bg p-4 outline-none"
+        className={`${shellClass} outline-none`}
         ref={dialogRef}
         tabIndex={-1}
         role="dialog"
