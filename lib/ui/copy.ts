@@ -259,6 +259,7 @@ export type Copy = {
     questionsTitle(count: number): string;
     answerLabel: string;
     answerPlaceholder: string;
+    multiHint: string;
     skip: string;
     sendAnswer: string;
     sendAnswers: string;
@@ -721,10 +722,11 @@ const id: Copy = {
     deny: "Tolak",
     smartDenied: "Pemeriksaan keamanan Hermes menyarankan agar tindakan ini ditolak.",
     hiddenCharacters: "Perintah ini berisi spasi panjang, baris kosong bertumpuk, atau karakter tak terlihat yang dapat menyembunyikan sebagian perintah. Bagian tersebut ditandai merah.",
-    questionTitle: "Hermes memiliki pertanyaan",
-    questionsTitle: (count) => `Hermes memiliki ${count} pertanyaan`,
+    questionTitle: "Pertanyaan dari Hermes",
+    questionsTitle: (count) => `${count} pertanyaan dari Hermes`,
     answerLabel: "Jawabanmu",
     answerPlaceholder: "Ketik jawaban untuk Hermes…",
+    multiHint: "Bisa pilih lebih dari satu.",
     skip: "Lewati",
     sendAnswer: "Kirim jawaban",
     sendAnswers: "Kirim semua jawaban",
@@ -1242,10 +1244,11 @@ const en: Copy = {
     deny: "Deny",
     smartDenied: "Hermes safety checks recommended denying this action.",
     hiddenCharacters: "This command contains long runs of spaces, stacked blank lines, or invisible characters that can hide part of it. They are marked in red.",
-    questionTitle: "Hermes has a question",
-    questionsTitle: (count) => `Hermes has ${count} questions`,
+    questionTitle: "A question from Hermes",
+    questionsTitle: (count) => `${count} questions from Hermes`,
     answerLabel: "Your answer",
     answerPlaceholder: "Type a response for Hermes…",
+    multiHint: "You can pick more than one.",
     skip: "Skip",
     sendAnswer: "Send answer",
     sendAnswers: "Send all answers",
