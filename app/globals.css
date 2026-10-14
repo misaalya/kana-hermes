@@ -882,19 +882,6 @@ details[open] > .kana-plus-summary::before {
     top: var(--kana-header-clear);
   }
 
-  /* Positioning on a phone grows the avatar from its tile to the whole stage.
-     Watching it stretch reads as a glitch, so it steps through the change
-     instead: fade out at the old size, swap while invisible, fade back in at
-     the new one and stay visible for the dragging itself. */
-  .kana-avatar-viewport[data-layout="positioning"] .kana-avatar-content {
-    animation: kana-avatar-restage 340ms linear both;
-  }
-}
-
-@keyframes kana-avatar-restage {
-  0%, 20% { opacity: 1; }
-  38%, 52% { opacity: 0; }
-  100% { opacity: 1; }
 }
 
 .kana-chat-toggle:focus-visible {
