@@ -161,13 +161,13 @@ export const LiveChatFeed = memo(function LiveChatFeed({
         })}
 
         {typing ? (
-          <div className="flex items-center gap-2.5 self-start">
+          <div className="flex flex-col items-start gap-1 self-start">
             <span className="kana-typing kana-message-assistant" aria-hidden="true">
               <span />
               <span />
               <span />
             </span>
-            <span className="text-[11px] font-bold text-muted">{status}</span>
+            <span className="pl-1 text-[10px] font-bold text-muted">{status}</span>
           </div>
         ) : null}
         <div aria-hidden="true" />
