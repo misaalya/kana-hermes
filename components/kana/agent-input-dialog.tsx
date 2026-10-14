@@ -516,20 +516,22 @@ export function AgentInputDialog({  request,
               ) : null}
             </div>
 
-            <footer className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-stretch gap-2 border-t-[3px] border-dotted border-line-strong px-5 pt-3.5 pb-4 sm:flex sm:flex-wrap">
+            <footer className="flex shrink-0 flex-wrap items-stretch gap-2 border-t-[3px] border-dotted border-line-strong px-5 pt-3.5 pb-4">
               {/* Deny is always enabled and reads as the quiet way out; the
                   approving actions stay disabled until the dialog is armed.
                   Phones pair the answers two by two, because four labels in
-                  one 390 px row are unreadable: the lasting choice takes the
-                  wide column, and Deny is its icon at the right edge. Wider
-                  screens keep one row of labelled buttons. */}
+                  one 390 px row are unreadable: half a row each, so the last
+                  approving answer fills what Deny leaves. Deny keeps a wider
+                  square-ish target than a bare icon, and stays in the right
+                  column of its row. Wider screens keep one row of labelled
+                  buttons of equal width. */}
               {approvalChoices.map((choice) => {
                 if (choice === "deny") return null;
                 const primary = choice === "once";
                 const label = approvalLabel(choice, copy);
                 return (
                   <button
-                    className={`kana-focus kana-pill ${primary ? "kana-pill-accent" : "kana-pill-soft"} min-h-11 max-sm:w-full px-3 text-[12.5px] leading-tight sm:w-auto sm:flex-1 disabled:cursor-not-allowed disabled:opacity-50`}
+                    className={`kana-focus kana-pill ${primary ? "kana-pill-accent" : "kana-pill-soft"} min-h-11 grow basis-[calc(50%-0.25rem)] px-3 text-[12.5px] leading-tight sm:basis-0 disabled:cursor-not-allowed disabled:opacity-50`}
                     disabled={submitting || !armed}
                     key={choice}
                     onClick={() => void onRespond({ kind: "approval", choice })}
@@ -545,7 +547,7 @@ export function AgentInputDialog({  request,
               })}
               {approvalChoices.includes("deny") ? (
                 <button
-                  className="kana-focus kana-pill kana-pill-danger min-h-11 w-11 max-sm:justify-self-end px-0 text-[12.5px] sm:w-auto sm:px-5 sm:text-[13px] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="kana-focus kana-pill kana-pill-danger min-h-11 shrink-0 px-0 text-[12.5px] max-sm:ml-auto max-sm:w-28 sm:w-auto sm:px-5 sm:text-[13px] disabled:cursor-not-allowed disabled:opacity-50"
                   disabled={submitting}
                   aria-label={copy.deny}
                   title={copy.deny}
