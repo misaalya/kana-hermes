@@ -89,7 +89,21 @@ export function AvatarPositionIcon(props: IconProps) {
 }
 
 export function SendIcon(props: IconProps) {
-  return <Icon {...props}><path d="m22 2-7 20-4-9-9-4Z" /><path d="M22 2 11 13" /></Icon>;
+  return (
+    <svg
+      aria-hidden="true"
+      className={props.className ?? "size-4"}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 6h8v9H5" />
+      <polyline points="9 11 5 15 9 19" />
+    </svg>
+  );
 }
 
 /** Return key (⏎), the send glyph used by Claude Code's composer. */
