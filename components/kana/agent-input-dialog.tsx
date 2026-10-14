@@ -547,7 +547,7 @@ export function AgentInputDialog({  request,
               })}
               {approvalChoices.includes("deny") ? (
                 <button
-                  className="kana-focus kana-pill kana-pill-danger min-h-11 shrink-0 px-0 text-[12.5px] max-sm:ml-auto max-sm:w-28 sm:w-auto sm:px-5 sm:text-[13px] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="kana-focus kana-pill kana-pill-danger min-h-11 shrink-0 px-0 text-[12.5px] max-sm:ml-auto max-sm:w-20 sm:w-auto sm:px-5 sm:text-[13px] disabled:cursor-not-allowed disabled:opacity-50"
                   disabled={submitting}
                   aria-label={copy.deny}
                   title={copy.deny}
