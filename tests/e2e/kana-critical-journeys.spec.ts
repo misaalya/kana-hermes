@@ -893,6 +893,45 @@ test("adjusts the active avatar from the workspace instead of settings", async (
   await expect(page.getByRole("slider", { name: /^X$/ })).toHaveCount(0);
 });
 
+test("never leaves a tapped header tab looking open on a touch device", async ({
+  page,
+}) => {
+  // A touch browser keeps :hover on the last thing tapped until something else
+  // is tapped, so an unguarded :hover rule leaves the closed tab showing its
+  // white disc, its 2px lift, and its label bubble as if the panel were open.
+  const trigger = page.getByRole("button", {
+    name: "Adjust avatar position and size",
+  });
+  await expect(trigger).toHaveAttribute("aria-expanded", "false");
+
+  const hoverCapable = await page.evaluate(
+    () => window.matchMedia("(hover: hover)").matches,
+  );
+  // mobile-chrome is a phone (390 px, no hover); desktop-chrome keeps its mouse.
+  expect(hoverCapable).toBe((page.viewportSize()?.width ?? 0) >= 1024);
+
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("DOM.enable");
+  await cdp.send("CSS.enable");
+  const { root } = await cdp.send("DOM.getDocument");
+  const { nodeId } = await cdp.send("DOM.querySelector", {
+    nodeId: root.nodeId,
+    selector: "button[aria-controls='kana-avatar-layout-panel']",
+  });
+
+  // Hold :hover on the closed tab, exactly as a phone does after a tap.
+  await cdp.send("CSS.forcePseudoState", { nodeId, forcedPseudoClasses: ["hover"] });
+  if (hoverCapable) {
+    await expect(trigger.locator(".kana-tip")).toBeVisible();
+    await expect(trigger).not.toHaveCSS("transform", "none");
+  } else {
+    await expect(trigger.locator(".kana-tip")).toBeHidden();
+    await expect(trigger).toHaveCSS("transform", "none");
+    await expect(trigger).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  }
+  await cdp.send("CSS.forcePseudoState", { nodeId, forcedPseudoClasses: [] });
+});
+
 test("composer uploads files, preserves failed drafts, and removes attachments", async ({ page }) => {
   const composer = page.getByRole("textbox", { name: "Message Kana" });
   const picker = page.getByLabel("Choose files", { exact: true });

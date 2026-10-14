@@ -371,9 +371,16 @@ button,
   font-size: 23px;
 }
 
-.kana-workspace-action:hover {
-  background: rgb(255 255 255 / 18%);
-  transform: translateY(-2px);
+/* Hand-written :hover rules must live inside @media (hover: hover), which is
+   what Tailwind v4 does for its own `hover:` variant. A touch browser applies
+   :hover to whatever was tapped and keeps it until something else is tapped,
+   so an unguarded rule leaves a tapped tab looking open - white disc, lifted
+   by 2px, label bubble showing - after the panel it opened is closed. */
+@media (hover: hover) {
+  .kana-workspace-action:hover {
+    background: rgb(255 255 255 / 18%);
+    transform: translateY(-2px);
+  }
 }
 
 /* The label bubble under a tab, shown while it is pointed at or open. */
@@ -393,7 +400,12 @@ button,
   pointer-events: none;
 }
 
-.kana-workspace-action:hover .kana-tip,
+@media (hover: hover) {
+  .kana-workspace-action:hover .kana-tip {
+    display: block;
+  }
+}
+
 .kana-workspace-action:focus-visible .kana-tip,
 .kana-workspace-action[aria-expanded="true"] .kana-tip {
   display: block;
@@ -422,8 +434,10 @@ button,
   transition: transform 250ms var(--spring), background-color 150ms ease, color 150ms ease;
 }
 
-.kana-pill:not(:disabled):hover {
-  transform: translateY(-2px);
+@media (hover: hover) {
+  .kana-pill:not(:disabled):hover {
+    transform: translateY(-2px);
+  }
 }
 
 .kana-pill:not(:disabled):active {
@@ -440,8 +454,10 @@ button,
   color: var(--ink);
 }
 
-.kana-pill-soft:not(:disabled):hover {
-  color: var(--accent-strong);
+@media (hover: hover) {
+  .kana-pill-soft:not(:disabled):hover {
+    color: var(--accent-strong);
+  }
 }
 
 /* Logout and other leave-the-app actions: red tint that fills on hover. */
@@ -450,9 +466,11 @@ button,
   color: var(--danger);
 }
 
-.kana-pill-danger:not(:disabled):hover {
-  background: var(--danger);
-  color: #fff;
+@media (hover: hover) {
+  .kana-pill-danger:not(:disabled):hover {
+    background: var(--danger);
+    color: #fff;
+  }
 }
 
 /* Choice cards: a ring and a round check badge mark the selection. */
@@ -463,8 +481,10 @@ button,
   transition: transform 250ms var(--spring), border-color 150ms ease;
 }
 
-.kana-choice:not(:disabled):hover {
-  transform: translateY(-3px) rotate(-0.6deg);
+@media (hover: hover) {
+  .kana-choice:not(:disabled):hover {
+    transform: translateY(-3px) rotate(-0.6deg);
+  }
 }
 
 .kana-choice:not(:disabled):active {
@@ -481,9 +501,11 @@ button,
   background: transparent;
 }
 
-.kana-choice.is-plain:not(:disabled):hover {
-  background: var(--surface-strong);
-  transform: translateX(3px);
+@media (hover: hover) {
+  .kana-choice.is-plain:not(:disabled):hover {
+    background: var(--surface-strong);
+    transform: translateX(3px);
+  }
 }
 
 .kana-choice.is-plain.is-selected {
@@ -554,8 +576,10 @@ button,
   transition: color 200ms ease;
 }
 
-.kana-seg-option:hover {
-  color: var(--ink);
+@media (hover: hover) {
+  .kana-seg-option:hover {
+    color: var(--ink);
+  }
 }
 
 .kana-seg-option[aria-checked="true"] {
@@ -581,9 +605,14 @@ button,
   transition: border-color 150ms ease;
 }
 
-.kana-select:not(:disabled):hover,
 .kana-select[aria-expanded="true"] {
   border-color: var(--accent);
+}
+
+@media (hover: hover) {
+  .kana-select:not(:disabled):hover {
+    border-color: var(--accent);
+  }
 }
 
 .kana-select:disabled {
@@ -920,8 +949,10 @@ details[open] > .kana-plus-summary::before {
   transition: transform 250ms var(--spring);
 }
 
-.kana-composer .kana-model-pill:not(:disabled):hover {
-  transform: translateY(-2px);
+@media (hover: hover) {
+  .kana-composer .kana-model-pill:not(:disabled):hover {
+    transform: translateY(-2px);
+  }
 }
 
 .kana-composer .kana-model-pill:disabled {
@@ -935,8 +966,10 @@ details[open] > .kana-plus-summary::before {
   transition: transform 250ms var(--spring);
 }
 
-.kana-composer .kana-send:not(:disabled):hover {
-  transform: translateY(-2px);
+@media (hover: hover) {
+  .kana-composer .kana-send:not(:disabled):hover {
+    transform: translateY(-2px);
+  }
 }
 
 .kana-composer .kana-model-dialog button {
@@ -1288,9 +1321,11 @@ video.kana-media-preview {
   transition: transform 250ms var(--spring), border-color 150ms ease;
 }
 
-.kana-wardrobe-add:not(:disabled):hover {
-  border-color: var(--accent);
-  transform: translateY(-3px) rotate(-0.6deg);
+@media (hover: hover) {
+  .kana-wardrobe-add:not(:disabled):hover {
+    border-color: var(--accent);
+    transform: translateY(-3px) rotate(-0.6deg);
+  }
 }
 
 .kana-wardrobe-add:disabled {
@@ -1310,10 +1345,12 @@ video.kana-media-preview {
   color: var(--accent);
 }
 
-.kana-settings-nav-item:hover {
-  background: color-mix(in srgb, var(--surface-strong) 75%, transparent);
-  color: var(--ink);
-  transform: translateX(2px);
+@media (hover: hover) {
+  .kana-settings-nav-item:hover {
+    background: color-mix(in srgb, var(--surface-strong) 75%, transparent);
+    color: var(--ink);
+    transform: translateX(2px);
+  }
 }
 
 .kana-settings-nav-item.is-active {
@@ -1593,8 +1630,10 @@ video.kana-media-preview {
   opacity: 1;
 }
 
-.kana-field:hover:not(:focus):not(:disabled) {
-  border-color: var(--line-strong);
+@media (hover: hover) {
+  .kana-field:hover:not(:focus):not(:disabled) {
+    border-color: var(--line-strong);
+  }
 }
 
 .kana-field:focus,
