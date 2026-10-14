@@ -131,6 +131,7 @@ export type Copy = {
     runningOnPort(port: number): string;
     managedByKana: string;
     externalHermes: string;
+    externalChip: string;
     controlUnavailable: string;
     missingExecutable: string;
     startedNotice: string;
@@ -598,9 +599,10 @@ const id: Copy = {
     hermesAria: "Kontrol proses Hermes",
     checkFailed: "Pemeriksaan kontrol gagal.",
     controlFailed: "Kontrol layanan gagal.",
-    runningOnPort: (port: number) => `Berjalan di port ${port}.`,
+    runningOnPort: (port: number) => `Port ${port}`,
     managedByKana: "Dijalankan oleh Kana.",
     externalHermes: "Dijalankan di luar Kana, jadi Kana tidak bisa memulai ulang atau mematikannya.",
+    externalChip: "Tidak dikelola Kana",
     controlUnavailable: "Kontrol proses hanya tersedia lewat launcher Kana (`kana serve`).",
     missingExecutable: "Hermes belum ditemukan. Jalankan `kana doctor`, lalu atur hermes.executable di config.json.",
     startedNotice: "Hermes dijalankan.",
@@ -1123,9 +1125,10 @@ const en: Copy = {
     hermesAria: "Hermes process control",
     checkFailed: "Control check failed.",
     controlFailed: "Service control failed.",
-    runningOnPort: (port: number) => `Running on port ${port}.`,
+    runningOnPort: (port: number) => `Port ${port}`,
     managedByKana: "Started by Kana.",
     externalHermes: "Started outside Kana, so Kana cannot restart or stop it.",
+    externalChip: "Not managed by Kana",
     controlUnavailable: "Process control is available only through the Kana launcher (`kana serve`).",
     missingExecutable: "Hermes was not found. Run `kana doctor`, then set hermes.executable in config.json.",
     startedNotice: "Hermes started.",
