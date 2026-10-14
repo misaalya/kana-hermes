@@ -14,7 +14,7 @@ import { resolveTypedCommand } from "@/lib/services/send-message";
 import { getCopy, type Copy } from "@/lib/ui/copy";
 import { ComposerDictation } from "./composer-dictation";
 import { ComposerModelChoice } from "./composer-model-choice";
-import { PlusIcon, ReturnIcon } from "./icons";
+import { PlusIcon, SendIcon } from "./icons";
 import { useKanaStore, useKanaWorkspace } from "./kana-workspace-context";
 import { SlashCommandMenu } from "./slash-command-menu";
 
@@ -258,7 +258,7 @@ export function ChatComposer() {
                 className="kana-send kana-focus inline-flex size-10 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-white/16 disabled:cursor-not-allowed"
                 onClick={() => void submitMessage()}
               >
-                <ReturnIcon className="size-[18px]" />
+                <SendIcon className="size-[18px]" />
               </button>
             )}
           </div>
