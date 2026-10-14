@@ -810,17 +810,17 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
     runtime.app.ticker.add(wanderTick);
 
     // --- Resize / visibility / context-loss lifecycle ----------------------
-    let resizeFrame = 0;
+    // Resize in the observer callback itself: it runs before the browser
+    // paints the new layout. Deferring to requestAnimationFrame lets one frame
+    // paint the grown stage with the old, smaller backing store stretched over
+    // it, which reads as a blurred avatar when the Scale panel opens on a phone.
     const resizeObserver = new ResizeObserver(() => {
-      cancelAnimationFrame(resizeFrame);
-      resizeFrame = requestAnimationFrame(() => {
-        const bounds = host.getBoundingClientRect();
-        runtime.app.renderer.resize(
-          Math.max(1, Math.round(bounds.width * runtime.resolution)),
-          Math.max(1, Math.round(bounds.height * runtime.resolution)),
-        );
-        applyFit();
-      });
+      const bounds = host.getBoundingClientRect();
+      runtime.app.renderer.resize(
+        Math.max(1, Math.round(bounds.width * runtime.resolution)),
+        Math.max(1, Math.round(bounds.height * runtime.resolution)),
+      );
+      applyFit();
     });
     resizeObserver.observe(host);
 
@@ -867,7 +867,6 @@ export class PixiLive2DRuntimeAdapter implements Live2DRuntimeAdapter {
         resizeObserver.disconnect();
         intersectionObserver.disconnect();
         document.removeEventListener("visibilitychange", updatePlayback);
-        cancelAnimationFrame(resizeFrame);
         canvas.removeEventListener("webglcontextlost", handleContextLost);
         canvas.removeEventListener(
           "webglcontextrestored",
