@@ -9,8 +9,6 @@ import {
   settingsButton,
   settingsButtonAccent,
   settingsButtonDanger,
-  SettingsRow,
-  SettingsRows,
   StatusPill,
 } from "./settings-layout";
 
@@ -131,27 +129,18 @@ export function HermesControlPanel({
     ? copy.states[state] ?? copy.states.checking
     : notice ? copy.states.failed : copy.states.checking;
 
-  // Plain facts in the UI language, never the server's technical message.
-  const facts: string[] = [];
-  if (status && running) {
-    facts.push(copy.runningOnPort(status.port));
-    facts.push(status.managed ? copy.managedByKana : copy.externalHermes);
-  } else if (status && !status.executable) {
-    facts.push(copy.missingExecutable);
-  }
-  if (status && !canControl) facts.push(copy.controlUnavailable);
-  const description = facts.length > 0 || notice
-    ? (
-      <>
-        {facts.map((fact) => <span key={fact} className="block">{fact}</span>)}
-        {notice ? (
-          <span className={`block ${notice.failed ? "text-danger" : "text-accent-strong"}`}>
-            {notice.text}
-          </span>
-        ) : null}
-      </>
-    )
-    : undefined;
+  // The chip carries the one fact that matters; the full sentence rides in
+  // its tooltip, so the row stays free of explanatory text.
+  const external = status && running && !status.managed;
+  const chipLabel = external ? copy.externalChip : stateLabel;
+  const chipTitle = status && running
+    ? status.managed ? copy.managedByKana : copy.externalHermes
+    : status && !status.executable
+      ? copy.missingExecutable
+      : status && !canControl
+        ? copy.controlUnavailable
+        : undefined;
+  const runningDetail = status && running ? copy.runningOnPort(status.port) : null;
 
   // One row: the state chip, then only the action that makes sense right now.
   const actions: React.ReactNode[] = [];
@@ -200,13 +189,22 @@ export function HermesControlPanel({
   }
 
   return (
-    <section aria-label={copy.hermesAria}>
-      <SettingsRows>
-        <SettingsRow label={copy.hermesTitle} description={description}>
-          <StatusPill tone={tone} capitalize={false}>{stateLabel}</StatusPill>
-          {actions}
-        </SettingsRow>
-      </SettingsRows>
+    <section aria-label={copy.hermesAria} className="flex flex-col gap-3 bg-surface-strong/60 p-5">
+      <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+        <div className="min-w-0" title={chipTitle}>
+          <div className="text-[13px] font-extrabold text-muted">{copy.hermesTitle}</div>
+          <div className="mt-1">
+            <StatusPill tone={tone} capitalize={false}>{chipLabel}</StatusPill>
+          </div>
+          {runningDetail ? <div className="mt-1 text-[11.5px] text-muted">{runningDetail}</div> : null}
+        </div>
+        {actions.length > 0 ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+      </div>
+      {notice ? (
+        <p className={`text-[11.5px] font-semibold ${notice.failed ? "text-danger" : "text-muted"}`} role="status">
+          {notice.text}
+        </p>
+      ) : null}
     </section>
   );
 }

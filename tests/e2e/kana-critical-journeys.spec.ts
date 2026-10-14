@@ -804,8 +804,8 @@ test("Settings → Connection separates Hermes state from its one useful action"
   // One state, in Kana's words, plus plain facts. The server's technical
   // message, its PID, and its endpoint stay out of the browser's reading.
   await expect(hermes.getByText("Running", { exact: true })).toBeVisible();
-  await expect(hermes.getByText("Running on port 9119.")).toBeVisible();
-  await expect(hermes.getByText("Started by Kana.")).toBeVisible();
+  await expect(hermes.getByText("Port 9119", { exact: true })).toBeVisible();
+  await expect(hermes.getByTitle("Started by Kana.")).toBeVisible();
   await expect(hermes.getByText(runtimeStatus.message)).toHaveCount(0);
   await expect(hermes.getByText("4242")).toHaveCount(0);
 
@@ -832,7 +832,8 @@ test("Settings → Connection separates Hermes state from its one useful action"
     route.fulfill({ json: { ...runtimeStatus, managed: false } }),
   );
   hermes = await reopen();
-  await expect(hermes.getByText("Started outside Kana, so Kana cannot restart or stop it.")).toBeVisible();
+  await expect(hermes.getByText("Not managed by Kana", { exact: true })).toBeVisible();
+  await expect(hermes.getByTitle("Started outside Kana, so Kana cannot restart or stop it.")).toBeVisible();
   await expect(hermes.getByRole("button", { name: /restart|stop/i })).toHaveCount(0);
 
   // Without process control the panel says so instead of offering dead buttons.
@@ -841,7 +842,7 @@ test("Settings → Connection separates Hermes state from its one useful action"
   );
   hermes = await reopen();
   await expect(hermes.getByText("Unavailable")).toBeVisible();
-  await expect(hermes.getByText("Process control is available only through the Kana launcher (`kana serve`).")).toBeVisible();
+  await expect(hermes.getByTitle("Process control is available only through the Kana launcher (`kana serve`).")).toBeVisible();
   await expect(hermes.getByRole("button", { name: /^(?:Start|Stop|Restart)$/ })).toHaveCount(0);
 });
 
