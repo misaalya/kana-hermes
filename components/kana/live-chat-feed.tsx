@@ -130,9 +130,9 @@ export const LiveChatFeed = memo(function LiveChatFeed({
               <article key={message.id} className="rounded-[22px] border-2 border-line bg-raised px-4 py-2.5 max-sm:px-3 max-sm:py-2">
                 <div className="mb-1 flex items-center justify-between gap-3">
                   <strong className="kana-label-bubble">{copy.chat.hermesNote}</strong>
-                  <span className="text-[9px] tabular-nums text-faint">{dateFormatter.format(message.timestamp)}</span>
+                  <span className="text-[11px] tabular-nums text-faint">{dateFormatter.format(message.timestamp)}</span>
                 </div>
-                <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-ink-dim [overflow-wrap:anywhere] max-sm:text-[10px]">{messageCopy}</p>
+                <p className="whitespace-pre-wrap text-[12px] leading-relaxed text-ink-dim [overflow-wrap:anywhere] max-sm:text-[13px]">{messageCopy}</p>
               </article>
             );
           }
@@ -146,14 +146,14 @@ export const LiveChatFeed = memo(function LiveChatFeed({
                   : "kana-message-user self-end"
               }`}
             >
-              <div className="text-[13px] font-medium leading-relaxed max-sm:text-[11px] max-sm:leading-[1.5]">
+              <div className="text-[13px] font-medium leading-relaxed max-sm:text-[13px] max-sm:leading-[1.5]">
                 {isAssistant ? (
                   <AssistantReply text={messageCopy} copy={copy.chat} />
                 ) : (
                   <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{messageCopy}</p>
                 )}
               </div>
-              <span className="mt-1.5 block text-right text-[9px] tabular-nums opacity-50 max-sm:text-[8px]">
+              <span className="mt-1.5 block text-right text-[11px] tabular-nums opacity-60 max-sm:text-[10px]">
                 {dateFormatter.format(message.timestamp)}
               </span>
             </article>
