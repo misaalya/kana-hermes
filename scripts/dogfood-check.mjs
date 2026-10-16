@@ -7,6 +7,20 @@ function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+// `dogfood/` is ignored, so a checkout that has never recorded a day has no
+// journal at all. Name the command that creates one instead of failing on a
+// bare ENOENT; the gate never invents evidence of its own.
+async function readJournal(file) {
+  try {
+    return JSON.parse(await readFile(file, "utf8"));
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+    throw new Error(
+      `No dogfood journal at ${file}. Record a day first:\n  npm run dogfood:record -- --minutes 45 --scenario hermes-only`,
+    );
+  }
+}
+
 function validDate(value) {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/u.test(value)) return null;
   const timestamp = Date.parse(`${value}T00:00:00Z`);
@@ -117,7 +131,7 @@ if (argumentsList.includes("--self-test")) {
   selfTest();
 } else {
   const file = process.env.KANA_DOGFOOD_FILE || argumentsList[0] || "dogfood/journal.json";
-  const value = JSON.parse(await readFile(file, "utf8"));
+  const value = await readJournal(file);
   const report = checkDogfood(value);
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   if (!report.passed) process.exitCode = 2;
