@@ -4,10 +4,10 @@
    fixed-size cached blobs, so a class name that sits on a blob boundary comes
    back with control bytes inside it ("…backdrop:bg-[var(--" + 0x13 + …). The
    utility generated from that candidate is invalid CSS and fails the whole
-   stylesheet build, taking every page down with it. */
-@source not "../.next/**";
-@source not "../.next-e2e/**";
-@source not "../.next-debug/**";
+   stylesheet build, taking every page down with it. The scan skips ignored
+   files, so a dist dir must stay ignored as well (`.next*` in .gitignore), and
+   the rules below exclude the rest. */
+@source not "../.next*/**";
 @source not "../.npm-package/**";
 @source not "../cli/.npm-package/**";
 @source not "../test-results/**";
