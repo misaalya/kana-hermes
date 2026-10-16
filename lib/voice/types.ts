@@ -1,4 +1,3 @@
-import type { AvatarController } from "@/lib/avatar/avatar-controller";
 import type { Emotion } from "@/lib/presentation/types";
 import type { VoiceDeliveryMode } from "./speech-chunks";
 
@@ -92,7 +91,3 @@ export interface VoiceProvider {
   getSnapshot(): VoiceRuntimeSnapshot;
   subscribe(listener: (snapshot: VoiceRuntimeSnapshot) => void): () => void;
 }
-
-export type VoiceProviderDependencies = {
-  avatar: AvatarController;
-};

@@ -18,10 +18,6 @@ export const settingsButtonDanger =
 export const settingsInput =
   "kana-field min-h-10 w-full rounded-full px-4 text-[13px] font-medium";
 
-export function SettingsPageTitle({ children }: { children: React.ReactNode }) {
-  return <h2 className="mb-3 text-[22px] font-extrabold text-ink max-md:hidden">{children}</h2>;
-}
-
 /**
  * A titled block. `action` follows the title on its row (e.g. carousel
  * arrows); it stays left so it never meets the dialog's corner close button.

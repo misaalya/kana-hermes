@@ -352,9 +352,6 @@ export type Copy = {
     avatarBehaviorReady(mapped: number, total: number): string;
     avatarBehaviorLoading: string;
     avatarBehaviorFailed: string;
-    avatarLayoutDescription: string;
-    avatarLayoutAutomatic: string;
-    avatarLayoutAdjusted: string;
     avatarLayoutHorizontal: string;
     avatarLayoutVertical: string;
     avatarLayoutScale: string;
@@ -385,7 +382,6 @@ export type Copy = {
     avatarEmotionNames: Record<Emotion, string>;
     includedAvatarAbout: string;
     hermesTitle: string;
-    hermesDescription: string;
     modelTitle: string;
     modelLoading: string;
     modelLoadFailed: string;
@@ -406,15 +402,12 @@ export type Copy = {
     modelInUse: string;
     modelUse: string;
     modelRefreshList: string;
-    voiceEngineTitle: string;
-    voiceEngineDescription: string;
     accessTitle: string;
     avatarNamePrompt: string;
     removeAvatarConfirm(name: string): string;
     removeBackgroundConfirm(name: string): string;
     advancedTitle: string;
     configGuide: string;
-    advancedSuffix: string;
     advancedMode: string;
     advancedModeLocal: string;
     advancedModeDeployment: string;
@@ -860,9 +853,6 @@ const id: Copy = {
     avatarBehaviorReady: (mapped, total) => `${mapped} dari ${total} emosi terhubung`,
     avatarBehaviorLoading: "Membaca kemampuan avatar…",
     avatarBehaviorFailed: "Kemampuan avatar tidak dapat dibaca.",
-    avatarLayoutDescription: "Kana menyesuaikan model otomatis dari bounds Live2D-nya. Koreksi ini disimpan khusus untuk avatar yang sedang dipilih.",
-    avatarLayoutAutomatic: "Posisi otomatis",
-    avatarLayoutAdjusted: "Disesuaikan",
     avatarLayoutHorizontal: "X",
     avatarLayoutVertical: "Y",
     avatarLayoutScale: "Ukuran",
@@ -902,7 +892,6 @@ const id: Copy = {
     },
     includedAvatarAbout: "Tentang avatar bawaan",
     hermesTitle: "Hermes",
-    hermesDescription: "Otak agen di balik Kana. Kana menemukan dan menghubungkannya secara otomatis.",
     modelTitle: "Model AI",
     modelLoading: "Memuat model dari Hermes…",
     modelLoadFailed: "Model tidak dapat dimuat.",
@@ -923,15 +912,12 @@ const id: Copy = {
     modelInUse: "Sedang digunakan",
     modelUse: "Gunakan model ini",
     modelRefreshList: "Segarkan daftar",
-    voiceEngineTitle: "Mesin suara",
-    voiceEngineDescription: "Layanan lokal yang mengubah teks Jepang Kana menjadi suara.",
     accessTitle: "Perlindungan akses",
     avatarNamePrompt: "Nama avatar",
     removeAvatarConfirm: (name) => `Hapus “${name}” dari browser ini?`,
     removeBackgroundConfirm: (name) => `Hapus ${name} dari perangkat ini?`,
     advancedTitle: "Konfigurasi lanjutan",
     configGuide: "Panduan",
-    advancedSuffix: "untuk instalasi mandiri",
     advancedMode: "Mode instalasi",
     advancedModeLocal: "Lokal",
     advancedModeDeployment: "Deployment",
@@ -1018,7 +1004,6 @@ const id: Copy = {
     reconnecting: "Menghubungkan ulang…",
     thinking: "Kana sedang berpikir",
     answering: "Kana sedang menjawab",
-    responseReceived: "Respons diterima",
     stopped: "Giliran dihentikan",
     attention: "Ada sesuatu yang perlu diperiksa",
     queued: "Pesan masuk antrean — Kana akan menjawab setelah tugas saat ini selesai",
@@ -1408,9 +1393,6 @@ const en: Copy = {
     avatarBehaviorReady: (mapped, total) => `${mapped} of ${total} emotions connected`,
     avatarBehaviorLoading: "Reading avatar capabilities…",
     avatarBehaviorFailed: "Could not read this avatar's capabilities.",
-    avatarLayoutDescription: "Kana fits the model automatically from its Live2D bounds. These corrections are stored only for the selected avatar.",
-    avatarLayoutAutomatic: "Automatic position",
-    avatarLayoutAdjusted: "Adjusted",
     avatarLayoutHorizontal: "X",
     avatarLayoutVertical: "Y",
     avatarLayoutScale: "Size",
@@ -1450,7 +1432,6 @@ const en: Copy = {
     },
     includedAvatarAbout: "About included avatars",
     hermesTitle: "Hermes",
-    hermesDescription: "The agent brain behind Kana. Kana finds and connects it automatically.",
     modelTitle: "AI model",
     modelLoading: "Loading models from Hermes…",
     modelLoadFailed: "Could not load models.",
@@ -1471,15 +1452,12 @@ const en: Copy = {
     modelInUse: "In use",
     modelUse: "Use this model",
     modelRefreshList: "Refresh list",
-    voiceEngineTitle: "Voice engine",
-    voiceEngineDescription: "The local service that turns Kana's Japanese text into speech.",
     accessTitle: "Access protection",
     avatarNamePrompt: "Avatar name",
     removeAvatarConfirm: (name) => `Remove “${name}” from this browser?`,
     removeBackgroundConfirm: (name) => `Remove ${name} from this device?`,
     advancedTitle: "Advanced configuration",
     configGuide: "Guide",
-    advancedSuffix: "for self-hosted setups",
     advancedMode: "Installation mode",
     advancedModeLocal: "Local",
     advancedModeDeployment: "Deployment",
@@ -1566,7 +1544,6 @@ const en: Copy = {
     reconnecting: "Reconnecting…",
     thinking: "Kana is thinking",
     answering: "Kana is answering",
-    responseReceived: "Response received",
     stopped: "Turn stopped",
     attention: "Something needs attention",
     queued: "Message queued — Kana will answer after the current task",

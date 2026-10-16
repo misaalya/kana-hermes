@@ -46,11 +46,6 @@ export interface ServerTtsProvider {
   cancel?(requestId: string, signal: AbortSignal): Promise<boolean>;
 }
 
-export function isAudioContentType(value: string): boolean {
-  const normalized = value.split(";", 1)[0]?.trim().toLowerCase() ?? "";
-  return normalized.startsWith("audio/") || normalized === "application/octet-stream";
-}
-
 const RESPONSE_FORMAT_CONTENT_TYPE = {
   mp3: "audio/mpeg",
   opus: "audio/ogg",

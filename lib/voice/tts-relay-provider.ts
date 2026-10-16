@@ -19,8 +19,6 @@ import type {
 const MAX_BROWSER_AUDIO_BYTES = 64 * 1024 * 1024;
 
 export type TtsRelayProviderOptions = {
-  /** Retained for preference migration; synthesis always uses the same-origin relay. */
-  baseUrl?: string;
   voiceId?: string;
   deliveryMode?: VoiceDeliveryMode;
   maximumChunkCharacters?: number;

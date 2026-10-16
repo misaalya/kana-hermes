@@ -41,11 +41,8 @@
   --color-danger: var(--danger);
 
   --font-sans: var(--kana-font);
-  --font-jp: var(--kana-font);
 
   --animate-kana-pulse: kana-pulse 1.6s ease-in-out infinite;
-  --animate-kana-float: kana-float 6s ease-in-out infinite;
-  --animate-kana-breathe: kana-breathe 4s ease-in-out infinite;
   --animate-kana-in: kana-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
@@ -81,7 +78,6 @@
   --chat-bubble: #263943;
   --chat-bubble-user: #2e2e2e;
   --chat-text: #f4f4f4;
-  --chat-composer: #2b2b2b;
 }
 
 [data-theme="light"] {
@@ -107,7 +103,6 @@
   --chat-bubble: #d9edf7;
   --chat-bubble-user: #ebebe8;
   --chat-text: #1c1c1c;
-  --chat-composer: #ffffff;
 }
 
 
@@ -527,12 +522,6 @@ button,
   background: var(--accent);
   color: #ffffff;
   animation: kana-pop 350ms var(--spring);
-}
-
-/* Inside a clipped card (previews, carousels) the badge sits in the corner. */
-.kana-check.is-inset {
-  top: 8px;
-  right: 8px;
 }
 
 /* In a full-width option row the badge sits in the row's own flow, so it can
