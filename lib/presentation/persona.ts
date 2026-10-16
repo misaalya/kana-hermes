@@ -7,7 +7,8 @@ import { EMOTIONS } from "./types";
  * Kana has no subtitle-language setting: Hermes writes the answer in the
  * language the user wrote in, and reports that language in the reply header.
  *
- * Delivery (verified against hermes serve and a 9router route, see AGENTS.md):
+ * Delivery (verified against hermes serve and a 9router route; see
+ * docs/agent/response-contract.md):
  * the contract rides in the USER turn, never as a system-role seed. A seed on
  * session.create becomes a second system message, which some OpenAI-compatible
  * routes drop before the model sees it (9router + cx/gpt-5.6-luna counted 99

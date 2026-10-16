@@ -238,7 +238,7 @@ if (command === "--self-test") {
 } else {
   if (!["record-day", "mark-matrix"].includes(command)) {
     throw new Error(
-      "Use record-day or mark-matrix. See docs/DOGFOOD.md for examples.",
+      "Use record-day or mark-matrix. See docs/evidence/dogfood.md for examples.",
     );
   }
   const flags = parseFlags(argumentsList);

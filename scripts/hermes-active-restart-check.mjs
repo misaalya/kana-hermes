@@ -24,7 +24,7 @@ async function readEvidence(file) {
   } catch (error) {
     if (error?.code !== "ENOENT") throw error;
     throw new Error(
-      `No active-restart evidence at ${file}. Record the matrix as docs/HERMES_RESTART_ACCEPTANCE.md describes, then run this check again.`,
+      `No active-restart evidence at ${file}. Record the matrix as docs/evidence/hermes-restart.md describes, then run this check again.`,
     );
   }
 }

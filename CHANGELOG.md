@@ -423,5 +423,5 @@
 
 ### Known limitations
 
-See [supported environment](docs/SUPPORTED_ENVIRONMENT.md) for known
+See [supported environment](docs/operator/supported-environment.md) for known
 environment limits and platform support.

@@ -107,7 +107,7 @@ Your data (password hash, settings, voice profiles, model cache) lives in
 - The Hermes activity log shows which tools ran for each reply.
 - Files Hermes sends (audio, video, images, documents) appear as a player, a
   preview, or a Download button instead of a file path.
-- Composer with [file attachments, voice dictation, and a model picker](docs/COMPOSER.md).
+- Composer with file attachments, voice dictation, and a model picker.
   The picker opens with the last Hermes model list at once and refreshes it in
   the background.
 - On phones and tablets the conversation fills the screen and Kana sits in a
@@ -140,7 +140,8 @@ Your data (password hash, settings, voice profiles, model cache) lives in
 - Password sign-in with lockout that never blocks your own known browsers and
   does not depend on IP addresses (safe behind shared home internet).
 - Cross-site request protection, server-side logout, and an owner-only data folder.
-- Installable app shell, credential-free backup and restore, and safe diagnostics.
+- Installable app shell, and safe diagnostics that redact tokens, prompts, and
+  secrets.
 - A configuration guide inside Kana at `/docs`, in English and Indonesian.
 
 ## Deploy on a VPS
@@ -159,8 +160,8 @@ KANA_DATA_DIR=/var/lib/kana kana serve --port 3000
   buffering for `/api/hermes/events`, and allow `client_max_body_size 14m`.
 
 The complete systemd unit and Nginx configuration are in the
-[VPS deploy checklist](docs/SUPPORTED_ENVIRONMENT.md#vps-deploy-checklist).
-To build from source instead of npm, see [Install and deploy Kana](docs/INSTALLATION.md).
+[VPS deploy checklist](docs/operator/supported-environment.md#vps-deploy-checklist).
+To build from source instead of npm, see [Install Kana](docs/operator/install.md).
 
 > [!WARNING]
 > `npm run dev` is a development server only. Never keep it running behind
@@ -178,7 +179,7 @@ Usually there is nothing to do. Kana:
 
 If detection fails, `kana doctor` shows what it found. Set
 `hermes.executable` in `config.json` to an absolute path and restart Kana.
-Details: [Hermes auto-detection on Linux](docs/SUPPORTED_ENVIRONMENT.md#hermes-auto-detection-on-linux).
+Details: [Hermes auto-detection on Linux](docs/operator/supported-environment.md#hermes-auto-detection-on-linux).
 
 To start Hermes yourself, give it a token Kana can discover:
 
@@ -212,7 +213,7 @@ Voice is optional and off on new installs. Turn Kana's voice on or off in
   voice. Each external service is its own integration; API keys stay in the
   server's `config.json` and never reach the browser.
 
-Configuration examples are in [TTS providers](docs/CONFIGURATION.md#tts-providers),
+Configuration examples are in [Speech](docs/operator/configure.md#speech),
 including every local engine option. CPU synthesis is slower than realtime on
 modest hardware; the engine's int8 path is used automatically on CPUs with
 AVX-512 VNNI.
@@ -255,8 +256,8 @@ browser, each workspace keeps its shared state in small per-concern
 [zustand](https://github.com/pmndrs/zustand) stores, and plain service classes
 talk to Hermes, voice, and the avatar, so typing re-renders only the composer.
 More in
-[process boundaries](docs/ADR-001-PROCESS-BOUNDARIES.md) and the
-[security model](docs/SECURITY.md).
+[process boundaries](docs/decisions/0001-process-boundaries.md) and the
+[security model](docs/operator/security.md).
 
 ## Development
 
@@ -283,8 +284,9 @@ npm run quality                                # full gate, including browser jo
 ```
 
 Real-environment checks (need Hermes, network, or target hardware) are
-`npm run test:hermes:restart`, `npm run test:live2d:official`,
-`npm run tts:acceptance`, and `npm run test:package:npm`.
+`npm run test:hermes:restart`, `npm run test:live2d:official`, and
+`npm run test:package:npm`. Local-voice latency stays a manual check on the
+target machine, because Kana ships no latency harness.
 Contributor rules are in [AGENTS.md](AGENTS.md).
 
 ## Documentation
@@ -292,12 +294,14 @@ Contributor rules are in [AGENTS.md](AGENTS.md).
 | Topic | Guide |
 |---|---|
 | Every `config.json` setting, inside Kana | Open `/docs` in Kana (English and Indonesian) |
-| Installing locally or on a server | [INSTALLATION.md](docs/INSTALLATION.md) |
-| `config.json`, TTS providers, deployment mode | [CONFIGURATION.md](docs/CONFIGURATION.md) |
-| VPS, systemd, Nginx, supported platforms | [SUPPORTED_ENVIRONMENT.md](docs/SUPPORTED_ENVIRONMENT.md) |
-| Threat model and reverse proxy | [SECURITY.md](docs/SECURITY.md) |
-| Attachments, dictation, model picker | [COMPOSER.md](docs/COMPOSER.md) |
-| Quality gates and releases | [QUALITY.md](docs/QUALITY.md) · [RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) |
+| Installing locally or on a server | [Install Kana](docs/operator/install.md) |
+| `config.json`, TTS providers, deployment mode | [Configure Kana](docs/operator/configure.md) |
+| Attachments, dictation, model picker | [Use the composer](docs/operator/composer.md) |
+| VPS, systemd, Nginx, supported platforms | [Supported environment](docs/operator/supported-environment.md) |
+| Threat model and reverse proxy | [Kana security model](docs/operator/security.md) |
+| Release channels and Hermes compatibility | [Compatibility](docs/operator/compatibility.md) |
+| Quality gates and releases | [Quality gates](docs/agent/quality-gates.md) · [Release checklist](docs/evidence/release-checklist.md) |
+| The documentation map | [docs/README.md](docs/README.md) |
 | Changes and migration notes | [CHANGELOG.md](CHANGELOG.md) |
 
 ## License

@@ -18,7 +18,7 @@ const username = userInfo().username.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 if (root.startsWith(homedir() + path.sep) || new RegExp(`(^|[^A-Za-z0-9])${username}($|[^A-Za-z0-9])`).test(root)) {
   const message = `The build folder ${root} names your user account and would be published with the package.`;
   if (process.argv.includes("--build")) {
-    throw new Error(`${message} Publish from a fresh clone outside your home directory (docs/RELEASE_CHECKLIST.md, step 5).`);
+    throw new Error(`${message} Publish from a fresh clone outside your home directory (docs/evidence/release-checklist.md).`);
   }
   process.stderr.write(`Warning: ${message} Do not publish this build.\n`);
 }

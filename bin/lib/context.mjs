@@ -25,7 +25,7 @@ export const runtimeRoot = isPublishedPackage
 
 /**
  * The command that sets the access password on this kind of install; the
- * login page shows it until a password exists. docs/SECURITY.md lists the
+ * login page shows it until a password exists. docs/operator/security.md lists the
  * same three.
  */
 export const passwordCommand = isPublishedPackage

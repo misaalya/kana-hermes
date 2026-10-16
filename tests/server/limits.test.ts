@@ -15,14 +15,14 @@ describe("request size limits", () => {
 
   it("documents the same Nginx body limit", () => {
     const documented = `${MAX_REQUEST_BODY_BYTES / (1024 * 1024)}m`;
-    const guide = readFileSync("docs/SUPPORTED_ENVIRONMENT.md", "utf8");
+    const guide = readFileSync("docs/operator/supported-environment.md", "utf8");
     const values = [...guide.matchAll(/client_max_body_size\s+(\S+);/g)].map((match) => match[1]);
     assert.ok(values.length > 0, "the Nginx example sets client_max_body_size");
     for (const value of values) assert.equal(value, documented);
   });
 
   it("documents a proxy Host header that keeps the port for the origin guard", () => {
-    for (const file of ["docs/SUPPORTED_ENVIRONMENT.md", "docs/SECURITY.md"]) {
+    for (const file of ["docs/operator/supported-environment.md", "docs/operator/security.md"]) {
       const guide = readFileSync(file, "utf8");
       const hosts = [...guide.matchAll(/proxy_set_header\s+Host\s+(\S+);/g)].map((match) => match[1]);
       assert.ok(hosts.length > 0, `${file} sets the proxied Host header`);
