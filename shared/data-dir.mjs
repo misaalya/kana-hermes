@@ -64,20 +64,23 @@ export function kanaLegacyDataDirsFrom(input) {
   return dirs;
 }
 
-// Files that only a Kana data root holds. Requiring one keeps a stray
-// directory that happens to be named "data" from being moved.
+// Names only a Kana data root holds. Requiring one keeps a stray directory that
+// happens to be named "data" from being moved. config.json and auth.json are
+// deliberately absent: they carry generic file names that an unrelated project
+// folder often holds, so they qualify nothing on their own. They are still
+// moved regardless of this list once a root is recognized, because every entry
+// of a recognized root moves.
 const KANA_DATA_ROOT_MARKERS = [
-  "config.json",
-  "auth.json",
   "appstate.db",
   "activities.db",
   "jwt-secret",
   "voices",
+  "irodori",
 ];
 
 /**
- * True when the directory holds something Kana wrote: config.json, a store, or
- * the voice library.
+ * True when the directory holds something only Kana writes: a store, the
+ * session secret, or the voice library and engine.
  *
  * @param {string} dir
  * @returns {boolean}
@@ -154,14 +157,25 @@ export function migrateKanaDataRoot(input) {
 
   let createdTarget = false;
   for (const [family, members] of families) {
-    if (existsSync(/* turbopackIgnore: true */ path.join(target, family))) continue;
+    const familyNames = [family, ...members];
+
+    // The whole family is left alone when the target already holds any part of
+    // it. A database and its journal files must never come from two roots, so a
+    // target that holds one member keeps the family where it is.
+    if (
+      familyNames.some((name) =>
+        existsSync(/* turbopackIgnore: true */ path.join(target, name)),
+      )
+    ) {
+      continue;
+    }
 
     // The newest copy of the family's base name decides which root it comes
     // from, so a database is never assembled from two different roots.
     let sourceDir = null;
     let newest = -1;
     for (const dir of sources) {
-      for (const candidate of [family, ...members]) {
+      for (const candidate of familyNames) {
         let stats;
         try {
           stats = statSync(/* turbopackIgnore: true */ path.join(dir, candidate));
@@ -178,12 +192,7 @@ export function migrateKanaDataRoot(input) {
 
     for (const member of members) {
       const from = path.join(/* turbopackIgnore: true */ sourceDir, member);
-      if (
-        !existsSync(/* turbopackIgnore: true */ from) ||
-        existsSync(/* turbopackIgnore: true */ path.join(target, member))
-      ) {
-        continue;
-      }
+      if (!existsSync(/* turbopackIgnore: true */ from)) continue;
       try {
         if (!createdTarget) {
           mkdirSync(/* turbopackIgnore: true */ target, { recursive: true, mode: 0o700 });
