@@ -833,10 +833,14 @@ test("Settings → Connection separates Hermes state from its one useful action"
 
   // Restarting closes every Hermes session, so it asks before it acts.
   await restart.click();
-  await expect(hermes.getByRole("button", { name: "Yes, restart?" })).toBeVisible();
+  await expect(hermes.getByRole("button", { name: "Yes, restart?", exact: true })).toBeVisible();
   await expect(hermes.getByRole("button", { name: "Restart", exact: true })).toHaveCount(0);
+  // Arming must not restart anything. A round-trip the test itself controls is
+  // awaited first, so a request the click had wrongly fired has already been
+  // received by the time this runs instead of still being in flight.
+  await settleNetwork(page, "/api/local-runtime/hermes");
   expect(actions).toEqual([]);
-  await hermes.getByRole("button", { name: "Yes, restart?" }).click();
+  await hermes.getByRole("button", { name: "Yes, restart?", exact: true }).click();
   await expect.poll(() => actions).toEqual(["restart"]);
   await expect(hermes.getByText("Hermes restarted.")).toBeVisible();
   await page.screenshot({ path: `test-results/connection-${test.info().project.name}.png` });
