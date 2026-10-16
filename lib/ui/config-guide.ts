@@ -6,7 +6,7 @@ import type { UiLocale } from "./copy";
 // Each language is written on its own in a formal register (Indonesian uses
 // "Anda"), not translated line by line. Keep the facts in step with
 // lib/server/user-config.ts (the parser is the source of truth) and
-// docs/CONFIGURATION.md; tests/presentation/config-guide.test.ts checks the
+// docs/operator/configure.md; tests/presentation/config-guide.test.ts checks the
 // structure and that every JSON example is accepted by that parser.
 //
 // Conventions on top of the chat subset:

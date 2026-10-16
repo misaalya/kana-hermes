@@ -1,7 +1,12 @@
-# ADR-002: Use complete WAV responses before streaming TTS
+# ADR-0002: Use complete WAV responses before streaming TTS
 
 Status: accepted baseline; opt-in sentence experiment implemented; streaming
 deferred, 2026-08-22.
+
+**Read when:** you are changing how speech is delivered, or considering streaming TTS.
+**Truth in code:** `lib/voice/tts-relay-provider.ts`,
+`lib/presentation/spoken-reply-queue.ts`, `lib/server/tts-provider/`,
+`lib/server/irodori/synthesis.ts`.
 
 Kana's speech relay uses one cancellable HTTP synthesis request and direct WAV
 playback. The generated audio can be replayed in memory without another Hermes
@@ -17,8 +22,9 @@ It does not call Hermes again or introduce a translation/agent model.
 The experiment records time-to-first-audio and per-turn synthesis/playback
 metrics, but it is not promoted to the default without target-hardware
 evidence. The development machine is not suitable for meaningful heavy
-inference. `npm run tts:acceptance` collects short/medium/long p50/p95 and
-real-time-factor evidence plus active cancellation on the VPS.
+inference, and Kana ships no latency harness: short/medium/long timings,
+real-time factor, and active cancellation stay a manual acceptance on the
+target machine (`docs/agent/quality-gates.md`).
 
 Streaming remains unadopted. It may proceed only if a bounded target-hardware
 spike shows a meaningful improvement over both complete WAV and sentence

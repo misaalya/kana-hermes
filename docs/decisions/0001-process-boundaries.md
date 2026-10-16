@@ -1,6 +1,11 @@
-# ADR-001: Keep Hermes and the voice engine outside the Kana application process
+# ADR-0001: Keep Hermes and the voice engine outside the Kana application process
 
 Status: accepted, 2026-08-22.
+
+**Read when:** you are about to add a second process, vendor or patch Hermes, or weigh a
+native desktop wrapper.
+**Truth in code:** `lib/server/local-hermes-runtime.ts`, `lib/server/hermes-bridge.ts`,
+`lib/server/irodori/`, `lib/server/tts-provider/`.
 
 Kana remains a Next.js presentation application. Its Node server may discover,
 start, and supervise the user's unmodified `hermes serve` executable, then
