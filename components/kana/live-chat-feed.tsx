@@ -6,6 +6,7 @@ import type { KanaMessage } from "@/lib/conversation/types";
 import { ActivityStack } from "./activity-stack";
 import { ChatMarkdown } from "./chat-markdown";
 import { MediaAttachments } from "./media-attachments";
+import { CheckIcon, CopyIcon } from "./icons";
 import { extractMediaAttachments } from "@/lib/presentation/media";
 import { getCopy, type Copy, type UiLocale } from "@/lib/ui/copy";
 import {
@@ -31,6 +32,69 @@ const AssistantReply = memo(function AssistantReply({ text, copy }: { text: stri
       {markdown ? <ChatMarkdown text={markdown} /> : null}
       <MediaAttachments attachments={attachments} copy={copy} />
     </>
+  );
+});
+
+/**
+ * What a bubble's copy button takes: the words on screen. A reply's MEDIA:
+ * links render as players and download buttons, so the invisible links stay out
+ * of the text the reader pastes somewhere else.
+ */
+function copyableText(role: KanaMessage["role"], shown: string): string {
+  if (role !== "assistant") return shown;
+  return extractMediaAttachments(shown).text || shown;
+}
+
+/**
+ * One bubble's copy button. A refused clipboard — a plain-http LAN install has
+ * none — selects the bubble's text instead, the same fallback the /docs code
+ * block uses, so it never claims a copy that did not happen.
+ */
+const CopyMessageButton = memo(function CopyMessageButton({ text, copy, quiet = false }: {
+  text: string;
+  copy: Copy["chat"];
+  /** The reader's own bubble: out of sight until that message is pointed at. */
+  quiet?: boolean;
+}) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 1600);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
+  const copyMessage = useCallback(
+    async (button: HTMLButtonElement) => {
+      try {
+        const clipboard: Clipboard | undefined = navigator.clipboard;
+        if (!clipboard?.writeText) throw new Error("The clipboard is unavailable.");
+        await clipboard.writeText(text);
+        setCopied(true);
+      } catch {
+        setCopied(false);
+        const selection = button.closest("article")?.querySelector("[data-copy-text]");
+        if (selection) window.getSelection()?.selectAllChildren(selection);
+      }
+    },
+    [text],
+  );
+
+  return (
+    <button
+      type="button"
+      aria-label={copied ? copy.copiedMessage : copy.copyMessage}
+      aria-live="polite"
+      onClick={(event) => void copyMessage(event.currentTarget)}
+      className={`kana-focus grid size-5 shrink-0 place-items-center rounded-full text-muted transition-[color,opacity] hover:text-accent focus-visible:text-accent max-sm:size-6 ${
+        quiet ? "kana-copy-quiet" : ""
+      }`}
+    >
+      {copied ? (
+        <CheckIcon className="size-3 max-sm:size-3.5 text-accent" />
+      ) : (
+        <CopyIcon className="size-3 max-sm:size-3.5" />
+      )}
+    </button>
   );
 });
 
@@ -140,22 +204,40 @@ export const LiveChatFeed = memo(function LiveChatFeed({
           return (
             <article
               key={message.id}
-              className={`min-w-0 max-w-[88%] rounded-[24px] border-2 px-4 py-3 max-sm:max-w-[90%] max-sm:rounded-[20px] max-sm:px-3 max-sm:py-2 ${
-                isAssistant
-                  ? "kana-message-assistant self-start"
-                  : "kana-message-user self-end"
+              className={`flex min-w-0 max-w-[88%] flex-col gap-1.5 max-sm:max-w-[90%] ${
+                isAssistant ? "self-start" : "self-end"
               }`}
             >
-              <div className="text-[13px] font-medium leading-relaxed max-sm:text-[13px] max-sm:leading-[1.5]">
-                {isAssistant ? (
-                  <AssistantReply text={messageCopy} copy={copy.chat} />
-                ) : (
-                  <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{messageCopy}</p>
-                )}
+              <div
+                className={`rounded-[24px] border-2 px-4 py-3 max-sm:rounded-[20px] max-sm:px-3 max-sm:py-2 ${
+                  isAssistant ? "kana-message-assistant" : "kana-message-user"
+                }`}
+              >
+                <div className="text-[13px] font-medium leading-relaxed max-sm:text-[13px] max-sm:leading-[1.5]" data-copy-text="">
+                  {isAssistant ? (
+                    <AssistantReply text={messageCopy} copy={copy.chat} />
+                  ) : (
+                    <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{messageCopy}</p>
+                  )}
+                </div>
               </div>
-              <span className="mt-1.5 block text-right text-[11px] tabular-nums opacity-60 max-sm:text-[10px]">
-                {dateFormatter.format(message.timestamp)}
-              </span>
+              {/* Under the bubble, never in it: the message is all the fill
+                  holds. A reply's actions start at its left edge, the reader's
+                  own at its right, so each row sits on its own side. */}
+              <div
+                className={`flex items-center gap-1 text-muted ${
+                  isAssistant ? "justify-start pl-1" : "justify-end pr-1"
+                }`}
+              >
+                <CopyMessageButton
+                  text={copyableText(message.role, messageCopy)}
+                  copy={copy.chat}
+                  quiet={!isAssistant}
+                />
+                <span className="text-[11px] tabular-nums opacity-70 max-sm:text-[10px]">
+                  {dateFormatter.format(message.timestamp)}
+                </span>
+              </div>
             </article>
           );
         })}

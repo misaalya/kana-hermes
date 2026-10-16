@@ -213,6 +213,8 @@ export type Copy = {
     emptyTitle: string;
     emptyBody: string;
     hermesNote: string;
+    copyMessage: string;
+    copiedMessage: string;
     latestAria: string;
     latest: string;
     download: string;
@@ -704,6 +706,8 @@ const id: Copy = {
     emptyTitle: "Sejenak tenang bersama Kana",
     emptyBody: "Tanyakan apa saja. Hermes akan bekerja di balik layar sementara Kana tetap menemanimu di sini.",
     hermesNote: "Catatan Hermes",
+    copyMessage: "Salin pesan",
+    copiedMessage: "Tersalin",
     latestAria: "Lompat ke pesan terbaru",
     latest: "Terbaru",
     download: "Unduh",
@@ -1250,6 +1254,8 @@ const en: Copy = {
     emptyTitle: "A quiet moment with Kana",
     emptyBody: "Ask anything. Hermes will work behind the scenes while Kana stays here with you.",
     hermesNote: "Hermes note",
+    copyMessage: "Copy message",
+    copiedMessage: "Copied",
     latestAria: "Jump to latest message",
     latest: "Latest",
     download: "Download",

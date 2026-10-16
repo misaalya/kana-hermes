@@ -614,6 +614,70 @@ test("shows files Hermes delivers as a player and download buttons, never as pat
   await expect(page.getByText(/MEDIA:/)).toHaveCount(0);
 });
 
+test("copies a bubble's text, and a reply's words rather than its hidden file links", async ({
+  page,
+}) => {
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
+  await composer.fill("Keep this prompt");
+  await composer.press("Enter");
+
+  const feed = await page.locator(".kana-chat-feed").boundingBox();
+  const feedMiddle = (feed?.x ?? 0) + (feed?.width ?? 0) / 2;
+
+  // A reply's copy button sits under its bubble — never in the bubble's fill —
+  // and on the left, where the reply itself starts.
+  await expect(page.getByText("Hello! I am here.", { exact: true }).first()).toBeVisible();
+  const reply = page.locator("article").filter({ hasText: "Hello! I am here." }).last();
+  const replyCopy = reply.getByRole("button", { name: "Copy message" });
+  const replyBubble = await reply.locator(".kana-message-assistant").boundingBox();
+  const replyButton = await replyCopy.boundingBox();
+  expect(replyBubble && replyButton).toBeTruthy();
+  expect(
+    (replyButton?.y ?? 0) - ((replyBubble?.y ?? 0) + (replyBubble?.height ?? 0)),
+  ).toBeGreaterThanOrEqual(0);
+  expect(replyButton?.x ?? 0).toBeLessThan(feedMiddle);
+
+  await replyCopy.click();
+  await expect(reply.getByRole("button", { name: "Copied" })).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("Hello! I am here.");
+
+  // A reply that delivered files copies its words: the MEDIA: links are a
+  // player and download buttons on screen, never text to paste somewhere else.
+  await composer.fill("Send me the files");
+  await composer.press("Enter");
+  await expect(page.getByText("Hello! I am here.", { exact: true })).toHaveCount(2);
+  const withFiles = page.locator("article").filter({ hasText: "Hello! I am here." }).last();
+  await withFiles.getByRole("button", { name: "Copy message" }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("Hello! I am here.");
+
+  // The reader's own bubbles keep their button on the right, and only the one
+  // pointed at shows it — a touch screen, which cannot point, shows them all.
+  const sent = page.locator("article").filter({ hasText: "Keep this prompt" }).last();
+  const other = page.locator("article").filter({ hasText: "Send me the files" }).last();
+  const sentCopy = sent.getByRole("button", { name: "Copy message" });
+  const otherCopy = other.getByRole("button", { name: "Copy message" });
+  expect((await sentCopy.boundingBox())?.x ?? 0).toBeGreaterThan(feedMiddle);
+
+  // The pointer sits on the reply copied a moment ago, so it has to leave the
+  // chat before either quiet button can be judged.
+  await page.mouse.move(0, 0);
+  if (await page.evaluate(() => window.matchMedia("(hover: hover)").matches)) {
+    await expect(sentCopy).toHaveCSS("opacity", "0");
+    await expect(otherCopy).toHaveCSS("opacity", "0");
+    await sent.hover();
+    await expect(sentCopy).toHaveCSS("opacity", "1");
+    await expect(otherCopy).toHaveCSS("opacity", "0");
+  } else {
+    // A touch screen has no pointer to hover with, so the button is simply
+    // there — pointing at nothing at all still leaves it on screen.
+    await expect(sentCopy).toHaveCSS("opacity", "1");
+  }
+
+  await sentCopy.click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("Keep this prompt");
+});
+
 test("subtitles follow the language the user writes in and survive reloads", async ({
   page,
 }) => {
