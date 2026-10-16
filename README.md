@@ -14,7 +14,7 @@ Hermes stays the only agent: its tools, files, memory, and sessions work exactly
 ![Node.js 22.13+](https://img.shields.io/badge/node-%3E%3D22.13-339933)
 ![Linux x64](https://img.shields.io/badge/platform-Linux%20x64-lightgrey)
 
-![Kana with Haru on the Seigaiha pattern, next to a conversation where Hermes added a model to its config](.github/readme/workspace-v4.jpg)
+![Kana with Haru on the Seigaiha pattern, next to a conversation where Hermes summarised the day's science news; every message carries its own copy button](.github/readme/workspace-v6.jpg)
 
 </div>
 
@@ -80,20 +80,26 @@ Your data (password hash, settings, voice profiles, model cache) lives in
 
 <table>
   <tr>
-    <td width="50%"><img src=".github/readme/workspace-dark-v3.jpg" alt="Kana in the dark theme on the Seigaiha pattern, with an audio player and a PDF that Hermes sent"></td>
-    <td width="50%"><img src=".github/readme/slash-commands-v4.jpg" alt="The slash menu completing /re with Kana's /restart and Hermes's /retry, /refine, /reasoning, and /reload"></td>
+    <td width="50%"><img src=".github/readme/workspace-dark-v5.jpg" alt="Kana in the dark theme on the Seigaiha pattern, next to the same conversation in the dark palette"></td>
+    <td width="50%"><img src=".github/readme/focus-mode-v2.jpg" alt="Kana with the avatar hidden: the conversation fills a single centred column instead"></td>
   </tr>
   <tr>
-    <td align="center"><sub>Dark theme, stage patterns, and files Hermes sends</sub></td>
-    <td align="center"><sub>Hermes slash commands, read live from your installation</sub></td>
+    <td align="center"><sub>Dark theme and stage patterns</sub></td>
+    <td align="center"><sub>Focus mode: the conversation and nothing else</sub></td>
   </tr>
   <tr>
+    <td width="50%"><img src=".github/readme/slash-commands-v5.jpg" alt="The slash menu completing /re with Kana's /restart and Hermes's /retry, /refine, /reasoning, and /reload"></td>
     <td width="50%"><img src=".github/readme/settings-avatar-v4.png" alt="Settings, Avatar: Haru and Mao as portrait cards, an Import Live2D card, and a grid of stage backgrounds"></td>
-    <td width="50%"><img src=".github/readme/mobile-v4.jpg" alt="Kana on two phones, light and dark, on the Seigaiha pattern: the chat fills the screen and Kana sits in a small call-style tile"></td>
   </tr>
   <tr>
+    <td align="center"><sub>Hermes slash commands, read live from your installation</sub></td>
     <td align="center"><sub>An avatar wardrobe and stage backgrounds</sub></td>
-    <td align="center"><sub>Chat-first on phones, with Kana in a call-style tile</sub></td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center"><img src=".github/readme/mobile-v6.jpg" width="50%" alt="Kana on two phones, light and dark, on the Seigaiha pattern: the chat fills the screen and Kana sits in a small call-style tile"></td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center"><sub>Chat-first on phones, with Kana in a call-style tile</sub></td>
   </tr>
 </table>
 
@@ -107,6 +113,8 @@ Your data (password hash, settings, voice profiles, model cache) lives in
 - The Hermes activity log shows which tools ran for each reply.
 - Files Hermes sends (audio, video, images, documents) appear as a player, a
   preview, or a Download button instead of a file path.
+- Copy any message with one button: a reply keeps its copy button in view, your
+  own appears when you point at that message, and a touch screen always shows it.
 - Composer with file attachments, voice dictation, and a model picker.
   The picker opens with the last Hermes model list at once and refreshes it in
   the background.
@@ -287,6 +295,9 @@ Real-environment checks (need Hermes, network, or target hardware) are
 `npm run test:hermes:restart`, `npm run test:live2d:official`, and
 `npm run test:package:npm`. Local-voice latency stays a manual check on the
 target machine, because Kana ships no latency harness.
+`npm run screenshots:readme` photographs the README images out of the real UI,
+against a stand-in conversation and Live2D's official samples, into
+`.github/readme/`; a person still judges the result.
 Contributor rules are in [AGENTS.md](AGENTS.md).
 
 ## Documentation

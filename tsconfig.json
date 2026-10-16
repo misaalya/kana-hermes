@@ -32,7 +32,9 @@
     ".next-e2e/types/**/*.ts",
     ".next-e2e/dev/types/**/*.ts",
     ".next-debug/types/**/*.ts",
-    ".next-debug/dev/types/**/*.ts"
+    ".next-debug/dev/types/**/*.ts",
+    ".next-readme/types/**/*.ts",
+    ".next-readme/dev/types/**/*.ts"
   ],
   "exclude": ["node_modules", "reference", "cli", ".npm-package"]
 }

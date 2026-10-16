@@ -33,6 +33,7 @@
     "test": "node --import tsx --test \"tests/**/*.test.ts\"",
     "test:package:npm": "npm run package:npm && node scripts/npm-package-smoke.mjs",
     "test:e2e": "playwright test",
+    "screenshots:readme": "playwright test --config playwright.readme.config.ts",
     "test:live2d:official": "playwright test --config playwright.live2d.config.ts",
     "test:pwa:built": "playwright test --config playwright.pwa.config.ts",
     "test:pwa": "npm run package:local && npm run test:pwa:built",
