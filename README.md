@@ -20,7 +20,6 @@ Hermes stays the only agent: its tools, files, memory, and sessions work exactly
 
 ## Contents
 
-- [Why Kana](#why-kana)
 - [Quick start](#quick-start)
 - [Screenshots](#screenshots)
 - [Features](#features)
@@ -31,18 +30,6 @@ Hermes stays the only agent: its tools, files, memory, and sessions work exactly
 - [How it works](#how-it-works)
 - [Development](#development)
 - [Documentation](#documentation)
-
-## Why Kana
-
-Hermes is powerful, but a terminal or chat log is not much company. Kana is
-the waifu layer on top of it: a presentation layer, not another assistant.
-
-- **One agent.** Every reply comes from your Hermes session. Kana never runs a
-  second model, translator, or tool loop.
-- **Your installation, untouched.** Kana starts or adopts the official
-  `hermes serve` and never patches or writes into Hermes.
-- **Private by design.** The Hermes session token stays inside the Kana server.
-  Your browser talks only to Kana, behind your own password.
 
 ## Quick start
 
