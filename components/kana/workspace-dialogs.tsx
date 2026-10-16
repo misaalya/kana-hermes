@@ -7,6 +7,7 @@ import { AgentInputDialog } from "./agent-input-dialog";
 import { useKanaStore, useKanaWorkspace } from "./kana-workspace-context";
 import { OnboardingWizard } from "./onboarding-dialog";
 import { SettingsDialog } from "./settings-dialog";
+import { UpdateNotice } from "./update-notice";
 
 function SettingsHost() {
   const workspace = useKanaWorkspace();
@@ -66,11 +67,9 @@ function InputRequestHost() {
 
 function SetupHost() {
   const workspace = useKanaWorkspace();
-  const setWorkspace = workspace.stores.workspace.setState;
   const wizardMode = useKanaStore("workspace", (state) => state.wizardMode);
   const deps = useKanaStore("workspace", (state) => state.deps);
   const preferences = useKanaStore("preferences", (state) => state.preferences);
-  const degraded = deps.hermes === "missing" || (deps.voice === "error" && preferences.voiceEnabled);
   const setGreeting = useCallback(
     (greeting: boolean) => workspace.stores.workspace.setState({ greeting }),
     [workspace],
@@ -84,38 +83,34 @@ function SetupHost() {
       .catch(() => undefined);
   }, [workspace]);
 
-  if (wizardMode) {
-    return (
-      <OnboardingWizard
-        locale={preferences.uiLocale}
-        preferences={preferences}
-        deps={deps}
-        mode={wizardMode}
-        onComplete={workspace.actions.completeOnboarding}
-        onDismiss={() => setWizardMode(null)}
-        onGreetingChange={setGreeting}
-        onGreet={greet}
-        onOpenSettings={() => setWorkspace({ wizardMode: null, settingsOpen: true })}
-      />
-    );
-  }
-  return degraded ? (
-    <DegradedBanner locale={preferences.uiLocale} onCheck={() => setWizardMode("repair")} />
-  ) : null;
+  if (!wizardMode) return null;
+  return (
+    <OnboardingWizard
+      locale={preferences.uiLocale}
+      preferences={preferences}
+      deps={deps}
+      mode={wizardMode}
+      onComplete={workspace.actions.completeOnboarding}
+      onDismiss={() => setWizardMode(null)}
+      onGreetingChange={setGreeting}
+      onGreet={greet}
+      onOpenSettings={() => workspace.stores.workspace.setState({ wizardMode: null, settingsOpen: true })}
+    />
+  );
 
   function setWizardMode(mode: "repair" | null) {
-    setWorkspace({ wizardMode: mode });
+    workspace.stores.workspace.setState({ wizardMode: mode });
   }
 }
 
 function DegradedBanner({ locale, onCheck }: { locale: KanaPreferences["uiLocale"]; onCheck(): void }) {
   const copy = getCopy(locale);
   return (
-    <div className="kana-panel kana-degraded-banner absolute bottom-5 left-5 z-20 flex max-w-[380px] items-center gap-3 rounded-full py-2 pl-4 pr-2">
-      <p className="text-[11px] font-bold text-ink-dim">{copy.banner.degraded}</p>
+    <div className="kana-panel kana-notice flex max-w-[380px] shrink-0 items-center gap-3 p-3">
+      <p className="text-[12px] font-extrabold text-ink">{copy.banner.degraded}</p>
       <button
         type="button"
-        className="kana-focus kana-pill kana-pill-accent shrink-0 px-3.5 py-1.5 text-[11px]"
+        className="kana-focus kana-pill kana-pill-accent min-h-9 shrink-0 px-3.5 text-[11px]"
         onClick={onCheck}
       >
         {copy.banner.action}
@@ -124,13 +119,48 @@ function DegradedBanner({ locale, onCheck }: { locale: KanaPreferences["uiLocale
   );
 }
 
-/** Settings, Hermes input requests, first-run setup, and the degraded-service banner. */
+/**
+ * The workspace corner notices. Both boxes share ONE positioned wrapper, so the
+ * degraded-service banner and the update notice stack instead of painting over
+ * each other (and neither can be Tab-reachable while hidden behind the other).
+ * The wrapper is not itself a `.kana-notice`: that class belongs to each box.
+ *
+ * The wrapper carries no z-index. A z-index here would make it a stacking
+ * context, and the update dialog this subtree renders (a `fixed` backdrop) would
+ * then be trapped inside the wrapper's layer: its own z-50 would be measured
+ * against the workspace's other modals rather than above them, so the
+ * connection gate or Settings would paint over it. Its `.kana-notice` boxes
+ * carry the layer instead (see globals.css).
+ */
+function NoticesHost() {
+  const workspace = useKanaWorkspace();
+  const wizardMode = useKanaStore("workspace", (state) => state.wizardMode);
+  const deps = useKanaStore("workspace", (state) => state.deps);
+  const preferences = useKanaStore("preferences", (state) => state.preferences);
+  const degraded = deps.hermes === "missing" || (deps.voice === "error" && preferences.voiceEnabled);
+  // The setup wizard is a full screen of its own; the corner stays clear.
+  if (wizardMode) return null;
+  return (
+    <div className="kana-notices absolute bottom-5 left-5 flex flex-col items-start gap-2">
+      {degraded ? (
+        <DegradedBanner
+          locale={preferences.uiLocale}
+          onCheck={() => workspace.stores.workspace.setState({ wizardMode: "repair" })}
+        />
+      ) : null}
+      <UpdateNotice locale={preferences.uiLocale} />
+    </div>
+  );
+}
+
+/** Settings, Hermes input requests, first-run setup, and the workspace notices. */
 export function WorkspaceDialogs() {
   return (
     <>
       <SettingsHost />
       <InputRequestHost />
       <SetupHost />
+      <NoticesHost />
     </>
   );
 }
