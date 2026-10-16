@@ -16,9 +16,9 @@
 /test-results/
 
 # next.js
-/.next/
-/.next-e2e/
-/.next-debug/
+# One pattern for the whole dist-dir family: KANA_NEXT_DIST_DIR can name any
+# of them, and an unignored one is also read by the Tailwind class scan.
+/.next*/
 /out/
 /.npm-package/
 
