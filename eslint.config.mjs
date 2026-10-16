@@ -15,6 +15,8 @@ const eslintConfig = defineConfig([
     // An optional isolated dist directory for local debugging servers, for the
     // same reason.
     ".next-debug/**",
+    // The README screenshot capture runs its own server, for the same reason.
+    ".next-readme/**",
     "out/**",
     "build/**",
     "next-env.d.ts",
