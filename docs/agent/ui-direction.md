@@ -6,9 +6,9 @@ Tomodachi Life), in Kana's own colours. It is soft, round, and friendly, but it
 stays a calm workspace rather than an ornamental dashboard. This is a product
 direction, not a temporary theme.
 
-**Read when:** you are changing any component, `app/globals.css`, the composer, Settings, the avatar wardrobe, the chat feed, or a stage pattern.
+**Read when:** you are changing any component, `app/globals.css`, the composer, Settings, the avatar wardrobe, the chat feed, a stage pattern, or the fatal error pages.
 
-**Truth in code:** `app/globals.css`, `components/kana/chat-composer.tsx`, `components/kana/live-chat-feed.tsx`, `components/kana/settings-avatar-cards.tsx`, `components/kana/kana-select.tsx`, `components/kana/config-guide.tsx`, `app/docs/page.tsx`, `lib/ui/copy.ts`, `lib/presentation/markdown.ts`, `lib/presentation/json-highlight.ts`, `scripts/generate-stage-patterns.py`
+**Truth in code:** `app/globals.css`, `app/error.tsx`, `app/global-error.tsx`, `components/kana/chat-composer.tsx`, `components/kana/live-chat-feed.tsx`, `components/kana/settings-avatar-cards.tsx`, `components/kana/kana-select.tsx`, `components/kana/config-guide.tsx`, `app/docs/page.tsx`, `lib/ui/copy.ts`, `lib/presentation/markdown.ts`, `lib/presentation/json-highlight.ts`, `scripts/generate-stage-patterns.py`
 
 ## Colours
 
@@ -200,6 +200,33 @@ tag. No blur, no icon, no step bar. The greeting is always English
 (`KANA_GREETING` in `lib/ui/copy.ts`, `lang="en"`), whatever the UI language;
 the setup screens that follow use the UI language and are numbered in the kicker
 text only ("Step 1 of 3").
+
+## The fatal error pages
+
+`app/error.tsx` is the workspace boundary. It keeps the root layout, so the
+theme tokens and Kana's vocabulary apply: the mark is `kana-mark`, the kicker a
+`kana-label-bubble`, and its two controls are a `kana-pill-accent` and a
+`kana-pill-soft`. It renders outside the workspace stores, so the agent, voice,
+avatar, and preference state it would usually report are what failed to load.
+
+`app/global-error.tsx` catches what that boundary cannot and replaces the root
+layout, so Next.js applies no global styles to it: no `globals.css`, no tokens,
+no web font. It therefore repeats the same page with inline styles whose every
+value is a token with the dark theme's own as its fallback, as in
+`var(--accent, #599dc6)`, so the page follows the theme when a stylesheet did
+reach it and stays legible when none did. It offers no diagnostics copy, because
+nothing guarantees the clipboard or the preference record survived the failure it
+reports; it shows the failure's reference inline instead.
+
+Both read their copy from the `fatalError` section of `lib/ui/copy.ts`. Their
+locale comes from `useUiLocale` and, where a stylesheet applies, their theme from
+`useTheme`: a per-mount store hydrated in an effect, which is the one shape
+available to a page that has no workspace to read a preference in (`/login`
+reads the same record by hand). Neither may import a workspace store, and
+neither may report one: what they copy is built by
+`lib/diagnostics/safe-diagnostics.ts` and holds the route without its query
+values, the redacted thrown value, and the digest, and no other field. A refused
+copy shows that snapshot in a selectable block instead of failing silently.
 
 ## The chat panel and composer
 

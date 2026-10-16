@@ -4,6 +4,8 @@ import type {
   KanaErrorCategory,
   KanaErrorRecord,
   KanaErrorSource,
+  KanaFatalDiagnosticSnapshot,
+  KanaFatalDiagnosticsInput,
 } from "./types";
 
 const SECRET_ASSIGNMENT =
@@ -100,4 +102,46 @@ export function serializeKanaDiagnostics(
   input: KanaDiagnosticsInput,
 ): string {
   return JSON.stringify(buildKanaDiagnostics(input), null, 2);
+}
+
+/**
+ * A route with its query values and fragment gone. The boundary passes
+ * `location.pathname`, which has neither; this drops them anyway, because the
+ * serializer is the one place that promises no query value reaches a report.
+ */
+function safeRoute(value: string): string {
+  return value.split(/[?#]/, 1)[0]?.trim() || "/";
+}
+
+/**
+ * The snapshot a fatal error page copies. It carries the failure and nothing
+ * else, because the workspace stores it would otherwise report from are exactly
+ * what failed to load. The thrown value keeps its name and message, both
+ * redacted, and the digest stays as the reference the server log uses.
+ */
+export function buildKanaFatalDiagnostics(
+  input: KanaFatalDiagnosticsInput,
+): KanaFatalDiagnosticSnapshot {
+  const name = input.error instanceof Error ? input.error.name : "Error";
+  const message =
+    input.error instanceof Error ? input.error.message : String(input.error);
+
+  return {
+    surface: "error-boundary",
+    generatedAt: new Date(input.generatedAt ?? Date.now()).toISOString(),
+    ...(input.route === undefined ? {} : { route: safeRoute(input.route) }),
+    ...(input.digest
+      ? { reference: redactDiagnosticText(input.digest) }
+      : {}),
+    error: {
+      name: redactDiagnosticText(name) || "Error",
+      message: redactDiagnosticText(message || "Unknown Kana error."),
+    },
+  };
+}
+
+export function serializeKanaFatalDiagnostics(
+  input: KanaFatalDiagnosticsInput,
+): string {
+  return JSON.stringify(buildKanaFatalDiagnostics(input), null, 2);
 }

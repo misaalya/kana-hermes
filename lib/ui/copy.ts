@@ -304,6 +304,25 @@ export type Copy = {
     sending: string;
     sendSecurely: string;
   };
+  /**
+   * The two fatal error pages. They render outside the workspace and its
+   * stores, so this is the only copy they have, and what they may report is
+   * the failure itself.
+   */
+  fatalError: {
+    attentionEyebrow: string;
+    attentionTitle: string;
+    attentionBody: string;
+    startEyebrow: string;
+    startTitle: string;
+    startBody: string;
+    reference(digest: string): string;
+    tryAgain: string;
+    copyDiagnostics: string;
+    copied: string;
+    copyFailed: string;
+    diagnosticsLabel: string;
+  };
   login: {
     password: string;
     placeholder: string;
@@ -789,6 +808,20 @@ const id: Copy = {
     cancel: "Batal",
     sending: "Mengirim…",
     sendSecurely: "Kirim dengan aman",
+  },
+  fatalError: {
+    attentionEyebrow: "Kana butuh perhatian",
+    attentionTitle: "Ruang kerja tidak bisa dilanjutkan dengan aman.",
+    attentionBody: "Data percakapan lokalmu tidak dihapus. Coba buka ruang kerjanya lagi; kalau masalahnya berulang, muat ulang Kana lalu salin diagnostik aman dari halaman ini.",
+    startEyebrow: "Kana tidak bisa dimulai",
+    startTitle: "Antarmuka lokal menemui kesalahan yang tak terduga.",
+    startBody: "Hermes tidak diubah. Coba lagi, atau muat ulang halaman kalau masalahnya berlanjut.",
+    reference: (digest) => `Referensi: ${digest}`,
+    tryAgain: "Coba lagi",
+    copyDiagnostics: "Salin diagnostik",
+    copied: "Diagnostik tersalin",
+    copyFailed: "Diagnostik tidak bisa disalin. Pilih teksnya, lalu salin sendiri.",
+    diagnosticsLabel: "Diagnostik aman untuk dilaporkan",
   },
   login: {
     password: "Kata sandi",
@@ -1329,6 +1362,20 @@ const en: Copy = {
     cancel: "Cancel",
     sending: "Sending…",
     sendSecurely: "Send securely",
+  },
+  fatalError: {
+    attentionEyebrow: "Kana needs attention",
+    attentionTitle: "The workspace could not continue safely.",
+    attentionBody: "Your local conversation data was not removed. Try the workspace again; if the problem repeats, reload Kana and copy the safe diagnostics from this page.",
+    startEyebrow: "Kana could not start",
+    startTitle: "The local interface encountered an unexpected error.",
+    startBody: "Hermes has not been modified. Try again, or reload the page if the problem continues.",
+    reference: (digest) => `Reference: ${digest}`,
+    tryAgain: "Try again",
+    copyDiagnostics: "Copy diagnostics",
+    copied: "Diagnostics copied",
+    copyFailed: "The diagnostics could not be copied. Select the text and copy it by hand.",
+    diagnosticsLabel: "Safe diagnostics to report",
   },
   login: {
     password: "Password",

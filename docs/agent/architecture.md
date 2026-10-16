@@ -145,7 +145,8 @@ Presentation, avatar, voice:
 - `lib/voice/` owns the relay TTS client, audio lip sync, speech chunking, and
   the relay contract. `lib/preferences/` owns preference types and the
   localStorage store. `lib/backup/` owns the credential-free backup format.
-  `lib/diagnostics/` owns redaction.
+  `lib/diagnostics/` owns redaction, including the short snapshot the fatal
+  error pages copy.
 
 ## Seam rules
 

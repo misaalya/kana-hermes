@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   buildKanaDiagnostics,
+  buildKanaFatalDiagnostics,
   classifyKanaError,
   redactDiagnosticText,
   safeDiagnosticEndpoint,
   serializeKanaDiagnostics,
+  serializeKanaFatalDiagnostics,
 } from "@/lib/diagnostics/safe-diagnostics";
 
 describe("safe diagnostics", () => {
@@ -81,5 +83,36 @@ describe("safe diagnostics", () => {
     const serialized = serializeKanaDiagnostics(input);
     assert.doesNotMatch(serialized, /never-store-this|also-private/);
     assert.doesNotMatch(serialized, /prompt|conversation text|tool output/i);
+  });
+
+  it("reports a fatal boundary failure without workspace state or query values", () => {
+    const input = {
+      error: new RangeError("IndexedDB quota exceeded for token=private-value"),
+      digest: "3f9c1d",
+      route: "/?invite=never-report-this",
+      generatedAt: 1_700_000_000_000,
+    };
+
+    const snapshot = buildKanaFatalDiagnostics(input);
+    assert.equal(snapshot.surface, "error-boundary");
+    assert.equal(snapshot.route, "/");
+    assert.equal(snapshot.reference, "3f9c1d");
+    assert.equal(snapshot.error.name, "RangeError");
+    assert.equal(snapshot.generatedAt, "2023-11-14T22:13:20.000Z");
+    assert.doesNotMatch(snapshot.error.message, /private-value/);
+
+    const serialized = serializeKanaFatalDiagnostics(input);
+    assert.doesNotMatch(serialized, /never-report-this|private-value/);
+    // The workspace stores are what failed to load, so none of their state is
+    // invented here.
+    assert.doesNotMatch(serialized, /websocket|voice|avatar|conversationCount/);
+  });
+
+  it("reports a non-Error thrown value and omits what it does not know", () => {
+    const snapshot = buildKanaFatalDiagnostics({ error: "plain failure" });
+    assert.equal(snapshot.error.name, "Error");
+    assert.equal(snapshot.error.message, "plain failure");
+    assert.equal(snapshot.route, undefined);
+    assert.equal(snapshot.reference, undefined);
   });
 });
