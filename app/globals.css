@@ -1057,6 +1057,21 @@ details[open] > .kana-plus-summary::before {
   color: var(--chat-text);
 }
 
+/* A reply keeps its copy button in view. The reader's own bubble keeps it quiet
+   until that message is pointed at — and only that message, never the ones
+   around it. Only a device with a pointer hides it, so a touch screen still
+   gets the button. */
+@media (hover: hover) {
+  .kana-copy-quiet {
+    opacity: 0;
+  }
+
+  .kana-chat-feed article:hover .kana-copy-quiet,
+  .kana-copy-quiet:focus-visible {
+    opacity: 1;
+  }
+}
+
 /* Hermes replies rendered from Markdown, sized for chat bubbles. Long words
    and URLs wrap; code blocks and tables scroll inside the bubble instead. */
 .kana-markdown {
