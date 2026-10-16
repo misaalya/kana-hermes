@@ -1,14 +1,17 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, describe, it } from "node:test";
 import {
   KANA_DATA_DIR_ENV,
+  ensureKanaDataRootMigrated,
+  kanaMovesLegacyData,
   migrateLegacyKanaFile,
   resolveKanaDataDir,
   resolveKanaDataDirFrom,
 } from "@/lib/server/data-dir";
+import { kanaLegacyDataDirsFrom, looksLikeKanaDataRoot, migrateKanaDataRoot } from "@/shared/data-dir.mjs";
 
 after(() => {
   delete process.env[KANA_DATA_DIR_ENV];
@@ -19,7 +22,6 @@ describe("data dir resolution precedence", () => {
     assert.equal(
       resolveKanaDataDirFrom({
         kanaDataDir: "/srv/kana-data",
-        xdgDataHome: "/xdg",
         home: "/home/kana",
       }),
       "/srv/kana-data",
@@ -33,30 +35,16 @@ describe("data dir resolution precedence", () => {
     );
   });
 
-  it("honors an absolute XDG_DATA_HOME when KANA_DATA_DIR is unset", () => {
-    assert.equal(
-      resolveKanaDataDirFrom({ xdgDataHome: "/xdg/data", home: "/home/kana" }),
-      path.join("/xdg/data", "kana"),
-    );
-  });
-
-  it("ignores a relative XDG_DATA_HOME per the XDG spec and falls back to HOME", () => {
-    assert.equal(
-      resolveKanaDataDirFrom({ xdgDataHome: "relative/path", home: "/home/kana" }),
-      path.join("/home/kana", ".local", "share", "kana"),
-    );
-  });
-
-  it("uses $HOME/.local/share/kana as the final default", () => {
+  it("uses $HOME/.kana as the default, whatever XDG_DATA_HOME says", () => {
     assert.equal(
       resolveKanaDataDirFrom({ home: "/home/kana" }),
-      path.join("/home/kana", ".local", "share", "kana"),
+      path.join("/home/kana", ".kana"),
     );
   });
 
   it("throws naming the env var when nothing is resolvable in production", () => {
     assert.throws(
-      () => resolveKanaDataDirFrom({ kanaDataDir: "", xdgDataHome: "", home: "" }),
+      () => resolveKanaDataDirFrom({ kanaDataDir: "", home: "" }),
       (error: Error) => error.message.includes(KANA_DATA_DIR_ENV),
     );
   });
@@ -65,7 +53,6 @@ describe("data dir resolution precedence", () => {
     const resolved = resolveKanaDataDir({
       NODE_ENV: "development",
       HOME: "",
-      XDG_DATA_HOME: "",
     });
     assert.equal(resolved, path.join(process.cwd(), "data"));
   });
@@ -75,6 +62,189 @@ describe("data dir resolution precedence", () => {
       () => resolveKanaDataDir({ NODE_ENV: "development", KANA_DATA_DIR: "relative" }),
       /must be an absolute path/,
     );
+  });
+});
+
+describe("legacy data roots", () => {
+  it("lists the earlier roots newest layout first, ending at the cwd fallback", () => {
+    assert.deepEqual(
+      kanaLegacyDataDirsFrom({
+        xdgDataHome: "/xdg/data",
+        home: "/home/kana",
+        cwd: "/srv/app",
+      }),
+      [
+        path.join("/xdg/data", "kana"),
+        path.join("/home/kana", ".local", "share", "kana"),
+        path.join("/srv/app", "data"),
+      ],
+    );
+  });
+
+  it("ignores a relative XDG_DATA_HOME per the XDG spec", () => {
+    assert.deepEqual(
+      kanaLegacyDataDirsFrom({ xdgDataHome: "relative/path", home: "/home/kana", cwd: "/srv/app" }),
+      [
+        path.join("/home/kana", ".local", "share", "kana"),
+        path.join("/srv/app", "data"),
+      ],
+    );
+  });
+
+  it("recognizes a directory Kana wrote and rejects an unrelated one", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "kana-root-marker-"));
+    try {
+      const ours = path.join(root, "ours");
+      const theirs = path.join(root, "theirs");
+      mkdirSync(ours, { recursive: true });
+      mkdirSync(theirs, { recursive: true });
+      writeFileSync(path.join(ours, "activities.db"), "");
+      writeFileSync(path.join(theirs, "notes.txt"), "");
+      assert.equal(looksLikeKanaDataRoot(ours), true);
+      assert.equal(looksLikeKanaDataRoot(theirs), false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("legacy data root migration", () => {
+  const root = mkdtempSync(path.join(tmpdir(), "kana-data-root-test-"));
+
+  after(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("moves files, the voice library, and removes the emptied source root", () => {
+    const legacy = path.join(root, "move", "legacy");
+    const target = path.join(root, "move", "target");
+    mkdirSync(path.join(legacy, "voices"), { recursive: true });
+    writeFileSync(path.join(legacy, "config.json"), "{}");
+    writeFileSync(path.join(legacy, "auth.json"), "{}");
+    writeFileSync(path.join(legacy, "voices", "haru.json"), "{}");
+
+    const moved = migrateKanaDataRoot({ targetDir: target, legacyDirs: [legacy] });
+
+    assert.deepEqual(moved.sort(), ["auth.json", "config.json", "voices"]);
+    assert.equal(existsSync(path.join(target, "config.json")), true);
+    assert.equal(existsSync(path.join(target, "voices", "haru.json")), true);
+    assert.equal(existsSync(legacy), false);
+  });
+
+  it("never overwrites the target and takes the newest copy of a file", () => {
+    const older = path.join(root, "newest", "older");
+    const newer = path.join(root, "newest", "newer");
+    const target = path.join(root, "newest", "target");
+    mkdirSync(older, { recursive: true });
+    mkdirSync(newer, { recursive: true });
+    mkdirSync(target, { recursive: true });
+    writeFileSync(path.join(older, "auth.json"), "old");
+    writeFileSync(path.join(newer, "auth.json"), "new");
+    writeFileSync(path.join(target, "jwt-secret"), "kept");
+    utimesSync(path.join(older, "auth.json"), new Date(1_000), new Date(1_000));
+
+    migrateKanaDataRoot({ targetDir: target, legacyDirs: [older, newer] });
+
+    assert.equal(readFileSync(path.join(target, "auth.json"), "utf8"), "new");
+    assert.equal(readFileSync(path.join(target, "jwt-secret"), "utf8"), "kept");
+    // The copy that lost the newest-match is left where it was: Kana never
+    // deletes data it did not take.
+    assert.equal(existsSync(path.join(older, "auth.json")), true);
+    assert.equal(existsSync(path.join(newer, "auth.json")), false);
+  });
+
+  it("keeps the target's own file when both sides hold it", () => {
+    const legacy = path.join(root, "keep", "legacy");
+    const target = path.join(root, "keep", "target");
+    mkdirSync(legacy, { recursive: true });
+    mkdirSync(target, { recursive: true });
+    writeFileSync(path.join(legacy, "jwt-secret"), "old");
+    writeFileSync(path.join(target, "jwt-secret"), "new");
+
+    assert.deepEqual(migrateKanaDataRoot({ targetDir: target, legacyDirs: [legacy] }), []);
+    assert.equal(existsSync(path.join(legacy, "jwt-secret")), true);
+  });
+
+  it("moves a WAL database with its journal files from one root", () => {
+    const legacy = path.join(root, "wal", "legacy");
+    const target = path.join(root, "wal", "target");
+    mkdirSync(legacy, { recursive: true });
+    for (const suffix of ["", "-wal", "-shm"]) {
+      writeFileSync(path.join(legacy, `appstate.db${suffix}`), suffix || "db");
+    }
+
+    migrateKanaDataRoot({ targetDir: target, legacyDirs: [legacy] });
+
+    for (const suffix of ["", "-wal", "-shm"]) {
+      assert.equal(existsSync(path.join(target, `appstate.db${suffix}`)), true);
+      assert.equal(existsSync(path.join(legacy, `appstate.db${suffix}`)), false);
+    }
+  });
+
+  it("leaves a directory holding nothing Kana wrote", () => {
+    const legacy = path.join(root, "stray", "data");
+    const target = path.join(root, "stray", "target");
+    mkdirSync(legacy, { recursive: true });
+    writeFileSync(path.join(legacy, "notes.md"), "not ours");
+
+    assert.deepEqual(migrateKanaDataRoot({ targetDir: target, legacyDirs: [legacy] }), []);
+    assert.equal(existsSync(path.join(legacy, "notes.md")), true);
+    assert.equal(existsSync(target), false);
+  });
+
+  it("reports nothing when no source root exists", () => {
+    assert.deepEqual(
+      migrateKanaDataRoot({
+        targetDir: path.join(root, "absent", "target"),
+        legacyDirs: [path.join(root, "absent", "legacy")],
+      }),
+      [],
+    );
+  });
+});
+
+describe("migration gating", () => {
+  it("moves data only when Kana resolved its own default root", () => {
+    const operatorRoot: NodeJS.ProcessEnv = { ...process.env, KANA_DATA_DIR: "/var/lib/kana" };
+    assert.equal(kanaMovesLegacyData(operatorRoot), false);
+    const blank: NodeJS.ProcessEnv = { ...process.env, KANA_DATA_DIR: "  " };
+    assert.equal(kanaMovesLegacyData(blank), true);
+    const defaulted: NodeJS.ProcessEnv = { ...process.env };
+    delete defaulted.KANA_DATA_DIR;
+    assert.equal(kanaMovesLegacyData(defaulted), true);
+  });
+
+  it("moves an earlier home root once per process", () => {
+    const home = mkdtempSync(path.join(tmpdir(), "kana-migrate-home-"));
+    const cwd = mkdtempSync(path.join(tmpdir(), "kana-migrate-cwd-"));
+    const previousCwd = process.cwd();
+    process.chdir(cwd);
+    try {
+      const legacy = path.join(home, ".local", "share", "kana");
+      mkdirSync(path.join(legacy, "voices"), { recursive: true });
+      writeFileSync(path.join(legacy, "config.json"), '{"tts":{"provider":"pollinations"}}');
+      writeFileSync(path.join(legacy, "voices", "haru.json"), "{}");
+
+      const environment: NodeJS.ProcessEnv = { ...process.env, HOME: home };
+      delete environment.KANA_DATA_DIR;
+      delete environment.XDG_DATA_HOME;
+
+      const moved = ensureKanaDataRootMigrated(environment);
+
+      assert.deepEqual(moved.sort(), ["config.json", "voices"]);
+      assert.equal(
+        existsSync(path.join(home, ".kana", "config.json")),
+        true,
+      );
+      assert.equal(existsSync(path.join(home, ".kana", "voices", "haru.json")), true);
+      assert.equal(existsSync(legacy), false);
+      // Later calls are a no-op: the second call has nothing left to move.
+      assert.deepEqual(ensureKanaDataRootMigrated(environment), []);
+    } finally {
+      process.chdir(previousCwd);
+      rmSync(home, { recursive: true, force: true });
+      rmSync(cwd, { recursive: true, force: true });
+    }
   });
 });
 

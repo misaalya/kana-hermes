@@ -86,8 +86,8 @@ rule, change the rule where it lives.
   only through `/api/hermes/*`.
 - All server-side persistent state (auth hash, JWT secret, activities DB)
   lives under ONE data root resolved by `lib/server/data-dir.ts`
-  (`KANA_DATA_DIR` → XDG → HOME). Never introduce a new `$CWD`-relative
-  storage location.
+  (`KANA_DATA_DIR` → `~/.kana`; an earlier root is moved there on first run).
+  Never introduce a new `$CWD`-relative storage location.
 - Do not hardcode a single Live2D model or third-party copyrighted character.
 - Do not hardcode a subtitle language or reintroduce a subtitle language
   setting: Hermes subtitles in the language the user writes in.

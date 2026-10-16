@@ -60,8 +60,8 @@ Useful commands:
 | `kana config` | Open the advanced `config.json` |
 
 Your data (password hash, settings, voice profiles, model cache) lives in
-`$KANA_DATA_DIR` when set, otherwise `$XDG_DATA_HOME/kana` or
-`~/.local/share/kana`.
+`$KANA_DATA_DIR` when set, otherwise `~/.kana`. An install from an earlier
+release is moved there automatically on the next `kana` run.
 
 ## Screenshots
 

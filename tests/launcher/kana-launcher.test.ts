@@ -42,7 +42,7 @@ function withFreshHome(
 describe("npm launcher", () => {
   it("creates an owner-only editable JSON config without replacing user edits", () => {
     withFreshHome((environment, home) => {
-      const dataDirectory = path.join(home, ".local", "share", "kana");
+      const dataDirectory = path.join(home, ".kana");
       const configFile = path.join(dataDirectory, "config.json");
       const first = spawnSync(process.execPath, [launcher, "config"], {
         cwd: root,
@@ -69,7 +69,50 @@ describe("npm launcher", () => {
     });
   });
 
-  it("runs doctor on a fresh install without invoking optional setup", () => {
+  it("moves an earlier install's data root into ~/.kana on the next start", () => {
+      withFreshHome((environment, home) => {
+        const legacy = path.join(home, ".local", "share", "kana");
+        mkdirSync(path.join(legacy, "voices"), { recursive: true });
+        writeFileSync(path.join(legacy, "config.json"), '{"deployment":{"mode":"deployment"}}\n');
+        writeFileSync(path.join(legacy, "auth.json"), "{}\n");
+
+        const result = spawnSync(process.execPath, [launcher, "doctor"], {
+          cwd: root,
+          env: environment,
+          encoding: "utf8",
+        });
+
+        assert.equal(result.status, 0, result.stderr);
+        assert.match(result.stdout, /Moved config\.json from /);
+        assert.equal(
+          readFileSync(path.join(home, ".kana", "config.json"), "utf8"),
+          '{"deployment":{"mode":"deployment"}}\n',
+        );
+        assert.equal(existsSync(path.join(home, ".kana", "auth.json")), true);
+        assert.equal(existsSync(path.join(home, ".kana", "voices")), true);
+        assert.equal(existsSync(legacy), false);
+      });
+    });
+
+    it("leaves an operator-set data root and its earlier root alone", () => {
+      withFreshHome((environment, home) => {
+        const legacy = path.join(home, ".local", "share", "kana");
+        mkdirSync(legacy, { recursive: true });
+        writeFileSync(path.join(legacy, "config.json"), "{}\n");
+
+        const result = spawnSync(process.execPath, [launcher, "doctor"], {
+          cwd: root,
+          env: { ...environment, KANA_DATA_DIR: path.join(home, "kana-deploy") },
+          encoding: "utf8",
+        });
+
+        assert.equal(result.status, 0, result.stderr);
+        assert.equal(existsSync(path.join(legacy, "config.json")), true);
+        assert.equal(existsSync(path.join(home, ".kana")), false);
+      });
+    });
+
+    it("runs doctor on a fresh install without invoking optional setup", () => {
     withFreshHome((environment, home) => {
       const result = spawnSync(process.execPath, [launcher, "doctor"], {
         cwd: root,
@@ -155,7 +198,7 @@ describe("npm launcher", () => {
       assert.equal(saved.status, 0, saved.stderr);
       assert.doesNotMatch(`${saved.stdout}${saved.stderr}`, /ExperimentalWarning/);
 
-      const database = new DatabaseSync(path.join(home, ".local", "share", "kana", "appstate.db"), { readOnly: true });
+      const database = new DatabaseSync(path.join(home, ".kana", "appstate.db"), { readOnly: true });
       const row = database.prepare("SELECT value FROM app_state WHERE key = 'auth.password'").get() as { value: string };
       database.close();
       const record = JSON.parse(row.value) as { passwordHash: string; sessionVersion: string };

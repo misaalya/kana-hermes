@@ -35,9 +35,9 @@ export type StoredTurnActivities = {
 const SCHEMA_VERSION = 2;
 
 function dbPath(): string {
-  // One authoritative data root (KANA_DATA_DIR -> XDG -> HOME). Legacy
-  // activities.db from the pre-consolidation root ($HOME/.kana) is adopted
-  // on first use so a machine switch no longer strands the activity log.
+  // One authoritative data root (KANA_DATA_DIR -> $HOME/.kana). An earlier
+  // root's activities.db is moved in on first use so a machine switch no
+  // longer strands the activity log.
   adoptLegacyKanaFile("activities.db");
   const dir = resolveKanaDataDir();
   fs.mkdirSync(dir, { recursive: true });

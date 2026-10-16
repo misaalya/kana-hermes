@@ -56,11 +56,11 @@ installation.
 ## The data root
 
 Kana keeps all server-side state in one directory: `KANA_DATA_DIR` when it is
-set (absolute, required), otherwise `$XDG_DATA_HOME/kana` when that is absolute,
-otherwise `~/.local/share/kana`. A production server without a resolvable home
-directory fails loudly instead of using the current working directory. Files
-from earlier layouts (`./data`, `~/.kana`, the old `auth.json`) are adopted into
-the resolved directory on first use.
+set (absolute, required), otherwise `~/.kana`. A production server without a
+resolvable home directory fails loudly instead of using the current working
+directory. On the first start after an upgrade, files from earlier layouts
+(`$XDG_DATA_HOME/kana`, `~/.local/share/kana`, `./data`) are moved into the
+resolved directory; an operator-set `KANA_DATA_DIR` is never touched.
 
 | Path | Contents |
 | --- | --- |
