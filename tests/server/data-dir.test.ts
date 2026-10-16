@@ -96,12 +96,19 @@ describe("legacy data roots", () => {
     try {
       const ours = path.join(root, "ours");
       const theirs = path.join(root, "theirs");
+      const generic = path.join(root, "generic");
       mkdirSync(ours, { recursive: true });
       mkdirSync(theirs, { recursive: true });
+      mkdirSync(generic, { recursive: true });
       writeFileSync(path.join(ours, "activities.db"), "");
       writeFileSync(path.join(theirs, "notes.txt"), "");
+      // config.json and auth.json are common file names, so on their own they
+      // must not make a project folder look like a Kana root.
+      writeFileSync(path.join(generic, "config.json"), "{}");
+      writeFileSync(path.join(generic, "auth.json"), "{}");
       assert.equal(looksLikeKanaDataRoot(ours), true);
       assert.equal(looksLikeKanaDataRoot(theirs), false);
+      assert.equal(looksLikeKanaDataRoot(generic), false);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -143,7 +150,9 @@ describe("legacy data root migration", () => {
     writeFileSync(path.join(target, "jwt-secret"), "kept");
     utimesSync(path.join(older, "auth.json"), new Date(1_000), new Date(1_000));
 
-    migrateKanaDataRoot({ targetDir: target, legacyDirs: [older, newer] });
+    // auth.json alone is not a Kana marker, so this test isolates the
+    // newest-wins rule by naming its sources explicitly.
+    migrateKanaDataRoot({ targetDir: target, legacyDirs: [older, newer], requireMarker: false });
 
     assert.equal(readFileSync(path.join(target, "auth.json"), "utf8"), "new");
     assert.equal(readFileSync(path.join(target, "jwt-secret"), "utf8"), "kept");
@@ -179,6 +188,22 @@ describe("legacy data root migration", () => {
       assert.equal(existsSync(path.join(target, `appstate.db${suffix}`)), true);
       assert.equal(existsSync(path.join(legacy, `appstate.db${suffix}`)), false);
     }
+  });
+
+  it("leaves a WAL family alone when the target already holds any part of it", () => {
+    const legacy = path.join(root, "wal-orphan", "legacy");
+    const target = path.join(root, "wal-orphan", "target");
+    mkdirSync(legacy, { recursive: true });
+    mkdirSync(target, { recursive: true });
+    for (const suffix of ["", "-wal", "-shm"]) {
+      writeFileSync(path.join(legacy, `appstate.db${suffix}`), suffix || "db");
+    }
+    writeFileSync(path.join(target, "appstate.db-wal"), "orphan");
+
+    // The base database must not be paired with a journal from another root.
+    assert.deepEqual(migrateKanaDataRoot({ targetDir: target, legacyDirs: [legacy] }), []);
+    assert.equal(existsSync(path.join(target, "appstate.db")), false);
+    assert.equal(existsSync(path.join(legacy, "appstate.db")), true);
   });
 
   it("leaves a directory holding nothing Kana wrote", () => {

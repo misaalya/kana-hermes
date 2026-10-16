@@ -63,9 +63,14 @@ development falls back to `$CWD/data`. Roots earlier releases wrote into
 (`$XDG_DATA_HOME/kana`, `$HOME/.local/share/kana`, `$CWD/data`) are moved into
 the resolved root on the first start, without overwriting, one file at a time,
 and only when Kana resolved its own default root: an operator-set
-`KANA_DATA_DIR` is used as-is. `adoptLegacyKanaFile` remains the per-file
-fallback for `appstate.db`, `activities.db`, `jwt-secret`, and `auth.json` (a
-bcrypt `auth.json` hash is verified and upgraded in place).
+`KANA_DATA_DIR` is used as-is. A directory counts as an earlier root only when
+it holds a name only Kana writes (`appstate.db`, `activities.db`, `jwt-secret`,
+`voices/`, `irodori/`), never a bare `config.json` or `auth.json`, so a root that
+holds nothing else keeps its file and receives a fresh default `config.json`.
+`adoptLegacyKanaFile` remains the per-file fallback for `appstate.db`,
+`activities.db`, `jwt-secret`, and `auth.json` (a bcrypt `auth.json` hash is
+verified and upgraded in place), and that path is not gated by recognition, so a
+password survives whatever the whole-root migration decides.
 
 | Path under the data root | Holds |
 | --- | --- |

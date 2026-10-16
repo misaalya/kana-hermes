@@ -38,9 +38,22 @@ operator's managed location, so nothing is ever moved into or out of it, and a
 test or capture run that points the root at a temporary directory cannot touch
 the developer's own install. A directory counts as an earlier root only when it
 holds something Kana wrote, so a project folder that happens to be named `data`
-is left alone. Keys, a WAL database that is open in a running older server, and
-a partly drained root are all acceptable outcomes: the next start finishes the
-move.
+is left alone. Recognition needs a name only Kana writes — `appstate.db`,
+`activities.db`, `jwt-secret`, `voices/`, or `irodori/`. `config.json` and
+`auth.json` deliberately do not qualify a directory, because an unrelated
+project folder often holds a file with one of those names, and taking one for
+Kana's root would move a stranger's files.
+
+That trade-off is accepted in the other direction too. An install that holds
+nothing but `config.json` — someone who ran `kana config`, never set a password,
+and never started the server, which is the state before `jwt-secret` and
+`appstate.db` appear — is not moved, and Kana writes a fresh default
+`config.json` into the resolved root instead. The password survives that case
+regardless: `auth.json` is still adopted per file by the server, and that path
+is not gated by recognition. Keys, a WAL database that is open in a running
+older server, and a root drained only in part are all acceptable outcomes, and
+the next start finishes the move — except for a database whose remaining journal
+is already claimed by the target, which stays where it is and is inert.
 
 The rejected alternative was a `postinstall` script that migrates during
 `npm install -g kana-alya`. It would move files while no Kana process expects

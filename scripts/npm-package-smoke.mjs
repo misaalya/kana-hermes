@@ -201,7 +201,7 @@ process.once("SIGINT", stop);
     if (!setup.ok || setupState.onboardingCompleted !== false) {
       throw new Error("the npm launcher did not preserve the in-app onboarding flow.");
     }
-    const dataDirectory = path.join(home, ".local", "share", "kana");
+    const dataDirectory = path.join(home, ".kana");
     const configFile = path.join(dataDirectory, "config.json");
     const jwtSecretFile = path.join(dataDirectory, "jwt-secret");
     const config = JSON.parse(await readFile(configFile, "utf8"));
