@@ -1923,12 +1923,29 @@ test("turns the workspace into a chat-only view for a focused conversation", asy
   await expect(stage).toBeVisible();
   await expect(scale).toHaveCount(0);
   await expect(dock).toHaveClass(/is-sole/);
+  const viewport = page.viewportSize()?.width ?? 0;
+  // The dock slides into its column with a transform transition, so wait until
+  // it stops moving before reading the layout: the column is centred, not a
+  // card pinned to one edge. The width is not transitioned, and the phone
+  // layout only moves the top edge, so this settles within the transition.
+  await expect
+    .poll(async () => {
+      const box = await dock.boundingBox();
+      if (!box) return Number.NaN;
+      return Math.abs(box.x - (viewport - box.width) / 2);
+    })
+    .toBeLessThan(2);
   const solo = await dock.boundingBox();
-  expect(solo?.width ?? 0).toBeGreaterThan(withAvatar * 1.5);
+  // Phones are chat-first already, so the conversation keeps the screen it had
+  // and only the band the avatar reserved goes away; above the phone breakpoint
+  // it must have grown past the panel it shared with the avatar.
+  if (viewport >= 1024) {
+    expect(solo?.width ?? 0).toBeGreaterThan(withAvatar * 1.5);
+  } else {
+    expect(solo?.width ?? 0).toBeGreaterThanOrEqual(viewport - 2);
+  }
   expect(solo?.width ?? 0).toBeLessThanOrEqual(721);
-  // A centred column, not a card pinned to one edge.
-  expect(Math.abs((solo?.x ?? 0) - ((page.viewportSize()?.width ?? 0) - (solo?.width ?? 0)) / 2)).toBeLessThan(2);
-  expect((solo?.width ?? 0) <= (page.viewportSize()?.width ?? 0));
+  expect(solo?.width ?? 0).toBeLessThanOrEqual(viewport);
   // The canvas stays mounted, so the model and its WebGL context survive.
   await expect(canvas).toHaveCount(1);
   await expect(page.getByRole("textbox", { name: "Message Kana" })).toBeVisible();
