@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AttachmentUploadError,
   MAX_ATTACHMENT_BYTES,
@@ -9,6 +9,14 @@ import {
   readAttachment,
   type AgentAttachment,
 } from "@/lib/agent/attachments";
+import {
+  NO_PROMPT_RECALL,
+  caretAtPromptEdge,
+  promptHistory,
+  stepPromptRecall,
+  type PromptRecall,
+} from "@/lib/conversation/prompt-history";
+import { findConversation } from "@/lib/store/conversation-store";
 import { isVoiceActive } from "@/lib/store/voice-store";
 import { resolveTypedCommand } from "@/lib/services/send-message";
 import { getCopy, type Copy } from "@/lib/ui/copy";
@@ -39,6 +47,7 @@ export function ChatComposer() {
   const setWorkspace = workspace.stores.workspace.setState;
   const locale = useKanaStore("preferences", (state) => state.preferences.uiLocale);
   const activeConversationId = useKanaStore("conversations", (state) => state.activeConversationId ?? undefined);
+  const conversation = useKanaStore("conversations", (state) => findConversation(state, state.activeConversationId));
   const busy = useKanaStore("agentSession", (state) => state.busy);
   const connected = useKanaStore("agentSession", (state) => state.connectionState === "connected");
   const voiceActive = useKanaStore("voice", (state) => isVoiceActive(state.runtimeState));
@@ -55,9 +64,13 @@ export function ChatComposer() {
   const dictating = useKanaStore("workspace", (state) => state.dictating);
   const submitting = useKanaStore("workspace", (state) => state.submitting);
   const selectedCommandIndex = useKanaStore("workspace", (state) => state.selectedCommandIndex);
+  const usesMobileChat = useKanaStore("workspace", (state) => state.usesMobileChat);
   const modelCatalog = useKanaStore("models", (state) => state.entry?.catalog ?? null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  /** Arrow-key recall of this conversation's sent prompts (desktop only). */
+  const [recall, setRecall] = useState<PromptRecall>(NO_PROMPT_RECALL);
+  const sentPrompts = useMemo(() => promptHistory(conversation?.messages ?? []), [conversation?.messages]);
   const copy = getCopy(locale);
   const text = copy.workspace;
 
@@ -70,7 +83,13 @@ export function ChatComposer() {
   const setNotice = (composerNotice: string) => setWorkspace({ composerNotice });
 
   useEffect(() => {
-    queueMicrotask(() => setWorkspace({ composerNotice: "" }));
+    // Deferred like the notice below: a walk belongs to one conversation, and
+    // switching conversations must not recall another one's prompt. Setting the
+    // shared constant back is a no-op for React, so nothing re-renders.
+    queueMicrotask(() => {
+      setRecall(NO_PROMPT_RECALL);
+      setWorkspace({ composerNotice: "" });
+    });
   }, [activeConversationId, setWorkspace]);
 
   // Slash completion follows the draft, debounced so typing stays responsive.
@@ -92,6 +111,7 @@ export function ChatComposer() {
   );
   const selectCommand = useCallback(
     (command: string) => {
+      setRecall(NO_PROMPT_RECALL);
       if (activeConversationId) workspace.stores.workspace.getState().setDraft(activeConversationId, `${command} `);
       actions.clearCommandSuggestions();
     },
@@ -141,6 +161,8 @@ export function ChatComposer() {
         }
       }
     } finally {
+      // The prompt is in the transcript now, so the walk starts over from it.
+      setRecall(NO_PROMPT_RECALL);
       setWorkspace({ submitting: false });
     }
   };
@@ -183,7 +205,12 @@ export function ChatComposer() {
             placeholder={text.messagePlaceholder}
             aria-label={text.messageAria}
             className="max-h-28 min-h-11 w-full resize-none bg-transparent px-1 py-3 text-[15px] leading-snug focus:outline-none"
-            onChange={(event) => setMessage(event.target.value)}
+            onChange={(event) => {
+              // Typing is the reader's own draft again: the walk ends here so an
+              // older prompt is never restored over what they just wrote.
+              setRecall(NO_PROMPT_RECALL);
+              setMessage(event.target.value);
+            }}
             onKeyDown={(event) => {
               if (suggestions.length > 0) {
                 if (event.key === "ArrowDown") {
@@ -198,12 +225,36 @@ export function ChatComposer() {
                 }
                 if (event.key === "Tab") {
                   event.preventDefault();
+                  setRecall(NO_PROMPT_RECALL);
                   setMessage(suggestions[activeCommandIndex]?.text ?? message);
                   return;
                 }
                 if (event.key === "Escape") {
                   event.preventDefault();
                   actions.clearCommandSuggestions();
+                  return;
+                }
+              }
+              // Desktop ArrowUp/ArrowDown walk the prompts this conversation has
+              // sent, like a shell. Phones keep the native keys, and a caret with
+              // a line to move to keeps them everywhere.
+              const direction = event.key === "ArrowUp" ? "older" : event.key === "ArrowDown" ? "newer" : null;
+              if (
+                direction &&
+                !usesMobileChat &&
+                !submitting &&
+                !event.nativeEvent.isComposing &&
+                !event.shiftKey &&
+                !event.altKey &&
+                !event.ctrlKey &&
+                !event.metaKey &&
+                caretAtPromptEdge(event.currentTarget.value, event.currentTarget.selectionStart, event.currentTarget.selectionEnd, direction)
+              ) {
+                const step = stepPromptRecall(sentPrompts, recall, direction, message);
+                if (step) {
+                  event.preventDefault();
+                  setRecall(step.recall);
+                  setMessage(step.text);
                   return;
                 }
               }
