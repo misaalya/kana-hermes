@@ -83,3 +83,6 @@ reference/
 /cli/LICENSE
 /*.tgz
 /cli/*.tgz
+
+# Local study checkouts of other projects (never committed)
+/.study/

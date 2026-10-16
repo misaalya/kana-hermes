@@ -12,7 +12,8 @@ const eslintConfig = defineConfig([
     // Playwright uses an isolated Next.js dist directory so it never locks or
     // reuses a developer's running application build.
     ".next-e2e/**",
-    // scripts/debug-server.mjs uses its own, for the same reason.
+    // An optional isolated dist directory for local debugging servers, for the
+    // same reason.
     ".next-debug/**",
     "out/**",
     "build/**",
@@ -27,6 +28,8 @@ const eslintConfig = defineConfig([
     "reference/**",
     // Read-only 9Router reference checkout used for the auth pattern study.
     "auth-reference/**",
+    // Gitignored study checkouts of other projects (see .gitignore).
+    ".study/**",
   ]),
 ]);
 
