@@ -15,6 +15,20 @@ function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+// `acceptance/` is ignored, so a checkout without recorded evidence has no
+// file. Point at the procedure that produces one instead of failing on a bare
+// ENOENT; the gate never invents evidence of its own.
+async function readEvidence(file) {
+  try {
+    return JSON.parse(await readFile(file, "utf8"));
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+    throw new Error(
+      `No active-restart evidence at ${file}. Record the matrix as docs/HERMES_RESTART_ACCEPTANCE.md describes, then run this check again.`,
+    );
+  }
+}
+
 function isIsoTimestamp(value) {
   return (
     typeof value === "string" &&
@@ -163,7 +177,7 @@ if (argumentsList.includes("--self-test")) {
     process.env.KANA_HERMES_ACTIVE_RESTART_FILE ||
     argumentsList[0] ||
     "acceptance/hermes-active-restart.json";
-  const value = JSON.parse(await readFile(file, "utf8"));
+  const value = await readEvidence(file);
   const report = checkActiveRestart(value);
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   if (!report.passed) process.exitCode = 2;

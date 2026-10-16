@@ -67,8 +67,12 @@ was cleared, and any issue ID. A case fails if there is a duplicate prompt or
 message, hidden busy state, stale protected-input submission, credential
 retention, data loss, or silent replacement of a missing session.
 
-Enter the sanitized result in
-`acceptance/hermes-active-restart.json`, then run:
+The result is recorded in `acceptance/hermes-active-restart.json`, which is
+local evidence rather than a tracked file: `acceptance/` is ignored, so create
+it from the cases above when your checkout has none, and keep it out of the
+repository.
+
+Enter the sanitized result there, then run:
 
 ```bash
 npm run hermes:active-check

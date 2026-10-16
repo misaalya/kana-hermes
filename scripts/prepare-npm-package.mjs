@@ -50,8 +50,10 @@ for (const localDirectory of [
   "docs",
   "dogfood",
   ".codegraph",
+  ".freebuff",
   ".git",
   ".hermes",
+  ".local",
   ".omo",
   ".playwright-mcp",
   "acceptance",
@@ -76,7 +78,7 @@ await copyRuntimeAssets(root, runtime, { launcher: false });
 process.stdout.write(`Prepared npm runtime at ${runtime}\n`);
 
 // One launcher/config source; generated distribution copies are never edited.
-for (const name of ["bin", "config", "shared", "docs", "README.md", "CHANGELOG.md", "PLAN.md", "LICENSE"]) {
+for (const name of ["bin", "config", "shared", "docs", "README.md", "CHANGELOG.md", "LICENSE"]) {
   await rm(path.join(cli, name), { recursive: true, force: true });
   await cp(path.join(root, name), path.join(cli, name), { recursive: true });
 }

@@ -6,7 +6,7 @@ import path from "node:path";
 const runtimeEntries = new Set([
   ".next", "node_modules", "server.js", "package.json", "lib", "bin",
   "config", "shared", "assets", "public", "services", "tools", "docs", "dogfood",
-  "README.md", "CHANGELOG.md", "PLAN.md", "LICENSE",
+  "README.md", "CHANGELOG.md", "LICENSE",
 ]);
 
 export async function cleanStandalone(directory) {

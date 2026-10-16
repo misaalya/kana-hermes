@@ -42,7 +42,6 @@ try {
   for (const required of [
     "bin/kana.mjs",
     "CHANGELOG.md",
-    "PLAN.md",
     ".npm-package/runtime/server.js",
     ".npm-package/runtime/.next/BUILD_ID",
     ".npm-package/runtime/assets/voices/kana-default.wav",
@@ -54,7 +53,7 @@ try {
   const forbidden = [...paths].find((entry) =>
     /^\.npm-package\/runtime\/(?:app|components)\//.test(entry) ||
     /(^|\/)\.env(?:\.|$)/.test(entry) ||
-    /(^|\/)(?:\.git|\.hermes|\.omo|\.codegraph|data|test-results|auth-reference|__pycache__|\.venv|services)(?:\/|$)/.test(entry) ||
+    /(^|\/)(?:\.git|\.hermes|\.local|\.freebuff|\.omo|\.codegraph|data|test-results|auth-reference|__pycache__|\.venv|services)(?:\/|$)/.test(entry) ||
     // The voice engine and model are downloaded on request, never shipped.
     /\.safetensors$|(^|\/)(?:irodori-(?:onemkl|blas)|libmkl_[\w.]+)$/.test(entry)
   );

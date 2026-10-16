@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { randomUUID } from "node:crypto";
@@ -7,6 +7,36 @@ import { REQUIRED_DOGFOOD_MATRIX } from "./dogfood-schema.mjs";
 
 const DEFAULT_FILE = "dogfood/journal.json";
 const MATRIX_STATUSES = new Set(["pending", "pass", "fail"]);
+
+// The journal is this machine's local evidence: `dogfood/` is ignored, so a
+// checkout without it starts from an empty journal and the recorder writes the
+// first one.
+function emptyJournal() {
+  return {
+    schemaVersion: 1,
+    startedAt: null,
+    days: [],
+    matrix: REQUIRED_DOGFOOD_MATRIX.map((id) => ({
+      id,
+      status: "pending",
+      evidence: "",
+    })),
+    issues: [],
+  };
+}
+
+async function loadJournal(file) {
+  try {
+    const journal = JSON.parse(await readFile(file, "utf8"));
+    if (!isRecord(journal) || journal.schemaVersion !== 1) {
+      throw new Error("Dogfood journal must use schemaVersion 1.");
+    }
+    return journal;
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+    return emptyJournal();
+  }
+}
 
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -158,6 +188,7 @@ function markMatrix(journal, flags) {
 
 async function writeAtomic(file, journal) {
   const absolute = path.resolve(file);
+  await mkdir(path.dirname(absolute), { recursive: true });
   const temporary = `${absolute}.${process.pid}.${randomUUID()}.tmp`;
   await writeFile(temporary, `${JSON.stringify(journal, null, 2)}\n`, {
     encoding: "utf8",
@@ -167,17 +198,7 @@ async function writeAtomic(file, journal) {
 }
 
 function selfTest() {
-  const journal = {
-    schemaVersion: 1,
-    startedAt: null,
-    days: [],
-    matrix: REQUIRED_DOGFOOD_MATRIX.map((id) => ({
-      id,
-      status: "pending",
-      evidence: "",
-    })),
-    issues: [],
-  };
+  const journal = emptyJournal();
   const flags = parseFlags([
     "--date",
     "2026-08-22",
@@ -223,10 +244,7 @@ if (command === "--self-test") {
   const flags = parseFlags(argumentsList);
   const file = one(flags, "--file", DEFAULT_FILE);
   flags.delete("--file");
-  const journal = JSON.parse(await readFile(file, "utf8"));
-  if (!isRecord(journal) || journal.schemaVersion !== 1) {
-    throw new Error("Dogfood journal must use schemaVersion 1.");
-  }
+  const journal = await loadJournal(file);
   const result =
     command === "record-day"
       ? recordDay(journal, flags)

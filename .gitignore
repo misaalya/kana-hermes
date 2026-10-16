@@ -11,8 +11,11 @@
 !.yarn/versions
 
 # testing
+# Playwright writes its HTML report, its blob report, and every trace,
+# screenshot, and running server's data root under test-results.
 /coverage
 /playwright-report/
+/blob-report/
 /test-results/
 
 # next.js
@@ -61,12 +64,26 @@ reference/
 /web/
 /showcase/
 
-# Local audit/debug artifacts
+# Local audit/debug artifacts. These are this machine's tool state, not the
+# project: Playwright MCP traces, the agent harness's own directories, the
+# code graph, the stage-scene experiments, and Freebuff's project id. They must
+# never be pushed from ANY checkout, so they are ignored here rather than in
+# .git/info/exclude, which stays on one machine.
 .playwright-mcp/
+/.local/
+/.freebuff/
+/.codegraph/
 /.hermes/
 /.omo/
+*.log
 /*.png
 /snapshot.txt
+
+# Local release evidence and the local remediation plan. The recorders create
+# the evidence files on first use; none of it is part of the repository.
+/acceptance/
+/dogfood/
+/PLAN.md
 
 # Server-side activity store (SQLite)
 .kana/

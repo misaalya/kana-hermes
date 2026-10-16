@@ -299,7 +299,6 @@ Contributor rules are in [AGENTS.md](AGENTS.md).
 | Attachments, dictation, model picker | [COMPOSER.md](docs/COMPOSER.md) |
 | Quality gates and releases | [QUALITY.md](docs/QUALITY.md) · [RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) |
 | Changes and migration notes | [CHANGELOG.md](CHANGELOG.md) |
-| Roadmap | [PLAN.md](PLAN.md) |
 
 ## License
 

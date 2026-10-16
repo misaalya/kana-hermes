@@ -12,7 +12,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 This file is the implementation handoff and operating guide for agents working
 on Kana. Read it completely before changing the project. The status below was
-last reviewed on 2026-08-25. Active remediation work is tracked in `PLAN.md`.
+last reviewed on 2026-08-25. Active remediation work is tracked in `PLAN.md`,
+which is a local working document: it is not part of the repository.
 
 ## Product definition
 
@@ -282,8 +283,7 @@ RPC  POST /api/hermes/rpc    ->  allow-listed JSON-RPC forward
   through `/api/voice/tts/*` relay routes: `speech`, request cancellation, and
   `engine` (install status and install/cancel/remove actions).
 
-For VPS deployment requirements see the checklist in `PLAN.md` §10 and
-`docs/SUPPORTED_ENVIRONMENT.md`.
+For VPS deployment requirements see `docs/SUPPORTED_ENVIRONMENT.md`.
 
 ## Hermes interfaces confirmed in the installed source
 
@@ -813,10 +813,11 @@ product direction, not a temporary theme.
   on target hardware. `npm run dogfood:check` deterministically reports the
   remaining seven-day, environment-matrix, and P0/P1 beta gates.
 - `npm run dogfood:record` and `npm run dogfood:matrix` safely update sanitized
-  evidence without hand-editing JSON. Active Hermes restart observations use
-  `acceptance/hermes-active-restart.json` and must pass
-  `npm run hermes:active-check`; neither validator turns pending evidence into
-  a pass automatically.
+  evidence without hand-editing JSON. The journal is local evidence: `dogfood/`
+  is ignored, and the recorder creates it on first use. Active Hermes restart
+  observations use `acceptance/hermes-active-restart.json`, which is local
+  evidence too, and must pass `npm run hermes:active-check`; neither validator
+  turns pending evidence into a pass automatically.
 - Next.js standalone output, installable web manifest, same-origin service
   worker shell, and `npm run package:local` package assembly are operational.
   The worker caches only the Kana shell/static assets, not cross-origin
@@ -923,14 +924,14 @@ tests/server/                               data-dir, auth, activity-store unit 
 tests/e2e/kana-critical-journeys.spec.ts    Desktop/mobile acceptance journeys
 docs/SECURITY.md                            Local threat model and controls
 docs/SUPPORTED_ENVIRONMENT.md               Tested versions + VPS deploy guide
-PLAN.md                                     Active remediation plan/status
 ```
 
 ## Implementation plan
 
 The phased plan below is complete; ACTIVE remediation work (bug fixes,
-hardening) is tracked in `PLAN.md` —
-read it before picking up work here.
+hardening) is tracked in the local `PLAN.md` beside this guide. It is a working
+document rather than a repository file, so read it before picking up work here
+when your checkout has one.
 
 Work incrementally and keep the application usable after every phase.
 

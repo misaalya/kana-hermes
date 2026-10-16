@@ -1,8 +1,10 @@
 # Kana dogfood and field-validation evidence
 
-Dogfood is release evidence, not a checkbox to fill retrospectively. Keep the
-tracked structure in `dogfood/journal.json`; do not put prompts, conversation
-text, tokens, passwords, secret values, or private tool output in it.
+Dogfood is release evidence, not a checkbox to fill retrospectively. The
+journal is local evidence rather than a tracked file: `dogfood/` is ignored and
+the recorder creates `dogfood/journal.json` the first time a day is recorded.
+Do not put prompts, conversation text, tokens, passwords, secret values, or
+private tool output in it.
 
 ## Daily entry
 

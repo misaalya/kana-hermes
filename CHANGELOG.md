@@ -423,5 +423,5 @@
 
 ### Known limitations
 
-See [supported environment](docs/SUPPORTED_ENVIRONMENT.md) and the open items in
-[PLAN.md](PLAN.md) for known environment limits and future work.
+See [supported environment](docs/SUPPORTED_ENVIRONMENT.md) for known
+environment limits and platform support.
