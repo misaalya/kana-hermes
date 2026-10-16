@@ -646,6 +646,47 @@ test("subtitles follow the language the user writes in and survive reloads", asy
   ).toBeVisible();
 });
 
+test("walks this conversation's sent prompts with the arrow keys", async ({
+  page,
+}) => {
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
+  await composer.fill("First prompt");
+  await composer.press("Enter");
+  await expect(page.getByText("Hello! I am here.", { exact: true }).first()).toBeVisible();
+  await composer.fill("Second prompt");
+  await composer.press("Enter");
+  await expect(page.getByText("Hello! I am here.", { exact: true })).toHaveCount(2);
+
+  // Only the desktop walks history; a phone keeps the keys for its caret.
+  const desktop = (page.viewportSize()?.width ?? 0) >= 1024;
+  await composer.fill("half typed");
+  await composer.press("ArrowUp");
+  await expect(composer).toHaveValue(desktop ? "Second prompt" : "half typed");
+  if (!desktop) return;
+
+  await composer.press("ArrowUp");
+  await expect(composer).toHaveValue("First prompt");
+  await composer.press("ArrowDown");
+  await expect(composer).toHaveValue("Second prompt");
+  // Past the newest prompt the walk gives the unsent draft back.
+  await composer.press("ArrowDown");
+  await expect(composer).toHaveValue("half typed");
+
+  // A draft with real line breaks keeps both keys while the caret has a line to
+  // move to, and a live draft has nothing newer behind it.
+  await composer.fill("first line\nsecond line");
+  await composer.press("ArrowDown");
+  await expect(composer).toHaveValue("first line\nsecond line");
+  await composer.press("ArrowUp");
+  await expect(composer).toHaveValue("first line\nsecond line");
+  // The caret is on the first line now, so this ArrowUp recalls.
+  await composer.press("ArrowUp");
+  await expect(composer).toHaveValue("Second prompt");
+  // Coming back past the newest prompt returns the whole draft, line breaks and all.
+  await composer.press("ArrowDown");
+  await expect(composer).toHaveValue("first line\nsecond line");
+});
+
 test("keeps a running turn's Hermes activity through a refresh and renders its Markdown reply", async ({
   page,
 }) => {
