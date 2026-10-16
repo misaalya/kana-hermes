@@ -478,6 +478,20 @@ async function openHistory(page: Page): Promise<void> {
   await openHistory.click();
 }
 
+/**
+ * Waits for one round-trip the test itself controls, so a request the UI may
+ * have wrongly fired on a click has definitely reached the route handler (or a
+ * `page.on("request")` listener) before the caller asserts against it. A
+ * synchronous `expect(requests).toEqual([])` cannot: right after a click the
+ * request would still be in flight through CDP, so the assertion passes
+ * whether or not the click was supposed to send anything.
+ */
+async function settleNetwork(page: Page, url: string): Promise<void> {
+  await page.evaluate(async (target) => {
+    await fetch(target, { cache: "no-store" });
+  }, url);
+}
+
 test("never reveals a password and signs in with the operator-set one", async ({
   page,
   context,
@@ -844,6 +858,344 @@ test("Settings → Connection separates Hermes state from its one useful action"
   await expect(hermes.getByText("Unavailable")).toBeVisible();
   await expect(hermes.getByTitle("Process control is available only through the Kana launcher (`kana serve`).")).toBeVisible();
   await expect(hermes.getByRole("button", { name: /^(?:Start|Stop|Restart)$/ })).toHaveCount(0);
+});
+
+/** The frozen update API contract this journey asserts against. */
+const UPDATE_STATUS = {
+  currentVersion: "0.4.1",
+  update: { latestVersion: "0.5.0", installCommand: "npm i -g kana-alya@latest" },
+};
+
+/**
+ * The update notice, told apart from the degraded-service banner by its text:
+ * both wear the same square `.kana-notice` box in the workspace, not Settings.
+ */
+function updateNotice(page: Page): Locator {
+  return page.locator(".kana-notice").filter({ hasText: "New Version Available" });
+}
+
+type SeenRequest = { method: string; path: string; body: string };
+
+/** Every request the page makes, so a journey can prove what Kana never runs. */
+function recordRequests(page: Page): SeenRequest[] {
+  const requests: SeenRequest[] = [];
+  page.on("request", (request) => {
+    let path = request.url();
+    try {
+      path = new URL(request.url()).pathname;
+    } catch {
+      // A data:/blob: URL is never part of the update surface.
+    }
+    let body = "";
+    try {
+      body = request.postData() ?? "";
+    } catch {
+      body = "";
+    }
+    requests.push({ method: request.method(), path, body });
+  });
+  return requests;
+}
+
+/** Kana copies the command for the user; it must never send one, or run npm. */
+function expectNoInstallRequest(requests: SeenRequest[]): void {
+  const installLike = requests.filter((request) =>
+    /npm\s+(?:i|install)\s+-g|kana-alya@latest/.test(`${request.path} ${request.body}`),
+  );
+  expect(installLike).toEqual([]);
+}
+
+/**
+ * The copy button by its visible label: its accessible name also carries the
+ * versions and the command, so the visible text is what identifies it.
+ */
+function copyCommandButton(page: Page): Locator {
+  return updateNotice(page).getByRole("button").filter({ hasText: "Copy Command" });
+}
+
+/**
+ * The notice's one action, whatever label it currently wears: it reads "Copy
+ * Command" until the copy lands and "Command Copied" afterwards.
+ */
+function noticeAction(page: Page): Locator {
+  return updateNotice(page).getByRole("button");
+}
+
+/**
+ * The same button after a landed copy, by the exact label the contract gives
+ * it: filtering on the visible text keeps the modal's own buttons out even if
+ * the modal renders inside the notice's box.
+ */
+function copiedCommandButton(page: Page): Locator {
+  return updateNotice(page).getByRole("button").filter({ hasText: "Command Copied" });
+}
+
+/**
+ * The stop dialog, told apart from any other dialog by the command it shows:
+ * the confirmation is the one place that renders the install command.
+ */
+function updateDialog(page: Page): Locator {
+  return page.getByRole("dialog").filter({ hasText: "npm i -g kana-alya@latest" });
+}
+
+/** The one action that stops Kana: inside that dialog, never in the notice. */
+function shutdownButton(page: Page): Locator {
+  return updateDialog(page).getByRole("button", { name: "Copy & Shutdown", exact: true });
+}
+
+/** The `/api/update/stop` requests the recorder saw: the only stop Kana knows. */
+function stopRequests(requests: SeenRequest[]): SeenRequest[] {
+  return requests.filter((request) => request.path === "/api/update/stop");
+}
+
+/** Copies the command, then waits for the clipboard and the modal it opens. */
+async function copyInstallCommand(page: Page): Promise<void> {
+  await copyCommandButton(page).click();
+  // The strongest statement that Kana installs nothing: the user, not Kana,
+  // ends up holding the exact command.
+  await expect
+    .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+    .toBe("npm i -g kana-alya@latest");
+  await expect(page.getByRole("dialog")).toHaveCount(1);
+}
+
+test("shows the workspace update notice and stops Kana only after Copy & Shutdown", async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.route("**/api/update", (route) => route.fulfill({ json: UPDATE_STATUS }));
+  const stops: unknown[] = [];
+  await page.route("**/api/update/stop", async (route) => {
+    stops.push(route.request().postDataJSON());
+    await route.fulfill({ json: { stopping: true } });
+  });
+  const requests = recordRequests(page);
+
+  await page.goto("/");
+  const notice = updateNotice(page);
+  await expect(notice).toBeVisible();
+
+  // The visible line is only the title: both versions and the exact command
+  // live in its tooltip, and the old "New Version Available: 0.5.0 (installed
+  // 0.4.1)" line is gone. Matching the title by its own exact text is itself
+  // the proof that no version number shares that line.
+  const titleLine = notice.getByText("New Version Available", { exact: true });
+  await expect(titleLine).toBeVisible();
+  await expect(notice.getByText(/New Version Available:/)).toHaveCount(0);
+  await expect(titleLine).toHaveAttribute("title", /0\.5\.0/);
+  await expect(titleLine).toHaveAttribute("title", /0\.4\.1/);
+  await expect(titleLine).toHaveAttribute("title", /npm i -g kana-alya@latest/);
+
+  // The copy button names both versions and the command too, for touch and
+  // screen-reader users who never see a tooltip, while its visible label is
+  // exactly "Copy Command" (no version numbers on the line).
+  await expect(notice.getByRole("button", { name: /0\.5\.0/ })).toHaveCount(1);
+  await expect(notice.getByRole("button", { name: /0\.4\.1/ })).toHaveCount(1);
+  await expect(notice.getByRole("button", { name: /npm i -g kana-alya@latest/ })).toHaveCount(1);
+  const copy = copyCommandButton(page);
+  await expect(copy).toHaveCount(1);
+  await expect(copy).toHaveText("Copy Command");
+  // One action, and no second way to stop Kana: `exact` so a substring of a
+  // longer label could never satisfy it.
+  await expect(noticeAction(page)).toHaveCount(1);
+  await expect(notice.getByRole("button", { name: "Stop Kana", exact: true })).toHaveCount(0);
+  await expect(notice.getByRole("button", { name: "Yes, Stop Kana", exact: true })).toHaveCount(0);
+  await expect(notice.getByRole("button", { name: "Copy & Shutdown", exact: true })).toHaveCount(0);
+
+  // Nothing can stop Kana before the command is copied, and no dialog exists
+  // yet. A round-trip the test controls is awaited first, so a request the UI
+  // may have wrongly fired has already been received before this asserts.
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await settleNetwork(page, "/api/update");
+  expect(stopRequests(requests)).toEqual([]);
+  expect(stops).toEqual([]);
+
+  await copyInstallCommand(page);
+
+  // The copy is the only thing that opens the modal, and the button now says
+  // so exactly.
+  const copied = copiedCommandButton(page);
+  await expect(copied).toHaveCount(1);
+  await expect(copied).toHaveText("Command Copied");
+  await expect(copied).toBeVisible();
+
+  // The modal names the target version, shows the exact command, and walks
+  // through the three steps that follow the copy.
+  const dialog = updateDialog(page);
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toHaveAttribute("aria-modal", "true");
+  await expect(dialog).toContainText("0.5.0");
+  await expect(dialog).toContainText(/Update Kana to/);
+  await expect(dialog.locator("code")).toHaveText("npm i -g kana-alya@latest");
+  await expect(dialog.getByRole("listitem")).toHaveCount(3);
+  await expect
+    .poll(() => dialog.evaluate((node) => node.contains(document.activeElement)))
+    .toBe(true);
+  await expect(dialog.getByRole("button", { name: "Cancel", exact: true })).toBeVisible();
+  await expect(shutdownButton(page)).toBeVisible();
+  // Reading the steps is not a decision: copying opens the modal, and the
+  // modal stops nothing on its own, so there is no timer to wait out. The
+  // round-trip makes a request fired by the copy, the focus move, or the modal
+  // paint impossible to miss.
+  await settleNetwork(page, "/api/update");
+  expect(stopRequests(requests)).toEqual([]);
+  expect(stops).toEqual([]);
+
+  // The only two things the modal offers, and neither stops anything yet.
+  await expect(dialog.getByRole("button", { name: "Cancel", exact: true })).toHaveCount(1);
+  await expect(dialog.getByRole("button", { name: "Copy & Shutdown", exact: true })).toHaveCount(1);
+
+  // Only Copy & Shutdown stops Kana, and exactly once.
+  await shutdownButton(page).click();
+  await expect.poll(() => stops).toEqual([{ confirm: true }]);
+  expect(stops).toHaveLength(1);
+  await expect(page.getByText(/Kana is stopping/).first()).toBeVisible();
+
+  // The POST really carried the confirmation the route requires.
+  const sent = stopRequests(requests);
+  expect(sent).toHaveLength(1);
+  expect(sent[0].method).toBe("POST");
+  expect(sent[0].body).toContain('"confirm":true');
+
+  // Kana never installs anything itself: no request carries the command, and
+  // the only update routes it ever calls are the two documented ones.
+  expectNoInstallRequest(requests);
+  const updatePaths = new Set(
+    requests.filter((request) => request.path.startsWith("/api/update")).map((request) => request.path),
+  );
+  expect(updatePaths).toEqual(new Set(["/api/update", "/api/update/stop"]));
+});
+
+test("keeps the update notice retryable when stopping Kana fails", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.route("**/api/update", (route) => route.fulfill({ json: UPDATE_STATUS }));
+  const stops: unknown[] = [];
+  let mode: "error" | "drop" = "error";
+  await page.route("**/api/update/stop", async (route) => {
+    stops.push(route.request().postDataJSON());
+    if (mode === "drop") return route.abort("connectionfailed");
+    return route.fulfill({ status: 503, json: { error: "Stop unavailable" } });
+  });
+  // Copy, then ask the modal to shut Kana down; the modal stays open so the
+  // same button can be pressed again.
+  const stopOnce = async () => {
+    await copyInstallCommand(page);
+    await shutdownButton(page).click();
+    return updateDialog(page);
+  };
+
+  // A server that refuses the stop says so, and never claims Kana is stopping.
+  await page.goto("/");
+  await stopOnce();
+  await expect.poll(() => stops.length).toBe(1);
+  await expect(page.getByText(/could not be stopped/).first()).toBeVisible();
+  await expect(page.getByText(/Kana is stopping/)).toHaveCount(0);
+  // Retryable, not a dead end: the same button asks again, and `exact` keeps
+  // a longer or shorter label from satisfying it.
+  await expect(shutdownButton(page)).toBeVisible();
+  await expect(shutdownButton(page)).toBeEnabled();
+
+  // A stop request that never reaches Kana must end the same way.
+  mode = "drop";
+  await page.reload();
+  await stopOnce();
+  await expect.poll(() => stops.length).toBe(2);
+  await expect(page.getByText(/could not be stopped/).first()).toBeVisible();
+  await expect(page.getByText(/Kana is stopping/)).toHaveCount(0);
+  await expect(shutdownButton(page)).toBeVisible();
+  await expect(shutdownButton(page)).toBeEnabled();
+  // The retry goes through the same route, with the same confirmation.
+  await shutdownButton(page).click();
+  await expect.poll(() => stops.length).toBe(3);
+  expect(stops.at(-1)).toEqual({ confirm: true });
+});
+
+test("closes the update notice's dialog from Cancel or Escape without stopping Kana", async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.route("**/api/update", (route) => route.fulfill({ json: UPDATE_STATUS }));
+  const stops: unknown[] = [];
+  await page.route("**/api/update/stop", async (route) => {
+    stops.push(route.request().postDataJSON());
+    await route.fulfill({ json: { stopping: true } });
+  });
+  const requests = recordRequests(page);
+
+  await page.goto("/");
+  await expect(updateNotice(page)).toBeVisible();
+
+  // Cancel is a way out, not a decision: the modal closes and Kana keeps
+  // running. The round-trip first, so a wrongly-fired stop cannot hide.
+  await copyInstallCommand(page);
+  const dialog = updateDialog(page);
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(updateNotice(page)).toBeVisible();
+  await settleNetwork(page, "/api/update");
+  expect(stopRequests(requests)).toEqual([]);
+  expect(stops).toEqual([]);
+
+  // Escape is the other way out, and stops nothing either.
+  await copiedCommandButton(page).click();
+  await expect(updateDialog(page)).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await settleNetwork(page, "/api/update");
+  expect(stopRequests(requests)).toEqual([]);
+  expect(stops).toEqual([]);
+});
+
+test("does not offer stopping Kana when the command could not be copied", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.route("**/api/update", (route) => route.fulfill({ json: UPDATE_STATUS }));
+  const stops: unknown[] = [];
+  await page.route("**/api/update/stop", async (route) => {
+    stops.push(route.request().postDataJSON());
+    await route.fulfill({ json: { stopping: true } });
+  });
+  const requests = recordRequests(page);
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator.clipboard, "writeText", {
+      configurable: true,
+      value: () => Promise.reject(new Error("clipboard blocked")),
+    });
+  });
+
+  await page.goto("/");
+  const notice = updateNotice(page);
+  await expect(notice).toBeVisible();
+  await copyCommandButton(page).click();
+  // The round-trip lets the rejected write settle before the assertions.
+  await settleNetwork(page, "/api/update");
+
+  // Nothing may claim the copy happened, no modal may open, and stopping may
+  // not be offered: Kana must never stop before the user holds the command.
+  await expect(notice.getByText("Command Copied", { exact: true })).toHaveCount(0);
+  await expect(copyCommandButton(page)).toHaveText("Copy Command");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(shutdownButton(page)).toHaveCount(0);
+  await expect(page.getByText(/could not be copied/)).toHaveCount(1);
+  await expect(page.getByText(/could not be copied/)).toBeVisible();
+  expect(stopRequests(requests)).toEqual([]);
+  expect(stops).toEqual([]);
+
+  // The command is still reachable: shown in a `<code>` the user selects and
+  // copies by hand. That is the whole fallback, and it never runs npm.
+  const shown = notice.locator("code");
+  await expect(shown).toHaveText("npm i -g kana-alya@latest");
+  const selectable = await shown.evaluate((node) => {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    return selection?.toString() ?? "";
+  });
+  expect(selectable).toBe("npm i -g kana-alya@latest");
+  expectNoInstallRequest(requests);
 });
 
 test("adjusts the active avatar from the workspace instead of settings", async ({

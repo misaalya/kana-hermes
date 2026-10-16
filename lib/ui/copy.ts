@@ -138,6 +138,30 @@ export type Copy = {
     restartedNotice: string;
     stoppedNotice: string;
   };
+  /**
+   * The npm-update notice and the manual-update dialog the copy opens: Kana
+   * copies the command, the user installs it, and only the user's own button
+   * press stops Kana — there is no countdown and no automatic stop.
+   */
+  update: {
+    title: string;
+    /** Tooltip on the title line: both versions and the command, hover-only. */
+    detail(latest: string, current: string, command: string): string;
+    /** Accessible name of the copy button: the same facts for touch users. */
+    copyAria(latest: string, current: string, command: string): string;
+    copy: string;
+    copied: string;
+    /** The dialog's title, naming the version the command installs. */
+    dialogTitle(latest: string): string;
+    /** The three manual-update steps, in order, as an ordered list. */
+    steps: string[];
+    cancel: string;
+    /** Copies the command again, then stops this Kana server. */
+    shutdown: string;
+    stopping: string;
+    copyFailed: string;
+    failed: string;
+  };
   gate: {
     connecting: string;
     reconnecting: string;
@@ -608,6 +632,26 @@ const id: Copy = {
     startedNotice: "Hermes dijalankan.",
     restartedNotice: "Hermes dimulai ulang.",
     stoppedNotice: "Hermes dimatikan.",
+  },
+  update: {
+    title: "Versi Baru Tersedia",
+    detail: (latest, current, command) =>
+      `Tersedia ${latest} (terpasang ${current}). Pada pemasangan npm, jalankan di terminal: ${command}`,
+    copyAria: (latest, current, command) =>
+      `Salin perintah pemasangan npm: ${command}. Versi ${latest} tersedia, versi terpasang ${current}. Jalankan perintah ini di terminal.`,
+    copy: "Salin perintah",
+    copied: "Perintah disalin",
+    dialogTitle: (latest) => `Perbarui Kana ke ${latest}`,
+    steps: [
+      "Salin perintah di atas.",
+      "Tempelkan ke terminal, lalu tekan Enter.",
+      "Jalankan Kana kembali setelah pemasangan selesai.",
+    ],
+    cancel: "Batal",
+    shutdown: "Salin & Hentikan",
+    stopping: "Kana sedang dihentikan. Jalankan perintah di terminal, lalu mulai Kana lagi.",
+    copyFailed: "Perintah tidak bisa disalin. Pilih perintah di bawah, lalu salin sendiri.",
+    failed: "Kana tidak bisa dihentikan dari sini. Hentikan lewat terminal dengan Ctrl+C.",
   },
   gate: {
     connecting: "Menghubungkan…",
@@ -1134,6 +1178,26 @@ const en: Copy = {
     startedNotice: "Hermes started.",
     restartedNotice: "Hermes restarted.",
     stoppedNotice: "Hermes stopped.",
+  },
+  update: {
+    title: "New Version Available",
+    detail: (latest, current, command) =>
+      `${latest} is available (installed ${current}). On an npm install, run: ${command}`,
+    copyAria: (latest, current, command) =>
+      `Copy the npm install command: ${command}. Version ${latest} is available, version ${current} is installed. Run it in a terminal.`,
+    copy: "Copy Command",
+    copied: "Command Copied",
+    dialogTitle: (latest) => `Update Kana to ${latest}`,
+    steps: [
+      "Copy the command above.",
+      "Paste it into a terminal and press Enter.",
+      "Start Kana again afterwards.",
+    ],
+    cancel: "Cancel",
+    shutdown: "Copy & Shutdown",
+    stopping: "Kana is stopping. Run the command in a terminal, then start Kana again.",
+    copyFailed: "The command could not be copied. Select the command below and copy it by hand.",
+    failed: "Kana could not be stopped from here. Stop it in the terminal with Ctrl+C.",
   },
   gate: {
     connecting: "Connecting…",

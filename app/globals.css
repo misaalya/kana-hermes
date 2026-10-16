@@ -1904,11 +1904,60 @@ video.kana-media-preview {
 
 @media (max-width: 1023px) {
   /* Beside the avatar tile, under the header actions. */
-  .kana-degraded-banner {
+  .kana-notices {
     top: calc(var(--kana-compact-inset) + env(safe-area-inset-top) + 54px);
     right: var(--kana-compact-inset);
     bottom: auto;
     left: auto;
     max-width: calc(100vw - var(--kana-compact-width) - 3 * var(--kana-compact-inset));
   }
+}
+
+/* Notices in the workspace corner: square boxes, like the modals. They are
+   stacked by one positioned wrapper so the degraded-service banner and the
+   update notice never paint over each other; the wrapper is not itself a
+   `.kana-notice`. The wrapper carries no z-index on purpose: a z-index there
+   would make it a stacking context, and the update dialog it renders (with its
+   own `z-50` backdrop) would then stay trapped under the workspace's other
+   modals instead of covering them. The boxes carry the layer instead.
+   The buttons inside keep the pill fills but never round, and the soft one
+   gets a fill of its own with a line to separate it from the box: on the box's
+   own fill it would be invisible in both themes. The update dialog renders
+   outside the box and has the same problem, so its soft pill gets the same
+   fill. */
+.kana-notice {
+  position: relative;
+  z-index: 20;
+  border-radius: 0;
+  border-color: var(--line-strong);
+  background: var(--surface-strong);
+}
+
+.kana-notice .kana-pill {
+  border-radius: 0;
+}
+
+.kana-notice .kana-pill-soft,
+.kana-notice-dialog .kana-pill-soft {
+  border: 2px solid var(--line-strong);
+  background: var(--surface);
+}
+
+@media (hover: hover) {
+  .kana-notice .kana-pill-soft:not(:disabled):hover,
+  .kana-notice-dialog .kana-pill-soft:not(:disabled):hover {
+    border-color: var(--accent);
+  }
+}
+
+/* The manual-update dialog a successful copy opens: the notice's own square
+   box, lifted onto the backdrop. Its corners stay square like every other
+   modal, while the pills inside it keep their rounded shape. No shadow. The
+   install command is the one thing in it that has to be readable and
+   selectable down to the last character, so it keeps the bordered block fill
+   its copy fallback uses. */
+.kana-notice-dialog {
+  border-radius: 0;
+  border-color: var(--line-strong);
+  background: var(--surface-strong);
 }

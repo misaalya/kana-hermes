@@ -1,3 +1,5 @@
+import { registerLiveStream } from "./live-streams";
+
 type EventStreamDependencies = {
   connect: () => Promise<unknown>;
   subscribe: (listener: (params: unknown) => void) => () => void;
@@ -16,6 +18,7 @@ export function createHermesEventStream(
 ): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   let cleanup = () => {};
+  let unregister = () => {};
   return new ReadableStream<Uint8Array>({
     start(controller) {
       let closed = false;
@@ -26,11 +29,17 @@ export function createHermesEventStream(
         if (closed) return;
         closed = true;
         signal.removeEventListener("abort", cleanup);
+        unregister();
         unsubscribe?.();
         stopWatching?.();
         if (heartbeat) clearInterval(heartbeat);
         try { controller.close(); } catch { /* Already cancelled by the reader. */ }
       };
+      // This stream lives for the whole gateway connection, so it is one of
+      // the connections a `server.close()` on shutdown would otherwise wait
+      // for. Register it so POST /api/update/stop can end it and let the
+      // process exit; unregistering when it ends keeps the set small.
+      unregister = registerLiveStream(cleanup);
       signal.addEventListener("abort", cleanup, { once: true });
       if (signal.aborted) {
         cleanup();
