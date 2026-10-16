@@ -84,3 +84,26 @@ export type KanaDiagnosticSnapshot = Omit<
   generatedAt: string;
   lastError?: Omit<KanaErrorRecord, "occurredAt"> & { occurredAt: string };
 };
+
+/**
+ * What the fatal error boundary can honestly report. It renders outside the
+ * workspace stores, so agent, voice, avatar, and storage state are unknown
+ * there, and a snapshot that guessed them would be worse than a short one.
+ */
+export type KanaFatalDiagnosticsInput = {
+  /** The thrown value, as the boundary received it. */
+  error: unknown;
+  /** Next.js's hash for the failure, and the key its server log carries. */
+  digest?: string;
+  /** The route that failed. Query values are dropped even if one is passed. */
+  route?: string;
+  generatedAt?: number;
+};
+
+export type KanaFatalDiagnosticSnapshot = {
+  surface: "error-boundary";
+  generatedAt: string;
+  route?: string;
+  reference?: string;
+  error: { name: string; message: string };
+};

@@ -6,6 +6,7 @@ import { createConversationStore, selectActiveConversation } from "@/lib/store/c
 import { createErrorStore } from "@/lib/store/error-store";
 import { createKanaStores } from "@/lib/store/kana-stores";
 import { createThemeStore, THEME_STORAGE_KEY } from "@/lib/store/theme-store";
+import { createUiLocaleStore } from "@/lib/store/ui-locale-store";
 import { createWorkspaceStore } from "@/lib/store/workspace-store";
 
 const activity = (id: string, state: "running" | "complete" = "running") => ({
@@ -100,5 +101,45 @@ describe("Kana stores", () => {
     store.getState().toggle();
     assert.equal(values.get(THEME_STORAGE_KEY), "dark");
     assert.equal(root.dataset.theme, "dark");
+  });
+
+  it("starts on the app default locale and adopts the stored one", () => {
+    const store = createUiLocaleStore({
+      getItem: (key) =>
+        key === "kana.preferences.v5" ? '{"uiLocale":"en"}' : null,
+      setItem: () => {},
+      removeItem: () => {},
+    });
+
+    assert.equal(store.getState().locale, "id");
+    store.getState().hydrate();
+    assert.equal(store.getState().locale, "en");
+  });
+
+  it("keeps the app default locale when the record is missing, unknown, or unreadable", () => {
+    const reading = (record: string | null) => ({
+      getItem: (key: string) =>
+        key === "kana.preferences.v5" ? record : null,
+      setItem: () => {},
+      removeItem: () => {},
+    });
+    const refusing = {
+      getItem: () => {
+        throw new Error("storage is blocked");
+      },
+      setItem: () => {},
+      removeItem: () => {},
+    };
+
+    for (const storage of [
+      reading(null),
+      reading("{not json"),
+      reading('{"uiLocale":"fr"}'),
+      refusing,
+    ]) {
+      const store = createUiLocaleStore(storage);
+      store.getState().hydrate();
+      assert.equal(store.getState().locale, "id");
+    }
   });
 });

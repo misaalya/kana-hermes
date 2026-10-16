@@ -1965,3 +1965,22 @@ video.kana-media-preview {
   border-color: var(--line-strong);
   background: var(--surface-strong);
 }
+
+/* The fatal error pages (`app/error.tsx`, `app/global-error.tsx`) render outside
+   the workspace, so neither one has a header, a tray, or a panel. The mark is
+   the one shape they share with Kana: a blue disc with her か, the same accent
+   fill and on-accent ink as every pill. It has to be repeated inline in
+   `app/global-error.tsx`, which Next.js renders as its own document without
+   these global styles. */
+.kana-mark {
+  display: grid;
+  place-items: center;
+  width: 74px;
+  height: 74px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1;
+}

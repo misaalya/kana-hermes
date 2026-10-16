@@ -1,4 +1,4 @@
-import { isUiLocale } from "@/lib/ui/copy";
+import { isUiLocale, type UiLocale } from "@/lib/ui/copy";
 import {
   DEFAULT_HARU_BINDINGS,
   OFFICIAL_CUBISM_CORE_URL,
@@ -13,7 +13,7 @@ import type {
 } from "./types";
 import { isStageBackground } from "./types";
 
-type BrowserStorage = Pick<
+export type BrowserStorage = Pick<
   Storage,
   "getItem" | "setItem" | "removeItem"
 >;
@@ -292,5 +292,22 @@ export class LocalPreferencesStore implements PreferencesStore {
   private getStorage(): BrowserStorage | null {
     if (this.storage) return this.storage;
     return typeof window === "undefined" ? null : window.localStorage;
+  }
+}
+
+/**
+ * The stored interface locale alone, for a surface that renders without the
+ * workspace and its stores: the two fatal error pages. Reading can fail before
+ * it reaches the store at all, because a hardened browser throws on
+ * `window.localStorage` itself, so this answers with the app's default instead
+ * of propagating that: nothing whose job is to report a failure may fail while
+ * reporting one.
+ */
+export function readStoredUiLocale(storage?: BrowserStorage): UiLocale {
+  try {
+    const stored = new LocalPreferencesStore(storage).load().uiLocale;
+    return isUiLocale(stored) ? stored : DEFAULT_PREFERENCES.uiLocale;
+  } catch {
+    return DEFAULT_PREFERENCES.uiLocale;
   }
 }

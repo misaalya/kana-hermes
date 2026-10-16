@@ -32,6 +32,9 @@ const eslintConfig = defineConfig([
     "auth-reference/**",
     // Gitignored study checkouts of other projects (see .gitignore).
     ".study/**",
+    // The gitignored local security assessment's cloned tooling (see
+    // .gitignore). It is not Kana code and has never been linted from here.
+    "security-audit/**",
   ]),
 ]);
 
