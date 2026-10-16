@@ -1325,14 +1325,6 @@ export class HermesAgentClient implements AgentClient {
     return relayRpc<T>(method, params, timeoutMs);
   }
 
-  private parseFrame(raw: unknown): HermesJsonRpcFrame | null {
-    try {
-      return JSON.parse(typeof raw === "string" ? raw : String(raw)) as HermesJsonRpcFrame;
-    } catch {
-      return null;
-    }
-  }
-
   private handleFrame(frame: HermesJsonRpcFrame): void {
     if (frame.method === "event" && frame.params) {
       this.handleGatewayEvent(frame.params);

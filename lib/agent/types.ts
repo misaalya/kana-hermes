@@ -38,12 +38,6 @@ export type AgentHistoryRow = {
   context?: string;
 };
 
-export type AgentInputRequestKind =
-  | "approval"
-  | "clarification"
-  | "sudo"
-  | "secret";
-
 export type ClarificationQuestion = {
   /** Stable wire id (Hermes `qid`, e.g. "q0"). */
   qid: string;

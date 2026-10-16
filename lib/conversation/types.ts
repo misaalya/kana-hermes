@@ -50,15 +50,6 @@ export type CreateConversationInput = {
   title?: string;
 };
 
-export interface ConversationStore {
-  list(): Promise<Conversation[]>;
-  get(id: string): Promise<Conversation | null>;
-  create(input: CreateConversationInput): Promise<Conversation>;
-  save(conversation: Conversation): Promise<void>;
-  rename(id: string, title: string): Promise<Conversation | null>;
-  delete(id: string): Promise<void>;
-}
-
 export function createId(prefix: string): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return `${prefix}-${crypto.randomUUID()}`;

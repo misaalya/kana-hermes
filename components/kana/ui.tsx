@@ -9,21 +9,12 @@ export const btnSecondary =
 export const btnGhost =
   "kana-focus inline-flex min-h-9 items-center justify-center gap-1.5 rounded-full px-3 text-xs font-bold text-muted transition-colors hover:bg-surface-strong hover:text-ink disabled:cursor-not-allowed disabled:opacity-40";
 
-export const btnDangerGhost =
-  "kana-focus inline-flex min-h-9 items-center justify-center gap-1.5 rounded-full px-3 text-xs font-bold text-muted transition-colors hover:bg-danger/10 hover:text-danger disabled:cursor-not-allowed disabled:opacity-40";
-
 export const inputBase =
   "kana-field min-h-10 w-full rounded-[20px] px-4 py-2 text-[13px] font-medium";
 
 export const bentoCard = "rounded-[28px] border-2 border-line bg-surface p-4";
 
-export const chipBase =
-  "kana-focus inline-flex min-h-9 items-center rounded-full border-2 px-3.5 text-xs font-bold transition-colors";
-
 export const fieldLabel = "text-[11.5px] font-extrabold text-muted";
-
-export const sectionEyebrow =
-  "text-[10px] font-bold tracking-[0.16em] text-muted uppercase";
 
 export function Toggle({
   checked,

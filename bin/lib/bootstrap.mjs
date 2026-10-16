@@ -1,7 +1,7 @@
 // First-start state that must exist before the server spawns.
 
 import { randomBytes } from "node:crypto";
-import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { configPath, defaultConfig } from "./context.mjs";
 
@@ -61,19 +61,4 @@ export async function ensureSessionSecret(dataRoot) {
 
 export async function sessionSecretReady(dataRoot) {
   return Boolean(process.env.KANA_JWT_SECRET?.trim()) || validSessionSecret(`${dataRoot}/jwt-secret`);
-}
-
-/** Atomically merge a change into config.json. */
-export async function updateConfig(dataRoot, transform) {
-  const file = await ensureConfigFile(dataRoot);
-  const current = JSON.parse(await readFile(file, "utf8"));
-  if (!current || typeof current !== "object" || Array.isArray(current)) {
-    throw new Error(`${file} must contain a JSON object.`);
-  }
-  const temporary = `${file}.tmp-${process.pid}`;
-  await writeFile(temporary, `${JSON.stringify(transform(current), null, 2)}\n`, {
-    encoding: "utf8",
-    mode: 0o600,
-  });
-  await rename(temporary, file);
 }

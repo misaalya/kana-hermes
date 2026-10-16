@@ -2,8 +2,6 @@
 // spinners, and prompts. Dependency-free and degrades cleanly for pipes,
 // NO_COLOR, TERM=dumb, and systemd journals.
 
-import readline from "node:readline/promises";
-
 const env = process.env;
 const stdout = process.stdout;
 const stderr = process.stderr;
@@ -244,18 +242,6 @@ export function promptSecret(question) {
     }
     if (!settled) input.resume();
   });
-}
-
-export async function promptConfirm(question, defaultValue = false) {
-  if (!canPrompt()) return defaultValue;
-  const prompt = readline.createInterface({ input: process.stdin, output: stdout });
-  try {
-    const hint = style.dim(defaultValue ? "[Y/n]" : "[y/N]");
-    const answer = (await prompt.question(`  ${style.accent(symbols.pointer)} ${question} ${hint} `)).trim();
-    return answer ? /^y(es)?$/i.test(answer) : defaultValue;
-  } finally {
-    prompt.close();
-  }
 }
 
 /** The first line of piped standard input (for non-interactive automation). */
