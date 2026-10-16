@@ -5,7 +5,7 @@
 **File konfigurasi:** `config.json` di folder data Kana. Lokasi pada instalasi ini:
 
 ```kana-config-path
-~/.local/share/kana/config.json
+~/.kana/config.json
 ```
 
 **Membuka file:** jalankan `kana config`, atau `npm run config` dari kode sumber. Apabila file belum ada, Kana membuatnya terlebih dahulu; file yang sudah ada tidak pernah ditimpa. File dibuka dengan editor pada variabel `VISUAL` atau `EDITOR`. Apabila keduanya tidak diatur, Kana hanya menampilkan lokasi file.
@@ -227,7 +227,7 @@ Ditujukan untuk pemasangan di server. Variabel ditetapkan pada lingkungan yang m
 
 | Variabel | Keterangan |
 | --- | --- |
-| `KANA_DATA_DIR` | Folder data Kana, termasuk `config.json` dan mesin suara. Apabila kosong, Kana menggunakan `$XDG_DATA_HOME/kana`, kemudian `~/.local/share/kana`. |
+| `KANA_DATA_DIR` | Folder data Kana, termasuk `config.json` dan mesin suara. Apabila kosong, Kana menggunakan `~/.kana`; data dari rilis sebelumnya (`$XDG_DATA_HOME/kana`, `~/.local/share/kana`) dipindahkan ke sana pada start berikutnya. |
 | `KANA_PORT` | Port halaman web Kana. Nilai bawaannya `3000`, setara dengan opsi `kana --port`. |
 | `KANA_DEPLOYMENT_MODE` | `local` atau `deployment`; menggantikan `deployment.mode`. |
 | `KANA_HERMES_BIN` | Path program Hermes; menggantikan `hermes.executable`. |

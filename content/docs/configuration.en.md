@@ -5,7 +5,7 @@
 **Config file:** `config.json` in Kana's data folder. On this installation:
 
 ```kana-config-path
-~/.local/share/kana/config.json
+~/.kana/config.json
 ```
 
 **Open it:** run `kana config`, or `npm run config` from a source checkout. The command creates the file if it does not exist (an existing file is never overwritten) and opens it in the editor set in `VISUAL` or `EDITOR`. When neither is set, it prints the file's location instead.
@@ -227,7 +227,7 @@ For server installations. Set these in the environment that runs `kana`, not in 
 
 | Variable | Description |
 | --- | --- |
-| `KANA_DATA_DIR` | Kana's data folder, which holds `config.json` and the voice engine. When unset, Kana uses `$XDG_DATA_HOME/kana`, then `~/.local/share/kana`. |
+| `KANA_DATA_DIR` | Kana's data folder, which holds `config.json` and the voice engine. When unset, Kana uses `~/.kana`; data from an earlier release (`$XDG_DATA_HOME/kana`, `~/.local/share/kana`) is moved there on the next start. |
 | `KANA_PORT` | Port for Kana's web page. Defaults to `3000`; equivalent to `kana --port`. |
 | `KANA_DEPLOYMENT_MODE` | `local` or `deployment`. Overrides `deployment.mode`. |
 | `KANA_HERMES_BIN` | Path to the Hermes program. Overrides `hermes.executable`. |

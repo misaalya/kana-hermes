@@ -4,7 +4,7 @@
 
 import { parseArgs } from "node:util";
 import { doctor, openConfig, password, setup } from "./lib/commands.mjs";
-import { manifest, resolveDataRoot } from "./lib/context.mjs";
+import { manifest, prepareDataRoot } from "./lib/context.mjs";
 import { LauncherError } from "./lib/errors.mjs";
 import { runServer } from "./lib/server.mjs";
 import { print, printError, PromptCancelledError, style, symbols } from "./lib/ui.mjs";
@@ -49,7 +49,7 @@ function help() {
     print(`  ${flags.padEnd(optionWidth)}${description}`);
   }
   print();
-  print(style.dim("  Data lives in $KANA_DATA_DIR, $XDG_DATA_HOME/kana, or ~/.local/share/kana."));
+  print(style.dim("  Data lives in $KANA_DATA_DIR or ~/.kana; an earlier install is moved there."));
   print();
 }
 
@@ -95,7 +95,7 @@ async function main() {
     throw new LauncherError(`Unknown command: ${command}`, "Run `kana --help` for usage.");
   }
 
-  const dataRoot = resolveDataRoot();
+  const dataRoot = prepareDataRoot();
   switch (command) {
     case "start":
     case "serve": {

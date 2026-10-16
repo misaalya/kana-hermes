@@ -4,7 +4,11 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolveKanaDataDirFrom } from "../../shared/data-dir.mjs";
+import {
+  kanaLegacyDataDirsFrom,
+  migrateKanaDataRoot,
+  resolveKanaDataDirFrom,
+} from "../../shared/data-dir.mjs";
 
 export const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 export const manifest = JSON.parse(readFileSync(path.join(packageRoot, "package.json"), "utf8"));
@@ -40,12 +44,54 @@ export const defaultConfig = JSON.parse(
   readFileSync(path.join(packageRoot, "config", "default-config.json"), "utf8"),
 );
 
-export function resolveDataRoot(env = process.env) {
-  return resolveKanaDataDirFrom({
-    kanaDataDir: env.KANA_DATA_DIR,
+/**
+ * Roots an earlier release wrote into, for this machine. Empty when
+ * KANA_DATA_DIR names a root: that root belongs to the operator, so nothing is
+ * ever moved into or out of it.
+ */
+export function legacyDataRoots(env = process.env) {
+  if (env.KANA_DATA_DIR?.trim()) return [];
+  return kanaLegacyDataDirsFrom({
+    home: userHome,
     xdgDataHome: env.XDG_DATA_HOME,
+    cwd: process.cwd(),
+  });
+}
+
+let preparedDataRoot = null;
+
+/**
+ * The data root, after moving an earlier install's files into it once. A
+ * release that moved Kana's data must not leave the user's password hash,
+ * conversations, voice library, or voice engine behind in the old location.
+ */
+export function prepareDataRoot(env = process.env) {
+  if (preparedDataRoot) return preparedDataRoot;
+  const dataRoot = resolveKanaDataDirFrom({
+    kanaDataDir: env.KANA_DATA_DIR,
     home: userHome,
   });
+  const legacyDirs = legacyDataRoots(env);
+  if (legacyDirs.length) {
+    try {
+      migrateKanaDataRoot({
+        targetDir: dataRoot,
+        legacyDirs,
+        log: (name, fromDir) => {
+          console.info(`[kana] Moved ${name} from ${fromDir} into ${dataRoot}.`);
+        },
+        warn: (name, fromDir, error) => {
+          const message = error instanceof Error ? error.message : String(error);
+          console.warn(`[kana] Could not move ${name} from ${fromDir} into ${dataRoot}: ${message}`);
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[kana] Could not move an earlier data root into ${dataRoot}: ${message}`);
+    }
+  }
+  preparedDataRoot = dataRoot;
+  return dataRoot;
 }
 
 export function configPath(dataRoot) {

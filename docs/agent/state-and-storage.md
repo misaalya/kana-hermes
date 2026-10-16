@@ -57,12 +57,15 @@ treat either as a second copy of history.
 ## Server state
 
 One data root holds every server file. `lib/server/data-dir.ts` resolves it in
-this order: `KANA_DATA_DIR` (must be absolute) -> `$XDG_DATA_HOME/kana` ->
-`$HOME/.local/share/kana`. An explicit but invalid root, or any failure in
-production, throws; only an unset root in development falls back to
-`$CWD/data`. Legacy files from `$CWD/data` and `$HOME/.kana` are adopted once,
-without overwriting, for `appstate.db`, `activities.db`, `jwt-secret`, and
-`auth.json` (a bcrypt `auth.json` hash is verified and upgraded in place).
+this order: `KANA_DATA_DIR` (must be absolute) -> `$HOME/.kana`. An explicit but
+invalid root, or any failure in production, throws; only an unset root in
+development falls back to `$CWD/data`. Roots earlier releases wrote into
+(`$XDG_DATA_HOME/kana`, `$HOME/.local/share/kana`, `$CWD/data`) are moved into
+the resolved root on the first start, without overwriting, one file at a time,
+and only when Kana resolved its own default root: an operator-set
+`KANA_DATA_DIR` is used as-is. `adoptLegacyKanaFile` remains the per-file
+fallback for `appstate.db`, `activities.db`, `jwt-secret`, and `auth.json` (a
+bcrypt `auth.json` hash is verified and upgraded in place).
 
 | Path under the data root | Holds |
 | --- | --- |

@@ -2,7 +2,7 @@
 
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { userHome } from "./context.mjs";
+import { legacyDataRoots } from "./context.mjs";
 import { LauncherError } from "./errors.mjs";
 import {
   canPrompt,
@@ -45,17 +45,22 @@ async function databaseHasPassword(file) {
 }
 
 /**
- * True when the server will find a password. Earlier releases kept the hash
- * in auth.json or under ~/.kana; the server adopts those on first use, so
- * they count as configured too.
+ * True when the server will find a password. Earlier releases kept the hash in
+ * auth.json, or in a data root this release moves into the resolved one; both
+ * count as configured. With an operator-set KANA_DATA_DIR nothing is moved, so
+ * those roots are ignored.
  */
 export async function isPasswordConfigured(dataRoot) {
-  const legacyRoot = path.join(userHome, ".kana");
-  if ([dataRoot, legacyRoot].some((root) => existsSync(path.join(root, "auth.json")))) return true;
+  if (existsSync(path.join(dataRoot, "auth.json"))) return true;
   const current = path.join(dataRoot, "appstate.db");
   if (existsSync(current)) return databaseHasPassword(current);
-  const legacy = path.join(legacyRoot, "appstate.db");
-  return legacyRoot !== dataRoot && existsSync(legacy) ? databaseHasPassword(legacy) : false;
+  for (const legacyRoot of legacyDataRoots()) {
+    if (legacyRoot === dataRoot) continue;
+    if (existsSync(path.join(legacyRoot, "auth.json"))) return true;
+    const legacy = path.join(legacyRoot, "appstate.db");
+    if (existsSync(legacy) && (await databaseHasPassword(legacy))) return true;
+  }
+  return false;
 }
 
 async function storePassword(dataRoot, password) {

@@ -113,9 +113,9 @@ a new token or port, Kana re-discovers it on the next failed connection.
 
 Kana keeps all server-side files (`auth.password`, the session secret, and
 `activities.db`) in one data directory resolved as `KANA_DATA_DIR` →
-`$XDG_DATA_HOME/kana` → `~/.local/share/kana`. Legacy roots (`./data`,
-`~/.kana`, and `auth.json`) are adopted on first use. Never run a production
-Kana without an explicit data directory.
+`~/.kana`. Files from earlier roots (`$XDG_DATA_HOME/kana`,
+`~/.local/share/kana`, `./data`) are moved into it on the first start. Never run
+a production Kana without an explicit data directory.
 
 1. Run Kana under the Linux account that owns Hermes (see above) and give it a
    persistent data directory:
