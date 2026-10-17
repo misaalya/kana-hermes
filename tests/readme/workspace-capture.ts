@@ -468,6 +468,44 @@ export async function openSlashMenu(page: Page): Promise<void> {
   await expect(menu.getByText("Session", { exact: true })).toHaveCount(0);
 }
 
+/**
+ * Opens Settings on the Avatar pane in the state the README shows: the avatar
+ * visible, Haru chosen on the Seigaiha stage, and a portrait in both cards. A
+ * portrait is taken from the stage the first time an avatar is shown, so Mao
+ * gets one visit before the frame is taken.
+ */
+export async function openAvatarSettings(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "Open settings" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog
+    .getByRole("button", { name: /^Avatar(?: Avatar and stage)?$/ })
+    .click();
+  const haru = dialog.getByRole("radio", { name: "Haru" });
+  const mao = dialog.getByRole("radio", { name: "Mao" });
+  await expect(haru).toBeVisible();
+  // Mao has never been on the stage in this browser, so its card holds the
+  // placeholder until the visit below takes its portrait.
+  await mao.click();
+  await expect(mao.locator("img")).toBeVisible({ timeout: 120_000 });
+  await haru.click();
+  await expect(haru.locator("img")).toBeVisible({ timeout: 120_000 });
+  // The frame is honest only once it shows the state a reader gets.
+  await expect(haru).toHaveAttribute("aria-checked", "true");
+  await expect(
+    dialog.getByRole("switch", { name: "Show avatar" }),
+  ).toHaveAttribute("aria-checked", "true");
+  await expect(
+    dialog.getByRole("radio", { name: "Seigaiha" }),
+  ).toHaveAttribute("aria-checked", "true");
+  // Each click queues a preference save; a frame taken mid-save would show the
+  // "Saving…" hint instead of the settled state a reader sees.
+  await expect(dialog.getByText("Saved automatically")).toBeVisible({
+    timeout: 30_000,
+  });
+  // The dialog's entrance animation settles before the frame is taken.
+  await page.waitForTimeout(600);
+}
+
 /** Turns the avatar off exactly as Settings offers it. */
 export async function hideAvatarFromSettings(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Open settings" }).click();

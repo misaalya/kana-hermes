@@ -76,7 +76,7 @@ release is moved there automatically on the next `kana` run.
   </tr>
   <tr>
     <td width="50%"><img src=".github/readme/slash-commands-v5.jpg" alt="The slash menu completing /re with Kana's /restart and Hermes's /retry, /refine, /reasoning, and /reload"></td>
-    <td width="50%"><img src=".github/readme/settings-avatar-v4.png" alt="Settings, Avatar: Haru and Mao as portrait cards, an Import Live2D card, and a grid of stage backgrounds"></td>
+    <td width="50%"><img src=".github/readme/settings-avatar-v5.png" alt="Settings, Avatar: the Show avatar switch on, Haru and Mao as portrait cards with Haru selected, an Import Live2D card, and a grid of stage backgrounds"></td>
   </tr>
   <tr>
     <td align="center"><sub>Hermes slash commands, read live from your installation</sub></td>
