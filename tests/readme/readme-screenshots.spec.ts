@@ -7,6 +7,7 @@ import {
   desktopContextOptions,
   expectWorkspaceReady,
   hideAvatarFromSettings,
+  openAvatarSettings,
   openSlashMenu,
   openWorkspace,
   phoneContextOptions,
@@ -64,6 +65,16 @@ test("desktop: the slash menu", async ({ page }) => {
   await page.screenshot({
     path: path.join(README_DIR, "slash-commands-v5.jpg"),
     ...JPEG,
+  });
+});
+
+test("desktop: the avatar settings", async ({ page }) => {
+  await openWorkspace(page);
+  await sendReadmeConversation(page);
+  await expectWorkspaceReady(page, { avatarVisible: true });
+  await openAvatarSettings(page);
+  await page.screenshot({
+    path: path.join(README_DIR, "settings-avatar-v5.png"),
   });
 });
 
