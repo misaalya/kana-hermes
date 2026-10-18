@@ -1,5 +1,177 @@
 # Changelog
 
+## 0.5.0 — 2026-10-19
+
+### Added
+
+- Kana tells you when a newer version is published. A notice in the workspace
+  corner reads "New Version Available"; both versions and the install command
+  live in its tooltip. Copying it opens the manual-update dialog, so Kana never
+  stops before you really hold the command, and Copy & Shutdown ends the relay
+  streams first and then this process, which a supervisor can restart. Kana runs
+  nothing itself, and the corner notices share one wrapper so the
+  degraded-service banner and the update notice stack instead of painting over
+  each other. The registry is read on the server, at most once an hour per
+  process, and a failed lookup is retried after five minutes instead of being
+  cached as "no update".
+- A conversation can run without the avatar. Settings → Avatar opens with the
+  one row "Show avatar"; off keeps the room's pattern as the wallpaper and gives
+  the conversation a centred 720px column on a desktop, while a phone keeps its
+  full-bleed chat. The avatar layer is hidden rather than removed, so the WebGL
+  runtime and the loaded model survive; the chat can no longer be hidden while
+  the avatar is off, and Kana's first-run greeting still shows the stage. The
+  avatar library, its import, and the model licence wait for the avatar to be
+  on, so nothing loads a model list that cannot be used.
+- Every message carries a copy button below its bubble: a reply on the left where
+  the reply starts, your own message on the right beside its timestamp. A reply
+  keeps its button on screen; your own message keeps it quiet on a device with a
+  pointer until that message is hovered or keyboard-focused, while a touch
+  screen, which can never point, keeps it visible. A reply copies the words on
+  screen, so the `MEDIA:` links that became a player or download buttons are
+  stripped before the clipboard sees them, and a refused clipboard selects the
+  text instead of claiming the copy happened.
+- On a desktop the composer recalls what this conversation has already sent:
+  ArrowUp walks back through the prompts and ArrowDown walks forward, keeping the
+  draft you were typing and putting it back after the newest prompt. Typing ends
+  the walk. A phone, and a caret that still has a line to move to, keep the arrow
+  keys for the caret.
+- Enter runs the command Hermes already matched. `complete.slash` returns the
+  nearest name for a typed fragment, so `/codex-run` is confirmed and sent as
+  `/codex-runtime` instead of reaching Hermes as an unknown command. A name that
+  is itself a suggestion is never rewritten, so a destructive confirmation always
+  names the command that runs; only the name is substituted, never a completion's
+  argument fallback, and the transcript shows what actually ran.
+- Hermes 0.21 is answered in its own shape. `clarify.request` arrives as
+  `{questions: [{qid, ...}]}` in 0.21 and flat in 0.20; Kana parses both, answers
+  a batch with one `clarify.respond` per question, handles `clarify.expire`, and
+  replays `pending_clarify` from `session.resume`. The dialog shows one to five
+  questions with single or multiple choice and free text, picks a choice with a
+  letter key, submits a typed answer with Ctrl/Cmd+Enter, waits for at least one
+  answer before Send, and keeps its footer in view instead of asking you to
+  scroll for it.
+- A blocking dialog survives a refresh. Hermes 0.21 replays `pending_approval`
+  and `pending_clarify`, but a sudo or secret prompt has no server-side replay,
+  so Kana falls back to its own per-session memory of the request and the agent
+  is no longer stranded until its timeout with nothing to answer. Only request
+  metadata is remembered, never an answer, a password, or a secret value; a
+  remembered request is dropped when the turn ends, when it is answered, or when
+  it expires. An answer Hermes reports as `expired` surfaces as a failure.
+
+### Changed
+
+- The server's files moved into one dot directory beside the other agent tools
+  you install: `KANA_DATA_DIR` when it is set, otherwise `~/.kana`. Earlier roots
+  are moved in on the first start; the migration notes below carry the detail.
+- The approval dialog uses the clarify dialog's shell: a square panel whose
+  header, body, and footer stay put while the command scrolls between them, with
+  the command on the dark code block Kana already uses in the config guide, where
+  the markers for hidden characters stay legible in both themes. Phone answers
+  pair two by two, Deny stays its own icon at the right edge, the lasting
+  approving answer fills what Deny leaves, and Enter runs the command once the
+  dialog is armed.
+- The chat is readable on a phone: the reply is 13px, the same size as on a
+  desktop, the timestamp 10px, and the Hermes note row steps up with it.
+- Settings → Connection shows Hermes as one status card: the state as a pill, the
+  port beneath it, and the single action that fits the current state, with the
+  explanations in the pill's tooltip instead of a row of prose. Restart and stop
+  ask once before acting, a Hermes Kana only adopted reads "Not managed by Kana",
+  and a start or stop in flight is followed until it settles.
+- Smaller corrections: the assistant status line sits under the typing bubble
+  instead of beside it, the composer's send button uses the requested arrow, the
+  model chip carries the model glyph and a real chevron, a tapped header tab no
+  longer looks open on a phone, and the phone avatar fades between its sizes
+  instead of stretching between them.
+- `docs/` is now a map plus agent guides, operator guides, numbered decisions,
+  and local evidence, and every document opens with what it is for and the files
+  that decide its behaviour; `AGENTS.md` routes into it and keeps only the rules,
+  contracts, and procedures that must not drift. The README's screenshots come
+  from `npm run screenshots:readme`, which drives the real UI against a stand-in
+  Hermes, and the "Why Kana" section is gone so the README opens on a working
+  Quick start.
+
+### Fixed
+
+- Both fatal pages were drawn with classes that no stylesheet defined, so a
+  failure was reported on an unstyled page that also promised safe diagnostics no
+  surface offered. They now use Kana's own vocabulary, follow the stored theme
+  and locale, and ask Next.js to `retry` the segment rather than merely
+  re-rendering it.
+- A Next dist directory that `.gitignore` did not name could leave Tailwind
+  reading Turbopack's cache, where a class name sitting on a blob boundary comes
+  back with control bytes inside it and fails the whole stylesheet build, taking
+  every page down with it. `.gitignore` and the `@source not` rule now cover the
+  `.next*` family together.
+- The phone avatar canvas resized inside `requestAnimationFrame`, so one frame
+  could paint the grown stage with the old backing store stretched over it and
+  read as a blurred avatar; the resize now runs in the `ResizeObserver` callback,
+  before paint. The fade that hid the stretch is gone with it.
+- The phone's avatar layout panel no longer appears over a half-faded chat, and
+  it no longer fades under reduced motion.
+- The hand-written `:hover` rules now live inside `@media (hover: hover)`, so a
+  phone, which keeps `:hover` on whatever was tapped, no longer draws a closed
+  header tab as if it were open.
+
+### Security
+
+- A fatal error page copies only a redacted snapshot of the failure: the route
+  without its query values, the redacted error name and message, and the digest.
+  Nothing from the workspace stores is included, because those are exactly what
+  failed to load, and a refused clipboard write shows the snapshot in a
+  selectable block instead of failing silently.
+- Moving a user's files has no undo, so the whole-root migration accepts a
+  directory as an earlier Kana root only when it holds `appstate.db`,
+  `activities.db`, `jwt-secret`, `voices/`, or `irodori/` — files Kana itself
+  writes. `config.json` and `auth.json` alone no longer qualify a directory, so
+  an unrelated project folder is never taken for Kana's root.
+
+### Removed
+
+- The tracked local debug server (`scripts/debug-server.mjs`); that work is now
+  the dev server against an isolated dist directory.
+- `PLAN.md` and the two local release-evidence files leave the tracked tree.
+  Every command around that evidence still works on a checkout that has none: the
+  dogfood recorder writes the first journal when it is missing, and a gate names
+  the command or document that produces an absent file instead of failing on a
+  bare `ENOENT`.
+- Eleven exports with no caller, eight copy keys with no caller in either locale,
+  and CSS that declared variables pointing at keyframes that do not exist.
+
+### Migration notes
+
+- The data root resolves as `KANA_DATA_DIR` when it is set, otherwise `~/.kana`.
+  The 0.4.x line resolved `$XDG_DATA_HOME/kana` first and `~/.local/share/kana`
+  last, which kept Kana's password hash, settings, voice library, and voice
+  engine under a path the user never chose. The first start of 0.5.0 moves what
+  an earlier root holds into the resolved root: `config.json`, `auth.json`,
+  `jwt-secret`, `appstate.db`, `activities.db`, the `voices/` library, and an
+  engine under `irodori/`. A file already in the target wins, the newest copy
+  wins when two earlier roots hold a name, a database moves with its journal
+  files, and a directory moves whole.
+- The move runs once per process — in the launcher before any command and in the
+  server on first store access — and never throws, because a legacy root another
+  account owns must not block a start. It happens only when Kana resolved its own
+  default root, so an operator-set `KANA_DATA_DIR` is used as it is and a test or
+  capture run pointed at a temporary directory cannot touch your own install.
+- Accepted cost: an install whose earlier root holds nothing but `config.json` is
+  left where it is and receives a fresh default. A password survives either way,
+  because the per-file adoption of `auth.json` is not gated by recognition.
+  `docs/decisions/0003-data-root.md` records the reasoning.
+
+### Known limitations
+
+- Field validation is incomplete and is published as it stands. The dogfood
+  journal has 0 of 7 recorded days and 6 of 13 required matrix cases pending —
+  `hermes-only`, `hermes-local-voice`, `custom-live2d-model-a`,
+  `custom-live2d-model-b`, `hermes-restart-active`, and
+  `voice-cancel-and-replay` — so this release makes no extended-compatibility
+  claim.
+- Hermes 0.21's batch clarify and its replayed pending input are implemented from
+  its documented protocol. The tested baseline is Hermes 0.20.1, and no 0.21
+  install has validated them here.
+- Local speech latency on small CPUs, the opt-in sentence delivery, and the
+  browser-local avatar packages and preferences are unchanged; the supported
+  environment document carries the measured numbers.
+
 ## 0.4.1 — 2026-09-26
 
 ### Security
