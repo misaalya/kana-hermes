@@ -12,6 +12,14 @@ import {
 // lookup is retried after a short wait instead of being cached as "no update".
 // The clock and the lookup are injected so neither policy costs a real hour.
 
+// `readUpdateStatus` compares the answer with the app version in package.json,
+// so a fixture standing for "a newer release" must stay newer than the running
+// version. These names sit above any release the repository could be at: a low
+// fixture would become "the same version" on the day the app reached it and
+// turn an expected update into "no update".
+const PUBLISHED_RELEASE = "9.9.9";
+const LATER_PUBLISHED_RELEASE = "9.9.10";
+
 type Harness = {
   dependencies: UpdateStatusDependencies;
   /** Answers the next lookup returns, one per call. */
@@ -50,34 +58,34 @@ beforeEach(() => {
 describe("update status cache", () => {
   it("asks the registry once and serves the cached answer for an hour", async () => {
     const h = harness();
-    h.setAnswers("0.5.0", "9.9.9");
+    h.setAnswers(PUBLISHED_RELEASE, LATER_PUBLISHED_RELEASE);
 
     const first = await readUpdateStatus(h.dependencies);
-    assert.equal(first.update?.latestVersion, "0.5.0");
+    assert.equal(first.update?.latestVersion, PUBLISHED_RELEASE);
     assert.equal(first.update?.installCommand, "npm i -g kana-alya@latest");
     assert.equal(h.lookups(), 1);
 
     // Still fresh: the second answer is never fetched.
     h.advance(CACHE_TTL_MS - 1);
     const cached = await readUpdateStatus(h.dependencies);
-    assert.equal(cached.update?.latestVersion, "0.5.0");
+    assert.equal(cached.update?.latestVersion, PUBLISHED_RELEASE);
     assert.equal(h.lookups(), 1);
   });
 
   it("re-reads the registry once the successful answer expires", async () => {
     const h = harness();
-    h.setAnswers("0.5.0", "0.6.0");
+    h.setAnswers(PUBLISHED_RELEASE, LATER_PUBLISHED_RELEASE);
     await readUpdateStatus(h.dependencies);
 
     h.advance(CACHE_TTL_MS);
     const refreshed = await readUpdateStatus(h.dependencies);
-    assert.equal(refreshed.update?.latestVersion, "0.6.0");
+    assert.equal(refreshed.update?.latestVersion, LATER_PUBLISHED_RELEASE);
     assert.equal(h.lookups(), 2);
   });
 
   it("retries a failed lookup after the short wait, not after an hour", async () => {
     const h = harness();
-    h.setAnswers(null, "0.5.0");
+    h.setAnswers(null, PUBLISHED_RELEASE);
 
     const failed = await readUpdateStatus(h.dependencies);
     assert.equal(failed.update, null);
@@ -92,21 +100,21 @@ describe("update status cache", () => {
     // not hide a release for a whole hour.
     h.advance(1);
     const recovered = await readUpdateStatus(h.dependencies);
-    assert.equal(recovered.update?.latestVersion, "0.5.0");
+    assert.equal(recovered.update?.latestVersion, PUBLISHED_RELEASE);
     assert.equal(h.lookups(), 2);
   });
 
   it("shares one request between concurrent callers", async () => {
     const h = harness();
-    h.setAnswers("0.5.0");
+    h.setAnswers(PUBLISHED_RELEASE);
     const [a, b, c] = await Promise.all([
       readUpdateStatus(h.dependencies),
       readUpdateStatus(h.dependencies),
       readUpdateStatus(h.dependencies),
     ]);
-    assert.equal(a.update?.latestVersion, "0.5.0");
-    assert.equal(b.update?.latestVersion, "0.5.0");
-    assert.equal(c.update?.latestVersion, "0.5.0");
+    assert.equal(a.update?.latestVersion, PUBLISHED_RELEASE);
+    assert.equal(b.update?.latestVersion, PUBLISHED_RELEASE);
+    assert.equal(c.update?.latestVersion, PUBLISHED_RELEASE);
     assert.equal(h.lookups(), 1);
   });
 
@@ -119,7 +127,7 @@ describe("update status cache", () => {
       fetchLatestVersion: async () => {
         lookups += 1;
         if (rejectNext) throw new Error("registry unreachable");
-        return "0.5.0";
+        return PUBLISHED_RELEASE;
       },
     };
 
@@ -135,13 +143,13 @@ describe("update status cache", () => {
     rejectNext = false;
     clock += RETRY_AFTER_FAILURE_MS;
     const recovered = await readUpdateStatus(dependencies);
-    assert.equal(recovered.update?.latestVersion, "0.5.0");
+    assert.equal(recovered.update?.latestVersion, PUBLISHED_RELEASE);
     assert.equal(lookups, 2);
   });
 
   it("reports the running version and the payload contract, with no duplicate", async () => {
     const h = harness();
-    h.setAnswers("0.5.0");
+    h.setAnswers(PUBLISHED_RELEASE);
     const status = await readUpdateStatus(h.dependencies);
     const app = (await import("@/package.json")).default;
     assert.equal(status.currentVersion, app.version);
