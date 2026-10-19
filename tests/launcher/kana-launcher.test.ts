@@ -27,6 +27,12 @@ function withFreshHome(
     run(
       {
         ...process.env,
+        // The assertions read the doctor's own text, and a caller that forces
+        // colour would put escape sequences inside that text: `node --test`
+        // sets FORCE_COLOR while it colorizes its reporter, and a real terminal
+        // does the same. NO_COLOR outranks FORCE_COLOR in the launcher, so the
+        // text these tests match is identical at a terminal and in a pipe.
+        NO_COLOR: "1",
         HOME: home,
         XDG_CONFIG_HOME: path.join(home, ".config"),
         XDG_DATA_HOME: path.join(home, ".local", "share"),
