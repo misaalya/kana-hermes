@@ -136,9 +136,13 @@ assets, and keep the data root outside it. The launcher sits next to
 `server.js`, so a deployment at `/opt/kana` runs with:
 
 ```bash
-KANA_DATA_DIR=/var/lib/kana node /opt/kana/bin/kana.mjs password
-KANA_DATA_DIR=/var/lib/kana node /opt/kana/bin/kana.mjs serve --port 3000
+node /opt/kana/bin/kana.mjs password
+node /opt/kana/bin/kana.mjs serve --port 3000
 ```
+
+The service account's data root is `~/.kana`, as in a desktop install. Set
+`KANA_DATA_DIR` to an absolute path the account can write only when the state
+should live elsewhere.
 
 The service and Nginx examples, the reverse-proxy headers, and the platform
 baseline are in `supported-environment.md`. To update either distribution path,

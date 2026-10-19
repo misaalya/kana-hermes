@@ -117,28 +117,28 @@ a new token or port, Kana re-discovers it on the next failed connection.
 Kana keeps all server-side files (`auth.password`, the session secret, and
 `activities.db`) in one data directory resolved as `KANA_DATA_DIR` →
 `~/.kana`. Files from earlier roots (`$XDG_DATA_HOME/kana`,
-`~/.local/share/kana`, `./data`) are moved into it on the first start. Never run
-a production Kana without an explicit data directory.
+`~/.local/share/kana`, `./data`) are moved into it on the first start.
 
-1. Run Kana under the Linux account that owns Hermes (see above) and give it a
-   persistent data directory:
+A service unit needs no second data root. Kana must run under the account that
+owns Hermes, because Linux only lets that user read the Hermes session token,
+and that account already has a home: `~/.kana` is its data root, exactly as on a
+desktop. Set `KANA_DATA_DIR` only when you deliberately want the state
+elsewhere, for example a dedicated volume; it must then be an absolute path the
+service account can write.
 
-   ```bash
-   sudo mkdir -p /var/lib/kana
-   sudo chown "$USER": /var/lib/kana
-   ```
+1. Run Kana under the Linux account that owns Hermes (see above).
 
-2. Configure the deployment mode and data root — systemd `Environment=` lines,
-   or an untracked `.env.production` next to the deployment:
+2. Configure the deployment mode — systemd `Environment=` lines, or an untracked
+   `.env.production` next to the deployment:
 
    ```bash
    KANA_DEPLOYMENT_MODE=deployment
-   KANA_DATA_DIR=/var/lib/kana
    AUTH_COOKIE_SECURE=true            # if nginx does not forward X-Forwarded-Proto
+   # KANA_DATA_DIR=/srv/kana          # only to move the state out of ~/.kana
    ```
 
    `KANA_JWT_SECRET` is optional; when omitted, Kana generates an owner-only
-   secret atomically under `KANA_DATA_DIR` and reuses it across restarts. An
+   secret atomically under the data directory and reuses it across restarts. An
    explicit value must contain at least 32 characters.
 
 3. Deploy the whole `.next/standalone` output (after `npm run package:local`) to
@@ -146,9 +146,9 @@ a production Kana without an explicit data directory.
    service account; Kana refuses to start without one and has no default:
 
    ```bash
-   KANA_DATA_DIR=/var/lib/kana node /opt/kana/bin/kana.mjs password
+   node /opt/kana/bin/kana.mjs password
    # npm package instead:
-   KANA_DATA_DIR=/var/lib/kana kana password
+   kana password
    # automation:
    printf '%s\n' "$PASSWORD" | kana password --stdin
    ```
@@ -164,7 +164,6 @@ a production Kana without an explicit data directory.
    User=your-user
    Group=your-user
    WorkingDirectory=/opt/kana
-   Environment=KANA_DATA_DIR=/var/lib/kana
    Environment=AUTH_COOKIE_SECURE=true
    ExecStart=/usr/bin/node /opt/kana/bin/kana.mjs serve --port 3000
    Restart=on-failure
@@ -173,10 +172,10 @@ a production Kana without an explicit data directory.
    WantedBy=multi-user.target
    ```
 
-   `kana serve` forces deployment mode, binds `127.0.0.1`, forwards
-   `KANA_DATA_DIR`, and passes the Hermes executable it found to the server. If
-   Kana came from npm, replace `ExecStart` with the absolute installed `kana`
-   path followed by `serve --port 3000`. Run one process per data root.
+   `kana serve` forces deployment mode, binds `127.0.0.1`, and passes the Hermes
+   executable it found to the server. If Kana came from npm, replace `ExecStart`
+   with the absolute installed `kana` path followed by `serve --port 3000`. Run
+   one process per data root.
 
 4. Nginx must preserve the public request metadata and allow long requests. The
    values below match Kana's code: the largest request body is 14 MiB
