@@ -103,3 +103,12 @@ reference/
 
 # Local study checkouts of other projects (never committed)
 /.study/
+
+# Local security assessment of the deployed instance: cloned tooling, raw
+# request evidence, and findings never belong in the repository.
+/security-audit/
+
+# Stray output from a mistyped shell redirect (e.g. `curl ... > 0`), which can
+# capture live session cookies or response bodies. A file literally named `0`
+# is never a source artifact.
+/0
