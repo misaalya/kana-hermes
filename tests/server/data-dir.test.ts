@@ -1,5 +1,14 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, describe, it } from "node:test";
@@ -11,7 +20,12 @@ import {
   resolveKanaDataDir,
   resolveKanaDataDirFrom,
 } from "@/lib/server/data-dir";
-import { kanaLegacyDataDirsFrom, looksLikeKanaDataRoot, migrateKanaDataRoot } from "@/shared/data-dir.mjs";
+import {
+  kanaLegacyDataDirsFrom,
+  looksLikeKanaDataRoot,
+  migrateKanaDataRoot,
+  planKanaDataRootMove,
+} from "@/shared/data-dir.mjs";
 
 after(() => {
   delete process.env[KANA_DATA_DIR_ENV];
@@ -323,5 +337,85 @@ describe("legacy data file migration", () => {
 
   it("reports no migration when no legacy file exists", () => {
     assert.equal(migrateLegacyKanaFile("missing.file", targetDir, [legacyHomeKana]), false);
+  });
+});
+
+describe("operator-run data root move", () => {
+  const root = mkdtempSync(path.join(tmpdir(), "kana-data-move-test-"));
+
+  after(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("plans a move with the size of every entry and changes nothing", () => {
+    const source = path.join(root, "plan", "source");
+    const target = path.join(root, "plan", "target");
+    mkdirSync(path.join(source, "voices"), { recursive: true });
+    writeFileSync(path.join(source, "jwt-secret"), "12345");
+    writeFileSync(path.join(source, "voices", "kana.wav"), "abc");
+
+    const plan = planKanaDataRootMove({ targetDir: target, legacyDirs: [source] });
+
+    assert.deepEqual(plan.move.map((entry) => entry.name).sort(), ["jwt-secret", "voices"]);
+    const voices = plan.move.find((entry) => entry.name === "voices");
+    assert.equal(voices?.directory, true);
+    assert.equal(voices?.files, 1);
+    assert.equal(voices?.bytes, 3);
+    assert.equal(existsSync(target), false);
+    assert.equal(existsSync(path.join(source, "jwt-secret")), true);
+  });
+
+  it("copies a root, verifies it, and leaves every source entry in place", () => {
+    const source = path.join(root, "copy", "source");
+    const target = path.join(root, "copy", "target");
+    mkdirSync(path.join(source, "voices"), { recursive: true });
+    writeFileSync(path.join(source, "jwt-secret"), "secret", { mode: 0o600 });
+    writeFileSync(path.join(source, "appstate.db"), "db");
+    writeFileSync(path.join(source, "appstate.db-wal"), "wal");
+    writeFileSync(path.join(source, "voices", "kana.wav"), "wav");
+
+    const copied = migrateKanaDataRoot({ targetDir: target, legacyDirs: [source], copyOnly: true });
+
+    assert.deepEqual(copied.sort(), ["appstate.db", "appstate.db-wal", "jwt-secret", "voices"]);
+    assert.equal(readFileSync(path.join(target, "jwt-secret"), "utf8"), "secret");
+    // A copied session secret must stay a secret.
+    assert.equal(statSync(path.join(target, "jwt-secret")).mode & 0o777, 0o600);
+    assert.equal(readFileSync(path.join(target, "voices", "kana.wav"), "utf8"), "wav");
+    // A copy never removes what it read: deleting a data root is a person's act.
+    for (const name of ["jwt-secret", "appstate.db", "appstate.db-wal", "voices"]) {
+      assert.equal(existsSync(path.join(source, name)), true, name);
+    }
+  });
+
+  it("reports a dry run without touching either root", () => {
+    const source = path.join(root, "dry", "source");
+    const target = path.join(root, "dry", "target");
+    mkdirSync(source, { recursive: true });
+    writeFileSync(path.join(source, "jwt-secret"), "secret");
+
+    assert.deepEqual(
+      migrateKanaDataRoot({ targetDir: target, legacyDirs: [source], dryRun: true }),
+      ["jwt-secret"],
+    );
+    assert.equal(existsSync(target), false);
+    assert.equal(existsSync(path.join(source, "jwt-secret")), true);
+  });
+
+  it("leaves a family the target already holds and reports why", () => {
+    const source = path.join(root, "held", "source");
+    const target = path.join(root, "held", "target");
+    mkdirSync(source, { recursive: true });
+    mkdirSync(target, { recursive: true });
+    writeFileSync(path.join(source, "appstate.db"), "old");
+    writeFileSync(path.join(target, "appstate.db"), "kept");
+
+    const skipped: string[] = [];
+    assert.deepEqual(
+      migrateKanaDataRoot({ targetDir: target, legacyDirs: [source], skip: (name) => skipped.push(name) }),
+      [],
+    );
+    assert.deepEqual(skipped, ["appstate.db"]);
+    assert.equal(readFileSync(path.join(target, "appstate.db"), "utf8"), "kept");
+    assert.equal(existsSync(path.join(source, "appstate.db")), true);
   });
 });

@@ -63,7 +63,10 @@ development falls back to `$CWD/data`. Roots earlier releases wrote into
 (`$XDG_DATA_HOME/kana`, `$HOME/.local/share/kana`, `$CWD/data`) are moved into
 the resolved root on the first start, without overwriting, one file at a time,
 and only when Kana resolved its own default root: an operator-set
-`KANA_DATA_DIR` is used as-is. A directory counts as an earlier root only when
+`KANA_DATA_DIR` is used as-is, and no start ever moves data into or out of it.
+`kana migrate` is the one command that moves such a root, on request: it copies
+and verifies by default, keeps the source, and never edits a systemd unit
+(`docs/decisions/0004-migrate-command.md`). A directory counts as an earlier root only when
 it holds a name only Kana writes (`appstate.db`, `activities.db`, `jwt-secret`,
 `voices/`, `irodori/`), never a bare `config.json` or `auth.json`, so a root that
 holds nothing else keeps its file and receives a fresh default `config.json`.

@@ -224,3 +224,145 @@ describe("npm launcher", () => {
     }
   });
 });
+
+describe("kana migrate", () => {
+  /** A data root shaped like a managed deployment: marker files, a WAL family, and a voice library. */
+  function managedRoot(home: string): string {
+    const managed = path.join(home, "srv-data");
+    mkdirSync(path.join(managed, "voices"), { recursive: true });
+    writeFileSync(path.join(managed, "jwt-secret"), "session-secret\n", { mode: 0o600 });
+    writeFileSync(path.join(managed, "appstate.db"), "db");
+    writeFileSync(path.join(managed, "appstate.db-wal"), "wal");
+    writeFileSync(path.join(managed, "voices", "kana.wav"), "wav");
+    return managed;
+  }
+
+  function run(args: string[], environment: NodeJS.ProcessEnv) {
+    return spawnSync(process.execPath, [launcher, ...args], {
+      cwd: root,
+      env: environment,
+      encoding: "utf8",
+    });
+  }
+
+  it("copies a managed root into ~/.kana, verifies every entry, and keeps the source", () => {
+    withFreshHome((environment, home) => {
+      const managed = managedRoot(home);
+      const result = run(["migrate", "--yes"], { ...environment, KANA_DATA_DIR: managed });
+
+      assert.equal(result.status, 0, result.stderr);
+      // The plan names every entry, with its size, before anything is written.
+      assert.match(result.stdout, /Entries\s+4\b/);
+      assert.match(result.stdout, /voices\s+1 file, 3 B/);
+      assert.match(result.stdout, /copied and verified/);
+      for (const name of ["jwt-secret", "appstate.db", "appstate.db-wal"]) {
+        assert.equal(existsSync(path.join(home, ".kana", name)), true, name);
+      }
+      assert.equal(existsSync(path.join(home, ".kana", "voices", "kana.wav")), true);
+      // A copied session secret must stay a secret.
+      assert.equal(statSync(path.join(home, ".kana", "jwt-secret")).mode & 0o777, 0o600);
+      // The copy leaves the source alone: deleting a data root is the operator's act.
+      assert.equal(existsSync(path.join(managed, "jwt-secret")), true);
+      assert.match(result.stdout, /unchanged; delete it yourself/);
+      // A systemd unit belongs to the operator, so Kana only says what to change.
+      assert.match(result.stdout, /KANA_DATA_DIR=/);
+    });
+  });
+
+  it("moves the entries and empties the source root with --delete-source", () => {
+    withFreshHome((environment, home) => {
+      const managed = managedRoot(home);
+      const result = run(["migrate", "--yes", "--delete-source"], {
+        ...environment,
+        KANA_DATA_DIR: managed,
+      });
+
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(result.stdout, /moved into/);
+      assert.equal(readFileSync(path.join(home, ".kana", "jwt-secret"), "utf8"), "session-secret\n");
+      assert.equal(readFileSync(path.join(home, ".kana", "appstate.db"), "utf8"), "db");
+      assert.equal(existsSync(path.join(home, ".kana", "appstate.db-wal")), true);
+      assert.equal(existsSync(managed), false);
+    });
+  });
+
+  it("lists the plan and changes nothing with --dry-run", () => {
+    withFreshHome((environment, home) => {
+      const managed = managedRoot(home);
+      const result = run(["migrate", "--dry-run"], { ...environment, KANA_DATA_DIR: managed });
+
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(result.stdout, /appstate\.db/);
+      assert.match(result.stdout, /Dry run: nothing was changed\./);
+      assert.equal(existsSync(path.join(home, ".kana")), false);
+      assert.equal(existsSync(path.join(managed, "jwt-secret")), true);
+    });
+  });
+
+  it("asks for a terminal or --yes before it moves anything", () => {
+    withFreshHome((environment, home) => {
+      const managed = managedRoot(home);
+      // spawnSync pipes both streams, so this start cannot prompt for agreement.
+      const result = run(["migrate"], { ...environment, KANA_DATA_DIR: managed });
+
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /interactive terminal/);
+      assert.match(result.stderr, /--yes/);
+      assert.equal(existsSync(path.join(home, ".kana")), false);
+    });
+  });
+
+  it("refuses a source Kana did not write, and --force takes it anyway", () => {
+    withFreshHome((environment, home) => {
+      const plain = path.join(home, "plain");
+      mkdirSync(plain, { recursive: true });
+      writeFileSync(path.join(plain, "notes.txt"), "not Kana's\n");
+
+      const refused = run(["migrate", "--from", plain, "--yes"], environment);
+      assert.equal(refused.status, 1);
+      assert.match(refused.stderr, /does not look like a Kana data root/);
+      assert.equal(existsSync(path.join(home, ".kana")), false);
+
+      const forced = run(["migrate", "--from", plain, "--force", "--yes"], environment);
+      assert.equal(forced.status, 0, forced.stderr);
+      assert.equal(readFileSync(path.join(home, ".kana", "notes.txt"), "utf8"), "not Kana's\n");
+    });
+  });
+
+  it("refuses a relative source, a missing source, and overlapping roots", () => {
+    withFreshHome((environment, home) => {
+      const managed = managedRoot(home);
+      const environmentWithRoot = { ...environment, KANA_DATA_DIR: managed };
+
+      const relative = run(["migrate", "--from", "relative/data", "--yes"], environmentWithRoot);
+      assert.equal(relative.status, 1);
+      assert.match(relative.stderr, /must be an absolute path/);
+
+      const missing = run(["migrate", "--from", path.join(home, "absent"), "--yes"], environmentWithRoot);
+      assert.equal(missing.status, 1);
+      assert.match(missing.stderr, /not a directory/);
+
+      const same = run(["migrate", "--to", managed, "--yes"], environmentWithRoot);
+      assert.equal(same.status, 1);
+      assert.match(same.stderr, /destination is the source/);
+
+      const inside = run(["migrate", "--to", path.join(managed, "inner"), "--yes"], environmentWithRoot);
+      assert.equal(inside.status, 1);
+      assert.match(inside.stderr, /overlap/);
+
+      // None of the refusals created a target or changed the source.
+      assert.equal(existsSync(path.join(home, ".kana")), false);
+      assert.equal(existsSync(path.join(managed, "jwt-secret")), true);
+    });
+  });
+
+  it("says the default root is already in use when there is nothing to name", () => {
+    withFreshHome((environment) => {
+      const result = run(["migrate", "--yes"], environment);
+
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /already uses the default data root/);
+      assert.match(result.stderr, /--from/);
+    });
+  });
+});

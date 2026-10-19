@@ -227,7 +227,7 @@ Ditujukan untuk pemasangan di server. Variabel ditetapkan pada lingkungan yang m
 
 | Variabel | Keterangan |
 | --- | --- |
-| `KANA_DATA_DIR` | Folder data Kana, termasuk `config.json` dan mesin suara. Apabila kosong, Kana menggunakan `~/.kana`; data dari rilis sebelumnya (`$XDG_DATA_HOME/kana`, `~/.local/share/kana`) dipindahkan ke sana pada start berikutnya. |
+| `KANA_DATA_DIR` | Folder data Kana, termasuk `config.json` dan mesin suara; harus berupa path absolut. Apabila kosong, Kana menggunakan `~/.kana`; data dari rilis sebelumnya (`$XDG_DATA_HOME/kana`, `~/.local/share/kana`) dipindahkan ke sana pada start berikutnya. Folder yang ditetapkan di sini tidak pernah dipindahkan oleh proses start: `kana migrate` menyalinnya ke `~/.kana` saat Anda memintanya. |
 | `KANA_PORT` | Port halaman web Kana. Nilai bawaannya `3000`, setara dengan opsi `kana --port`. |
 | `KANA_DEPLOYMENT_MODE` | `local` atau `deployment`; menggantikan `deployment.mode`. |
 | `KANA_HERMES_BIN` | Path program Hermes; menggantikan `hermes.executable`. |
@@ -237,6 +237,8 @@ Ditujukan untuk pemasangan di server. Variabel ditetapkan pada lingkungan yang m
 ```sh
 KANA_DATA_DIR=/var/lib/kana KANA_PORT=3000 kana serve
 ```
+
+Untuk memindahkan folder terkelola itu ke `~/.kana`, hentikan Kana lalu jalankan `kana migrate`: perintah ini menampilkan setiap entri beserta ukurannya, menyalin dan memverifikasi setiap berkas, membiarkan folder asal tetap utuh, lalu meminta Anda mengarahkan `KANA_DATA_DIR` ke `~/.kana` atau menghapusnya. Tambahkan `--delete-source` untuk memindahkan entri alih-alih menyalinnya, dan `--dry-run` untuk membaca rencananya tanpa mengubah apa pun.
 
 Pengaturan suara tidak memiliki variabel lingkungan dan hanya dapat diubah melalui `config.json`.
 

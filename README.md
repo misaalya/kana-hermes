@@ -58,10 +58,13 @@ Useful commands:
 | `kana doctor` | Check Node.js, Hermes, password, voice, and data folders |
 | `kana setup` | Explain the optional local voice engine download |
 | `kana config` | Open the advanced `config.json` |
+| `kana migrate` | Move a `KANA_DATA_DIR` root into `~/.kana` |
 
 Your data (password hash, settings, voice profiles, model cache) lives in
 `$KANA_DATA_DIR` when set, otherwise `~/.kana`. An install from an earlier
-release is moved there automatically on the next `kana` run.
+release is moved there automatically on the next `kana` run; a root you named
+with `KANA_DATA_DIR` is never touched by a start, and `kana migrate` copies it
+into `~/.kana` when you ask for it.
 
 ## Screenshots
 

@@ -3,7 +3,7 @@
 // `kana` — launcher for the Kana web interface to Hermes Agent.
 
 import { parseArgs } from "node:util";
-import { doctor, openConfig, password, setup } from "./lib/commands.mjs";
+import { doctor, migrate, openConfig, password, setup } from "./lib/commands.mjs";
 import { manifest, prepareDataRoot } from "./lib/context.mjs";
 import { LauncherError } from "./lib/errors.mjs";
 import { runServer } from "./lib/server.mjs";
@@ -18,6 +18,7 @@ const COMMANDS = {
   password: "Create or change the access password",
   setup: "Explain the optional local voice engine download",
   config: "Open the advanced config.json",
+  migrate: "Move a KANA_DATA_DIR root into the standard ~/.kana root",
   doctor: "Check Hermes, voice, password, and data locations",
 };
 
@@ -26,6 +27,12 @@ const OPTIONS = [
   ["    --host <address>", `Bind address for serve (default ${DEFAULT_HOST})`],
   ["    --no-open", "Do not open a browser"],
   ["    --stdin", "password: read the new password from standard input"],
+  ["    --from <dir>", "migrate: source root (default $KANA_DATA_DIR)"],
+  ["    --to <dir>", "migrate: destination root (default ~/.kana)"],
+  ["    --delete-source", "migrate: remove each entry after it is moved"],
+  ["    --dry-run", "migrate: list what would move and change nothing"],
+  ["    --force", "migrate: move a root without Kana's own marker files"],
+  ["    --yes", "migrate: confirm without the prompt"],
   ["-v, --version", "Print the version"],
   ["-h, --help", "Show this help"],
 ];
@@ -50,6 +57,7 @@ function help() {
   }
   print();
   print(style.dim("  Data lives in $KANA_DATA_DIR or ~/.kana; an earlier install is moved there."));
+  print(style.dim("  `kana migrate` moves an operator-set KANA_DATA_DIR root into ~/.kana on request."));
   print();
 }
 
@@ -64,6 +72,12 @@ function parse(argv) {
       host: { type: "string" },
       open: { type: "boolean", default: true },
       stdin: { type: "boolean", default: false },
+      from: { type: "string" },
+      to: { type: "string" },
+      "delete-source": { type: "boolean", default: false },
+      "dry-run": { type: "boolean", default: false },
+      force: { type: "boolean", default: false },
+      yes: { type: "boolean", default: false },
       version: { type: "boolean", short: "v" },
       help: { type: "boolean", short: "h" },
     },
@@ -116,6 +130,17 @@ async function main() {
       return 0;
     case "config":
       await openConfig({ dataRoot });
+      return 0;
+    case "migrate":
+      await migrate({
+        dataRoot,
+        from: values.from,
+        to: values.to,
+        deleteSource: values["delete-source"],
+        dryRun: values["dry-run"],
+        force: values.force,
+        assumeYes: values.yes,
+      });
       return 0;
     case "doctor":
       await doctor({ dataRoot });

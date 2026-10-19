@@ -177,8 +177,11 @@ export function canPrompt() {
 // Keystrokes typed or pasted past the end of one prompt belong to the next.
 let pendingKeys = "";
 
-/** Reads a secret without echoing it (a dot per character). */
-export function promptSecret(question) {
+/**
+ * Reads one line from the terminal in raw mode. `echo` prints what is typed;
+ * without it a dot stands in for each character, which is what a secret needs.
+ */
+function promptRaw(question, { echo }) {
   const input = process.stdin;
   if (!canPrompt()) return Promise.reject(new Error("An interactive terminal is required."));
   stdout.write(`  ${style.accent(symbols.pointer)} ${question} `);
@@ -231,7 +234,7 @@ export function promptSecret(question) {
         }
         if (character < " ") continue;
         value += character;
-        stdout.write(style.dim(symbols.bullet));
+        stdout.write(echo ? character : style.dim(symbols.bullet));
       }
     };
     input.on("data", onData);
@@ -242,6 +245,20 @@ export function promptSecret(question) {
     }
     if (!settled) input.resume();
   });
+}
+
+/** Reads a secret without echoing it (a dot per character). */
+export function promptSecret(question) {
+  return promptRaw(question, { echo: false });
+}
+
+/**
+ * Asks a yes/no question. Only an explicit `y` is a yes: Enter keeps the default
+ * `N`, so a prompt that a person dismisses never changes anything by accident.
+ */
+export async function promptConfirm(question) {
+  const answer = await promptRaw(`${question} ${style.dim("[y/N]")}`, { echo: true });
+  return /^y(es)?$/i.test(answer.trim());
 }
 
 /** The first line of piped standard input (for non-interactive automation). */

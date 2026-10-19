@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `kana migrate` moves an operator-set `KANA_DATA_DIR` root into the standard
+  `~/.kana` root. A start still never touches a root the operator named — this is
+  the one command that does, and only when asked. The command prints every entry
+  with its size, copies each one, verifies that the bytes it wrote equal the bytes
+  it read, and leaves the source where it was, so starting the service again with
+  the same root undoes the copy; it never edits a systemd unit and instead states
+  the change the operator has to make. `--delete-source` moves the entries instead
+  of copying them, `--dry-run` reads the plan, `--yes` confirms from a script, and
+  `--force` moves a directory that holds nothing Kana writes. It refuses to run on
+  a source that is relative, missing, unrecognized, or overlapping the
+  destination, and the plan and the move share one selection, so what a person
+  agreed to is what moves.
+
 ## 0.5.0 — 2026-10-19
 
 ### Added

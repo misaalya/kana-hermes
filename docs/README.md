@@ -39,6 +39,7 @@ Numbered records of decisions that were taken and are expensive to reverse. They
 | `docs/decisions/0001-process-boundaries.md` | Why Kana is a server-held relay in front of `hermes serve` rather than a second agent or a messaging platform. |
 | `docs/decisions/0002-tts-delivery.md` | Why the local Irodori engine is the default speech provider, and why sentence-split delivery stays opt-in. |
 | `docs/decisions/0003-data-root.md` | Why the data root is `~/.kana`, and how an earlier install is moved into it on the next start. |
+| `docs/decisions/0004-migrate-command.md` | Why `kana migrate` exists, why an operator-set root is never moved automatically, and what the command guarantees about a copy. |
 
 ## Evidence
 
