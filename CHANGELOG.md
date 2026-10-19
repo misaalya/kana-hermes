@@ -45,8 +45,9 @@
   home: `~/.kana` in it is the data root, as on a desktop. `KANA_DATA_DIR` stays
   documented for deliberately moving the state, which is what it always was.
 - The `/docs` configuration guide is told in prose instead of tables, in both
-  languages. The keys, ranges, defaults, every JSON example, and the section
-  anchors are unchanged.
+  languages, and the six `###` headings that never appeared in the sidebar are
+  gone. Every fact is the same: the keys, ranges, defaults, all ten JSON
+  examples, the nine sections, and their anchors.
 
 ### Migration notes
 
