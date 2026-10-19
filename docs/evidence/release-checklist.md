@@ -13,7 +13,7 @@ The order Kana is released in, the scripts that enforce each step, and the rules
 4. Run `npm audit --omit=dev` and review, rather than blindly auto-fix, every production finding.
 5. Run `npm run test:package:npm`. It runs `npm run package:npm` (build, prepare `cli/`, `npm pack --dry-run`) and then `scripts/npm-package-smoke.mjs`, which packs the real tarball, installs it into a temporary prefix, boots it against a fake `hermes` script, and checks the password, data-root, and cross-origin rules. The root app is private; package and publish `cli/` only.
 6. Verify the Live2D notices and third-party licenses, and never package user avatar assets. If the renderer or sample integration changed, run `npm run test:live2d:official` (needs network).
-7. Run `npm run quality` from a clean checkout with enough disk.
+7. Run `npm run quality` from a clean checkout with enough disk, at a terminal as well as with its output piped (`docs/agent/quality-gates.md`).
 8. Run the Hermes live audit and the isolated restart audit without sending an LLM prompt, and record any incomplete active-turn restart case as a supported-environment limitation. See `docs/agent/quality-gates.md` and `docs/evidence/hermes-restart.md`.
 9. If the pinned voice engine or model changed, update `shared/irodori-release.mjs` with the release sizes and SHA-256, install it on target hardware, and keep one intelligibility check.
 10. Start `.next/standalone/server.js` from outside the source checkout and run desktop and mobile smoke tests.
@@ -40,6 +40,8 @@ npm run publish:cli           # lint, typecheck, unit tests, guard, publish
 ## Publishing with the owner's 2FA
 
 npm publishing uses the owner's interactive 2FA. A page that offers **Use security key** is a valid WebAuthn/passkey challenge; it does not mean 2FA was skipped because npm did not ask for a six-digit TOTP code. TOTP and WebAuthn are alternative second factors: never guess, request from an untrusted source, or enter an OTP or passkey response on the owner's behalf.
+
+Publishing needs a live owner session, not merely a credential on disk. With a token that is missing, expired, or belongs to an account that is not a maintainer, the registry refuses the write as `E404 ... Not found - PUT ...` for a package that exists; `npm whoami` answering `E401` is the honest signal, and `npm view <name> maintainers` names the account that may publish. Log in again as that account — `npm logout` then `npm login` — and never read the 404 as a reason to change the package name, the registry, or the manifest.
 
 When `xdg-open` is unavailable, use npm's manual-URL mode instead of pressing Enter at a browser-opening prompt:
 
