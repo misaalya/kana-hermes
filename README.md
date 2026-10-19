@@ -152,12 +152,16 @@ into `~/.kana` when you ask for it.
 that owns Hermes, then run Kana behind HTTPS:
 
 ```bash
-KANA_DATA_DIR=/var/lib/kana kana password
-KANA_DATA_DIR=/var/lib/kana kana serve --port 3000
+kana password                       # in the same account that runs Hermes
+kana serve --port 3000
 ```
 
-- Run it with systemd **as the same user that runs Hermes**. Linux only lets that
-  user read the Hermes session token.
+Kana keeps its files in `~/.kana` in that account, exactly as it does on a
+desktop. A service unit does not need a second data root: it must already run
+as the user that owns Hermes, because Linux only lets that user read the Hermes
+session token. Set `KANA_DATA_DIR` only when you deliberately want the state
+somewhere else.
+
 - Put Nginx in front for HTTPS. Use `proxy_set_header Host $http_host;`, disable
   buffering for `/api/hermes/events`, and allow `client_max_body_size 14m`.
 
