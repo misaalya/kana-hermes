@@ -97,7 +97,9 @@ The guardrail is a data-sharing decision as much as a control. When the owner
 sets `guardrails.apiKey`, the text of every screened turn — a chat message, a
 slash command, or `/steer` — is sent to `https://api.typesafe.ai/v1/systemone`
 for evaluation, so that text leaves the machine for a third party. With no key,
-or a key and no rules, nothing is sent and the layer costs nothing.
+or a key and no rules, nothing is sent and the layer costs nothing. A blank key
+is the layer being off, not a broken block: a new `config.json` ships five
+starter rules and an empty key, and none of them runs until the owner adds a key.
 
 The rules and the key live in `config.json`, which Kana creates once, owner-only,
 and never rewrites; no route, setting, or browser request can change a rule or

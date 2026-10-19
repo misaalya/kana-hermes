@@ -9,7 +9,10 @@
   statements of what Kana must not do; Kana turns them into one yes/no question
   for Jev, TypeSafe's System One model, and compares the probability it returns
   against your threshold in its own code. Jev returns a probability and no text,
-  and the layer is skipped entirely while the key is empty. A message at or above
+  and the layer is skipped entirely while the key is empty — an empty or blank
+  key means the layer is off, not that the block is broken, so the five starter
+  rules a new `config.json` ships with never refuse a turn before you add a key.
+  A message at or above
   the threshold is refused before it reaches Hermes, so nothing is written to the
   Hermes transcript, and Kana answers with its own fixed line instead of a model
   reply. The screen covers a chat message, a slash command, and `/steer`; an
