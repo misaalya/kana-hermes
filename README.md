@@ -137,6 +137,10 @@ into `~/.kana` when you ask for it.
 **Security and operations**
 - Password sign-in with lockout that never blocks your own known browsers and
   does not depend on IP addresses (safe behind shared home internet).
+- An optional prompt guardrail you write in your own `config.json` as plain
+  rules ("never read anything under Y"). Kana turns them into one yes/no question
+  for TypeSafe's Jev and refuses the turn before Hermes sees it. Kana cannot edit
+  those rules, and the layer is skipped while the key is empty.
 - Cross-site request protection, server-side logout, and an owner-only data folder.
 - Installable app shell, and safe diagnostics that redact tokens, prompts, and
   secrets.

@@ -27,6 +27,11 @@ import {
   buildKanaUserPrompt,
 } from "@/lib/presentation/persona";
 import {
+  PROMPT_GUARDRAIL_BLOCKED,
+  PROMPT_GUARDRAIL_UNAVAILABLE,
+  PromptGuardrailError,
+} from "@/lib/guardrails/protocol";
+import {
   KanaProtocolError,
   parseKanaResponse,
 } from "@/lib/presentation/response-parser";
@@ -222,9 +227,18 @@ async function relayRpc<T>(
       credentials: "same-origin",
       signal: controller.signal,
     });
-    const value = (await response.json()) as { result?: T; error?: string };
+    const value = (await response.json()) as { result?: T; error?: string; code?: string };
     if (!response.ok || value.error) {
-      throw new Error(value.error || `Hermes relay failed (${response.status}).`);
+      const message = value.error || `Hermes relay failed (${response.status}).`;
+      // Kana's own decision, not a relay failure: the caller answers it with
+      // Kana's fixed wording instead of a send-failure banner.
+      if (value.code === PROMPT_GUARDRAIL_BLOCKED) {
+        throw new PromptGuardrailError("blocked", message);
+      }
+      if (value.code === PROMPT_GUARDRAIL_UNAVAILABLE) {
+        throw new PromptGuardrailError("unavailable", message);
+      }
+      throw new Error(message);
     }
     return value.result as T;
   } catch (error) {
@@ -1204,6 +1218,11 @@ export class HermesAgentClient implements AgentClient {
         command,
       });
     } catch (slashError) {
+      // A guardrail refusal is Kana's own decision about this text, and
+      // command.dispatch would send the same words to be screened again: the
+      // fallback could only spend a second request, and in an outage a second
+      // timeout, to arrive at the same refusal.
+      if (slashError instanceof PromptGuardrailError) throw slashError;
       try {
         raw = await this.request<HermesSlashExecResponse>("command.dispatch", {
           session_id: this.session.sessionId,

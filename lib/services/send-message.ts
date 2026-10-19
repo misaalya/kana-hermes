@@ -1,5 +1,6 @@
 import { AttachmentUploadError, type AgentAttachment } from "@/lib/agent/attachments";
 import type { AgentCommandSuggestion } from "@/lib/agent/types";
+import { PromptGuardrailError } from "@/lib/guardrails/protocol";
 import {
   createSystemMessage,
   createUserMessage,
@@ -315,6 +316,30 @@ export async function sendMessage(
     }
     clearSuggestions();
   } catch (sendError) {
+    if (sendError instanceof PromptGuardrailError) {
+      // Kana's own decision, not a failed send: the user's message stays in the
+      // transcript and Kana answers it in fixed wording. No model ever saw the
+      // message, so inventing a persona reply would be a lie.
+      const guardrail = getCopy(preferences.current().uiLocale).guardrail;
+      const answered = conversations.get(nextConversation.id) ?? nextConversation;
+      conversations.save({
+        ...answered,
+        messages: [
+          ...answered.messages,
+          createSystemMessage(
+            sendError.reason === "blocked" ? guardrail.blocked : guardrail.unavailable(sendError.message),
+            sentText,
+          ),
+        ],
+      });
+      if (!wasBusy) {
+        session.setState({ busy: false, status: status().refused });
+        sessions.tracking.turnId = null;
+      } else {
+        setStatus(status().stillWorking);
+      }
+      throw sendError;
+    }
     if (sendError instanceof AttachmentUploadError) {
       const current = conversations.get(nextConversation.id);
       if (current) {

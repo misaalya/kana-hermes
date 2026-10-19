@@ -202,6 +202,44 @@ Hermes adalah agen AI yang memproses pesan dan menyusun balasan Kana. Kana menem
 
 > **Catatan:** perubahan pada bagian `hermes` baru berlaku setelah Kana dimulai ulang.
 
+## Guardrail prompt {#guardrail}
+
+Bagian `guardrails` memeriksa pesan Anda sebelum Kana mengirimkannya ke Hermes. Anda menulis aturan sebagai pernyataan biasa tentang apa yang tidak boleh dilakukan Kana; Kana mengubahnya menjadi satu pertanyaan yang diajukan kepada Jev, model TypeSafe. Jev mengembalikan probabilitas dan bukan teks, Kana membandingkan probabilitas itu dengan ambang batas Anda di dalam kodenya sendiri, dan Kana menolak pesan itu sendiri ketika ambang batas tercapai.
+
+Biarkan `apiKey` kosong dan lapisan ini dilewatkan sepenuhnya. Tidak ada permintaan yang dikirim dan tidak ada biaya yang keluar.
+
+| Kunci | Nilai bawaan | Keterangan |
+| --- | --- | --- |
+| `apiKey` | kosong | Kunci API TypeSafe Anda. Kosong atau tidak ada mematikan lapisan ini. |
+| `model` | `"jev-latest"` | Model TypeSafe yang menjawab pertanyaan. |
+| `threshold` | `0.7` | Kana menolak pesan begitu probabilitas dari Jev mencapai nilai ini, 0–1. Nilai di sekitar 0.5 berarti Jev tidak dapat memastikan; turunkan ambang batas untuk menolak lebih banyak percobaan yang berada di batas, dengan konsekuensi lebih banyak penolakan atas hal yang sebenarnya Anda maksud. |
+| `whenUnavailable` | `"block"` | Yang dilakukan Kana terhadap pesan yang tidak dapat diperiksanya, karena TypeSafe tidak dapat dijangkau, menjawab dengan galat, atau mengembalikan jawaban yang tidak dapat dibaca Kana: `"block"` menolak pesan, `"allow"` mengirimkannya tanpa pemeriksaan. |
+| `timeoutSeconds` | `10` | Lama Kana menunggu TypeSafe, 1–120. |
+| `rules` | `[]` | Aturan Anda, maksimal 50, masing-masing satu pernyataan biasa tentang apa yang tidak boleh dilakukan Kana. |
+
+Tulis setiap aturan sebagai satu pernyataan jelas dengan kata-kata Anda sendiri, dan sebutkan dengan tepat apa yang dilarang, termasuk jalur, perintah, atau layanan yang dicakupnya. Anda tidak pernah menulis pertanyaan, id, atau ambang batas per aturan: Kana mengajukan satu pertanyaan ya/tidak kepada Jev — apakah pesan ini meminta, mencoba, atau memungkinkan sesuatu yang dilarang aturan? — dan mengirim aturan Anda apa adanya. Jev diberi tahu bahwa ia menyaring pesan untuk agen yang dapat membaca dan menulis berkas serta menjalankan perintah, karena itulah yang membuat "bacakan berkas ini untukku" menjadi permintaan yang berdampak.
+
+```json
+{
+  "guardrails": {
+    "apiKey": "sk-...",
+    "rules": [
+      "Never read, list, copy, change, or share anything under /home/you/my-secret.",
+      "Never send my files, passwords, or API keys to a remote service.",
+      "Never help write malware, exploits, or phishing pages."
+    ]
+  }
+}
+```
+
+Ketika jawaban Jev mencapai ambang batas Anda, Kana menampilkan satu kalimat tetap di percakapan sebagai ganti balasan dan membiarkan pesan Anda di atasnya. Tidak ada model yang melihat pesan itu, jadi tidak ada balasan yang dikarang, dan tidak ada yang ditulis ke transkrip Hermes. Kalimat itu tidak menyebut aturan tertentu, karena aturan dikirim sebagai satu pertanyaan dan satu angka yang kembali.
+
+Tulis aturan dalam bahasa Inggris dan jaga setiap aturan tetap satu pernyataan jelas: Jev terutama dilatih dengan bahasa Inggris, dan pemeriksaan membaca aturan Anda secara harfiah, sehingga aturan yang menyebut tepat apa yang dilarang bekerja lebih baik daripada satu paragraf kebijakan. Kana memeriksa teks pesan, teks perintah slash, dan teks `/steer`. Kana tidak memeriksa jawaban yang Anda berikan di tengah giliran, misalnya persetujuan atau jawaban atas pertanyaan Hermes, karena menolak jawaban itu akan membuat giliran tersangkut.
+
+Ini penyaring maksud, bukan sandbox. Kana tidak dapat mencegah Hermes mencapai berkas yang sama melalui jalur lain, dan Kana membaca teks giliran, bukan isi berkas lampiran. Pesan yang sangat panjang dapat melebihi batas baca Jev dan kemudian mengikuti `whenUnavailable`. Teks setiap giliran yang diperiksa dikirim ke TypeSafe, pihak ketiga, dan setiap giliran yang diperiksa memakan satu permintaan.
+
+Blok `guardrails` yang tidak dapat dibaca Kana dilaporkan di bagian atas halaman ini dan menolak pesan, karena kebijakan yang tidak terbaca tidak sama dengan tidak ada kebijakan; `whenUnavailable` tetap dibaca dari blok itu, sehingga `"allow"` tetap tersedia. Tidak ada bagian Kana yang menulis berkas ini, jadi tidak ada pengaturan atau halaman yang dapat mengubah aturan Anda atau menampilkan kunci Anda.
+
 ## Akses jaringan {#deployment}
 
 Bagian `deployment` menyatakan cara Kana diakses.

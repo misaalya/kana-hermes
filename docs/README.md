@@ -24,9 +24,9 @@ These documents ship inside the npm package and are linked from the README, so t
 | Document | Covers |
 | --- | --- |
 | `docs/operator/install.md` | Installing and running Kana (npm package, source checkout, headless server), the first password, and the data directory. |
-| `docs/operator/configure.md` | `config.json` and the settings it drives: deployment mode, Hermes executable and port, and the TTS providers. |
-| `docs/operator/composer.md` | The composer: sending a message, file attachments and their limits, voice dictation, and the Hermes model picker. |
-| `docs/operator/security.md` | The local threat model and the controls that answer it: password login, session custody, origin and host checks, media delivery, and backup hygiene. |
+| `docs/operator/configure.md` | `config.json` and the settings it drives: deployment mode, Hermes executable and port, the TTS providers, and the prompt guardrail. |
+| `docs/operator/composer.md` | The composer: sending a message, file attachments and their limits, voice dictation, a turn the guardrail refuses, and the Hermes model picker. |
+| `docs/operator/security.md` | The local threat model and the controls that answer it: password login, session custody, origin and host checks, the prompt guardrail's data flow, media delivery, and backup hygiene. |
 | `docs/operator/supported-environment.md` | Tested operating systems, runtimes, browsers, and hardware, and the requirements a host must meet. |
 | `docs/operator/compatibility.md` | Which Hermes and browser versions Kana supports, and what happens when a dependency moves ahead. |
 
@@ -40,6 +40,7 @@ Numbered records of decisions that were taken and are expensive to reverse. They
 | `docs/decisions/0002-tts-delivery.md` | Why the local Irodori engine is the default speech provider, and why sentence-split delivery stays opt-in. |
 | `docs/decisions/0003-data-root.md` | Why the data root is `~/.kana`, and how an earlier install is moved into it on the next start. |
 | `docs/decisions/0004-migrate-command.md` | Why `kana migrate` exists, why an operator-set root is never moved automatically, and what the command guarantees about a copy. |
+| `docs/decisions/0005-prompt-guardrail.md` | Why the prompt guardrail screens a turn in the relay with a typed judgment instead of an LLM, why its rules live in a file Kana cannot write, and why an unchecked prompt is refused by default. |
 
 ## Evidence
 

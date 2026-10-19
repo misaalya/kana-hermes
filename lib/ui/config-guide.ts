@@ -32,6 +32,7 @@ export type ConfigGuideSectionId =
   | "irodori"
   | "pollinations"
   | "hermes"
+  | "guardrail"
   | "deployment"
   | "environment"
   | "troubleshooting";
@@ -47,6 +48,10 @@ export type ConfigGuideCopy = {
   modeLocal: string;
   modeDeployment: string;
   configError: string;
+  guardrail: string;
+  guardrailOn(rules: number): string;
+  guardrailOff(reason: string): string;
+  guardrailInvalid(reason: string): string;
 };
 
 export const CONFIG_GUIDE_GROUPS: {
@@ -55,7 +60,7 @@ export const CONFIG_GUIDE_GROUPS: {
 }[] = [
   { id: "basics", sections: ["quickstart"] },
   { id: "voice", sections: ["voice", "irodori", "pollinations"] },
-  { id: "system", sections: ["hermes", "deployment", "environment"] },
+  { id: "system", sections: ["hermes", "guardrail", "deployment", "environment"] },
   { id: "help", sections: ["troubleshooting"] },
 ];
 
@@ -71,6 +76,10 @@ const COPY: Record<UiLocale, ConfigGuideCopy> = {
     modeLocal: "Lokal",
     modeDeployment: "Deployment",
     configError: "Terdapat kesalahan pada config.json:",
+    guardrail: "Guardrail prompt",
+    guardrailOn: (rules) => `aktif — ${rules} aturan`,
+    guardrailOff: (reason) => `nonaktif — ${reason}`,
+    guardrailInvalid: (reason) => `tidak dapat dipakai — ${reason}`,
   },
   en: {
     docs: "Documentation",
@@ -83,6 +92,10 @@ const COPY: Record<UiLocale, ConfigGuideCopy> = {
     modeLocal: "Local",
     modeDeployment: "Deployment",
     configError: "config.json contains an error:",
+    guardrail: "Prompt guardrail",
+    guardrailOn: (rules) => `on — ${rules} ${rules === 1 ? "rule" : "rules"}`,
+    guardrailOff: (reason) => `off — ${reason}`,
+    guardrailInvalid: (reason) => `unusable — ${reason}`,
   },
 };
 

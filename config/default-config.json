@@ -6,5 +6,12 @@
       "steps": 16,
       "precision": "auto"
     }
+  },
+  "guardrails": {
+    "apiKey": "",
+    "model": "jev-latest",
+    "threshold": 0.7,
+    "whenUnavailable": "block",
+    "rules": []
   }
 }

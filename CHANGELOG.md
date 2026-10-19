@@ -4,6 +4,21 @@
 
 ### Added
 
+- A prompt guardrail you write yourself. `guardrails` in `config.json` holds your
+  TypeSafe API key, a threshold, and any number of rules written as plain
+  statements of what Kana must not do; Kana turns them into one yes/no question
+  for Jev, TypeSafe's System One model, and compares the probability it returns
+  against your threshold in its own code. Jev returns a probability and no text,
+  and the layer is skipped entirely while the key is empty. A message at or above
+  the threshold is refused before it reaches Hermes, so nothing is written to the
+  Hermes transcript, and Kana answers with its own fixed line instead of a model
+  reply. The screen covers a chat message, a slash command, and `/steer`; an
+  unreachable guardrail refuses by default (`whenUnavailable: "block"`) rather
+  than forwarding an unchecked prompt. The rules live in `config.json`, which
+  Kana creates once and never rewrites, so no setting or browser request can
+  change them. Because the agent runs as the same user as Kana and can write that
+  file, `operator/security.md` also documents the operating-system immutable flag
+  (`chattr +i`) as the way to stop the agent from emptying the rules.
 - `kana migrate` moves an operator-set `KANA_DATA_DIR` root into the standard
   `~/.kana` root. A start still never touches a root the operator named — this is
   the one command that does, and only when asked. The command prints every entry

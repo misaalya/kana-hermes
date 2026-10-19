@@ -72,6 +72,9 @@ rule, change the rule where it lives.
   context manager in Kana.
 - Do not create a separate Kana model for persona or translation. Persona and
   subtitle generation belong in the same Hermes response.
+- The optional prompt guardrail may refuse a turn, never answer one: it holds no
+  agent, no fallback model, and no writer for its own rules, which live in the
+  `guardrails` block of `config.json`.
 - Keep Hermes-specific JSON-RPC details inside `HermesAgentClient` and its
   gateway types. Components should depend on `AgentClient` and `AgentEvent`.
 - Keep voice, avatar, conversation storage, presentation protocol, and agent

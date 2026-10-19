@@ -10,7 +10,7 @@ is reached through a same-origin Kana route.
 or which route carries a flow before changing code.
 **Truth in code:** `proxy.ts`, `lib/server/hermes-bridge.ts`,
 `lib/server/local-hermes-runtime.ts`, `lib/services/kana-workspace.ts`,
-`lib/agent/types.ts`, `app/api/hermes/rpc/route.ts`
+`lib/agent/types.ts`, `app/api/hermes/rpc/route.ts`, `lib/guardrails/`
 
 ## Process boundary
 
@@ -62,12 +62,12 @@ mock agent mode.
 | Route | What flows through it |
 | --- | --- |
 | `GET /api/hermes/events` (SSE) | Every gateway event frame the bridge receives, with `MEDIA:` paths rewritten to signed links. Ends when the shared socket drops, so each tab reconnects and resumes. |
-| `POST /api/hermes/rpc` | One allow-listed JSON-RPC request forwarded over the shared socket; the response returns correlated. `config.set` accepts only a session-scoped `model` value. |
+| `POST /api/hermes/rpc` | One allow-listed JSON-RPC request forwarded over the shared socket; the response returns correlated. `config.set` accepts only a session-scoped `model` value, and the owner's prompt guardrail may refuse a turn here before it reaches the bridge. |
 | `POST /api/hermes/attachments` | One base64 chat attachment, validated then forwarded as Hermes `file.attach`; this method is not on the RPC allow-list. |
 | `GET /api/kana/sessions` | `session.list` filtered server-side to `source: "kana"`, i.e. Kana's cross-browser conversation directory. |
 | `GET`/`PUT /api/kana/activities` | The per-turn activity snapshots read from and written to `activities.db`. |
 | `GET`/`PUT /api/kana/setup` | Install-level onboarding completion in `appstate.db`, shared by every browser of this user. |
-| `GET /api/kana/config` | The `config.json` path, whether it exists, and the deployment mode; never the file's contents. |
+| `GET /api/kana/config` | The `config.json` path, whether it exists, the deployment mode, and the prompt guardrail's state and rule count; never the file's contents, the key, or a rule's text. |
 | `GET`/`POST`/`DELETE /api/kana/voices` | The voice library: reference WAVs on disk plus rows in `appstate.db`. |
 | `GET`/`HEAD /api/media/<token>/<name>` | One delivered file, streamed with byte ranges and ETag revalidation; the token is the only input that picks the file. |
 | `GET`/`POST /api/local-runtime/hermes` | Inspect, `start`, `restart`, or `stop` the `hermes serve` Kana manages. A browser chooses only the action and optional port. |
@@ -132,6 +132,18 @@ Server:
   `lib/server/media-response.ts`, `lib/server/user-config.ts`,
   `lib/server/auth/`, `lib/server/irodori/`, and `lib/server/tts-provider/`.
 
+Guardrail:
+
+- `lib/guardrails/` owns the optional screen on the text Kana forwards to
+  Hermes: `policy.ts` reads and validates the owner-written `guardrails` block
+  of `config.json` (which Kana never writes), `prompt.ts` turns the owner's rules
+  into the one question Kana asks, `jev.ts` is the TypeSafe System One adapter,
+  `screen.ts` turns the answer into one allow-or-refuse outcome, and
+  `protocol.ts` is the browser-safe half — the refusal codes and
+  `PromptGuardrailError`. The relay route calls `screenPrompt`, and the relay
+  client and `lib/services/send-message.ts` turn a refusal into Kana's fixed
+  wording.
+
 Presentation, avatar, voice:
 
 - `lib/presentation/` owns the persona and response contract
@@ -160,3 +172,7 @@ Presentation, avatar, voice:
 - Live chat and restored history must render the same way: the same
   `AgentEvent` types and the same stored messages feed `LiveChatFeed`, so a
   refresh produces the transcript the user already saw.
+- The prompt guardrail reads the text of a turn at the relay and answers allow
+  or refuse. It must not grow a second agent, a fallback model, or a way for the
+  browser to set its rules: the rules and the key live in `config.json`, which
+  Kana has no writer for.

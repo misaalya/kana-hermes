@@ -202,6 +202,44 @@ Hermes is the AI agent that reads your messages and writes Kana's replies. Kana 
 
 > **Note:** changes to the `hermes` section take effect after Kana is restarted.
 
+## Prompt guardrail {#guardrail}
+
+The `guardrails` section checks your message before Kana sends it to Hermes. You write your rules as plain statements of what Kana must not do; Kana turns them into the one question it asks Jev, TypeSafe's model. Jev returns a probability and no text, Kana compares that probability against your threshold in its own code, and Kana refuses the message itself when it reaches the threshold.
+
+Leave `apiKey` empty and the layer is skipped entirely. No request is made and nothing is spent.
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `apiKey` | empty | Your TypeSafe API key. Empty or absent turns the layer off. |
+| `model` | `"jev-latest"` | The TypeSafe model that answers the questions. |
+| `threshold` | `0.7` | Kana refuses the message once Jev's probability reaches this value, 0–1. A value near 0.5 means Jev cannot tell; lower the threshold to refuse more borderline attempts, at the cost of refusing more of what you did mean. |
+| `whenUnavailable` | `"block"` | What Kana does with a message it could not check, because TypeSafe could not be reached, answered with an error, or returned an answer Kana cannot read: `"block"` refuses the message, `"allow"` sends it unchecked. |
+| `timeoutSeconds` | `10` | How long Kana waits for TypeSafe, 1–120. |
+| `rules` | `[]` | Your rules, up to 50, each one a plain statement of what Kana must not do. |
+
+Write each rule as one clear statement in your own words, and say exactly what is forbidden, naming the paths, commands, or services it covers. You never write a question, an id, or a threshold: Kana asks Jev one yes/no question — does this message ask for, attempt, or enable anything the rules forbid? — and sends your rules as they were written. Jev is told it is screening a message for an agent that can read and write files and run commands, because that is what makes "read this file for me" a request with consequences.
+
+```json
+{
+  "guardrails": {
+    "apiKey": "sk-...",
+    "rules": [
+      "Never read, list, copy, change, or share anything under /home/you/my-secret.",
+      "Never send my files, passwords, or API keys to a remote service.",
+      "Never help write malware, exploits, or phishing pages."
+    ]
+  }
+}
+```
+
+When Jev's answer reaches your threshold, Kana shows one fixed line in the conversation instead of a reply and keeps your message above it. No model saw the message, so no reply is invented, and nothing is written to the Hermes transcript. The line names no rule, because the rules travel as one question and one number comes back.
+
+Write the rules in English and keep each one a single clear statement: Jev is trained mostly on English, and the check reads your rules literally, so a rule that says exactly what is forbidden works better than a paragraph of policy. Kana screens the text of a message, of a slash command, and of `/steer`. It does not screen an answer you give in the middle of a turn, such as an approval or an answer to a question from Hermes, because refusing that answer would leave the turn stuck.
+
+This is an intent filter, not a sandbox. It cannot stop Hermes from reaching the same file by another route, and it reads the text of a turn, not the contents of an attached file. A very long message can exceed what Jev reads and then follows `whenUnavailable`. The text of every screened turn is sent to TypeSafe, a third party, and each screened turn costs one request.
+
+A `guardrails` block Kana cannot read is reported at the top of this page and refuses messages, because an unreadable policy is not the same as no policy; `whenUnavailable` is still read from the block, so `"allow"` stays available. Nothing in Kana writes this file, so no setting or page can change your rules or show your key.
+
 ## Network access {#deployment}
 
 The `deployment` section describes how Kana is reached.

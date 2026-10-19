@@ -80,8 +80,16 @@ password survives whatever the whole-root migration decides.
 | `appstate.db` | `app_state` rows (`auth.password` hash + session version, `onboarding` completion), the `voice_clones` voice library, and the `revoked_sessions` logout list. Owner-only, WAL. |
 | `activities.db` | The per-turn tool activity log, schema v2. |
 | `jwt-secret` | The installation secret that signs session and login-device JWTs and derives other keys. `KANA_JWT_SECRET` overrides it (minimum 32 characters). |
-| `config.json` | The server-owned advanced config (deployment mode, Hermes executable/port/working folder, TTS provider and credentials). Created from `config/default-config.json`; never returned to the browser. |
+| `config.json` | The server-owned advanced config (deployment mode, Hermes executable/port/working folder, TTS provider and credentials, and the optional `guardrails` block). Created from `config/default-config.json`; never returned to the browser. |
 | `voices/` | Reference WAVs for the voice library; `appstate.db` holds only their metadata and paths. Engine/model installs and downloads live under `irodori/` (unless `tts.irodoriLocal.installDirectory` overrides it). |
+
+`config.json` has exactly one writer: `ensureKanaUserConfigFile` creates it once
+with `flag: "wx"`, owner-only, and never replaces it. That is what makes the
+`guardrails` block trustworthy as an owner-written policy — no route, setting, or
+browser request can change the rules or the TypeSafe key. The block is parsed by
+`lib/guardrails/policy.ts` rather than by `parseKanaUserConfigFile`, so a broken
+rule cannot invalidate the rest of the file and a broken block elsewhere cannot
+silently disable the guardrail.
 
 `appstate.db` is created and read through `lib/server/app-state-store.ts` so
 the `kana` launcher and the server share one schema and handle. Do not open it
