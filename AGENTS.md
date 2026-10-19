@@ -55,8 +55,10 @@ decide the behaviour; open those files before you rely on a sentence.
 | Why an expensive-to-reverse decision was taken | `docs/decisions/` |
 | Releasing, or a claim that needs real-world evidence | `docs/evidence/` |
 
-Rules for the documents themselves: English, formal and plain; `# Sentence-case
-title` and `## Sentence-case headings`; the mandatory `**Read when:**` and
+Rules for the documents themselves: English, formal and plain; a decision
+record opens `# ADR-NNNN: Sentence-case title` (the number is how other
+documents cite it) and every other document opens `# Sentence-case title` with
+`## Sentence-case headings`; the mandatory `**Read when:**` and
 `**Truth in code:**` header; prose over lists; lowercase-kebab file names; no
 emoji. Every path, class, token, and command a document cites must exist now, so
 verify it in the checkout, and never document a command that `package.json` does
