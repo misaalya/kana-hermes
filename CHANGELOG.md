@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.1 — 2026-10-19
 
 ### Added
 
@@ -34,6 +34,48 @@
   a source that is relative, missing, unrecognized, or overlapping the
   destination, and the plan and the move share one selection, so what a person
   agreed to is what moves.
+
+### Changed
+
+- A server install needs no data root of its own. The VPS instructions used to
+  create `/var/lib/kana` and set `KANA_DATA_DIR` to it, and the checklist said
+  never to run a production Kana without an explicit data directory; neither was
+  true. A service unit must already run as the account that owns Hermes, because
+  Linux exposes the gateway token only to its own user, and that account has a
+  home: `~/.kana` in it is the data root, as on a desktop. `KANA_DATA_DIR` stays
+  documented for deliberately moving the state, which is what it always was.
+- The `/docs` configuration guide is told in prose instead of tables, in both
+  languages. The keys, ranges, defaults, every JSON example, and the section
+  anchors are unchanged.
+
+### Migration notes
+
+- The guardrail is off after upgrading. `guardrails.apiKey` is empty in a
+  `config.json` that already exists, so no turn is screened and no TypeSafe
+  request is made until you add a key. A fresh `config.json` carries five starter
+  rules for you to keep or replace.
+- An install that set `KANA_DATA_DIR` keeps using it; nothing moves on its own.
+  Only `kana migrate` moves such a root, and only when you ask for it. A new
+  server install has no reason to set the variable at all.
+
+### Known limitations
+
+- Field validation is incomplete and is published as it stands. The dogfood
+  journal has 0 of 7 recorded days and 6 of 13 required matrix cases pending —
+  `hermes-only`, `hermes-local-voice`, `custom-live2d-model-a`,
+  `custom-live2d-model-b`, `hermes-restart-active`, and
+  `voice-cancel-and-replay` — so this release makes no extended-compatibility
+  claim. `npm run dogfood:check` reports the same result.
+- The guardrail is an intent filter, not a sandbox. It reads the text of a turn
+  and cannot stop Hermes from reaching the same file by another route, and it
+  does not screen an answer given in the middle of a turn, such as an approval.
+  The text of every screened turn is sent to TypeSafe, a third party.
+- Hermes 0.21's batch clarify and its replayed pending input are implemented from
+  its documented protocol. The tested baseline is Hermes 0.20.1, and no 0.21
+  install has validated them here.
+- Local speech latency on small CPUs, the opt-in sentence delivery, and the
+  browser-local avatar packages and preferences are unchanged; the supported
+  environment document carries the measured numbers.
 
 ## 0.5.0 — 2026-10-19
 
