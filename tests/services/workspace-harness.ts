@@ -57,6 +57,8 @@ export class FakeAgent implements AgentClient {
   completions: AgentCommandSuggestion[] = [];
   completionError: Error | null = null;
   sendError: Error | null = null;
+  /** Thrown by executeCommand, as a guardrail refusal on a slash command is. */
+  commandError: Error | null = null;
   respondError: Error | null = null;
   /** Session key session.opened reports; resumes report the requested key. */
   nextSessionKey = "hermes-session-1";
@@ -95,6 +97,7 @@ export class FakeAgent implements AgentClient {
   }
   async executeCommand(input: { command: string }) {
     this.commands.push(input.command);
+    if (this.commandError) throw this.commandError;
     return this.commandResult;
   }
   /** The catalog completeCommands received, if any. */
