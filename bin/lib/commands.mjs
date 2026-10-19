@@ -1,7 +1,7 @@
-// `kana doctor`, `kana setup`, `kana config`, and `kana password`.
+// `kana doctor`, `kana setup`, `kana config`, `kana migrate`, and `kana password`.
 
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import path from "node:path";
 import {
   IRODORI_ASSETS_ARCHIVE,
@@ -13,6 +13,7 @@ import {
   irodoriInstallPaths,
 } from "../../shared/irodori-release.mjs";
 import { ensureConfigFile, sessionSecretReady } from "./bootstrap.mjs";
+import { KANA_DATA_DIR_ENV, migrateKanaDataRoot, planKanaDataRootMove } from "../../shared/data-dir.mjs";
 import {
   configPath,
   manifest,
@@ -20,6 +21,7 @@ import {
   voiceProviderName,
   runtimeRoot,
   serverEntry,
+  userHome,
 } from "./context.mjs";
 import { LauncherError } from "./errors.mjs";
 import { locateHermes, runningGateways } from "./hermes.mjs";
@@ -34,9 +36,11 @@ import {
   heading,
   keyValues,
   print,
+  promptConfirm,
   readStdinLine,
   status,
   style,
+  symbols,
 } from "./ui.mjs";
 
 const REQUIRED_NODE = manifest.engines?.node?.replace(/^>=\s*/, "") ?? "22.13";
@@ -196,4 +200,231 @@ export async function openConfig({ dataRoot }) {
     return;
   }
   await runChild(editor, [file], {});
+}
+
+const KILOBYTE = 1024;
+const MEGABYTE = 1024 * KILOBYTE;
+const GIGABYTE = 1024 * MEGABYTE;
+
+/** A size a person can read at a glance. */
+function formatBytes(bytes) {
+  if (bytes >= GIGABYTE) return `${(bytes / GIGABYTE).toFixed(1)} GB`;
+  if (bytes >= MEGABYTE) return `${(bytes / MEGABYTE).toFixed(1)} MB`;
+  if (bytes >= KILOBYTE) return `${Math.round(bytes / KILOBYTE)} KB`;
+  return `${bytes} B`;
+}
+
+/** "1 entry" / "3 entries". */
+function formatEntries(count) {
+  return `${count} ${count === 1 ? "entry" : "entries"}`;
+}
+
+/** "1 file" / "3 files". */
+function formatFiles(count) {
+  return `${count} ${count === 1 ? "file" : "files"}`;
+}
+
+function describeSkipReason(reason, target) {
+  switch (reason) {
+    case "target":
+      return `already in ${displayPath(target)}`;
+    case "missing":
+      return "does not exist";
+    case "unrecognized":
+      return "holds nothing Kana writes";
+    default:
+      return reason;
+  }
+}
+
+/**
+ * The root `kana migrate` reads from: the one the operator named, or this
+ * shell's KANA_DATA_DIR, which is the root the automatic path deliberately
+ * leaves alone.
+ */
+function resolveMigrateSource({ from, dataRoot }) {
+  const named = from?.trim() || process.env[KANA_DATA_DIR_ENV]?.trim() || "";
+  if (!named) {
+    throw new LauncherError(
+      `This install already uses the default data root ${displayPath(dataRoot)}.`,
+      `Name the root to move, for example: kana migrate --from /var/lib/kana`,
+    );
+  }
+  if (!path.isAbsolute(named)) {
+    throw new LauncherError(
+      `The source must be an absolute path: ${named}`,
+      `For example: kana migrate --from /var/lib/kana`,
+    );
+  }
+  const source = path.resolve(named);
+  let stats = null;
+  try {
+    stats = statSync(source);
+  } catch {
+    stats = null;
+  }
+  if (!stats?.isDirectory()) {
+    throw new LauncherError(
+      `The source is not a directory: ${displayPath(source)}`,
+      "Run `kana doctor` to see where this installation keeps its data.",
+    );
+  }
+  return source;
+}
+
+/** The root the data goes to: the standard `~/.kana`, or the one the operator named. */
+function resolveMigrateDestination({ to, source }) {
+  const fallback = path.join(userHome, ".kana");
+  const named = to?.trim() || fallback;
+  if (!path.isAbsolute(named)) {
+    throw new LauncherError(
+      `The destination must be an absolute path: ${named}`,
+      `The default is ${displayPath(fallback)}.`,
+    );
+  }
+  const destination = path.resolve(named);
+  if (destination === source) {
+    throw new LauncherError(
+      "The destination is the source.",
+      "Omit --to to use the default ~/.kana root, or name a different directory.",
+    );
+  }
+  if (source.startsWith(`${destination}${path.sep}`) || destination.startsWith(`${source}${path.sep}`)) {
+    throw new LauncherError(
+      `The source and the destination overlap: ${displayPath(source)} and ${displayPath(destination)}`,
+      "Choose two directories that do not contain each other.",
+    );
+  }
+  return destination;
+}
+
+/**
+ * `kana migrate` — an operator's explicit request to move a KANA_DATA_DIR root
+ * into the standard data root. The automatic migration never touches a root the
+ * operator named, so this command is the only way data leaves one, and it does
+ * nothing the operator has not agreed to: it shows the plan, copies by default,
+ * verifies every file it writes, and keeps the source until the operator
+ * removes it.
+ */
+export async function migrate({ dataRoot, from, to, deleteSource, dryRun, force, assumeYes }) {
+  const source = resolveMigrateSource({ from, dataRoot });
+  const destination = resolveMigrateDestination({ to, source });
+  const plan = planKanaDataRootMove({
+    targetDir: destination,
+    legacyDirs: [source],
+    requireMarker: !force,
+  });
+
+  const unrecognized = plan.skip.find((skipped) => skipped.reason === "unrecognized");
+  if (unrecognized) {
+    throw new LauncherError(
+      `${displayPath(unrecognized.name)} does not look like a Kana data root.`,
+      "Kana moves only a root that holds appstate.db, activities.db, jwt-secret, voices/, or irodori/. Pass --force to move it anyway.",
+    );
+  }
+
+  heading("Move a Kana data root");
+  const bytes = plan.move.reduce((total, entry) => total + entry.bytes, 0);
+  print(keyValues([
+    ["From", displayPath(source)],
+    ["To", displayPath(plan.target)],
+    ["Entries", `${plan.move.length}`],
+    ["Size", formatBytes(bytes)],
+    ["Source after the move", deleteSource ? "removed, entry by entry" : "kept"],
+  ], "  ").join("\n"));
+  print();
+  for (const entry of plan.move) {
+    const detail = entry.directory
+      ? `${formatFiles(entry.files)}, ${formatBytes(entry.bytes)}`
+      : formatBytes(entry.bytes);
+    print(`  ${style.dim(symbols.bullet)} ${entry.name}  ${style.dim(detail)}`);
+  }
+  for (const skipped of plan.skip) {
+    status.info(displayPath(skipped.name), describeSkipReason(skipped.reason, plan.target));
+  }
+  print();
+
+  if (!plan.move.length) {
+    status.warning("Nothing to move", `Every entry is already in ${displayPath(plan.target)}.`);
+    return;
+  }
+
+  if (process.env[KANA_DATA_DIR_ENV]?.trim()) {
+    const configured = path.resolve(process.env[KANA_DATA_DIR_ENV].trim());
+    if (configured === source) {
+      status.warning(
+        "Stop Kana first",
+        `${displayPath(source)} is this shell's ${KANA_DATA_DIR_ENV}; a running server may be writing to its databases.`,
+      );
+    }
+  }
+
+  if (dryRun) {
+    print(style.dim("  Dry run: nothing was changed."));
+    return;
+  }
+
+  let agreed = assumeYes;
+  if (!agreed) {
+    if (!canPrompt()) {
+      throw new LauncherError(
+        "`kana migrate` needs an interactive terminal to confirm.",
+        "Run it in a terminal, or pass --yes to confirm from a script.",
+      );
+    }
+    const verb = deleteSource ? "Move" : "Copy";
+    agreed = await promptConfirm(
+      `${verb} ${formatEntries(plan.move.length)} from ${displayPath(source)} into ${displayPath(plan.target)}?`,
+    );
+  }
+  if (!agreed) {
+    print(style.dim("  Nothing was changed."));
+    return;
+  }
+
+  print();
+  const moved = migrateKanaDataRoot({
+    targetDir: plan.target,
+    legacyDirs: [source],
+    requireMarker: !force,
+    copyOnly: !deleteSource,
+    log: (name, _fromDir, targetDir, result) => {
+      status.success(
+        name,
+        result?.mode === "moved"
+          ? `moved into ${displayPath(targetDir)}`
+          : `copied and verified into ${displayPath(targetDir)}`,
+      );
+    },
+    warn: (name, _fromDir, error) => {
+      status.warning(name, `left in place: ${error instanceof Error ? error.message : String(error)}`);
+    },
+  });
+  print();
+
+  const unfinished = plan.move.length - moved.length;
+  if (unfinished > 0) {
+    status.warning(
+      "Partly moved",
+      `${unfinished} of ${plan.move.length} entries are still in ${displayPath(source)}; run the command again.`,
+    );
+  }
+
+  const configured = process.env[KANA_DATA_DIR_ENV]?.trim();
+  const configuredHere = configured && path.resolve(configured) === source;
+  status.info(
+    "Next",
+    configuredHere
+      ? `point the service at the new root: set ${KANA_DATA_DIR_ENV}=${plan.target}, or remove it, then restart Kana. Kana never edits a systemd unit.`
+      : `restart Kana so it reads ${displayPath(plan.target)}.`,
+  );
+  if (!deleteSource) {
+    status.info(
+      "Source",
+      `${displayPath(source)} is unchanged; delete it yourself once Kana reads the new root.`,
+    );
+  } else if (existsSync(source)) {
+    status.info("Source", `${displayPath(source)} still holds entries that were left alone.`);
+  }
+  status.info("Check", "`kana doctor` prints the data root Kana will use.");
 }

@@ -4,7 +4,7 @@ Kana ships as one npm package and one source checkout, and both run the same
 web server. This page covers installation, the first start, and the data root.
 
 **Read when:** you are installing Kana on a computer or a server, or starting it for the first time.
-**Truth in code:** `bin/kana.mjs`, `bin/lib/server.mjs`, `bin/lib/password.mjs`, `scripts/package-standalone.mjs`
+**Truth in code:** `bin/kana.mjs`, `bin/lib/server.mjs`, `bin/lib/password.mjs`, `bin/lib/commands.mjs`, `shared/data-dir.mjs`, `scripts/package-standalone.mjs`
 
 ## Install from npm
 
@@ -31,6 +31,7 @@ forces deployment mode for the life of that process.
 | `kana password` | Creates or changes the access password, on an interactive terminal or from `--stdin`. |
 | `kana config` | Creates `config.json` when missing and opens it in `$VISUAL` or `$EDITOR`, otherwise prints its path. |
 | `kana setup` | Explains the optional local voice download and prints its size. |
+| `kana migrate` | Copies or moves a `KANA_DATA_DIR` root into the default `~/.kana` root, showing every entry and verifying what it writes. |
 | `kana doctor` | Reports Node.js, the web runtime, the password, the config file, Hermes, running Hermes gateways, voice, and the resolved data paths. |
 
 `--port` (default `3000`, then `$KANA_PORT`, then `$PORT`, and 1024–65535) sets
@@ -76,6 +77,32 @@ cancellation registry, and local engine supervisor live in that process, and are
 not shared by clustered workers or replicas. Configure TLS, proxy timeouts, and
 persistent storage for a server deployment (`supported-environment.md`); a
 laptop normally needs only the default root.
+
+### Moving a managed root to the default
+
+A start never moves a root that `KANA_DATA_DIR` names. `kana migrate` is the one
+command that moves one, and only when asked. Stop the service that runs Kana,
+then read the plan and apply it with the same `KANA_DATA_DIR` the unit sets, or
+name the root with `--from`:
+
+```bash
+kana migrate --dry-run   # reads the plan
+kana migrate             # copies $KANA_DATA_DIR into ~/.kana
+```
+
+It lists every entry with its size, copies each one, and verifies that the bytes
+it wrote equal the bytes it read; the source stays where it was, so starting the
+service again with the same root undoes the copy. `--delete-source` moves the
+entries instead of copying them, `--yes` confirms without a prompt, and a
+directory that holds nothing Kana writes is refused unless `--force` is given.
+
+Kana never edits a systemd unit. Point `KANA_DATA_DIR` at the new root, or remove
+it so the service uses the `~/.kana` of the user that runs it, then start the
+service again and read the root Kana reports:
+
+```bash
+kana doctor              # prints the data root this installation uses
+```
 
 ## Install from a source checkout
 

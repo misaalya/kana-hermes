@@ -166,7 +166,7 @@ have no environment override.
 
 | Variable | Effect |
 | --- | --- |
-| `KANA_DATA_DIR` | The data root. Must be absolute. |
+| `KANA_DATA_DIR` | The data root. Must be absolute. A start never moves it; `kana migrate` copies it into the default `~/.kana` root on request (`install.md`). |
 | `KANA_PORT` | Web port; equivalent to `kana --port`. `PORT` is also read. |
 | `KANA_DEPLOYMENT_MODE` | `local` or `deployment`; overrides `deployment.mode`. |
 | `KANA_JWT_SECRET` | Session-signing secret, at least 32 characters. When unset, Kana generates and reuses `jwt-secret` in the data root. |

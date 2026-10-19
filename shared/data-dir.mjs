@@ -4,14 +4,17 @@
 // this one module.
 
 import {
-  cpSync,
+  copyFileSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readdirSync,
+  readlinkSync,
   renameSync,
   rmSync,
   rmdirSync,
   statSync,
+  symlinkSync,
 } from "node:fs";
 import path from "node:path";
 
@@ -95,14 +98,72 @@ function isExdevError(error) {
   return Boolean(error && typeof error === "object" && "code" in error && error.code === "EXDEV");
 }
 
-/** Move one path, falling back to a recursive copy across mount points. */
+/**
+ * Copies one path, verifying every regular file it writes: a directory is
+ * recreated with its own mode and walked, a symlink is recreated as a link, and
+ * a file's written size must equal the size of its source. Returns what it
+ * wrote, so a caller can report a copy it can stand behind.
+ *
+ * @param {string} from
+ * @param {string} to
+ * @returns {{ files: number, bytes: number }}
+ */
+function copyPath(from, to) {
+  const stats = lstatSync(from);
+  if (stats.isDirectory()) {
+    const mode = stats.mode & 0o777;
+    mkdirSync(to, { recursive: true, mode: mode || 0o700 });
+    let files = 0;
+    let bytes = 0;
+    for (const entry of readdirSync(from, { withFileTypes: true })) {
+      const written = copyPath(path.join(from, entry.name), path.join(to, entry.name));
+      files += written.files;
+      bytes += written.bytes;
+    }
+    return { files, bytes };
+  }
+  if (stats.isSymbolicLink()) {
+    symlinkSync(readlinkSync(from), to);
+    return { files: 1, bytes: 0 };
+  }
+  if (!stats.isFile()) {
+    throw new Error(`${from} is not a file, a directory, or a symlink.`);
+  }
+  copyFileSync(from, to);
+  const written = statSync(to);
+  if (written.size !== stats.size) {
+    throw new Error(`${to} holds ${written.size} bytes after the copy, not ${stats.size}.`);
+  }
+  return { files: 1, bytes: stats.size };
+}
+
+/** The same walk as copyPath, writing nothing, for a move nobody has agreed to yet. */
+function measurePath(from) {
+  const stats = lstatSync(from);
+  if (stats.isDirectory()) {
+    let files = 0;
+    let bytes = 0;
+    for (const entry of readdirSync(from, { withFileTypes: true })) {
+      const measured = measurePath(path.join(from, entry.name));
+      files += measured.files;
+      bytes += measured.bytes;
+    }
+    return { files, bytes };
+  }
+  if (stats.isSymbolicLink()) return { files: 1, bytes: 0 };
+  return { files: 1, bytes: stats.isFile() ? stats.size : 0 };
+}
+
+/** Move one path, falling back to a verified copy across mount points. */
 function movePath(from, to) {
   try {
     renameSync(/* turbopackIgnore: true */ from, to);
+    return { mode: "moved", ...measurePath(to) };
   } catch (error) {
     if (!isExdevError(error)) throw error;
-    cpSync(/* turbopackIgnore: true */ from, to, { recursive: true });
+    const written = copyPath(from, to);
     rmSync(/* turbopackIgnore: true */ from, { recursive: true, force: true });
+    return { mode: "copied", ...written };
   }
 }
 
@@ -113,35 +174,39 @@ function familyName(name) {
 }
 
 /**
- * Moves everything an earlier data root holds into the resolved root, one file
- * at a time: an existing target file always wins, and for a name that two
- * legacy roots both hold the newest copy wins. Directories (the voice library,
- * an installed voice engine) move whole.
+ * What a move would take, and what it would leave. The families of a source
+ * root the target does not already hold, each paired with the one source root it
+ * comes from, plus a reason for every source or family passed over.
  *
- * Best effort by design: a failure leaves that entry in place for the next
- * start, and never throws, so a launcher or server start is never blocked by a
- * read-only or foreign-owned legacy root.
- *
- * @param {{
- *   targetDir: string,
- *   legacyDirs: readonly string[],
- *   log?: (name: string, fromDir: string, targetDir: string) => void,
- *   warn?: (name: string, fromDir: string, error: unknown) => void,
- *   requireMarker?: boolean,
- * }} input
- * @returns {string[]} the names it moved, in the order it moved them
+ * @param {{ targetDir: string, legacyDirs: readonly string[], requireMarker?: boolean }} input
+ * @returns {{
+ *   target: string,
+ *   sources: string[],
+ *   entries: { family: string, members: string[], sourceDir: string }[],
+ *   skips: { name: string, reason: string }[],
+ * }}
  */
-export function migrateKanaDataRoot(input) {
+function selectKanaDataEntries(input) {
   const target = path.resolve(input.targetDir);
   const requireMarker = input.requireMarker !== false;
-  const sources = [...new Set(
-    input.legacyDirs
-      .map((dir) => path.resolve(dir))
-      .filter((dir) => dir !== target && existsSync(/* turbopackIgnore: true */ dir)),
-  )].filter((dir) => !requireMarker || looksLikeKanaDataRoot(dir));
+  const skips = [];
 
-  const moved = [];
-  if (!sources.length) return moved;
+  const sources = [];
+  for (const dir of new Set(input.legacyDirs.map((entry) => path.resolve(entry)))) {
+    if (dir === target) {
+      skips.push({ name: dir, reason: "target" });
+      continue;
+    }
+    if (!existsSync(/* turbopackIgnore: true */ dir)) {
+      skips.push({ name: dir, reason: "missing" });
+      continue;
+    }
+    if (requireMarker && !looksLikeKanaDataRoot(dir)) {
+      skips.push({ name: dir, reason: "unrecognized" });
+      continue;
+    }
+    sources.push(dir);
+  }
 
   const names = new Set();
   for (const source of sources) {
@@ -155,7 +220,7 @@ export function migrateKanaDataRoot(input) {
     families.get(family).push(name);
   }
 
-  let createdTarget = false;
+  const entries = [];
   for (const [family, members] of families) {
     const familyNames = [family, ...members];
 
@@ -167,6 +232,7 @@ export function migrateKanaDataRoot(input) {
         existsSync(/* turbopackIgnore: true */ path.join(target, name)),
       )
     ) {
+      skips.push({ name: family, reason: "target" });
       continue;
     }
 
@@ -190,33 +256,138 @@ export function migrateKanaDataRoot(input) {
     }
     if (!sourceDir) continue;
 
-    for (const member of members) {
-      const from = path.join(/* turbopackIgnore: true */ sourceDir, member);
+    entries.push({ family, members, sourceDir });
+  }
+
+  return { target, sources, entries, skips };
+}
+
+/**
+ * Moves everything an earlier data root holds into the resolved root, one file
+ * at a time: an existing target file always wins, and for a name that two
+ * legacy roots both hold the newest copy wins. Directories (the voice library,
+ * an installed voice engine) move whole.
+ *
+ * Best effort by design: a failure leaves that entry in place for the next
+ * start, and never throws, so a launcher or server start is never blocked by a
+ * read-only or foreign-owned legacy root.
+ *
+ * `copyOnly` copies rather than moves, verifies every file it writes, and leaves
+ * each source entry where it was; `dryRun` reports the same names and touches
+ * nothing. Both exist for the operator-run `kana migrate`, which must be able to
+ * show a plan and to keep the source until the operator deletes it.
+ *
+ * @param {{
+ *   targetDir: string,
+ *   legacyDirs: readonly string[],
+ *   log?: (name: string, fromDir: string, targetDir: string, result?: { mode: string, files: number, bytes: number }) => void,
+ *   warn?: (name: string, fromDir: string, error: unknown) => void,
+ *   skip?: (name: string, reason: string) => void,
+ *   requireMarker?: boolean,
+ *   copyOnly?: boolean,
+ *   dryRun?: boolean,
+ * }} input
+ * @returns {string[]} the names it moved, in the order it moved them
+ */
+export function migrateKanaDataRoot(input) {
+  const { target, sources, entries, skips } = selectKanaDataEntries(input);
+  for (const skipped of skips) input.skip?.(skipped.name, skipped.reason);
+
+  const moved = [];
+  let createdTarget = false;
+
+  for (const entry of entries) {
+    const copied = [];
+    for (const member of entry.members) {
+      const from = path.join(entry.sourceDir, member);
       if (!existsSync(/* turbopackIgnore: true */ from)) continue;
+      const to = path.join(target, member);
+
+      if (input.dryRun) {
+        moved.push(member);
+        input.log?.(member, entry.sourceDir, target);
+        continue;
+      }
+
       try {
         if (!createdTarget) {
           mkdirSync(/* turbopackIgnore: true */ target, { recursive: true, mode: 0o700 });
           createdTarget = true;
         }
-        movePath(from, path.join(/* turbopackIgnore: true */ target, member));
+        const result = input.copyOnly
+          ? { mode: "copied", ...copyPath(from, to) }
+          : movePath(from, to);
+        copied.push(member);
         moved.push(member);
-        input.log?.(member, sourceDir, target);
+        input.log?.(member, entry.sourceDir, target, result);
       } catch (error) {
-        input.warn?.(member, sourceDir, error);
+        // A copy that failed halfway would leave a database family split across
+        // two roots, which is what the family rule exists to prevent: take back
+        // what this call wrote and leave the source whole for another try.
+        if (input.copyOnly) {
+          for (const written of copied) {
+            try {
+              rmSync(path.join(target, written), { recursive: true, force: true });
+            } catch {
+              // An entry that will not come back off is still better left in
+              // place than made a reason to fail the whole move.
+            }
+          }
+        }
+        input.warn?.(member, entry.sourceDir, error);
+        if (input.copyOnly) break;
       }
     }
   }
 
   // A legacy root that gave up everything it held leaves no clutter behind.
-  for (const source of sources) {
-    try {
-      if (!readdirSync(/* turbopackIgnore: true */ source).length) {
-        rmdirSync(/* turbopackIgnore: true */ source);
+  if (!input.dryRun && !input.copyOnly) {
+    for (const source of sources) {
+      try {
+        if (!readdirSync(/* turbopackIgnore: true */ source).length) {
+          rmdirSync(/* turbopackIgnore: true */ source);
+        }
+      } catch {
+        // Still in use, partly drained, or not ours to remove.
       }
-    } catch {
-      // Still in use, partly drained, or not ours to remove.
     }
   }
 
   return moved;
+}
+
+/**
+ * What a move would take, without taking it: the entries, how much they hold,
+ * and why anything was passed over. `kana migrate` shows this before it asks for
+ * agreement, and the move itself runs the same selection again, so a plan that
+ * was read by a person and the move that follows it cannot disagree about the
+ * rules.
+ *
+ * @param {{ targetDir: string, legacyDirs: readonly string[], requireMarker?: boolean }} input
+ * @returns {{
+ *   target: string,
+ *   move: { name: string, from: string, to: string, directory: boolean, files: number, bytes: number }[],
+ *   skip: { name: string, reason: string }[],
+ * }}
+ */
+export function planKanaDataRootMove(input) {
+  const { target, entries, skips } = selectKanaDataEntries(input);
+  const move = [];
+  for (const entry of entries) {
+    for (const member of entry.members) {
+      const from = path.join(entry.sourceDir, member);
+      if (!existsSync(/* turbopackIgnore: true */ from)) continue;
+      const stats = lstatSync(/* turbopackIgnore: true */ from);
+      const measured = measurePath(from);
+      move.push({
+        name: member,
+        from,
+        to: path.join(target, member),
+        directory: stats.isDirectory(),
+        files: measured.files,
+        bytes: measured.bytes,
+      });
+    }
+  }
+  return { target, move, skip: skips };
 }

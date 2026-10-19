@@ -227,7 +227,7 @@ For server installations. Set these in the environment that runs `kana`, not in 
 
 | Variable | Description |
 | --- | --- |
-| `KANA_DATA_DIR` | Kana's data folder, which holds `config.json` and the voice engine. When unset, Kana uses `~/.kana`; data from an earlier release (`$XDG_DATA_HOME/kana`, `~/.local/share/kana`) is moved there on the next start. |
+| `KANA_DATA_DIR` | Kana's data folder, which holds `config.json` and the voice engine, and must be absolute. When unset, Kana uses `~/.kana`; data from an earlier release (`$XDG_DATA_HOME/kana`, `~/.local/share/kana`) is moved there on the next start. A folder set here is never moved by a start: `kana migrate` copies it into `~/.kana` when you ask for it. |
 | `KANA_PORT` | Port for Kana's web page. Defaults to `3000`; equivalent to `kana --port`. |
 | `KANA_DEPLOYMENT_MODE` | `local` or `deployment`. Overrides `deployment.mode`. |
 | `KANA_HERMES_BIN` | Path to the Hermes program. Overrides `hermes.executable`. |
@@ -237,6 +237,8 @@ For server installations. Set these in the environment that runs `kana`, not in 
 ```sh
 KANA_DATA_DIR=/var/lib/kana KANA_PORT=3000 kana serve
 ```
+
+To move a managed folder into `~/.kana`, stop Kana and run `kana migrate`: it prints every entry with its size, copies and verifies each one, leaves the source in place, and then asks you to point `KANA_DATA_DIR` at `~/.kana` or remove it. Add `--delete-source` to move the entries instead of copying them, and `--dry-run` to read the plan without changing anything.
 
 Voice settings have no environment variables; change them in `config.json`.
 

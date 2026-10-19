@@ -34,9 +34,10 @@ moved stays where it is for the next start.
 
 The migration is deliberately narrow, because moving user data has no undo. It
 runs only when Kana resolved its own default root: `KANA_DATA_DIR` is an
-operator's managed location, so nothing is ever moved into or out of it, and a
-test or capture run that points the root at a temporary directory cannot touch
-the developer's own install. A directory counts as an earlier root only when it
+operator's managed location, so no start ever moves anything into or out of it,
+and a test or capture run that points the root at a temporary directory cannot
+touch the developer's own install. The one way data leaves that root is a person
+asking for it: `kana migrate` (ADR-0004). A directory counts as an earlier root only when it
 holds something Kana wrote, so a project folder that happens to be named `data`
 is left alone. Recognition needs a name only Kana writes — `appstate.db`,
 `activities.db`, `jwt-secret`, `voices/`, or `irodori/`. `config.json` and
