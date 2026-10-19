@@ -12,7 +12,7 @@ baseline, the limits it implies, and the steps for a VPS deployment.
 | --- | --- |
 | Host OS | Linux x86_64 with glibc; 2.35 or newer for the local voice engine |
 | Node.js | 22.13 or newer; validated on 22.22 |
-| Kana | 0.5.0 on Next.js 16.3.1, standalone server bound to loopback |
+| Kana | 0.5.1 on Next.js 16.3.1, standalone server bound to loopback |
 | Browser | current Chromium/Chrome desktop and 390 × 844 mobile emulation; reflow checked at 320, 360, 390, 768, and 1440 CSS pixels plus mobile landscape; a production Chrome profile also passes manifest installability and an offline service-worker reload |
 | Hermes Agent | 0.20.1 (2026.8.13) through `hermes serve` JSON-RPC/WebSocket |
 | Local voice (optional) | irodori-c `v0.2.0` prebuilt Linux x86-64 release with Irodori-TTS v4.1 Anime revision `6b259f5b`, verified on an Intel i3-1005G1 with int8 |
