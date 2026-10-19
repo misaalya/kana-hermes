@@ -20,7 +20,10 @@ import { isJsonRecord } from "./protocol";
 export type KanaGuardrailUnavailableAction = "block" | "allow";
 
 export type KanaGuardrailsConfig = {
-  /** Server-only TypeSafe key. An unset or empty key disables the layer. */
+  /**
+   * Server-only TypeSafe key. Absent, empty, or whitespace turns the layer off:
+   * config.json ships an empty string, so blank means "off", never "broken".
+   */
   apiKey?: string;
   /** A TypeSafe model alias or versioned id; defaults to jev-latest. */
   model?: string;
@@ -75,6 +78,21 @@ function optionalString(
   return value.trim();
 }
 
+/**
+ * The API key, where empty means "the layer is off" rather than "the block is
+ * broken". config.json ships an empty string, and the owner may clear the key
+ * to turn the layer off, so a blank or whitespace key disables screening
+ * instead of failing the config and refusing turns. A key that is not a string
+ * at all is still a mistake the owner has to see.
+ */
+function parseApiKey(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string") {
+    throw new Error("guardrails.apiKey must be a string.");
+  }
+  return value.trim() || undefined;
+}
+
 function optionalProbability(
   record: Record<string, unknown>,
   key: string,
@@ -105,8 +123,13 @@ function parseRule(value: unknown, index: number): string {
 export function parseGuardrailsConfig(value: unknown): KanaGuardrailsConfig {
   if (!isJsonRecord(value)) throw new Error("guardrails must be a JSON object.");
   const config: KanaGuardrailsConfig = {};
-  const apiKey = optionalString(value, "apiKey", "guardrails", MAX_API_KEY_CHARACTERS);
-  if (apiKey !== undefined) config.apiKey = apiKey;
+  const apiKey = parseApiKey(value.apiKey);
+  if (apiKey !== undefined) {
+    if (apiKey.length > MAX_API_KEY_CHARACTERS) {
+      throw new Error(`guardrails.apiKey must be ${MAX_API_KEY_CHARACTERS} characters or fewer.`);
+    }
+    config.apiKey = apiKey;
+  }
   const model = optionalString(value, "model", "guardrails", 200);
   if (model !== undefined) {
     if (!/^[\w.:-]+$/.test(model)) {
@@ -143,7 +166,9 @@ export function parseGuardrailsConfig(value: unknown): KanaGuardrailsConfig {
 /**
  * The screening the config asks for, or null when nothing should be screened:
  * no API key (the layer is off), or a key with no rules (nothing to check).
- * Both are the owner's explicit choice, so neither sends a request.
+ * An empty key is the layer being off, not a broken block, so rules that ship
+ * with a fresh config never refuse a turn before the owner sets a key. Both
+ * cases are the owner's explicit choice, so neither sends a request.
  */
 export function resolveGuardrailPolicy(config: KanaGuardrailsConfig): GuardrailPolicy | null {
   if (!config.apiKey) return null;

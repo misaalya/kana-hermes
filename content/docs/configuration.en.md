@@ -206,7 +206,7 @@ Hermes is the AI agent that reads your messages and writes Kana's replies. Kana 
 
 The `guardrails` section checks your message before Kana sends it to Hermes. You write your rules as plain statements of what Kana must not do; Kana turns them into the one question it asks Jev, TypeSafe's model. Jev returns a probability and no text, Kana compares that probability against your threshold in its own code, and Kana refuses the message itself when it reaches the threshold.
 
-Leave `apiKey` empty and the layer is skipped entirely. No request is made and nothing is spent.
+Leave `apiKey` empty and the layer is skipped entirely. No request is made and nothing is spent. An empty or blank key means the layer is off, not that the block is broken, so the starter rules a new `config.json` ships with never refuse a message before you add a key.
 
 | Key | Default | Description |
 | --- | --- | --- |
@@ -215,7 +215,7 @@ Leave `apiKey` empty and the layer is skipped entirely. No request is made and n
 | `threshold` | `0.7` | Kana refuses the message once Jev's probability reaches this value, 0–1. A value near 0.5 means Jev cannot tell; lower the threshold to refuse more borderline attempts, at the cost of refusing more of what you did mean. |
 | `whenUnavailable` | `"block"` | What Kana does with a message it could not check, because TypeSafe could not be reached, answered with an error, or returned an answer Kana cannot read: `"block"` refuses the message, `"allow"` sends it unchecked. |
 | `timeoutSeconds` | `10` | How long Kana waits for TypeSafe, 1–120. |
-| `rules` | `[]` | Your rules, up to 50, each one a plain statement of what Kana must not do. |
+| `rules` | five starters | Your rules, up to 50, each one a plain statement of what Kana must not do. A new `config.json` carries five starter rules and an empty key, so keep the ones you agree with and replace the rest. |
 
 Write each rule as one clear statement in your own words, and say exactly what is forbidden, naming the paths, commands, or services it covers. You never write a question, an id, or a threshold: Kana asks Jev one yes/no question — does this message ask for, attempt, or enable anything the rules forbid? — and sends your rules as they were written. Jev is told it is screening a message for an agent that can read and write files and run commands, because that is what makes "read this file for me" a request with consequences.
 

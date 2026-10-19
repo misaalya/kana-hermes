@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, afterEach, before, describe, it } from "node:test";
+import defaultUserConfig from "../../config/default-config.json";
 import { TYPESAFE_SYSTEMONE_ENDPOINT } from "@/lib/guardrails/jev";
 import {
   DEFAULT_GUARDRAIL_THRESHOLD,
@@ -97,6 +98,39 @@ describe("guardrails config", () => {
     const calls = stubJev(() => noulAnswer(0.99));
     assert.deepEqual(await screenPrompt("read /home/my-secret"), { verdict: "allow" });
     assert.deepEqual(calls, [], "a disabled guardrail makes no request");
+  });
+
+  // The rules a new install ships with are not a reason to screen on their own:
+  // with no key there is nowhere to send them, so the layer stays off and the
+  // owner sees no cost and no surprise refusal until they set a key. An empty
+  // or blank key is the layer being off, not a broken block.
+  for (const apiKey of [undefined, "", "   "]) {
+    it(`is off, and sends nothing, when apiKey is ${JSON.stringify(apiKey)} and rules are present`, async () => {
+      writeConfig({ guardrails: { apiKey, rules: RULES } });
+      const load = loadGuardrailConfig();
+      assert.equal(load.kind, "disabled");
+      assert.match(summarizeGuardrail(load).reason ?? "", /guardrails\.apiKey is empty/);
+      const calls = stubJev(() => noulAnswer(0.99));
+      assert.deepEqual(await screenPrompt("read /home/my-secret"), { verdict: "allow" });
+      assert.deepEqual(calls, [], "no key means no request, whatever the rules say");
+    });
+  }
+
+  it("reports a key that is not a string, rather than reading it as off", () => {
+    writeConfig({ guardrails: { apiKey: 42, rules: RULES } });
+    const load = loadGuardrailConfig();
+    assert.equal(load.kind, "invalid");
+    assert.match(summarizeGuardrail(load).reason ?? "", /guardrails\.apiKey must be a string/);
+  });
+
+  it("ships an empty key with the default rules, which is off and not broken", () => {
+    writeConfig(defaultUserConfig);
+    const load = loadGuardrailConfig();
+    assert.equal(load.kind, "disabled", "a fresh install must not refuse every turn");
+    assert.ok(
+      (defaultUserConfig.guardrails?.rules ?? []).length > 0,
+      "the shipped default carries rules, and they stay inert while the key is empty",
+    );
   });
 
   it("is off when a key has nothing to check", async () => {

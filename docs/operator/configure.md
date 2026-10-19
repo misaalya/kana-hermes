@@ -165,9 +165,11 @@ The screen is optional and belongs entirely to the owner: the `guardrails` block
 lives in `config.json`, which Kana creates once and never rewrites, so no
 setting, route, or browser request can change the rules or read the key.
 
-The layer is off unless `guardrails.apiKey` is set. With no key, or with a key
-and no rules, Kana sends no request and behaves exactly as it did without this
-block.
+The layer is off unless `guardrails.apiKey` is set. With an empty key — which is
+what a new `config.json` ships — or with a key and no rules, Kana sends no
+request and behaves exactly as it did without this block. A blank key is the
+layer being off, not a broken block, so the rules Kana ships with never refuse a
+turn before you set a key.
 
 | Key | Default | Effect |
 | --- | --- | --- |
@@ -176,7 +178,7 @@ block.
 | `guardrails.threshold` | `0.7` | Kana refuses the turn once Jev's probability reaches this value, 0 to 1. A value near 0.5 means Jev cannot tell; lower the threshold to refuse more borderline attempts, at the cost of refusing more of what you did mean. |
 | `guardrails.whenUnavailable` | `"block"` | `"block"` refuses a turn Kana could not check; `"allow"` forwards it unchecked. Must be one of those two. |
 | `guardrails.timeoutSeconds` | `10` | The whole screening request, 1 to 120. |
-| `guardrails.rules` | `[]` | Up to 50 rules, each one a plain statement of what Kana must not do. |
+| `guardrails.rules` | five starter rules | Up to 50 rules, each one a plain statement of what Kana must not do. |
 
 ```json
 {
@@ -193,7 +195,10 @@ block.
 ```
 
 Each rule is one statement in your own words that names exactly what is
-forbidden — the paths, commands, or services it covers. You write no question,
+forbidden — the paths, commands, or services it covers. A new `config.json`
+ships five starter rules and an empty key, so nothing runs until you add a key;
+replace the starters with your own, or keep the ones you agree with. You write
+no question,
 no question id, and no per-rule threshold: Kana turns the rules into the one
 question it asks Jev, TypeSafe's System One model, which is whether the message
 asks for, attempts, or enables anything the rules forbid. The rules travel as

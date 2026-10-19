@@ -206,7 +206,7 @@ Hermes adalah agen AI yang memproses pesan dan menyusun balasan Kana. Kana menem
 
 Bagian `guardrails` memeriksa pesan Anda sebelum Kana mengirimkannya ke Hermes. Anda menulis aturan sebagai pernyataan biasa tentang apa yang tidak boleh dilakukan Kana; Kana mengubahnya menjadi satu pertanyaan yang diajukan kepada Jev, model TypeSafe. Jev mengembalikan probabilitas dan bukan teks, Kana membandingkan probabilitas itu dengan ambang batas Anda di dalam kodenya sendiri, dan Kana menolak pesan itu sendiri ketika ambang batas tercapai.
 
-Biarkan `apiKey` kosong dan lapisan ini dilewatkan sepenuhnya. Tidak ada permintaan yang dikirim dan tidak ada biaya yang keluar.
+Biarkan `apiKey` kosong dan lapisan ini dilewatkan sepenuhnya. Tidak ada permintaan yang dikirim dan tidak ada biaya yang keluar. Kunci yang kosong atau berisi spasi berarti lapisan ini mati, bukan blok yang rusak, sehingga aturan bawaan yang disertakan `config.json` baru tidak pernah menolak pesan sebelum Anda menambahkan kunci.
 
 | Kunci | Nilai bawaan | Keterangan |
 | --- | --- | --- |
@@ -215,7 +215,7 @@ Biarkan `apiKey` kosong dan lapisan ini dilewatkan sepenuhnya. Tidak ada permint
 | `threshold` | `0.7` | Kana menolak pesan begitu probabilitas dari Jev mencapai nilai ini, 0–1. Nilai di sekitar 0.5 berarti Jev tidak dapat memastikan; turunkan ambang batas untuk menolak lebih banyak percobaan yang berada di batas, dengan konsekuensi lebih banyak penolakan atas hal yang sebenarnya Anda maksud. |
 | `whenUnavailable` | `"block"` | Yang dilakukan Kana terhadap pesan yang tidak dapat diperiksanya, karena TypeSafe tidak dapat dijangkau, menjawab dengan galat, atau mengembalikan jawaban yang tidak dapat dibaca Kana: `"block"` menolak pesan, `"allow"` mengirimkannya tanpa pemeriksaan. |
 | `timeoutSeconds` | `10` | Lama Kana menunggu TypeSafe, 1–120. |
-| `rules` | `[]` | Aturan Anda, maksimal 50, masing-masing satu pernyataan biasa tentang apa yang tidak boleh dilakukan Kana. |
+| `rules` | lima aturan awal | Aturan Anda, maksimal 50, masing-masing satu pernyataan biasa tentang apa yang tidak boleh dilakukan Kana. `config.json` baru membawa lima aturan awal dan kunci kosong, jadi simpan yang Anda setujui dan ganti sisanya. |
 
 Tulis setiap aturan sebagai satu pernyataan jelas dengan kata-kata Anda sendiri, dan sebutkan dengan tepat apa yang dilarang, termasuk jalur, perintah, atau layanan yang dicakupnya. Anda tidak pernah menulis pertanyaan, id, atau ambang batas per aturan: Kana mengajukan satu pertanyaan ya/tidak kepada Jev — apakah pesan ini meminta, mencoba, atau memungkinkan sesuatu yang dilarang aturan? — dan mengirim aturan Anda apa adanya. Jev diberi tahu bahwa ia menyaring pesan untuk agen yang dapat membaca dan menulis berkas serta menjalankan perintah, karena itulah yang membuat "bacakan berkas ini untukku" menjadi permintaan yang berdampak.
 

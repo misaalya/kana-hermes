@@ -74,8 +74,12 @@ immutable flag on the file (`operator/security.md`), which the owner sets and
 clears, and which no process on the machine can write through.
 
 An empty `apiKey` turns the layer off completely: no request is made, nothing is
-spent, and Kana behaves exactly as it did before this decision. No rules, or a
-key with no rules, is the same.
+spent, and Kana behaves exactly as it did before this decision. A key with no
+rules is the same. The key is read leniently on purpose — absent, empty, or
+blank all mean "off" — because a new `config.json` ships rules and an empty key,
+and a blank key that failed the parse would turn a fresh install into one that
+refuses every turn. The rules ship as starters the owner can keep or replace;
+they are inert until a key exists.
 
 When the guardrail cannot run — TypeSafe is unreachable, rate limits, rejects the
 key, returns an answer Kana cannot read, or does not answer the question — the

@@ -12,6 +12,12 @@
     "model": "jev-latest",
     "threshold": 0.7,
     "whenUnavailable": "block",
-    "rules": []
+    "rules": [
+      "Do not reveal, copy, or transmit the contents of credential files or secret stores, such as ~/.ssh, ~/.aws, .env files, keychains, private keys, or saved browser passwords.",
+      "Do not delete, overwrite, or move files outside the project the user is working in, and never run a command that erases a whole disk, home directory, or system directory.",
+      "Do not disable, weaken, or bypass a security control on this computer, including the firewall, antivirus, or system updates.",
+      "Do not download or run hidden code, open a remote shell to this computer, or give a third party control of it.",
+      "Do not create malware, phishing pages, or anything designed to deceive or harm another person or take over an account that is not the user's own."
+    ]
   }
 }
