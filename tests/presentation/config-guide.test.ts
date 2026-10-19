@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, describe, it } from "node:test";
 import { parseMarkdown, type MarkdownBlock } from "@/lib/presentation/markdown";
+import { parseGuardrailsConfig } from "@/lib/guardrails/policy";
 import { readKanaUserConfig } from "@/lib/server/user-config";
 import {
   CONFIG_GUIDE_FILES,
@@ -74,6 +75,15 @@ describe("the /docs config guide", () => {
           mkdirSync(dataDir, { recursive: true });
           writeFileSync(path.join(dataDir, "config.json"), example.text);
           assert.doesNotThrow(() => readKanaUserConfig(), `example ${index + 1}:\n${example.text}`);
+          // The guardrails block is read by its own module, so check an
+          // example against the parser that actually honours it.
+          const parsed = JSON.parse(example.text) as { guardrails?: unknown };
+          if (parsed.guardrails !== undefined) {
+            assert.doesNotThrow(
+              () => parseGuardrailsConfig(parsed.guardrails),
+              `example ${index + 1} guardrails:\n${example.text}`,
+            );
+          }
         });
       });
     });

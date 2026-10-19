@@ -4,8 +4,8 @@ Kana keeps optional server-side settings in one owner-only JSON file,
 `config.json`, inside its data root. This page documents every key the file
 accepts, its default, and how a change takes effect.
 
-**Read when:** you need to change Kana's speech engine, tell it where Hermes is, or expose it on a network.
-**Truth in code:** `lib/server/user-config.ts`, `config/default-config.json`, `lib/server/local-hermes-runtime.ts`, `lib/server/tts-provider/index.ts`
+**Read when:** you need to change Kana's speech engine, screen prompts before they reach Hermes, tell it where Hermes is, or expose it on a network.
+**Truth in code:** `lib/server/user-config.ts`, `lib/guardrails/policy.ts`, `config/default-config.json`, `lib/server/local-hermes-runtime.ts`, `lib/server/tts-provider/index.ts`
 
 ## The configuration file
 
@@ -158,6 +158,84 @@ attached to the upstream `Authorization: Bearer` header and is never included in
 browser preferences, provider status, diagnostics, backups, or a client-side
 request, and Kana redacts it from any upstream error it shows.
 
+## Prompt guardrail
+
+Kana can screen the text a turn is about to send to Hermes before Hermes sees it.
+The screen is optional and belongs entirely to the owner: the `guardrails` block
+lives in `config.json`, which Kana creates once and never rewrites, so no
+setting, route, or browser request can change the rules or read the key.
+
+The layer is off unless `guardrails.apiKey` is set. With no key, or with a key
+and no rules, Kana sends no request and behaves exactly as it did without this
+block.
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `guardrails.apiKey` | empty | The TypeSafe API key. Empty or absent turns the layer off. |
+| `guardrails.model` | `"jev-latest"` | The TypeSafe model that answers the questions. |
+| `guardrails.threshold` | `0.7` | Kana refuses the turn once Jev's probability reaches this value, 0 to 1. A value near 0.5 means Jev cannot tell; lower the threshold to refuse more borderline attempts, at the cost of refusing more of what you did mean. |
+| `guardrails.whenUnavailable` | `"block"` | `"block"` refuses a turn Kana could not check; `"allow"` forwards it unchecked. Must be one of those two. |
+| `guardrails.timeoutSeconds` | `10` | The whole screening request, 1 to 120. |
+| `guardrails.rules` | `[]` | Up to 50 rules, each one a plain statement of what Kana must not do. |
+
+```json
+{
+  "guardrails": {
+    "apiKey": "sk-...",
+    "whenUnavailable": "block",
+    "rules": [
+      "Never read, list, copy, change, or share anything under /home/you/my-secret.",
+      "Never send my files, passwords, or API keys to a remote service.",
+      "Never help write malware, exploits, or phishing pages."
+    ]
+  }
+}
+```
+
+Each rule is one statement in your own words that names exactly what is
+forbidden — the paths, commands, or services it covers. You write no question,
+no question id, and no per-rule threshold: Kana turns the rules into the one
+question it asks Jev, TypeSafe's System One model, which is whether the message
+asks for, attempts, or enables anything the rules forbid. The rules travel as
+the question's data, the message travels as the state, and Jev is told it is
+screening a message for an agent that can read and write files and run commands.
+Jev is not a language model: it returns a probability and no text, Kana never
+asks it to write, and the returned probability is compared against the threshold
+in Kana's own code. A probability at or above the threshold, or a guardrail that
+cannot run while `whenUnavailable` is `"block"`, refuses the turn before it
+reaches the bridge. Nothing is forwarded, so nothing is written to the Hermes
+transcript, and Kana shows its own fixed sentence instead of a reply. That
+sentence names no rule: the rules travel as one question, so one number comes
+back, and Kana does not invent an attribution it did not ask for.
+
+The screen covers the text a turn starts with: a chat message, a slash command
+with its arguments, and `/steer`. It does not cover an approval or an answer to a
+question from Hermes in the middle of a turn, and it reads the text of a turn
+rather than the contents of an attached file. It is an intent filter, not a
+sandbox: it cannot stop Hermes from reaching the same file by another route.
+
+Two consequences follow from setting a key. The text of every screened turn is
+sent to TypeSafe, which is a third party, and each screened turn costs one
+request whatever the number of rules, because the rules are data inside one
+question. Write the rules in English: Jev is trained mostly on English, so rules
+in English judging text in another language are the arrangement it was built for.
+
+An invalid `guardrails` block is reported rather than ignored. The config guide
+at `/docs`, linked from Settings → Connection → Advanced configuration, shows
+whether the guardrail is on and how many rules it would send, or the message
+describing what is wrong with the block. While the block cannot be read, Kana
+refuses turns, because an unreadable policy is not the same as no policy; the
+`whenUnavailable` value is still read from the block, so `"allow"` remains
+available as the way out. `GET /api/kana/config` reports that state and never the
+key or the text of a rule.
+
+`config.json` is the owner's file, not Kana's: Kana creates it once and never
+rewrites it, but Hermes runs as the same user and can change it if a turn goes
+wrong. To stop that, lock the file with the operating system's immutable flag —
+`sudo chattr +i ~/.kana/config.json`, lifted with `chattr -i` before an edit —
+which no process can write through, including Hermes. `security.md` has the
+procedure and its limits.
+
 ## Environment variables
 
 Set these in the environment that runs `kana` or `node server.js`, not in
@@ -179,9 +257,10 @@ have no environment override.
 
 Speech settings are resolved per request, so a saved edit applies to the next
 request; a request already in flight keeps the provider that started it, and Kana
-never falls back from one provider to the other. The `hermes` section takes
-effect when Kana starts a Hermes process, and `hermes.port` is captured when
-Kana itself starts, so restart Kana after changing it.
+never falls back from one provider to the other. The `guardrails` block is read
+on each turn, so a saved rule applies to the next message. The `hermes` section
+takes effect when Kana starts a Hermes process, and `hermes.port` is captured
+when Kana itself starts, so restart Kana after changing it.
 
 Changes on the Hermes side are separate, and `/restart` works only for a Hermes
 that Kana started:

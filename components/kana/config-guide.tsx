@@ -27,6 +27,7 @@ const SECTION_ICONS: Record<string, MaterialSymbolName> = {
   irodori: "memory",
   pollinations: "cloud",
   hermes: "dns",
+  guardrail: "check",
   deployment: "lan",
   environment: "terminal",
   troubleshooting: "help",
@@ -60,11 +61,36 @@ function GuideCode({ language, code, copy }: { language: string; code: string; c
   );
 }
 
+type GuardrailStatus = {
+  state: "disabled" | "enabled" | "invalid";
+  rules: number;
+  reason: string | null;
+};
+
 type ConfigFileState = {
   path: string;
   deploymentMode: "local" | "deployment";
   configError: string | null;
+  guardrail: GuardrailStatus;
 };
+
+/** The endpoint never sends the key or the rule text, only this summary. */
+function readGuardrailStatus(value: unknown): GuardrailStatus {
+  const record =
+    typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
+  return {
+    state:
+      record.state === "enabled" || record.state === "invalid" ? record.state : "disabled",
+    rules: typeof record.rules === "number" && Number.isFinite(record.rules) ? record.rules : 0,
+    reason: typeof record.reason === "string" ? record.reason : null,
+  };
+}
+
+function guardrailLabel(status: GuardrailStatus, copy: ConfigGuideCopy): string {
+  if (status.state === "enabled") return copy.guardrailOn(status.rules);
+  if (status.state === "invalid") return copy.guardrailInvalid(status.reason ?? "");
+  return copy.guardrailOff(status.reason ?? "");
+}
 
 /** The guide's `kana-config-path` block: this installation's own file. */
 function ConfigFile({ fallback, copy }: { fallback: string; copy: ConfigGuideCopy }) {
@@ -74,12 +100,13 @@ function ConfigFile({ fallback, copy }: { fallback: string; copy: ConfigGuideCop
     let active = true;
     void fetch("/api/kana/config", { credentials: "same-origin", cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
-      .then((value: Partial<ConfigFileState> | null) => {
-        if (!active || !value?.path) return;
+      .then((value: Record<string, unknown> | null) => {
+        if (!active || typeof value?.path !== "string") return;
         setState({
           path: value.path,
           deploymentMode: value.deploymentMode === "deployment" ? "deployment" : "local",
-          configError: value.configError ?? null,
+          configError: typeof value.configError === "string" ? value.configError : null,
+          guardrail: readGuardrailStatus(value.guardrail),
         });
       })
       .catch(() => undefined);
@@ -104,6 +131,13 @@ function ConfigFile({ fallback, copy }: { fallback: string; copy: ConfigGuideCop
       {state ? (
         <p className="px-1 text-[12.5px] text-muted">
           {copy.mode}: {state.deploymentMode === "deployment" ? copy.modeDeployment : copy.modeLocal}
+        </p>
+      ) : null}
+      {state ? (
+        <p
+          className={`px-1 text-[12.5px] ${state.guardrail.state === "invalid" ? "text-danger" : "text-muted"}`}
+        >
+          {copy.guardrail}: {guardrailLabel(state.guardrail, copy)}
         </p>
       ) : null}
       {state?.configError ? (

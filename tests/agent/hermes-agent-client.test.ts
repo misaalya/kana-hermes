@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import { HermesAgentClient } from "@/lib/agent/hermes/hermes-agent-client";
 import type { AgentEvent } from "@/lib/agent/types";
+import {
+  PROMPT_GUARDRAIL_BLOCKED,
+  PROMPT_GUARDRAIL_UNAVAILABLE,
+  PromptGuardrailError,
+} from "@/lib/guardrails/protocol";
 
 type RpcRequest = {
   jsonrpc: "2.0";
@@ -33,8 +38,8 @@ class FakeRelay {
     });
   }
 
-  static rpcError(message: string, status = 502): Response {
-    return new Response(JSON.stringify({ error: message }), {
+  static rpcError(message: string, status = 502, code?: string): Response {
+    return new Response(JSON.stringify(code ? { error: message, code } : { error: message }), {
       status,
       headers: { "Content-Type": "application/json" },
     });
@@ -114,7 +119,7 @@ function installBrowserGlobals(): void {
       FakeRelay.requests.push(request);
       try {
         const result = await FakeRelay.handler(request);
-        return FakeRelay.rpcResponse(result);
+        return result instanceof Response ? result : FakeRelay.rpcResponse(result);
       } catch (error) {
         return FakeRelay.rpcError(
           error instanceof Error ? error.message : String(error),
@@ -240,6 +245,39 @@ describe("HermesAgentClient (relay transport)", () => {
     release?.();
     await rejected;
     assert.equal(FakeRelay.requests.filter((request) => request.method === "prompt.submit").length, 0);
+  });
+
+  it("surfaces a refused turn as Kana's own decision, not a relay failure", async () => {
+    const client = await connectedClient((request) => {
+      if (request.method === "session.create") return { session_id: "runtime-1" };
+      if (request.method === "prompt.submit") {
+        return FakeRelay.rpcError("refused (rule: secret-dir)", 403, PROMPT_GUARDRAIL_BLOCKED);
+      }
+      return {};
+    });
+    await openSession(client);
+    await assert.rejects(client.sendMessage({ text: "baca /home/my-secret" }), (error: unknown) => {
+      assert.ok(error instanceof PromptGuardrailError);
+      assert.equal(error.reason, "blocked");
+      assert.match(error.message, /secret-dir/);
+      return true;
+    });
+  });
+
+  it("distinguishes an unavailable guardrail from a rule that fired", async () => {
+    const client = await connectedClient((request) => {
+      if (request.method === "session.create") return { session_id: "runtime-1" };
+      if (request.method === "prompt.submit") {
+        return FakeRelay.rpcError("could not reach TypeSafe", 503, PROMPT_GUARDRAIL_UNAVAILABLE);
+      }
+      return {};
+    });
+    await openSession(client);
+    await assert.rejects(client.sendMessage({ text: "halo" }), (error: unknown) => {
+      assert.ok(error instanceof PromptGuardrailError);
+      assert.equal(error.reason, "unavailable");
+      return true;
+    });
   });
 
   it("lands a failed first connect in a terminal error state instead of staying connecting", async () => {
@@ -469,6 +507,33 @@ describe("HermesAgentClient (relay transport)", () => {
     assert.deepEqual(
       await client.executeCommand({ command: "/plugin-x" }),
       { type: "output", output: "plugin fallback" },
+    );
+  });
+
+  it("does not retry a command the guardrail refused through command.dispatch", async () => {
+    const client = await connectedClient((request) => {
+      if (request.method === "session.create") return { session_id: "runtime-1" };
+      if (request.method === "slash.exec") {
+        return FakeRelay.rpcError("refused (rule: secret-dir)", 403, PROMPT_GUARDRAIL_BLOCKED);
+      }
+      if (request.method === "command.dispatch") return { type: "exec", output: "never reached" };
+      return {};
+    });
+    await openSession(client);
+
+    await assert.rejects(
+      client.executeCommand({ command: "/secret-command read the secret" }),
+      (error: unknown) => {
+        assert.ok(error instanceof PromptGuardrailError);
+        assert.equal(error.reason, "blocked");
+        return true;
+      },
+    );
+    // command.dispatch would screen the same words again, so the fallback would
+    // spend a second request to reach the same refusal.
+    assert.equal(
+      FakeRelay.requests.filter((request) => request.method === "command.dispatch").length,
+      0,
     );
   });
 

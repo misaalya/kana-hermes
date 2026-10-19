@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { loadGuardrailConfig, summarizeGuardrail } from "@/lib/guardrails/policy";
 import { NO_STORE, withSession } from "@/lib/server/api-response";
 import {
   ensureKanaUserConfigFile,
@@ -19,6 +20,9 @@ export const GET = withSession(async () => {
       deploymentMode: deployment.mode,
       deploymentModeSource: deployment.source,
       configError: deployment.error,
+      // Whether the prompt guardrail is screening, and how many rules it
+      // would send; never the key or the rule text.
+      guardrail: summarizeGuardrail(loadGuardrailConfig()),
     },
     { headers: NO_STORE },
   );

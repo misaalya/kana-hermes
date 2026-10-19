@@ -4,7 +4,7 @@ Kana displays sensitive agent activity in a browser, so "localhost" is not
 automatically trusted. This covers the trust boundaries and enforced controls.
 
 **Read when:** you are deploying Kana, reviewing its threat model, or placing it behind a reverse proxy.
-**Truth in code:** `proxy.ts`, `lib/server/request-origin.ts`, `lib/server/auth/`, `lib/server/media-links.ts`
+**Truth in code:** `proxy.ts`, `lib/server/request-origin.ts`, `lib/server/auth/`, `lib/server/media-links.ts`, `lib/guardrails/policy.ts`
 
 ## Trust boundaries
 
@@ -19,6 +19,10 @@ automatically trusted. This covers the trust boundaries and enforced controls.
 - Remote Live2D model URLs are untrusted data. Cubism Core is executable, and
   is restricted to Live2D's official HTTPS SDK path. Files Hermes delivers are
   untrusted input and are treated in Delivered files below.
+- The optional prompt guardrail is a separate service as well. When the owner
+  sets a TypeSafe key, the text of each screened turn is sent to TypeSafe's API,
+  and the probability it returns is thresholded in Kana's own code. The key stays
+  in `config.json` and the server process.
 
 ## Threat checklist
 
@@ -31,6 +35,7 @@ automatically trusted. This covers the trust boundaries and enforced controls.
 | Login lockout | Not keyed by IP. A browser that signed in before carries a signed device cookie and has its own bucket; all other attempts share one strict progressive bucket, so guessing cannot lock the owner's devices out. One password check runs per bucket at a time |
 | Delivered files | `MEDIA:` paths become signed links only for regular files outside system paths, home credential folders and files, Hermes's secrets, and Kana's data root; the file is re-checked on every request |
 | Protected input | Password and secret fields are uncontrolled, ephemeral, sent directly to Hermes, and never added to Kana history, activity details, preferences, or local storage |
+| Prompt guardrail | Optional and off without an owner-set key. The owner's rules and key live in `config.json`, which Kana has no writer for, and the key never reaches the browser. A rule that fires, or a check that could not run, refuses the turn before it reaches Hermes |
 | Local voice engine | No listening service: each utterance is a short-lived child process with a minimal environment; every downloaded artifact is pinned by size and SHA-256 and verified before it is unpacked or run |
 | Hermes process | `hermes serve` started by Kana listens on 127.0.0.1 with a minted token and inherits no `KANA_*` setting, so `KANA_JWT_SECRET` never reaches the commands Hermes runs |
 
@@ -85,6 +90,69 @@ A file from `/api/media` is served as a sandboxed document with its own policy
 sandbox`), so an SVG or HTML file opened on its own can never run script as Kana.
 The route requires a session, and responses are `private, no-cache` with range
 support and ETag revalidation.
+
+## Prompt guardrail
+
+The guardrail is a data-sharing decision as much as a control. When the owner
+sets `guardrails.apiKey`, the text of every screened turn — a chat message, a
+slash command, or `/steer` — is sent to `https://api.typesafe.ai/v1/systemone`
+for evaluation, so that text leaves the machine for a third party. With no key,
+or a key and no rules, nothing is sent and the layer costs nothing.
+
+The rules and the key live in `config.json`, which Kana creates once, owner-only,
+and never rewrites; no route, setting, or browser request can change a rule or
+read the key, and `GET /api/kana/config` reports only whether the layer is on and
+how many rules it would send. A rule that fires, or a check that cannot run while
+`whenUnavailable` is `"block"`, refuses the turn before it reaches the bridge, so
+Hermes never sees it and never stores it.
+
+The guardrail is not a sandbox. It reads the text a turn starts with, not the
+contents of an attached file, and it cannot stop Hermes from reaching the same
+file or command by another route. Refusing an answer given mid-turn is
+deliberately out of scope, because it would strand a turn Hermes already started.
+
+### Protecting the rules from the agent
+
+`config.json` lives in Kana's data root, normally `~/.kana`, which Hermes can
+read and write when Kana and Hermes run as the same user account. Kana itself
+never writes a `config.json` that already exists, but that says nothing about
+Hermes: a turn that empties `guardrails.rules` — directly, through a shell
+command, or through a subagent or an MCP tool — turns the layer off, because Kana
+reads an empty rule list as the owner not using the guardrail. Kana cannot
+prevent that from inside its own process, and the guardrail's server-side nature
+does not change it.
+
+The owner can close it with an operating-system lock instead:
+
+```bash
+sudo chattr +i ~/.kana/config.json   # lock: no process may change or delete it
+lsattr ~/.kana/config.json           # the flags line must show "i"
+```
+
+While the immutable flag is set, `config.json` cannot be changed, renamed, or
+deleted by any process, including Hermes, Kana, and the owner, even with root.
+The owner lifts it before editing and sets it again afterwards:
+
+```bash
+sudo chattr -i ~/.kana/config.json   # unlock
+$EDITOR ~/.kana/config.json          # edit the rules
+sudo chattr +i ~/.kana/config.json   # lock again
+```
+
+The flag is a filesystem attribute, not a Kana feature: Kana never runs `chattr`,
+never asks for root, and offers no setting for it. It needs a filesystem that
+supports the attribute (ext4, xfs, btrfs), it needs root to set and clear, and it
+is limited to the file — do not mark the data-root directory immutable, because
+Kana must keep writing `appstate.db`, `activities.db`, and `jwt-secret` beside it.
+It also stops only change, never reading, so Hermes can still read the key and the
+rules; and anyone who holds root can lift it.
+
+Set the flag only when no legacy data root is still to be migrated: a move copies
+`config.json` out of a legacy root, and a failed copy is logged as a warning
+rather than raised, so a lock left on during a move goes unnoticed. Kana needs no
+write access to the file for its own operation — `ensureKanaUserConfigFile`
+returns as soon as the file exists — so the lock leaves reading, the guardrail,
+and normal startup unaffected.
 
 ## Delivered files
 

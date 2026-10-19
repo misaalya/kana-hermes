@@ -208,6 +208,14 @@ export type Copy = {
     confirmUpdate: string;
     confirmRollback: string;
   };
+  /**
+   * Kana's own words for a turn its prompt guardrail refused. Fixed wording,
+   * never model-generated: no model saw the refused message.
+   */
+  guardrail: {
+    blocked: string;
+    unavailable(reason: string): string;
+  };
   chat: {
     aria: string;
     emptyTitle: string;
@@ -713,6 +721,12 @@ const id: Copy = {
     confirmUpdate: "Izinkan Hermes memperbarui instalasinya sendiri?",
     confirmRollback: "Pulihkan checkpoint sistem berkas Hermes? Ini dapat menimpa berkas saat ini.",
   },
+  guardrail: {
+    blocked:
+      "Maaf, aku tidak bisa membantu permintaan itu. Pesan ini ditolak oleh guardrail Kana sebelum dikirim ke Hermes.",
+    unavailable: (reason) =>
+      `Kana tidak dapat memeriksa pesan ini, jadi pesan itu tidak dikirim ke Hermes. ${reason}`,
+  },
   chat: {
     aria: "Chat langsung",
     emptyTitle: "Sejenak tenang bersama Kana",
@@ -1049,6 +1063,7 @@ const id: Copy = {
     draftReady: "Perintah menyiapkan draf",
     stillWorking: "Hermes masih bekerja",
     sendFailed: "Pesan tidak dapat dikirim",
+    refused: "Guardrail Kana menolak pesan ini",
     disconnected: "Agen terputus",
     inputSent: "Input dikirim ke Hermes",
     inputFailed: "Input tidak dapat dikirim",
@@ -1266,6 +1281,12 @@ const en: Copy = {
     confirmRestart: "Restart the Hermes gateway? Kana will disconnect temporarily.",
     confirmUpdate: "Allow Hermes to update its own installation?",
     confirmRollback: "Restore a Hermes filesystem checkpoint? This can overwrite current files.",
+  },
+  guardrail: {
+    blocked:
+      "Sorry, I can't help with that. Kana's guardrail refused this message before it reached Hermes.",
+    unavailable: (reason) =>
+      `Kana could not check this message, so it was not sent to Hermes. ${reason}`,
   },
   chat: {
     aria: "Live chat",
@@ -1603,6 +1624,7 @@ const en: Copy = {
     draftReady: "Command prepared a draft",
     stillWorking: "Hermes is still working",
     sendFailed: "Could not send the message",
+    refused: "Kana's guardrail refused this message",
     disconnected: "Agent disconnected",
     inputSent: "Input sent to Hermes",
     inputFailed: "Input could not be sent",

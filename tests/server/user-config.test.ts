@@ -34,7 +34,10 @@ describe("advanced user configuration", () => {
   it("creates an owner-editable starter JSON without overwriting it", () => {
     const filePath = ensureKanaUserConfigFile();
     assert.equal(filePath, path.join(root, "config.json"));
-    assert.deepEqual(readKanaUserConfig(), DEFAULT_KANA_USER_CONFIG);
+    // The starter file also carries an empty guardrails block, which its own
+    // module reads (lib/guardrails/policy.ts) so that a bad rule cannot take
+    // down the rest of the configuration, and vice versa.
+    assert.deepEqual(readKanaUserConfig(), { tts: DEFAULT_KANA_USER_CONFIG.tts });
     writeFileSync(filePath, JSON.stringify({ deployment: { mode: "deployment" } }));
     ensureKanaUserConfigFile();
     assert.equal(readKanaUserConfig().deployment?.mode, "deployment");

@@ -20,6 +20,12 @@ A draft and its selected files belong to one conversation and live only in the
 browser tab's memory, so a reload clears them; each conversation keeps its own
 draft for as long as the tab is open.
 
+When the owner has configured the prompt guardrail (`configure.md`), a message
+may be refused before it reaches Hermes. Kana keeps your message in the
+conversation and answers it with one fixed line instead of a reply, because no
+model saw it. The same applies to a slash command and to `/steer`; a refused turn
+is not added to the Hermes transcript.
+
 ## File attachments
 
 Press the attach button, select files, review the filename chips, and send;

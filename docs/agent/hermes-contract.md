@@ -3,7 +3,7 @@
 Kana is a presentation layer in front of the user's existing Hermes Agent installation. This document is the surface of Hermes that Kana is allowed to call and the behavior an agent must respect when changing it.
 
 **Read when:** you are touching the agent adapter, the server relay, slash handling, session lifecycle, or anything that reaches Hermes.
-**Truth in code:** `app/api/hermes/rpc/route.ts`, `app/api/hermes/events/route.ts`, `lib/agent/types.ts`, `lib/agent/hermes/hermes-agent-client.ts`, `lib/agent/hermes/gateway-types.ts`, `lib/server/hermes-bridge.ts`, `lib/server/local-hermes-runtime.ts`, `lib/services/send-message.ts`
+**Truth in code:** `app/api/hermes/rpc/route.ts`, `app/api/hermes/events/route.ts`, `lib/agent/types.ts`, `lib/agent/hermes/hermes-agent-client.ts`, `lib/agent/hermes/gateway-types.ts`, `lib/server/hermes-bridge.ts`, `lib/server/local-hermes-runtime.ts`, `lib/services/send-message.ts`, `lib/guardrails/`
 
 ## Integration boundary
 
@@ -48,6 +48,14 @@ Only the methods in `ALLOWED_METHODS` (`app/api/hermes/rpc/route.ts`) are forwar
 `session.compress`, `model.options`, and `reload.mcp` use the long-running RPC timeout (`LONG_HERMES_RPC_TIMEOUT_MS` in `lib/limits.ts`). `config.set` is narrowed further: it accepts only a session-scoped model selection, requires `--provider` and `--session` in the value, and refuses `--global` and `--once`.
 
 `session.list` is deliberately not on the browser allow-list. `GET /api/kana/sessions` calls it server-side and filters rows to `source === "kana"`, which is Kana's cross-browser session directory (`app/api/kana/sessions/route.ts`).
+
+## Prompt guardrail
+
+The owner may configure a prompt guardrail (`guardrails` in `config.json`, read by `lib/guardrails/policy.ts`). When it is on, `POST /api/hermes/rpc` screens the user's own text before forwarding, for `prompt.submit`, `session.steer`, `slash.exec`, and `command.dispatch`. The user's words come from `unwrapKanaUserPrompt`, so the Kana note and attachment references are never part of what a rule judges. An empty `apiKey` turns the layer off and no request is made.
+
+The screen is one request to TypeSafe's System One endpoint per turn (`lib/guardrails/jev.ts`), carrying one `noul` question built from the owner's rules by `lib/guardrails/prompt.ts`: the rules ride in the question's instructions, the message is the state, and Jev is told what the screening is for. The returned probability is compared against the owner's threshold in `lib/guardrails/screen.ts`. Jev returns no text and Kana asks for none. A probability at or above the threshold, or a guardrail that cannot run while `whenUnavailable` is `"block"`, returns HTTP 403 or 503 with `code: "prompt_guardrail_blocked"` or `"prompt_guardrail_unavailable"`, and the request never reaches `hermesRpc`. Adding a rule adds no request.
+
+The relay client turns those codes into `PromptGuardrailError` (`lib/guardrails/protocol.ts`), and `lib/services/send-message.ts` answers it with Kana's own fixed wording instead of a send-failure banner. A refused command is not retried through `command.dispatch`, so one refusal costs one request. Hermes never saw the turn, so it holds no record of it; the user's message and Kana's line survive a reload as local rows. Answers to a Hermes prompt mid-turn (`approval.respond`, `clarify.respond`, `sudo.respond`, `secret.respond`) are deliberately not screened: refusing one would strand a turn Hermes already started.
 
 ## Session lifecycle
 
@@ -95,7 +103,7 @@ Events are ignored when they belong to another tab's session, unless this client
 - Typing `/` reads Hermes's live categorized registry with `commands.catalog`; a name or argument fragment uses `complete.slash`. Kana keeps no second command list and reimplements no fuzzy matching.
 - Command names and arguments come from Hermes. Kana marks surface-only commands unavailable with an honest reason (`lib/agent/hermes/kana-command-surface.ts`), but never invents platform context.
 - The nearest-command rule lives in `resolveTypedCommand` (`lib/services/send-message.ts`). A name that is itself one of the suggestions is never rewritten, so a destructive confirmation always names the command that runs. An unknown name uses the nearest suggestion, shortest first (`/qui` becomes `/quit`). Only the name token is substituted; a completion's argument fallback is never pasted over the command. No suggestion means the text goes to Hermes as typed.
-- Commands run through `slash.exec`, falling back to `command.dispatch`. The structured result is honored: `exec`/`plugin` output, `alias` (re-executed, depth-capped), `prefill` (returns a draft), and `send`/`skill`, which are submitted to the same Hermes session with the Kana response contract and never trigger a second model. A `send`/`skill` prompt that arrives mid-turn is queued for the next turn.
+- Commands run through `slash.exec`, falling back to `command.dispatch` — except after a guardrail refusal, where the fallback would screen the same words again. The structured result is honored: `exec`/`plugin` output, `alias` (re-executed, depth-capped), `prefill` (returns a draft), and `send`/`skill`, which are submitted to the same Hermes session with the Kana response contract and never trigger a second model. A `send`/`skill` prompt that arrives mid-turn is queued for the next turn.
 - Dedicated RPCs replace terminal-text parsing: `/approve` and `/deny` use `approval.respond`; `/title` uses `session.title`; `/branch` uses `session.branch`; `/save`, `/status`, `/compress`, `/steer`, `/handoff` use `session.save`, `session.status`, `session.compress`, `session.steer`, `handoff.request`.
 - `/reload`, `/reload-mcp`, and `/reload-skills` use `reload.env`, `reload.mcp`, and `skills.reload`, as Hermes's TUI does. Through `slash.exec` they would act on Hermes's separate slash worker instead of the `hermes serve` Kana talks to. `/reload-mcp` asks first (`confirm_required`); `now`, `approve`, `once`, `yes`, or `always` confirms.
 - `/restart` is Kana's own command, not Hermes's gateway restart. It restarts only the `hermes serve` Kana started, on the same port with a new token (`restartLocalHermesRuntime`, `POST /api/local-runtime/hermes` `{"action":"restart"}`), then resumes the open conversation. An adopted or externally started server is left alone, and discovery is off during the restart so another Hermes is never adopted.

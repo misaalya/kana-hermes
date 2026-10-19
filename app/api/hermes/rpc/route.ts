@@ -3,6 +3,12 @@ import { readJsonObject } from "@/lib/server/request-body";
 import { hermesRpc } from "@/lib/server/hermes-bridge";
 import { LONG_HERMES_RPC_TIMEOUT_MS } from "@/lib/limits";
 import { rewriteMediaInResult } from "@/lib/server/media-links";
+import {
+  PROMPT_GUARDRAIL_BLOCKED,
+  PROMPT_GUARDRAIL_UNAVAILABLE,
+} from "@/lib/guardrails/protocol";
+import { screenPrompt, type GuardrailOutcome } from "@/lib/guardrails/screen";
+import { unwrapKanaUserPrompt } from "@/lib/presentation/persona";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -50,6 +56,48 @@ const LONG_RUNNING_METHODS = new Set(["session.compress", "model.options", "relo
 
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 
+type Refusal = Extract<GuardrailOutcome, { verdict: "refuse" }>;
+
+/**
+ * The user's own text in a relayed method, without any of Kana's own framing,
+ * or null when the method carries no user-written text. A slash command counts:
+ * its arguments reach the same Hermes turn as a chat message.
+ */
+function userText(method: string, params: Record<string, unknown>): string | null {
+  if (method === "prompt.submit" || method === "session.steer") {
+    // The Kana response note rides in the user turn; the rule judges what the
+    // user typed, not Kana's own boilerplate.
+    return typeof params.text === "string" ? unwrapKanaUserPrompt(params.text) : null;
+  }
+  if (method === "slash.exec") {
+    return typeof params.command === "string" ? params.command : null;
+  }
+  if (method === "command.dispatch") {
+    if (typeof params.name !== "string") return null;
+    const arg = typeof params.arg === "string" ? params.arg.trim() : "";
+    return arg ? `/${params.name} ${arg}` : `/${params.name}`;
+  }
+  return null;
+}
+
+/**
+ * Refuse a turn without forwarding it. The browser turns these codes back into
+ * Kana's own fixed wording; the message here is for an operator reading the
+ * network panel or the log.
+ */
+function guardrailRefusal(outcome: Refusal): Response {
+  const blocked = outcome.kind === "blocked";
+  return Response.json(
+    {
+      error: blocked
+        ? "Kana's prompt guardrail refused this turn."
+        : `Kana's prompt guardrail could not check this turn: ${outcome.reason}`,
+      code: blocked ? PROMPT_GUARDRAIL_BLOCKED : PROMPT_GUARDRAIL_UNAVAILABLE,
+    },
+    { status: blocked ? 403 : 503, headers: NO_STORE },
+  );
+}
+
 export const POST = withSession(async (request) => {
   let body: { method?: unknown; params?: unknown };
   try {
@@ -89,6 +137,13 @@ export const POST = withSession(async (request) => {
     };
   }
   const timeoutMs = LONG_RUNNING_METHODS.has(method) ? LONG_HERMES_RPC_TIMEOUT_MS : undefined;
+  // Kana screens what the user wrote before it reaches Hermes. The guardrail
+  // only reads the text and answers allow or refuse; Hermes still owns the turn.
+  const screenable = userText(method, params);
+  if (screenable !== null) {
+    const outcome = await screenPrompt(screenable);
+    if (outcome.verdict === "refuse") return guardrailRefusal(outcome);
+  }
   try {
     // Restored transcripts carry the same signed media links as live events.
     const result = rewriteMediaInResult(await hermesRpc(method, params, timeoutMs));
