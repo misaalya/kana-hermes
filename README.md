@@ -25,7 +25,6 @@ Hermes stays the only agent: its tools, files, memory, and sessions work exactly
 - [Features](#features)
 - [Deploy on a VPS](#deploy-on-a-vps)
 - [Connecting to Hermes](#connecting-to-hermes)
-- [Security](#security)
 - [Voice](#voice)
 - [Live2D avatars](#live2d-avatars)
 - [How it works](#how-it-works)
@@ -141,10 +140,7 @@ into `~/.kana` when you ask for it.
 - An optional prompt guardrail you write in your own `config.json` as plain
   rules ("never read anything under Y"). Kana turns them into one yes/no question
   for TypeSafe's Jev and refuses the turn before Hermes sees it. The rules ship
-  as five editable starters and the layer is skipped while the key is empty.
-  Kana cannot edit those rules; the agent runs as the same user and can write
-  that file, so the [security guide](docs/operator/security.md) also documents
-  an operating-system lock that stops everything, including you.
+  as five editable starters, and the layer is skipped while the key is empty.
 - Cross-site request protection, server-side logout, and an owner-only data folder.
 - Installable app shell, and safe diagnostics that redact tokens, prompts, and
   secrets.
@@ -202,40 +198,6 @@ After you change Hermes's configuration, you rarely need to leave Kana:
 | MCP servers | Type `/reload-mcp now`. |
 | Anything else Hermes reads at startup | Type `/restart`. Kana restarts the `hermes serve` it started and resumes the conversation. A Hermes you started yourself is restarted where you started it. |
 
-## Security
-
-Kana treats the browser as untrusted and Hermes as the only agent. You sign in
-with a password, and the browser never holds a Hermes token: every Hermes
-request is relayed by the Kana server, which keeps the Hermes session token,
-your voice API keys, and the guardrail key inside the server process.
-
-```mermaid
-flowchart LR
-    u([You]) -- "access password" --> b["Browser<br>Kana UI"]
-    b -- "session cookie,<br>same origin" --> s["Kana server<br>Hermes token, voice keys,<br>and screening policy stay here"]
-    t["your prompt"] -- "screened first" --> g{"Guardrail:<br>one Jev question,<br>your threshold"}
-    g -- "refused" --> r["a fixed line;<br>Hermes never sees the message"]
-    g -- "allowed" --> h["hermes serve<br>one server-held WebSocket"]
-    h --> a["Hermes agent<br>tools, files, memory"]
-    d[("data root ~/.kana<br>password hash, JWT secret,<br>rules, activity log")] --- s
-```
-
-- `config.json` belongs to you: Kana creates it once, owner-only, and never
-  rewrites it. The guardrail reads it on every turn, so a rule change applies
-  to the next message without a restart.
-- Because Hermes and Kana run as the same user, that file is also the agent's
-  to write. When you want its rules beyond the agent's reach, the
-  [security model](docs/operator/security.md) documents the operating-system
-  lock (`chattr +i`) that no process can write through, and what it cannot do.
-- Files Hermes delivers arrive as signed links, never as filesystem paths: the
-  token is the encrypted path, and every download re-checks the file.
-- An installation's `jwt-secret` is 32 random bytes generated on first run
-  (`lib/server/auth/session.ts`), so tokens sign nowhere else and one install's
-  cookies prove nothing on another install.
-
-Everything above, including the threat checklist and the reverse-proxy
-requirements, is in the [security model](docs/operator/security.md).
-
 ## Voice
 
 Voice is optional and off on new installs. Turn Kana's voice on or off in
@@ -281,9 +243,9 @@ redistributed by Kana.
 ```mermaid
 flowchart LR
     bw["Browser<br>Kana UI"] -- "session cookie,<br>same origin only" --> app["Kana server<br>Next.js"]
-    app -- "/api/hermes/*" --> ws["one server-held<br>WebSocket"] --> hs["hermes serve"] --> ag["Hermes agent<br>tools, files, memory, MCP"]
+    app -- "/api/hermes/*" --> ws["one server-held<br>WebSocket"] --> hs["hermes serve"] --> ag["Hermes agent<br>tools, files, memory"]
     app -- "/api/voice/tts/*" --> vc["irodori-c engine<br>or Pollinations"]
-    df[("data folder<br>password hash, JWT secret,<br>screening rules, activity log, voices")] --- app
+    df[("data root<br>config.json, JWT secret,<br>activity log, voices")] --- app
 ```
 
 Hermes events are translated into a stable internal model that drives the
@@ -293,9 +255,22 @@ the voice is on) and then writes the answer in Markdown. In the
 browser, each workspace keeps its shared state in small per-concern
 [zustand](https://github.com/pmndrs/zustand) stores, and plain service classes
 talk to Hermes, voice, and the avatar, so typing re-renders only the composer.
-More in
-[process boundaries](docs/decisions/0001-process-boundaries.md) and the
-[security model](docs/operator/security.md).
+
+That split is also the trust boundary. The browser holds a Kana session cookie
+and no secret of any kind: the Hermes session token, your voice service keys,
+and the guardrail key stay in the server process, and every Hermes request
+travels through Kana's authenticated relay. Files Hermes delivers arrive as
+signed links, never as filesystem paths, and each download re-checks the file.
+
+The one file both sides can reach is `config.json`, because Hermes and Kana run
+as the same user. Kana creates it once, owner-only, and never rewrites it, so
+your guardrail rules stay yours unless the agent writes them. To put them
+beyond the agent's reach, the [security model](docs/operator/security.md)
+documents the operating-system lock (`chattr +i`), what it cannot do, and the
+threat checklist for a server install.
+
+More on how those boundaries are enforced:
+[process boundaries](docs/decisions/0001-process-boundaries.md).
 
 ## Development
 
