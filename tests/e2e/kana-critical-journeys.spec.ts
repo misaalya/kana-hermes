@@ -1651,7 +1651,10 @@ test("stands the workspace down while Hermes is unreachable and plugs in on conn
         avatarMode: "live2d",
       }),
     );
-    type GateWindow = Window & { __kanaGateAllowConnect?: boolean };
+    type GateWindow = Window & {
+      __kanaGateAllowConnect?: boolean;
+      __kanaGateDrop?: () => void;
+    };
     const target = window as GateWindow;
 
     // The relay stream answers unreachable until the test opens it after the
@@ -1669,6 +1672,7 @@ test("stands the workspace down while Hermes is unreachable and plugs in on conn
 
       constructor() {
         super();
+        target.__kanaGateDrop = () => this.dispatchEvent(new Event("error"));
         queueMicrotask(() => {
           this.readyState = GateEventSource.OPEN;
           this.dispatchEvent(new Event("open"));
@@ -1749,6 +1753,24 @@ test("stands the workspace down while Hermes is unreachable and plugs in on conn
   });
   await expect(screen).toBeHidden({ timeout: 3000 });
   await expect(gatePage.getByRole("textbox", { name: "Message Kana" })).toBeVisible();
+
+  // A live drop leaves Hermes unreachable while Kana retries, so the cable
+  // screen returns and the workspace stands down for the whole outage.
+  await gatePage.evaluate(() => {
+    const target = window as Window & {
+      __kanaGateAllowConnect?: boolean;
+      __kanaGateDrop?: () => void;
+    };
+    target.__kanaGateAllowConnect = false;
+    target.__kanaGateDrop?.();
+  });
+  await expect(screen).toBeVisible();
+  await expect(screen.getByText("Reconnecting…", { exact: true })).toBeVisible();
+  await expect(screen.getByRole("button", { name: "Connecting…" })).toBeDisabled();
+  await expect(gatePage.getByRole("textbox", { name: "Message Kana" })).toHaveCount(0);
+  await gatePage.screenshot({
+    path: `test-results/connection-reconnecting-${test.info().project.name}.png`,
+  });
   await gatePage.close();
 });
 

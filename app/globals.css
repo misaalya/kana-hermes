@@ -1675,48 +1675,94 @@ video.kana-media-preview {
   outline-offset: 3px;
 }
 
-/* The workspace stands down while Hermes is unreachable: the cable waits,
-   seats while the relay connects, and the screen steps away on success. */
+/* The workspace stands down while Hermes is unreachable: the plug and socket
+   wait with a spark between them, meet while the relay connects, and the
+   screen steps away on success. */
 .kana-connection-screen {
+  /* White plastic hardware with cool shading, drawn in both themes. */
+  --kana-plug-top: #fbfcfd;
+  --kana-plug-mid: #eef1f5;
+  --kana-plug-shade: #ccd5df;
+  --kana-plug-line: #b7c1cc;
+  --kana-plug-deep: #98a4b1;
+  --kana-cord: #d5dbe2;
+  --kana-cord-shade: #aeb8c3;
+  --kana-cord-light: #f2f5f8;
+  --kana-metal: #5f6873;
+  --kana-metal-light: #98a2ad;
+  --kana-metal-dark: #404750;
   transition: opacity 320ms ease;
+}
+
+[data-theme="light"] .kana-connection-screen {
+  --kana-plug-top: #ffffff;
+  --kana-plug-mid: #f8f9fb;
+  --kana-plug-shade: #dfe4ea;
+  --kana-plug-line: #b9c2cc;
+  --kana-plug-deep: #a9b3be;
+  --kana-cord: #e3e7ec;
+  --kana-cord-shade: #bcc5cf;
+  --kana-cord-light: #f8fafb;
+  --kana-metal: #616a75;
+  --kana-metal-light: #9ba5b0;
+  --kana-metal-dark: #444b54;
 }
 
 .kana-connection-screen.is-leaving {
   opacity: 0;
 }
 
-.kana-connection-plug {
+/* Fade the cables into the screen edges instead of cutting them off. */
+.kana-connection-art {
+  mask-image: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
+  mask-repeat: no-repeat;
+  mask-size: 100% 100%;
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+}
+
+.kana-connection-plug,
+.kana-connection-socket {
   transition: transform 700ms cubic-bezier(0.22, 0.9, 0.3, 1.08);
 }
 
 .kana-connection-screen.is-busy .kana-connection-plug,
 .kana-connection-screen.is-plugged .kana-connection-plug {
-  transform: translateX(54px);
+  transform: translateX(131px);
 }
 
-.kana-connection-screen.is-unplugged .kana-connection-float {
-  animation: kana-connection-float 3.4s ease-in-out infinite;
+.kana-connection-screen.is-busy .kana-connection-socket,
+.kana-connection-screen.is-plugged .kana-connection-socket {
+  transform: translateX(-45px);
 }
 
-.kana-connection-alert {
-  transition: opacity 280ms ease;
+.kana-connection-sparks {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: opacity 280ms ease, transform 360ms ease;
 }
 
-.kana-connection-screen.is-busy .kana-connection-alert,
-.kana-connection-screen.is-plugged .kana-connection-alert {
+.kana-connection-screen.is-busy .kana-connection-sparks,
+.kana-connection-screen.is-plugged .kana-connection-sparks {
   opacity: 0;
+  transform: scale(0.55);
 }
 
-.kana-connection-led {
-  animation: kana-connection-blink 1.8s ease-in-out infinite;
+.kana-connection-screen.is-unplugged .kana-connection-hover {
+  animation: kana-connection-hover 5.2s ease-in-out infinite;
 }
 
-@keyframes kana-connection-float {
-  50% { transform: translate(-4px, -6px); }
+.kana-connection-screen.is-unplugged .kana-connection-spark-pulse {
+  animation: kana-connection-spark-pulse 2.8s ease-in-out infinite;
 }
 
-@keyframes kana-connection-blink {
-  50% { opacity: 0.3; }
+@keyframes kana-connection-hover {
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes kana-connection-spark-pulse {
+  50% { opacity: 0.55; }
 }
 
 @keyframes kana-pulse {
