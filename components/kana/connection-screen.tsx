@@ -377,6 +377,22 @@ function CableIllustration({ label }: { label: string }) {
   );
 }
 
+/** The dots that keep time while Kana reaches Hermes again. */
+function ConnectingDots() {
+  const [dots, setDots] = useState(1);
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setDots((count) => (count === 3 ? 1 : count + 1));
+    }, 350);
+    return () => window.clearInterval(timer);
+  }, []);
+  return (
+    <span aria-hidden="true" className="inline-block w-[1.1em] text-left">
+      {".".repeat(dots)}
+    </span>
+  );
+}
+
 /**
  * The workspace while Hermes is unreachable: the avatar and chat step away,
  * the header stays, and the cable seats once the relay reports connected.
@@ -388,12 +404,7 @@ export function ConnectionScreen({ screen }: { screen: ConnectionScreenControlle
   const connectPhase = useKanaStore("workspace", (state) => state.connectPhase);
   const hermesRuntime = useKanaStore("workspace", (state) => state.hermesRuntime);
   const hermesRuntimeNotice = useKanaStore("workspace", (state) => state.hermesRuntimeNotice);
-  const hermesRuntimeBusy = useKanaStore("workspace", (state) => state.hermesRuntimeBusy);
   const connectionInTransition = connectionState === "connecting";
-  const failed =
-    connectionState === "error" ||
-    connectionState === "authentication_failed" ||
-    connectionState === "incompatible";
   const plugged = connectionState === "connected";
   const connectingPhase = connectPhase === "connecting" || connectPhase === "auto_starting";
   const busy = connectionInTransition || connectingPhase;
@@ -410,21 +421,30 @@ export function ConnectionScreen({ screen }: { screen: ConnectionScreenControlle
   const text = copy.workspace;
   const gateCopy = copy.gate;
   const detectedExternalGateway = Boolean(hermesRuntime?.state === "running" && !hermesRuntime.managed);
+  // Only a real outcome needs a pill: the heading carries the idle and
+  // connecting states, so the gate never says the same thing twice.
   const statusText = plugged
     ? gateCopy.connected
-    : connectionState === "connecting" || connectPhase === "connecting"
-      ? gateCopy.connecting
-      : connectionState === "reconnecting"
-        ? gateCopy.reconnecting
-        : connectionState === "authentication_failed"
-          ? gateCopy.authInvalid
-          : connectionState === "incompatible"
-            ? gateCopy.incompatible
-            : connectPhase === "auto_starting"
-              ? gateCopy.startButton
-              : connectionState === "error"
-                ? gateCopy.failed
-                : gateCopy.idle;
+    : busy
+      ? null
+      : connectionState === "authentication_failed"
+        ? gateCopy.authInvalid
+        : connectionState === "incompatible"
+          ? gateCopy.incompatible
+          : connectionState === "error"
+            ? gateCopy.failed
+            : null;
+  const runtimeHint = !hermesRuntime
+    ? null
+    : detectedExternalGateway
+      ? gateCopy.detectedExternal(hermesRuntime.port)
+      : hermesRuntime.state === "running" && hermesRuntime.managed
+        ? gateCopy.managedRunning(hermesRuntime.pid ?? null)
+        : hermesRuntime.executable
+          ? null
+          : gateCopy.missingBinary;
+  const showRuntimeHint =
+    Boolean(hermesRuntime?.controlAvailable) && !plugged && Boolean(runtimeHint || hermesRuntimeNotice);
   const stateClass = plugged ? "is-plugged" : busy ? "is-busy" : "is-unplugged";
 
   const connect = () => {
@@ -441,15 +461,29 @@ export function ConnectionScreen({ screen }: { screen: ConnectionScreenControlle
         <CableIllustration label={plugged ? gateCopy.illustrationPlugged : gateCopy.illustration} />
       </div>
 
-      <h2 className="mt-2 text-xl font-bold text-ink sm:text-2xl">
-        {plugged ? gateCopy.connectedTitle : text.gatewayTitle}
+      <h2
+        aria-live="polite"
+        className={`mt-2 text-xl font-bold sm:text-2xl ${plugged || busy ? "text-ink" : "text-danger"}`}
+      >
+        {plugged ? (
+          gateCopy.connectedTitle
+        ) : busy ? (
+          <>
+            {gateCopy.reconnecting}
+            <ConnectingDots />
+          </>
+        ) : (
+          text.gatewayTitle
+        )}
       </h2>
 
-      <div role="status" className="mt-2.5">
-        <StatusPill tone={plugged ? "ok" : busy ? "busy" : failed ? "error" : "idle"} capitalize={false}>
-          {statusText}
-        </StatusPill>
-      </div>
+      {statusText ? (
+        <div role="status" className="mt-2.5">
+          <StatusPill tone={plugged ? "ok" : "error"} capitalize={false}>
+            {statusText}
+          </StatusPill>
+        </div>
+      ) : null}
 
       <button
         type="button"
@@ -466,17 +500,9 @@ export function ConnectionScreen({ screen }: { screen: ConnectionScreenControlle
               : gateCopy.connectButton}
       </button>
 
-      {hermesRuntime?.controlAvailable && !plugged ? (
+      {showRuntimeHint ? (
         <div className="mt-4 flex max-w-xs flex-col items-center gap-1 text-[11px] leading-relaxed">
-          {detectedExternalGateway ? (
-            <p className="text-faint">{gateCopy.detectedExternal(hermesRuntime.port)}</p>
-          ) : hermesRuntime.state === "running" && hermesRuntime.managed ? (
-            <p className="text-faint">{gateCopy.managedRunning(hermesRuntime.pid ?? null)}</p>
-          ) : hermesRuntime.executable ? (
-            <p className="text-faint">{hermesRuntimeBusy ? gateCopy.startButton : gateCopy.installedReady}</p>
-          ) : (
-            <p className="text-faint">{gateCopy.missingBinary}</p>
-          )}
+          {runtimeHint ? <p className="text-faint">{runtimeHint}</p> : null}
           {hermesRuntimeNotice ? (
             <p role="status" className="max-w-full break-words text-faint">
               {hermesRuntimeNotice}

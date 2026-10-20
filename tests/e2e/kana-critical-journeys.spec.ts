@@ -1717,7 +1717,7 @@ test("stands the workspace down while Hermes is unreachable and plugs in on conn
   await gatePage.goto("/");
   const screen = gatePage.getByRole("region", { name: "Hermes connection" });
   await expect(screen).toBeVisible();
-  await expect(screen.getByRole("heading", { name: "Hermes is not connected" })).toBeVisible();
+  await expect(screen.getByRole("heading", { name: "Hermes is not connected" })).toHaveClass(/text-danger/);
   await expect(
     screen.getByRole("img", { name: "Hermes cable and plug disconnected" }),
   ).toBeVisible();
@@ -1741,6 +1741,7 @@ test("stands the workspace down while Hermes is unreachable and plugs in on conn
   });
   await screen.getByRole("button", { name: "Connect Hermes" }).click();
   await expect(screen).toHaveClass(/is-busy/);
+  await expect(screen.getByRole("heading", { name: "Reconnecting" })).toBeVisible();
   await expect(screen.getByRole("button", { name: "Connecting…" })).toBeDisabled();
   await gatePage.waitForTimeout(250);
   await gatePage.screenshot({
@@ -1766,7 +1767,10 @@ test("stands the workspace down while Hermes is unreachable and plugs in on conn
     target.__kanaGateDrop?.();
   });
   await expect(screen).toBeVisible();
-  await expect(screen.getByText("Reconnecting…", { exact: true })).toBeVisible();
+  // No separate "Reconnecting" pill: the heading owns the status and turns
+  // red only when the gate is waiting without an attempt in flight.
+  await expect(screen.getByRole("heading", { name: "Hermes is not connected" })).toHaveClass(/text-danger/);
+  await expect(screen.getByText("Reconnecting…", { exact: true })).toHaveCount(0);
   // The retry loop must not trap the user: the button stays usable so a manual
   // attempt can start a Hermes that died.
   await expect(screen.getByRole("button", { name: "Connect Hermes" })).toBeEnabled();
