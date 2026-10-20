@@ -96,7 +96,7 @@ export class WorkspaceSetup {
     this.store.setState({ hermesRuntimeBusy: true, hermesRuntimeNotice: null });
     try {
       const status = await this.deps.hermesControl.start({ port: this.store.getState().hermesRuntime?.port });
-      this.store.setState({ hermesRuntime: status, hermesRuntimeNotice: status.message });
+      this.store.setState({ hermesRuntime: status });
     } catch (error) {
       this.store.setState({
         hermesRuntimeNotice: error instanceof Error ? error.message : "Could not start the Hermes gateway.",

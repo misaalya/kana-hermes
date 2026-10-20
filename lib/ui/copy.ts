@@ -170,7 +170,6 @@ export type Copy = {
     authInvalid: string;
     incompatible: string;
     failed: string;
-    idle: string;
     connected: string;
     connectedTitle: string;
     illustration: string;
@@ -179,7 +178,6 @@ export type Copy = {
     startButton: string;
     detectedExternal(port: number): string;
     managedRunning(pid: number | null): string;
-    installedReady: string;
     missingBinary: string;
   };
   workspace: {
@@ -687,11 +685,10 @@ const id: Copy = {
   },
   gate: {
     connecting: "Menghubungkan…",
-    reconnecting: "Menghubungkan ulang…",
+    reconnecting: "Menghubungkan ulang",
     authInvalid: "Sesi Kana tidak valid",
     incompatible: "Versi Hermes tidak kompatibel",
     failed: "Koneksi gagal",
-    idle: "Hermes tidak terhubung",
     connected: "Terhubung",
     connectedTitle: "Terhubung ke Hermes",
     illustration: "Kabel dan colokan Hermes terlepas",
@@ -700,7 +697,6 @@ const id: Copy = {
     startButton: "Memulai Hermes…",
     detectedExternal: (port: number) => `Gateway Hermes terdeteksi di port ${port}.`,
     managedRunning: (pid: number | null) => `Hermes sedang berjalan (PID ${pid ?? "—"}).`,
-    installedReady: "Hermes terpasang, siap dijalankan.",
     missingBinary: "Hermes tidak ditemukan. Jalankan `kana doctor`.",
   },
   workspace: {
@@ -1258,11 +1254,10 @@ const en: Copy = {
   },
   gate: {
     connecting: "Connecting…",
-    reconnecting: "Reconnecting…",
+    reconnecting: "Reconnecting",
     authInvalid: "Kana session is invalid",
     incompatible: "Incompatible Hermes version",
     failed: "Connection failed",
-    idle: "Hermes is not connected",
     connected: "Connected",
     connectedTitle: "Connected to Hermes",
     illustration: "Hermes cable and plug disconnected",
@@ -1271,7 +1266,6 @@ const en: Copy = {
     startButton: "Starting Hermes…",
     detectedExternal: (port: number) => `Hermes gateway detected on port ${port}.`,
     managedRunning: (pid: number | null) => `Hermes is running (PID ${pid ?? "—"}).`,
-    installedReady: "Hermes is installed and ready to start.",
     missingBinary: "Hermes was not found. Run `kana doctor`.",
   },
   workspace: {
