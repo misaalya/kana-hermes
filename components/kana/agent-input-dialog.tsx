@@ -8,7 +8,7 @@ import type {
 import { useDialogFocus } from "@/lib/accessibility/use-dialog-focus";
 import { revealCommand } from "@/lib/presentation/command-text";
 import { BlockIcon, BotIcon, CheckIcon, GuardIcon, ReturnIcon } from "./icons";
-import { btnPrimary, btnSecondary, bentoCard, inputBase } from "./ui";
+import { btnPrimary, btnSecondary, inputBase } from "./ui";
 import { getCopy, type UiLocale } from "@/lib/ui/copy";
 
 type AgentInputDialogProps = {
@@ -405,15 +405,14 @@ export function AgentInputDialog({  request,
       await onRespond({ kind: "secret", requestId: request.requestId, value });
     }
   };
-  // A clarify call gets its own shell: a square panel whose header and footer
-  // stay put while the questions scroll between them, so Send is always in
-  // reach on a five-question form. The other kinds keep the plain card.
+  // Every kind shares one shell: a square panel whose header and footer stay
+  // put while the body scrolls between them, so its action is always in reach.
   const shellClass =
     request.kind === "clarification"
       ? "flex max-h-[calc(100dvh-1.5rem)] w-[min(560px,100%)] flex-col overflow-hidden border-2 border-line bg-bg"
       : request.kind === "approval"
         ? "flex max-h-[calc(100dvh-1.5rem)] w-[min(520px,100%)] flex-col overflow-hidden border-2 border-line bg-bg"
-        : "max-h-[calc(100dvh-1.5rem)] w-[min(480px,100%)] overflow-y-auto border-2 border-line bg-bg p-4";
+        : "flex max-h-[calc(100dvh-1.5rem)] w-[min(480px,100%)] flex-col overflow-hidden border-2 border-line bg-bg";
   const { dialogRef, onDialogKeyDown } = useDialogFocus(() => {
     void cancel();
   }, { initialFocus: request.kind === "approval" ? "dialog" : "first" });
@@ -578,52 +577,58 @@ export function AgentInputDialog({  request,
 
         {request.kind === "sudo" || request.kind === "secret" ? (
           <form
+            className="flex min-h-0 flex-1 flex-col"
             onSubmit={(event) => {
               event.preventDefault();
               void submitSecureValue();
             }}
           >
-            <div className={`mb-2 ${bentoCard}`}>
+            <header className="flex shrink-0 items-start gap-3 border-b-[3px] border-dotted border-line-strong px-5 pt-4 pb-3.5">
+              <GuardIcon className="mt-[3px] size-6 shrink-0 text-accent" />
               <div className="min-w-0">
-                <h2 id="agent-input-title" className="text-sm font-bold break-words text-ink">
+                <h2 id="agent-input-title" className="text-base font-extrabold break-words text-ink">
                   {request.kind === "sudo"
                     ? copy.sudoTitle
                     : request.envVar || copy.secretTitle}
                 </h2>
-                <p className="mt-0.5 text-xs leading-relaxed text-ink-dim">
+                <p className="mt-0.5 text-[11.5px] leading-relaxed break-words text-muted">
                   {request.kind === "sudo"
                     ? copy.sudoBody
                     : request.prompt || copy.secretBody}
                 </p>
               </div>
+            </header>
+
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[10px] font-extrabold tracking-[0.14em] text-muted uppercase">
+                  {request.kind === "sudo" ? copy.password : copy.secretValue}
+                </span>
+                <input
+                  autoComplete="off"
+                  autoFocus
+                  data-1p-ignore
+                  disabled={submitting}
+                  name={`kana-${request.kind}-${request.requestId}`}
+                  ref={secureInputRef}
+                  spellCheck={false}
+                  type="password"
+                  className={inputBase}
+                />
+                <span className="text-[10px] leading-relaxed text-faint">
+                  {copy.secureHint}
+                </span>
+              </label>
             </div>
-            <label className={`mb-2 flex flex-col gap-1.5 ${bentoCard}`}>
-              <span className="text-[11px] font-semibold text-muted">
-                {request.kind === "sudo" ? copy.password : copy.secretValue}
-              </span>
-              <input
-                autoComplete="off"
-                autoFocus
-                data-1p-ignore
-                disabled={submitting}
-                name={`kana-${request.kind}-${request.requestId}`}
-                ref={secureInputRef}
-                spellCheck={false}
-                type="password"
-                className={inputBase}
-              />
-              <span className="text-[10px] leading-relaxed text-faint">
-                {copy.secureHint}
-              </span>
-            </label>
-            <div className={`flex justify-end gap-2 ${bentoCard}`}>
+
+            <footer className="flex shrink-0 items-center justify-end gap-2 border-t-[3px] border-dotted border-line-strong px-5 pt-3.5 pb-4">
               <button type="button" className={btnSecondary} disabled={submitting} onClick={() => void cancel()}>
                 {copy.cancel}
               </button>
               <button type="submit" className={btnPrimary} disabled={submitting}>
                 {submitting ? copy.sending : copy.sendSecurely}
               </button>
-            </div>
+            </footer>
           </form>
         ) : null}
       </section>

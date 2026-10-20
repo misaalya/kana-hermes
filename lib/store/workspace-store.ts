@@ -30,7 +30,6 @@ export type WorkspaceState = {
   usesMobileChat: boolean;
 
   connectionGateOpen: boolean;
-  connectionGateDismissed: boolean;
   /** The one automatic connection attempt of this page load has finished. */
   automaticConnectFinished: boolean;
   connectPhase: ConnectPhase;
@@ -63,7 +62,6 @@ export function createWorkspaceStore(): WorkspaceStore {
     chatOpen: true,
     usesMobileChat: false,
     connectionGateOpen: false,
-    connectionGateDismissed: false,
     automaticConnectFinished: false,
     connectPhase: "idle",
     hermesRuntime: null,

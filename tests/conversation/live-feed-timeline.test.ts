@@ -36,6 +36,32 @@ describe("live feed activity anchoring", () => {
     );
   });
 
+  it("draws a message Hermes took into a running turn under that turn's user message", () => {
+    const messages: KanaMessage[] = [
+      { id: "user-1", role: "user", text: "Find env files", timestamp: 100 },
+      { id: "correction-1", role: "user", text: "and the folders", correction: "redirected", timestamp: 150 },
+      { id: "correction-2", role: "user", text: "also the hidden ones", correction: "steered", timestamp: 160 },
+      { id: "assistant-1", role: "assistant", subtitle: { text: "Found them", language: "en" }, timestamp: 200 },
+    ];
+
+    const timeline = buildLiveFeedTimeline(messages, [], []);
+    assert.deepEqual(
+      timeline.map((entry) => (entry.kind === "message" ? entry.message.id : "activity")),
+      ["user-1", "assistant-1"],
+      "corrections never become bubbles of their own",
+    );
+    const turn = timeline[0];
+    assert.ok(turn.kind === "message");
+    assert.deepEqual(turn.corrections?.map((message) => message.id), ["correction-1", "correction-2"]);
+
+    const orphan = buildLiveFeedTimeline(
+      [{ id: "correction", role: "user", text: "alone", correction: "redirected", timestamp: 1 }],
+      [],
+      [],
+    );
+    assert.equal(orphan.length, 1, "a correction with no turn still reaches the reader");
+  });
+
   it("marks the running turn's block live and gives it a new key once its reply lands", () => {
     const user: KanaMessage = { id: "user-1", role: "user", text: "Find env files", timestamp: 100 };
     const running = buildLiveFeedTimeline([user], [activity], []);

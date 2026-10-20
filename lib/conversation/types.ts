@@ -14,6 +14,11 @@ export type KanaMessage = {
   timestamp: number;
   /** Tool activity log for the turn that produced this assistant reply. */
   activities?: import("@/lib/agent/types").ActivityItem[];
+  /**
+   * A message Hermes took into the turn that was already running. It is drawn
+   * as a line under that turn's user message, never as a bubble of its own.
+   */
+  correction?: "redirected" | "steered";
 };
 
 export type ConversationAgentLink = {

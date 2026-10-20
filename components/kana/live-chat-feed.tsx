@@ -6,7 +6,7 @@ import type { KanaMessage } from "@/lib/conversation/types";
 import { ActivityStack } from "./activity-stack";
 import { ChatMarkdown } from "./chat-markdown";
 import { MediaAttachments } from "./media-attachments";
-import { CheckIcon, CopyIcon } from "./icons";
+import { CheckIcon, CopyIcon, RedirectIcon, StopIcon } from "./icons";
 import { extractMediaAttachments } from "@/lib/presentation/media";
 import { getCopy, type Copy, type UiLocale } from "@/lib/ui/copy";
 import {
@@ -22,6 +22,8 @@ type LiveChatFeedProps = {
   typing: boolean;
   status: string;
   locale: UiLocale;
+  /** Stop the running turn, or release a reply whose voice is still coming. */
+  onStop?: () => void;
 };
 
 /** Hermes's reply: its Markdown, then any files it delivered. */
@@ -105,6 +107,7 @@ export const LiveChatFeed = memo(function LiveChatFeed({
   typing,
   status,
   locale,
+  onStop,
 }: LiveChatFeedProps) {
   const copy = getCopy(locale);
   const dateLocale = copy.dateLocale;
@@ -187,6 +190,7 @@ export const LiveChatFeed = memo(function LiveChatFeed({
           const isAssistant = message.role === "assistant";
           const isSystem = message.role === "system";
           const messageCopy = isAssistant ? message.subtitle?.text : message.text;
+          const corrections = entry.corrections ?? [];
           if (!messageCopy?.trim()) return null;
 
           if (isSystem) {
@@ -221,6 +225,26 @@ export const LiveChatFeed = memo(function LiveChatFeed({
                   )}
                 </div>
               </div>
+              {corrections.length ? (
+                // A message Hermes folded into this turn: a branch under the
+                // bubble that opened it, the same line the Hermes TUI prints.
+                <div className="flex flex-col items-end gap-0.5 pr-1">
+                  {corrections.map((correction) => (
+                    <p
+                      key={correction.id}
+                      data-correction={correction.correction}
+                      className="flex max-w-full items-start justify-end gap-1.5 text-[11px] leading-relaxed text-muted max-sm:text-[11px]"
+                    >
+                      <RedirectIcon className="mt-0.5 size-3.5 shrink-0" />
+                      <span className="whitespace-pre-wrap text-right [overflow-wrap:anywhere]">
+                        {correction.correction === "steered"
+                          ? copy.chat.correctionSteered(correction.text ?? "")
+                          : copy.chat.correctionRedirected(correction.text ?? "")}
+                      </span>
+                    </p>
+                  ))}
+                </div>
+              ) : null}
               {/* Under the bubble, never in it: the message is all the fill
                   holds. A reply's actions start at its left edge, the reader's
                   own at its right, so each row sits on its own side. */}
@@ -249,7 +273,20 @@ export const LiveChatFeed = memo(function LiveChatFeed({
               <span />
               <span />
             </span>
-            <span className="pl-1 text-[10px] font-bold text-muted">{status}</span>
+            <div className="flex items-center gap-2 pl-1">
+              <span className="text-[10px] font-bold text-muted">{status}</span>
+              {onStop ? (
+                <button
+                  type="button"
+                  onClick={onStop}
+                  aria-label={copy.workspace.stop}
+                  className="kana-focus inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold text-muted transition-colors hover:bg-white/16 hover:text-accent"
+                >
+                  <StopIcon className="size-3" />
+                  {copy.workspace.stop}
+                </button>
+              ) : null}
+            </div>
           </div>
         ) : null}
         <div aria-hidden="true" />

@@ -8,7 +8,13 @@ export type ServerActivityTurn = {
 };
 
 export type LiveFeedEntry =
-  | { kind: "message"; at: number; message: KanaMessage }
+  | {
+      kind: "message";
+      at: number;
+      message: KanaMessage;
+      /** Messages Hermes folded into this user turn; never their own bubbles. */
+      corrections?: KanaMessage[];
+    }
   | {
       kind: "activity";
       at: number;
@@ -24,11 +30,28 @@ export function buildLiveFeedTimeline(
   liveActivities: ActivityItem[],
   serverActivityTurns: ServerActivityTurn[],
 ): LiveFeedEntry[] {
-  const timeline: LiveFeedEntry[] = messages.map((message) => ({
-    kind: "message",
-    at: message.timestamp,
-    message,
-  }));
+  const timeline: LiveFeedEntry[] = [];
+  // Corrections stay attached to the message that opened their turn, even if
+  // narration or a reply was already on screen when they arrived.
+  let turnUser: Extract<LiveFeedEntry, { kind: "message" }> | undefined;
+  for (const message of messages) {
+    if (message.role === "user" && message.correction) {
+      if (turnUser) {
+        turnUser.corrections = [...(turnUser.corrections ?? []), message];
+        continue;
+      }
+      // A correction with no turn to attach to still reaches the reader.
+      timeline.push({ kind: "message", at: message.timestamp, message });
+      continue;
+    }
+    const entry: Extract<LiveFeedEntry, { kind: "message" }> = {
+      kind: "message",
+      at: message.timestamp,
+      message,
+    };
+    timeline.push(entry);
+    if (message.role === "user") turnUser = entry;
+  }
   const assistants = messages.filter((message) => message.role === "assistant");
   const embeddedActivityIds = new Set<string>();
 

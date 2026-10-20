@@ -1,4 +1,5 @@
 import type {
+  AgentBusyDelivery,
   AgentClient,
   AgentCommandResult,
   AgentCommandSuggestion,
@@ -50,6 +51,9 @@ export class FakeAgent implements AgentClient {
   readonly opened: AgentSessionOptions[] = [];
   readonly sent: string[] = [];
   readonly queued: string[] = [];
+  readonly busyMessages: string[] = [];
+  busyDelivery: AgentBusyDelivery = "redirected";
+  busyError: Error | null = null;
   readonly commands: string[] = [];
   readonly responses: AgentInputResponse[] = [];
   history: AgentHistoryRow[] = [];
@@ -87,6 +91,11 @@ export class FakeAgent implements AgentClient {
   }
   enqueuePrompt(message: string) {
     this.queued.push(message);
+  }
+  async sendWhileBusy(message: string) {
+    if (this.busyError) throw this.busyError;
+    this.busyMessages.push(message);
+    return this.busyDelivery;
   }
   async fetchHistory() {
     return { messages: this.history };

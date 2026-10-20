@@ -64,6 +64,43 @@ describe("Hermes transcript projection", () => {
     assert.deepEqual(parseHermesTranscript([{ role: "user", text: "hi" }]).unfinished, []);
   });
 
+  it("marks a user row Hermes redirected into a running turn", () => {
+    const { messages } = parseHermesTranscript([
+      { role: "user", text: "cari folder bernama .kana" },
+      { role: "tool", name: "search_files", context: "preparing search_files" },
+      { role: "user", text: "dan folder tugas" },
+      { role: "assistant", text: envelope("Ditemukan tiga folder.") },
+      { role: "user", text: "terima kasih" },
+      { role: "assistant", text: envelope("Sama-sama.") },
+    ]);
+    assert.deepEqual(
+      messages.map((message) => [message.role, message.correction ?? null]),
+      [
+        ["user", null],
+        ["user", "redirected"],
+        ["assistant", null],
+        ["user", null],
+        ["assistant", null],
+      ],
+      "only the mid-turn row is a correction; the next turn is a normal message",
+    );
+  });
+
+  it("keeps a local steered marker when the refreshed transcript matches its row", () => {
+    const restored = parseHermesTranscript([
+      { role: "user", text: "halo" },
+      { role: "assistant", text: envelope("Hai.") },
+      { role: "user", text: "dan ini" },
+    ]).messages;
+    const local = restored.map((message, index) => ({
+      ...message,
+      id: `local-${index}`,
+      ...(index === 2 ? { correction: "steered" as const } : {}),
+    }));
+    const merged = mergeRestoredMessages(restored, local);
+    assert.equal(merged[2].correction, "steered");
+  });
+
   it("keeps a plain reply without inventing a subtitle language, and hides broken envelopes", () => {
     const { messages } = parseHermesTranscript([
       { role: "assistant", text: "plain text reply" },

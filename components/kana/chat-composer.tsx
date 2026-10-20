@@ -292,26 +292,20 @@ export function ChatComposer() {
             <ComposerModelChoice key={`model-${activeConversationId}`} locale={locale} sessionKey={activeConversationId}
               connected={connected} disabled={busy || submitting} catalog={modelCatalog}
               onList={actions.listAgentModels} onSelect={actions.selectAgentModel} />
-            {busy || voiceActive ? (
-              <button
-                type="button"
-                aria-label={text.stop}
-                className="kana-focus inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-white/20 transition-colors hover:bg-white/30"
-                onClick={() => void actions.abort()}
-              >
-                <span aria-hidden="true" className="size-3 rounded-xs bg-current" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                aria-label={text.send}
-                disabled={(!message.trim() && !files.length) || submitting || dictating || (busy && !canSubmitWhileBusy)}
-                className="kana-send kana-focus inline-flex size-10 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-white/16 disabled:cursor-not-allowed"
-                onClick={() => void submitMessage()}
-              >
-                <SendIcon className="size-[18px]" />
-              </button>
-            )}
+            <button
+              type="button"
+              aria-label={text.send}
+              disabled={
+                (!message.trim() && !files.length) ||
+                submitting ||
+                dictating ||
+                (Boolean(commandName) && busy && !canSubmitWhileBusy)
+              }
+              className="kana-send kana-focus inline-flex size-10 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-white/16 disabled:cursor-not-allowed"
+              onClick={() => void submitMessage()}
+            >
+              <SendIcon className="size-[18px]" />
+            </button>
           </div>
         </div>
       </div>

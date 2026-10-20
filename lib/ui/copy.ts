@@ -128,7 +128,9 @@ export type Copy = {
     hermesAria: string;
     checkFailed: string;
     controlFailed: string;
-    runningOnPort(port: number): string;
+    portLabel: string;
+    managedLabel: string;
+    managedValue: string;
     managedByKana: string;
     externalHermes: string;
     externalChip: string;
@@ -169,13 +171,16 @@ export type Copy = {
     incompatible: string;
     failed: string;
     idle: string;
+    connected: string;
+    connectedTitle: string;
+    illustration: string;
+    illustrationPlugged: string;
     connectButton: string;
     startButton: string;
     detectedExternal(port: number): string;
     managedRunning(pid: number | null): string;
     installedReady: string;
     missingBinary: string;
-    relayNote: string;
   };
   workspace: {
     preparing: string;
@@ -198,10 +203,7 @@ export type Copy = {
     send: string;
     conversationHistory: string;
     gatewayAria: string;
-    gatewayEyebrow: string;
     gatewayTitle: string;
-    gatewayBody: string;
-    notNow: string;
     confirmNew: string;
     confirmUndo: string;
     confirmRestart: string;
@@ -229,6 +231,8 @@ export type Copy = {
     downloadAria(name: string): string;
     openImage(name: string): string;
     mediaUnavailable: string;
+    correctionRedirected(text: string): string;
+    correctionSteered(text: string): string;
   };
   history: {
     aria: string;
@@ -454,17 +458,18 @@ export type Copy = {
   voiceLibrary: {
     title: string;
     chooseAria: string;
-    available: string;
     loading: string;
     empty: string;
-    selected: string;
-    choose: string;
     remove: string;
+    confirmRemove: string;
+    removeAria(name: string): string;
+    confirmRemoveAria(name: string): string;
+    providerTitle: string;
+    externalFallback: string;
     externalReady: string;
     externalUnavailable: string;
     externalChecking: string;
     externalRefresh: string;
-    addTitle: string;
     addSample: string;
     formAria: string;
     formTitle: string;
@@ -491,8 +496,11 @@ export type Copy = {
     title: string;
     aria: string;
     states: Record<"ready" | "installing" | "not_installed" | "failed" | "unsupported" | "checking", string>;
-    downloadNote(size: string): string;
-    diskNote(needed: string, free: string): string;
+    modelLabel: string;
+    deviceLabel: string;
+    downloadLabel: string;
+    diskLabel: string;
+    diskValue(needed: string, free: string): string;
     lowDisk(needed: string, free: string): string;
     progress(step: string, percent: number): string;
     steps: Record<"engine" | "assets" | "model", string>;
@@ -645,7 +653,9 @@ const id: Copy = {
     hermesAria: "Kontrol proses Hermes",
     checkFailed: "Pemeriksaan kontrol gagal.",
     controlFailed: "Kontrol layanan gagal.",
-    runningOnPort: (port: number) => `Port ${port}`,
+    portLabel: "Port",
+    managedLabel: "Dikelola",
+    managedValue: "Kana",
     managedByKana: "Dijalankan oleh Kana.",
     externalHermes: "Dijalankan di luar Kana, jadi Kana tidak bisa memulai ulang atau mematikannya.",
     externalChip: "Tidak dikelola Kana",
@@ -682,13 +692,16 @@ const id: Copy = {
     incompatible: "Versi Hermes tidak kompatibel",
     failed: "Koneksi gagal",
     idle: "Hermes tidak terhubung",
+    connected: "Terhubung",
+    connectedTitle: "Terhubung ke Hermes",
+    illustration: "Kabel dan colokan Hermes terlepas",
+    illustrationPlugged: "Kabel dan colokan Hermes tersambung",
     connectButton: "Koneksikan Hermes",
     startButton: "Memulai Hermes…",
     detectedExternal: (port: number) => `Gateway Hermes terdeteksi di port ${port}.`,
     managedRunning: (pid: number | null) => `Hermes sedang berjalan (PID ${pid ?? "—"}).`,
     installedReady: "Hermes terpasang, siap dijalankan.",
-    missingBinary: "Hermes belum ditemukan. Jalankan `kana doctor`, lalu atur hermes.executable di config.json jika lokasinya khusus.",
-    relayNote: "Koneksi diproses di server Kana — token tidak diperlukan di browser.",
+    missingBinary: "Hermes tidak ditemukan. Jalankan `kana doctor`.",
   },
   workspace: {
     preparing: "Menyiapkan Kana",
@@ -710,11 +723,8 @@ const id: Copy = {
     stop: "Hentikan",
     send: "Kirim",
     conversationHistory: "Riwayat percakapan",
-    gatewayAria: "Gateway Hermes",
-    gatewayEyebrow: "Kana membutuhkan Hermes",
-    gatewayTitle: "Hubungkan pikiran di balik Kana",
-    gatewayBody: "Kana akan menemukan atau menjalankan instalasi Hermes milikmu secara otomatis.",
-    notNow: "Nanti saja",
+    gatewayAria: "Koneksi Hermes",
+    gatewayTitle: "Hermes tidak terhubung",
     confirmNew: "Mulai percakapan Kana dan Hermes yang baru?",
     confirmUndo: "Batalkan giliran Hermes terbaru dan hapus dari riwayat Kana ini?",
     confirmRestart: "Mulai ulang gateway Hermes? Kana akan terputus sementara.",
@@ -740,6 +750,8 @@ const id: Copy = {
     downloadAria: (name) => `Unduh ${name}`,
     openImage: (name) => `Buka ${name} di tab baru`,
     mediaUnavailable: "File ini sudah tidak tersedia.",
+    correctionRedirected: (text) => `Giliran saat ini dialihkan: '${text}'`,
+    correctionSteered: (text) => `Pesan disisipkan: '${text}'`,
   },
   history: {
     aria: "Riwayat percakapan",
@@ -984,17 +996,18 @@ const id: Copy = {
   voiceLibrary: {
     title: "Koleksi suara",
     chooseAria: "Pilih suara Kana",
-    available: "Suara yang tersedia",
     loading: "Memuat suara…",
     empty: "Belum ada suara. Tambahkan sampel suara di bawah.",
-    selected: "Dipilih",
-    choose: "Pilih",
     remove: "Hapus",
+    confirmRemove: "Yakin hapus?",
+    removeAria: (name) => `Hapus suara “${name}”`,
+    confirmRemoveAria: (name) => `Yakin hapus suara “${name}”?`,
+    providerTitle: "Penyedia suara eksternal",
+    externalFallback: "TTS eksternal",
     externalReady: "Siap digunakan",
     externalUnavailable: "Konfigurasi belum siap",
     externalChecking: "Memeriksa provider…",
     externalRefresh: "Periksa ulang",
-    addTitle: "Tambahkan suaramu",
     addSample: "Tambah sampel",
     formAria: "Tambahkan sampel suara",
     formTitle: "Tambahkan suara",
@@ -1028,8 +1041,11 @@ const id: Copy = {
       unsupported: "Tidak didukung",
       checking: "Memeriksa…",
     },
-    downloadNote: (size) => `Unduhan ${size}`,
-    diskNote: (needed, free) => `Disk: butuh ${needed} · tersedia ${free}`,
+    modelLabel: "Model",
+    deviceLabel: "Perangkat",
+    downloadLabel: "Unduhan",
+    diskLabel: "Disk",
+    diskValue: (needed, free) => `butuh ${needed} · tersedia ${free}`,
     lowDisk: (needed, free) => `Ruang disk tidak cukup: butuh ${needed}, tersedia ${free}.`,
     progress: (step, percent) => `${step} · ${percent}%`,
     steps: { engine: "Mesin", assets: "Aset suara", model: "Model" },
@@ -1054,6 +1070,8 @@ const id: Copy = {
     stopped: "Giliran dihentikan",
     attention: "Ada sesuatu yang perlu diperiksa",
     queued: "Pesan masuk antrean — Kana akan menjawab setelah tugas saat ini selesai",
+    redirected: "Pesan digabung ke giliran yang sedang berjalan",
+    steered: "Pesan menunggu tool Hermes berikutnya",
     alreadyNew: "Sudah berada dalam percakapan baru",
     newReady: "Percakapan baru siap",
     opening: "Membuka percakapan",
@@ -1206,7 +1224,9 @@ const en: Copy = {
     hermesAria: "Hermes process control",
     checkFailed: "Control check failed.",
     controlFailed: "Service control failed.",
-    runningOnPort: (port: number) => `Port ${port}`,
+    portLabel: "Port",
+    managedLabel: "Managed by",
+    managedValue: "Kana",
     managedByKana: "Started by Kana.",
     externalHermes: "Started outside Kana, so Kana cannot restart or stop it.",
     externalChip: "Not managed by Kana",
@@ -1243,13 +1263,16 @@ const en: Copy = {
     incompatible: "Incompatible Hermes version",
     failed: "Connection failed",
     idle: "Hermes is not connected",
+    connected: "Connected",
+    connectedTitle: "Connected to Hermes",
+    illustration: "Hermes cable and plug disconnected",
+    illustrationPlugged: "Hermes cable and plug connected",
     connectButton: "Connect Hermes",
     startButton: "Starting Hermes…",
     detectedExternal: (port: number) => `Hermes gateway detected on port ${port}.`,
     managedRunning: (pid: number | null) => `Hermes is running (PID ${pid ?? "—"}).`,
     installedReady: "Hermes is installed and ready to start.",
-    missingBinary: "Hermes was not found. Run `kana doctor`, then set hermes.executable in config.json if it uses a custom location.",
-    relayNote: "The connection is handled by the Kana server — no token needed in the browser.",
+    missingBinary: "Hermes was not found. Run `kana doctor`.",
   },
   workspace: {
     preparing: "Preparing Kana",
@@ -1271,11 +1294,8 @@ const en: Copy = {
     stop: "Stop",
     send: "Send",
     conversationHistory: "Conversation history",
-    gatewayAria: "Hermes gateway",
-    gatewayEyebrow: "Kana needs Hermes",
-    gatewayTitle: "Connect the mind behind Kana",
-    gatewayBody: "Kana will find or start your existing Hermes installation automatically.",
-    notNow: "Not now",
+    gatewayAria: "Hermes connection",
+    gatewayTitle: "Hermes is not connected",
     confirmNew: "Start a fresh Kana and Hermes conversation?",
     confirmUndo: "Undo the latest Hermes turn and remove it from this Kana history?",
     confirmRestart: "Restart the Hermes gateway? Kana will disconnect temporarily.",
@@ -1301,6 +1321,8 @@ const en: Copy = {
     downloadAria: (name) => `Download ${name}`,
     openImage: (name) => `Open ${name} in a new tab`,
     mediaUnavailable: "This file is no longer available.",
+    correctionRedirected: (text) => `Redirected current turn: '${text}'`,
+    correctionSteered: (text) => `Steered: '${text}'`,
   },
   history: {
     aria: "Conversation history",
@@ -1545,17 +1567,18 @@ const en: Copy = {
   voiceLibrary: {
     title: "Voice library",
     chooseAria: "Choose Kana's voice",
-    available: "Available voices",
     loading: "Loading voices…",
     empty: "No voices yet. Add a voice sample below.",
-    selected: "Selected",
-    choose: "Choose",
     remove: "Remove",
+    confirmRemove: "Remove it?",
+    removeAria: (name) => `Remove voice “${name}”`,
+    confirmRemoveAria: (name) => `Remove voice “${name}”?`,
+    providerTitle: "External voice provider",
+    externalFallback: "External TTS",
     externalReady: "Ready to use",
     externalUnavailable: "Configuration is not ready",
     externalChecking: "Checking provider…",
     externalRefresh: "Check again",
-    addTitle: "Add your own voice",
     addSample: "Add sample",
     formAria: "Add a voice sample",
     formTitle: "Add your voice",
@@ -1589,8 +1612,11 @@ const en: Copy = {
       unsupported: "Not supported",
       checking: "Checking…",
     },
-    downloadNote: (size) => `${size} download`,
-    diskNote: (needed, free) => `Disk: ${needed} needed · ${free} free`,
+    modelLabel: "Model",
+    deviceLabel: "Device",
+    downloadLabel: "Download",
+    diskLabel: "Disk",
+    diskValue: (needed, free) => `${needed} needed · ${free} free`,
     lowDisk: (needed, free) => `Not enough disk space: ${needed} needed, ${free} free.`,
     progress: (step, percent) => `${step} · ${percent}%`,
     steps: { engine: "Engine", assets: "Voice assets", model: "Model" },
@@ -1615,6 +1641,8 @@ const en: Copy = {
     stopped: "Turn stopped",
     attention: "Something needs attention",
     queued: "Message queued — Kana will answer after the current task",
+    redirected: "Message added to the current turn",
+    steered: "Message waits for Hermes's next tool call",
     alreadyNew: "Already on a new conversation",
     newReady: "New conversation ready",
     opening: "Opening the conversation",

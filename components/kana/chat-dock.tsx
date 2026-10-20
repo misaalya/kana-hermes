@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback } from "react";
 import type { KanaMessage } from "@/lib/conversation/types";
 import { selectActiveConversation } from "@/lib/store/conversation-store";
 import { getCopy } from "@/lib/ui/copy";
@@ -12,6 +13,7 @@ import { useChatVisible } from "./workspace-stage";
 const NO_MESSAGES: KanaMessage[] = [];
 
 function ChatFeed() {
+  const workspace = useKanaWorkspace();
   const messages = useKanaStore("conversations", (state) => selectActiveConversation(state)?.messages ?? NO_MESSAGES);
   const activities = useKanaStore("activity", (state) => state.activities);
   const serverActivityTurns = useKanaStore("activity", (state) => state.serverActivityTurns);
@@ -21,6 +23,7 @@ function ChatFeed() {
   // while on slower machines: keep the typing bubble up until it plays.
   const synthesizing = useKanaStore("voice", (state) => state.runtimeState === "synthesizing");
   const locale = useKanaStore("preferences", (state) => state.preferences.uiLocale);
+  const stop = useCallback(() => void workspace.actions.abort(), [workspace.actions]);
   return (
     <LiveChatFeed
       messages={messages}
@@ -29,6 +32,7 @@ function ChatFeed() {
       typing={busy || synthesizing}
       status={status}
       locale={locale}
+      onStop={stop}
     />
   );
 }

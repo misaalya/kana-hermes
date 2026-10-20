@@ -400,6 +400,65 @@ describe("HermesAgentClient (relay transport)", () => {
     assert.match(sent[3], /response protocol 3/, "a resumed session and a failed submit both get the full contract");
   });
 
+  it("hands a mid-turn message to Hermes's busy policy without starting a local turn", async () => {
+    let prompts = 0;
+    const client = await connectedClient((request) => {
+      if (request.method === "session.create") return { session_id: "runtime-1", stored_session_id: "stored-1" };
+      if (request.method === "prompt.submit") {
+        prompts += 1;
+        return { status: prompts === 2 ? "redirected" : "steered" };
+      }
+      return {};
+    });
+    const events: AgentEvent[] = [];
+    await openSession(client);
+    client.subscribe((event) => events.push(event));
+    await client.sendMessage({ text: "Satu" });
+    assert.equal(await client.sendWhileBusy("Dua"), "redirected");
+    assert.equal(await client.sendWhileBusy("Tiga"), "steered");
+
+    const submitted = FakeRelay.requests.filter((request) => request.method === "prompt.submit");
+    assert.equal(submitted.length, 3);
+    assert.equal(submitted[1].params.queued, undefined, "Hermes applies display.busy_input_mode");
+    assert.match(String(submitted[1].params.text), /^Dua\n\n<kana>\n/);
+    assert.equal(
+      events.filter((event) => event.type === "agent.started").length,
+      1,
+      "a redirect stays inside the turn Kana already started",
+    );
+
+    latestStream().emitEvent("message.start", { text: "Satu" });
+    await tick();
+    assert.equal(
+      events.filter((event) => event.type === "agent.started").length,
+      1,
+      "Hermes's start frame for the running turn is not a second start",
+    );
+  });
+
+  it("accepts a turn Hermes starts from its own busy queue", async () => {
+    const client = await connectedClient((request) => {
+      if (request.method === "session.create") return { session_id: "runtime-1", stored_session_id: "stored-1" };
+      if (request.method === "prompt.submit") return { status: "queued" };
+      return {};
+    });
+    const events: AgentEvent[] = [];
+    await openSession(client);
+    client.subscribe((event) => events.push(event));
+    await client.sendMessage({ text: "Satu" });
+    assert.equal(await client.sendWhileBusy("Dua"), "queued");
+
+    latestStream().emitEvent("message.complete", { status: "complete", text: responseText() });
+    await tick();
+    latestStream().emitEvent("message.start", { text: "Dua" });
+    latestStream().emitEvent("message.complete", { status: "complete", text: responseText() });
+    await tick();
+
+    assert.equal(events.filter((event) => event.type === "assistant.message").length, 2);
+    assert.equal(events.filter((event) => event.type === "agent.finished").length, 2);
+    assert.equal(events.filter((event) => event.type === "agent.started").length, 2);
+  });
+
   it("asks for Japanese only while the voice is on, and resends the full contract when it changes", async () => {
     let voice = true;
     const client = await connectedClient((request) => {

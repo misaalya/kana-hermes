@@ -1,6 +1,7 @@
 import { classifyHermesTool } from "@/lib/agent/tool-kind";
 import { AttachmentUploadError, MAX_ATTACHMENTS, MAX_ATTACHMENT_TOTAL_BYTES, validateAttachment } from "@/lib/agent/attachments";
 import type {
+  AgentBusyDelivery,
   AgentClient,
   AgentCommandInput,
   AgentCommandResult,
@@ -1309,28 +1310,55 @@ export class HermesAgentClient implements AgentClient {
     if (!this.session) {
       throw new Error("Open a Hermes session before sending a message.");
     }
-    const voice = this.options.voiceEnabled?.() ?? true;
-    const full = this.needsFullContract || this.contractVoice !== voice;
-    const text = buildKanaUserPrompt(message, { full, voice });
     this.running = true;
     this.emit({ type: "agent.started" });
     try {
-      await this.request("prompt.submit", {
-        session_id: this.session.sessionId,
-        // References go after the Kana note: Hermes's context-reference
-        // parser reads them anywhere, and transcript restore drops them
-        // together with the note.
-        text: attachmentRefs.length ? `${text}\n\n${attachmentRefs.join("\n")}` : text,
-      });
-      // Cleared only once Hermes took the prompt, so a failed submit retries
-      // with the full contract.
-      this.needsFullContract = false;
-      this.sessionStored = true;
-      if (full) this.contractVoice = voice;
+      await this.postPrompt(message, attachmentRefs);
     } catch (error) {
       this.running = false;
       throw error;
     }
+  }
+
+  /**
+   * Hand a plain message to Hermes while a turn is running and let its
+   * `display.busy_input_mode` decide: redirect the live turn (default),
+   * steer after the next tool call, or queue the next turn. The turn is
+   * already running, so no local `agent.started` is emitted; a server-queued
+   * turn announces itself later with `message.start`.
+   */
+  async sendWhileBusy(message: string): Promise<AgentBusyDelivery> {
+    if (!this.session) {
+      throw new Error("Open a Hermes session before sending a message.");
+    }
+    const status = await this.postPrompt(message);
+    if (status === "redirected" || status === "steered" || status === "queued") return status;
+    return "started";
+  }
+
+  private async postPrompt(
+    message: string,
+    attachmentRefs: string[] = [],
+  ): Promise<string | undefined> {
+    if (!this.session) {
+      throw new Error("Open a Hermes session before sending a message.");
+    }
+    const voice = this.options.voiceEnabled?.() ?? true;
+    const full = this.needsFullContract || this.contractVoice !== voice;
+    const text = buildKanaUserPrompt(message, { full, voice });
+    const response = await this.request<{ status?: string }>("prompt.submit", {
+      session_id: this.session.sessionId,
+      // References go after the Kana note: Hermes's context-reference
+      // parser reads them anywhere, and transcript restore drops them
+      // together with the note.
+      text: attachmentRefs.length ? `${text}\n\n${attachmentRefs.join("\n")}` : text,
+    });
+    // Cleared only once Hermes took the prompt, so a failed submit retries
+    // with the full contract.
+    this.needsFullContract = false;
+    this.sessionStored = true;
+    if (full) this.contractVoice = voice;
+    return response.status;
   }
 
   private request<T>(
@@ -1387,6 +1415,19 @@ export class HermesAgentClient implements AgentClient {
               : "clarification",
         requestId: payload.request_id,
       });
+      return;
+    }
+
+    if (event.type === "message.start") {
+      // A turn Hermes started on its own, such as a prompt drained from its
+      // server-side busy queue. Kana's own submits mark the turn running
+      // before they reach Hermes, so only a turn this client has not seen
+      // begin is announced here; without it that turn's message.complete
+      // would be discarded as terminal.
+      if (!this.running) {
+        this.running = true;
+        this.emit({ type: "agent.started" });
+      }
       return;
     }
 

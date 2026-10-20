@@ -4,17 +4,23 @@ The composer writes the message, attaches files, captures dictation, and picks
 the Hermes model. This page covers its controls and limits.
 
 **Read when:** you are attaching files or dictating, or you need to know where an attachment goes.
-**Truth in code:** `components/kana/chat-composer.tsx`, `lib/limits.ts`, `lib/services/send-message.ts`, `lib/services/model-catalog-service.ts`, `app/api/hermes/attachments/route.ts`
+**Truth in code:** `components/kana/chat-composer.tsx`, `components/kana/live-chat-feed.tsx`, `lib/limits.ts`, `lib/services/send-message.ts`, `lib/services/model-catalog-service.ts`, `app/api/hermes/attachments/route.ts`
 
 ## Sending a message
 
 Text sits on the first row; the second row holds the attach button, the
 microphone, the current model, and Send. Enter sends and Shift+Enter inserts a
-newline. Send becomes Stop while Hermes works or the reply's voice is still
-being generated. A plain message typed during a turn is queued until that turn
-finishes; approvals, `/status`, `/steer`, `/queue`, `/agents`, `/goal`,
-`/heartbeat`, and `/background` may still be sent. A draft typed `/` opens the
-Hermes command menu with keyboard navigation.
+newline. Send keeps its icon while Hermes works; Stop appears beside the working
+status in the conversation and remains there while the reply's voice is still
+being generated. A plain message typed during a turn follows Hermes's
+`display.busy_input_mode`: by default it is redirected into the running turn,
+which still answers once; with `queue` it runs as the next turn, and with
+`steer` it reaches Hermes after the next tool call. A redirected or steered
+message is drawn as a small icon line under the message that opened the turn,
+such as `Redirected current turn: '…'`, instead of a bubble of its own.
+Approvals, `/status`, `/steer`, `/queue`, `/agents`, `/goal`, `/heartbeat`, and
+`/background` may still be sent. A draft typed `/` opens the Hermes command menu
+with keyboard navigation.
 
 A draft and its selected files belong to one conversation and live only in the
 browser tab's memory, so a reload clears them; each conversation keeps its own

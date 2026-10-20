@@ -9,6 +9,8 @@ import {
   settingsButton,
   settingsButtonAccent,
   settingsButtonDanger,
+  SettingsRow,
+  SettingsRows,
   StatusPill,
 } from "./settings-layout";
 
@@ -23,10 +25,10 @@ type HermesControlPanelProps = {
 // details (paths, PIDs, endpoints) are deliberately not shown here: the
 // server mints and holds the session token and the browser never needs them.
 //
-// Two rows, so state and intent never compete: the first says what Hermes is
-// doing (one chip, one refresh), the second offers only the single action that
-// makes sense right now. A Hermes Kana did not start is adopted as it is found
-// and cannot be restarted or stopped from here.
+// The rows follow the rest of Settings: the identity row says what Hermes is
+// doing and offers only the action that makes sense right now; the rows under
+// it state the port and who owns the process. A Hermes Kana did not start is
+// adopted as it is found and cannot be restarted or stopped from here.
 
 export function HermesControlPanel({
   locale,
@@ -140,9 +142,9 @@ export function HermesControlPanel({
       : status && !canControl
         ? copy.controlUnavailable
         : undefined;
-  const runningDetail = status && running ? copy.runningOnPort(status.port) : null;
 
-  // One row: the state chip, then only the action that makes sense right now.
+  // One identity row: the state chip, then only the action that makes sense
+  // right now. The facts it is talking about (port, ownership) sit under it.
   const actions: React.ReactNode[] = [];
   if (canControl && settled) {
     if (running && status?.managed) {
@@ -189,19 +191,34 @@ export function HermesControlPanel({
   }
 
   return (
-    <section aria-label={copy.hermesAria} className="flex flex-col gap-3 bg-surface-strong/60 p-5">
-      <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
-        <div className="min-w-0" title={chipTitle}>
-          <div className="text-[13px] font-extrabold text-muted">{copy.hermesTitle}</div>
-          <div className="mt-1">
-            <StatusPill tone={tone} capitalize={false}>{chipLabel}</StatusPill>
+    <section aria-label={copy.hermesAria}>
+      <SettingsRows>
+        <SettingsRow
+          label={copy.hermesTitle}
+          inline
+          description={
+            <span title={chipTitle}>
+              <StatusPill tone={tone} capitalize={false}>{chipLabel}</StatusPill>
+            </span>
+          }
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            {actions}
           </div>
-          {runningDetail ? <div className="mt-1 text-[11.5px] text-muted">{runningDetail}</div> : null}
-        </div>
-        {actions.length > 0 ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
-      </div>
+        </SettingsRow>
+        {running ? (
+          <SettingsRow label={copy.portLabel} inline>
+            <span className="text-xs font-semibold text-ink-dim">{status?.port}</span>
+          </SettingsRow>
+        ) : null}
+        {status?.managed ? (
+          <SettingsRow label={copy.managedLabel} inline>
+            <span className="text-xs font-semibold text-ink-dim">{copy.managedValue}</span>
+          </SettingsRow>
+        ) : null}
+      </SettingsRows>
       {notice ? (
-        <p className={`text-[11.5px] font-semibold ${notice.failed ? "text-danger" : "text-muted"}`} role="status">
+        <p className={`mt-3 text-[11.5px] font-semibold ${notice.failed ? "text-danger" : "text-muted"}`} role="status">
           {notice.text}
         </p>
       ) : null}

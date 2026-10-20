@@ -121,15 +121,62 @@ export async function sendMessage(
   const conversation = conversations.get(activeConversationId);
   if (!conversation) return;
 
-  // A plain message typed mid-turn is queued and submitted when the turn
-  // completes instead of being dropped.
+  // A plain message typed mid-turn is handed to Hermes while it is running,
+  // so its own display.busy_input_mode decides: redirect the live turn by
+  // default, steer after the next tool call, or queue the next turn. A
+  // redirected turn answers once, as the Hermes TUI does.
   if (wasBusy && !commandName) {
-    sessions.client?.enqueuePrompt(cleanText);
-    conversations.save({
+    const client = sessions.client;
+    const pendingUserMessage = { ...createUserMessage(cleanText), text: cleanText };
+    const saved = conversations.save({
       ...conversation,
-      messages: [...conversation.messages, { ...createUserMessage(cleanText), text: cleanText }],
+      messages: [...conversation.messages, pendingUserMessage],
     });
-    setStatus(status().queued);
+    if (!client) return;
+    try {
+      const delivery = await client.sendWhileBusy(cleanText);
+      if (delivery === "redirected" || delivery === "steered") {
+        // Hermes folded the message into the live turn, so it reads as a line
+        // under the message that opened that turn instead of a second bubble.
+        const current = conversations.get(saved.id) ?? saved;
+        conversations.save({
+          ...current,
+          messages: current.messages.map((message) =>
+            message.id === pendingUserMessage.id ? { ...message, correction: delivery } : message,
+          ),
+        });
+      }
+      setStatus(
+        delivery === "redirected"
+          ? status().redirected
+          : delivery === "steered"
+            ? status().steered
+            : delivery === "queued"
+              ? status().queued
+              : status().thinking,
+      );
+    } catch (error) {
+      if (error instanceof PromptGuardrailError) {
+        const guardrail = getCopy(preferences.current().uiLocale).guardrail;
+        conversations.save({
+          ...saved,
+          messages: [
+            ...saved.messages,
+            createSystemMessage(
+              error.reason === "blocked" ? guardrail.blocked : guardrail.unavailable(error.message),
+              cleanText,
+            ),
+          ],
+        });
+        setStatus(session.getState().busy ? status().stillWorking : status().refused);
+      } else {
+        stores.errors
+          .getState()
+          .report("agent", error instanceof Error ? error.message : status().sendFailed);
+        setStatus(session.getState().busy ? status().stillWorking : status().sendFailed);
+      }
+      throw error;
+    }
     return;
   }
 
