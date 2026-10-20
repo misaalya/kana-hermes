@@ -20,6 +20,8 @@ export type WorkspaceSetupDependencies = {
   hermesControl: HermesControl;
   inspectVoice(): Promise<VoiceProviderStatus>;
   connect(): Promise<void>;
+  /** Try the connection now instead of after the scheduled reconnect delay. */
+  reconnect(): Promise<boolean>;
   fetchSetupState(): Promise<SetupState | null>;
   sessionStorage?: Pick<Storage, "getItem" | "setItem">;
   /** Let the connection-state update from connect() settle before reading it. */
@@ -89,12 +91,12 @@ export class WorkspaceSetup {
     return findings;
   }
 
+  /** Start the managed gateway and report the outcome; the caller connects. */
   async startGateway(): Promise<void> {
     this.store.setState({ hermesRuntimeBusy: true, hermesRuntimeNotice: null });
     try {
       const status = await this.deps.hermesControl.start({ port: this.store.getState().hermesRuntime?.port });
       this.store.setState({ hermesRuntime: status, hermesRuntimeNotice: status.message });
-      await this.deps.connect();
     } catch (error) {
       this.store.setState({
         hermesRuntimeNotice: error instanceof Error ? error.message : "Could not start the Hermes gateway.",
@@ -107,18 +109,41 @@ export class WorkspaceSetup {
     }
   }
 
-  /** Connect through the relay; start the managed gateway when Hermes is installed but not running. */
+  /** Close the gate once the connection is up. */
+  private finishConnection(): void {
+    this.store.setState({
+      automaticConnectFinished: true,
+      connectionGateOpen: false,
+      connectPhase: "idle",
+    });
+  }
+
+  /**
+   * Connect through the relay; start the managed gateway when Hermes is
+   * installed but not running. A live drop is retried on a timer, so a manual
+   * attempt during it tries now instead of waiting, and can start Hermes.
+   */
   async connectHermes(): Promise<void> {
     const connectionState = this.deps.agentSession.getState().connectionState;
-    if (connectionState === "connecting" || connectionState === "reconnecting") return;
+    // One attempt owns the gate: the auto-connect and the button must not race.
+    if (connectionState === "connecting" || this.store.getState().connectPhase !== "idle") return;
+    const reconnecting = connectionState === "reconnecting";
     this.store.setState({ connectPhase: "connecting", hermesRuntimeNotice: null });
 
-    // The server may already run Hermes.
-    await this.deps.connect();
-    await this.deps.settle(0);
-    if (this.connected()) {
-      this.store.setState({ automaticConnectFinished: true, connectionGateOpen: false, connectPhase: "idle" });
+    // A scheduled retry is waiting; ask for the connection now.
+    if (reconnecting && (await this.deps.reconnect())) {
+      this.finishConnection();
       return;
+    }
+
+    // The server may already run Hermes.
+    if (!reconnecting) {
+      await this.deps.connect();
+      await this.deps.settle(0);
+      if (this.connected()) {
+        this.finishConnection();
+        return;
+      }
     }
 
     let runtime = this.store.getState().hermesRuntime;
@@ -135,7 +160,8 @@ export class WorkspaceSetup {
       try {
         await this.startGateway();
         await this.deps.settle(100);
-        await this.deps.connect();
+        if (reconnecting) await this.deps.reconnect();
+        else await this.deps.connect();
       } catch {
         // The gate below reports the outcome.
       }

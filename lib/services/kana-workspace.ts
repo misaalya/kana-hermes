@@ -182,6 +182,7 @@ export function createKanaWorkspace(): KanaWorkspace {
     hermesControl,
     inspectVoice: () => voice.inspect(),
     connect: () => sessions.connect(),
+    reconnect: () => sessions.reconnect(),
     fetchSetupState,
     sessionStorage: typeof window === "undefined" ? undefined : window.sessionStorage,
     settle: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),

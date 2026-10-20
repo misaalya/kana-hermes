@@ -47,6 +47,8 @@ export class AvatarService {
   private canvas: HTMLCanvasElement | null = null;
   /** Identity of the loaded model and bindings; an unchanged key only updates layout. */
   private loadedKey = "";
+  /** The canvas the loaded model draws into; a remounted stage hands over a new one. */
+  private loadedCanvas: HTMLCanvasElement | null = null;
   private lastLoadError: Error | null = null;
   private previewTimers: Array<ReturnType<typeof setTimeout>> = [];
   private portraitTimer: ReturnType<typeof setTimeout> | null = null;
@@ -94,7 +96,10 @@ export class AvatarService {
             .map((file) => `${file.webkitRelativePath}:${file.size}:${file.lastModified}`)
             .join("|")}:${JSON.stringify(bindings)}`
         : `live2d:${next.live2d.coreScriptUrl}:${next.live2d.modelId || next.live2d.modelUrl}:${JSON.stringify(bindings)}`;
-      if (!force && this.loadedKey === key) {
+      // A remounted stage supplies a new canvas element; the loaded model still
+      // draws into the old, detached one, so an unchanged key alone is not
+      // enough to keep it.
+      if (!force && this.loadedKey === key && this.loadedCanvas === canvas) {
         this.deps.controller.setLayout(layout);
         return true;
       }
@@ -109,6 +114,7 @@ export class AvatarService {
         modelUrl: modelFiles?.length ? undefined : next.live2d.modelUrl.trim(),
       });
       this.loadedKey = key;
+      this.loadedCanvas = canvas;
       this.lastLoadError = null;
       this.deps.controller.presentEmotion("neutral");
       this.schedulePortrait(provider, key, next.live2d.modelId || next.live2d.modelUrl.trim());
@@ -121,6 +127,7 @@ export class AvatarService {
       if (avatarError instanceof AvatarLoadSupersededError) return false;
       this.lastLoadError = avatarError instanceof Error ? avatarError : new Error("Unknown Live2D runtime error.");
       this.loadedKey = "mock-fallback";
+      this.loadedCanvas = null;
       this.deps.errors.getState().report(
         "avatar",
         avatarError instanceof Error
@@ -259,6 +266,7 @@ export class AvatarService {
     if (this.portraitTimer) globalThis.clearTimeout(this.portraitTimer);
     this.portraitTimer = null;
     this.loadedKey = "";
+    this.loadedCanvas = null;
     this.deps.provider.unload();
   }
 
