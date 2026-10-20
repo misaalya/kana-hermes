@@ -199,6 +199,14 @@ export type AgentMessageInput = {
   attachments?: import("./attachments").AgentAttachment[];
 };
 
+/**
+ * What Hermes did with a plain message that arrived during a running turn,
+ * following its own `display.busy_input_mode`: redirect the live turn
+ * (default), steer after the next tool call, queue the next turn, or start
+ * one because the previous turn ended first.
+ */
+export type AgentBusyDelivery = "redirected" | "steered" | "queued" | "started";
+
 export type AgentCommandSuggestion = {
   text: string;
   display: string;
@@ -279,10 +287,16 @@ export interface AgentClient {
   disconnect(): Promise<void>;
   openSession(options: AgentSessionOptions): Promise<AgentSession>;
   /**
-   * Queue a plain message while a turn is running; it is submitted
-   * automatically when the current turn completes (Telegram-parity).
+   * Queue a command-generated prompt while a turn is running; it is submitted
+   * automatically when the current turn completes, as Hermes's TUI queues
+   * slash commands rather than steering them into the live turn.
    */
   enqueuePrompt(message: string): void;
+  /**
+   * Send a plain message while a turn is running. Hermes decides what happens
+   * from `display.busy_input_mode`; the result reports which path it took.
+   */
+  sendWhileBusy(message: string): Promise<AgentBusyDelivery>;
   /**
    * Fetch the persisted transcript of the currently open Hermes session.
    * Hermes resolves `session.history` only by RUNTIME session id, so this

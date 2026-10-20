@@ -518,23 +518,21 @@ export function SettingsDialog({
               <>
                 <SettingsGroup title={settingsCopy.sections.voice.label}>
                   <SettingsRows>
-                    <SettingsRow label={settingsCopy.voiceTitle}>
+                    <SettingsRow label={settingsCopy.voiceTitle} inline>
                       <Toggle checked={draft.voiceEnabled} label={settingsCopy.voiceToggle} onChange={() => setDraft((current) => ({ ...current, voiceEnabled: !current.voiceEnabled }))} />
                     </SettingsRow>
-                    <VoiceEnginePanel locale={draft.uiLocale} />
                   </SettingsRows>
                 </SettingsGroup>
+                <VoiceEnginePanel locale={draft.uiLocale} />
                 {draft.voiceEnabled ? (
-                  <SettingsGroup>
-                    <VoicePanel
-                      locale={draft.uiLocale}
-                      selectedVoiceId={draft.voice.voiceId}
-                      onVoiceSelect={(voiceId) => setDraft((current) => ({
-                        ...current,
-                        voice: { ...current.voice, voiceId },
-                      }))}
-                    />
-                  </SettingsGroup>
+                  <VoicePanel
+                    locale={draft.uiLocale}
+                    selectedVoiceId={draft.voice.voiceId}
+                    onVoiceSelect={(voiceId) => setDraft((current) => ({
+                      ...current,
+                      voice: { ...current.voice, voiceId },
+                    }))}
+                  />
                 ) : null}
               </>
             ) : null}

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { AttachmentUploadError } from "@/lib/agent/attachments";
 import { readActiveConversationPointer } from "@/lib/conversation/active-conversation";
+import { PromptGuardrailError } from "@/lib/guardrails/protocol";
 import type { HermesRuntimeStatus } from "@/lib/runtime/hermes-control-client";
 import { getCopy } from "@/lib/ui/copy";
 import { createHarness, envelope, MemoryStorage, tick } from "./workspace-harness";
@@ -224,15 +225,78 @@ describe("HermesSessionManager", () => {
     assert.equal(harness.emotions.at(-1), "confused");
   });
 
-  it("queues a plain message typed during a turn", async () => {
+  it("hands a plain message typed during a turn to Hermes's busy policy", async () => {
     const harness = createHarness();
     harness.conversations.initialize();
     await harness.send("first");
     harness.agent.emit({ type: "agent.started" });
     await harness.send("second");
-    assert.deepEqual(harness.agent.queued, ["second"]);
+    assert.deepEqual(harness.agent.busyMessages, ["second"]);
+    assert.deepEqual(harness.agent.queued, [], "plain messages are not client-queued");
     assert.deepEqual(harness.agent.sent, ["first"]);
     assert.equal(harness.active().messages.at(-1)?.text, "second");
+    assert.equal(
+      harness.active().messages.at(-1)?.correction,
+      "redirected",
+      "the message is drawn under the turn it joined, not as a new bubble",
+    );
+    assert.equal(harness.status(), copy(harness).redirected);
+  });
+
+  it("marks a steered message as a line under the turn it joined", async () => {
+    const harness = createHarness({
+      setupAgent: (agent) => {
+        agent.busyDelivery = "steered";
+      },
+    });
+    harness.conversations.initialize();
+    await harness.send("first");
+    harness.agent.emit({ type: "agent.started" });
+    await harness.send("second");
+    assert.equal(harness.active().messages.at(-1)?.correction, "steered");
+    assert.equal(harness.status(), copy(harness).steered);
+  });
+
+  it("keeps the queued status when Hermes queues a busy message", async () => {
+    const harness = createHarness({
+      setupAgent: (agent) => {
+        agent.busyDelivery = "queued";
+      },
+    });
+    harness.conversations.initialize();
+    await harness.send("first");
+    harness.agent.emit({ type: "agent.started" });
+    await harness.send("second");
+    assert.equal(harness.status(), copy(harness).queued);
+    assert.equal(
+      harness.active().messages.at(-1)?.correction,
+      undefined,
+      "a queued message opens the next turn and stays a normal bubble",
+    );
+  });
+
+  it("answers a refused message typed during a turn without disturbing it", async () => {
+    const harness = createHarness({
+      setupAgent: (agent) => {
+        agent.busyError = new PromptGuardrailError("blocked", "refused");
+      },
+    });
+    harness.conversations.initialize();
+    await harness.send("first");
+    harness.agent.emit({ type: "agent.started" });
+    await assert.rejects(harness.send("second"), PromptGuardrailError);
+    const messages = harness.active().messages;
+    assert.deepEqual(
+      messages.map((message) => message.role),
+      ["user", "user", "system"],
+    );
+    assert.equal(
+      messages.at(-1)?.text,
+      getCopy(harness.preferences.current().uiLocale).guardrail.blocked,
+    );
+    assert.equal(harness.stores.errors.getState().error, null, "a refusal is not a failure banner");
+    assert.equal(harness.status(), copy(harness).stillWorking);
+    assert.equal(harness.stores.agentSession.getState().busy, true);
   });
 
   it("reuses a blank conversation for /new", async () => {

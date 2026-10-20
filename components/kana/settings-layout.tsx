@@ -25,14 +25,16 @@ export const settingsInput =
 export function SettingsGroup({
   title,
   action,
+  ariaLabel,
   children,
 }: {
   title?: string;
   action?: React.ReactNode;
+  ariaLabel?: string;
   children?: React.ReactNode;
 }) {
   return (
-    <section className="pt-8 first:pt-0">
+    <section aria-label={ariaLabel} className="pt-8 first:pt-0">
       {title || action ? (
         <div className="flex min-h-8 items-center gap-3">
           {title ? <h3 className="text-base font-extrabold text-ink">{title}</h3> : null}
@@ -44,22 +46,29 @@ export function SettingsGroup({
   );
 }
 
-/** A divided row. `stacked` puts the control under the label (wide controls). */
+/** A divided row. `stacked` puts the control under the label (wide controls);
+ * `inline` keeps a short control beside the label on phones too. */
 export function SettingsRow({
   label,
   description,
   children,
   stacked = false,
+  inline = false,
 }: {
   label: React.ReactNode;
   description?: React.ReactNode;
   children?: React.ReactNode;
   stacked?: boolean;
+  inline?: boolean;
 }) {
   return (
     <div
       className={`py-3.5 ${
-        stacked ? "" : "flex items-center justify-between gap-6 max-sm:flex-col max-sm:items-stretch max-sm:gap-3"
+        stacked
+          ? ""
+          : inline
+            ? "flex items-center justify-between gap-3 sm:gap-6"
+            : "flex items-center justify-between gap-6 max-sm:flex-col max-sm:items-stretch max-sm:gap-3"
       }`}
     >
       <div className="min-w-0">

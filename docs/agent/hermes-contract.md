@@ -70,6 +70,14 @@ The relay client turns those codes into `PromptGuardrailError` (`lib/guardrails/
 
 A message with files uploads each one through `POST /api/hermes/attachments` (`file.attach`) before submitting, and the returned reference (`@file:...`) is appended after the Kana note in the prompt. Hermes's context-reference parser reads references anywhere in the turn, and transcript restore drops them together with the note, so they never appear in a restored bubble (`sendMessage` in `hermes-agent-client.ts`, `unwrapKanaUserPrompt`).
 
+## Busy input
+
+A plain message typed while a turn is running is submitted with `prompt.submit` and no `queued` flag, so Hermes applies the user's own `display.busy_input_mode` (`_handle_busy_submit` in Hermes's `tui_gateway/server.py`). The default `interrupt` redirects the live turn: the in-flight model request is cancelled, completed tool work is kept, the correction joins the same turn, and the user receives one answer, as in the Hermes TUI. `steer` injects the text after the next tool call, and `queue` runs it as the next turn. `sendWhileBusy` reports which path Hermes took; `lib/services/send-message.ts` shows the matching status and does not emit a second `agent.started` for a redirect or steer, so the turn keeps one activity log. A turn Hermes starts from its own queue is announced with `message.start`, which becomes `agent.started` only when Kana has not already marked a turn running.
+
+Kana keeps a received correction out of the transcript's bubble flow: `lib/conversation/live-feed-timeline.ts` attaches it to the user message that opened the turn, and the feed draws it as an icon line under that bubble with the same wording as the Hermes TUI, `Redirected current turn: '…'`. Hermes persists a redirect as a user row inside the running turn, so `parseHermesTranscript` recognises a user row after tool activity, or directly after another user row, as that correction; a steered message leaves no row, so `mergeRestoredMessages` restores its marker from the local copy on a same-browser reload. Each Kana conversation marks the messages with `correction` in `lib/conversation/types.ts`.
+
+Command-generated prompts are different: Hermes's TUI queues slash commands while busy, so a `send`/`skill` prompt that arrives mid-turn stays in Kana's client-side queue and is submitted after the turn.
+
 ## Model selection
 
 `config.set` sends `<model> --provider <slug> --session` unquoted. Hermes's `/model` parser splits on whitespace and never unquotes, so shell quoting would arrive as part of the provider name. A switch warning is passed through except Hermes's own `Note:` model-listing parts, which ride on switches Hermes accepted and read like failures (`switchWarning`).
@@ -86,6 +94,7 @@ An unexpected stream drop rejects pending RPCs, marks a running turn for recover
 | --- | --- |
 | `gateway.ready` / `gateway` SSE | resolves the connection; `connection.changed` |
 | `session.title` | `session.updated` |
+| `message.start` | `agent.started` when Kana did not already mark a turn running |
 | `message.delta` | `assistant.delta` (status only) |
 | `message.complete` | `assistant.message` after `parseKanaResponse`, or `agent.error` |
 | `tool.start`, `tool.progress`/`tool.generating`, `tool.complete` | `tool.started`, `tool.progress`, `tool.finished` |

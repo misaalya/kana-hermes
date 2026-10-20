@@ -235,8 +235,11 @@ texture. The composer stays the blue band with a transparent text field and whit
 text; its model chooser is a white pill and Send becomes a white disc when there
 is something to send. While Hermes works, or while the reply's voice is still
 being generated, the transcript shows a chat-app typing bubble (`kana-typing`,
-three hopping dots) with the status beside it. Voice generation has no short time
-limit on the client; slow machines keep the bubble up longer.
+three hopping dots) with the status beside it, and Stop is a small icon-and-label
+pill next to that status rather than a replacement for Send. A message Hermes
+takes into the running turn is a right-aligned icon line (`RedirectIcon`) under
+the user bubble that opened the turn, never a second bubble. Voice generation has
+no short time limit on the client; slow machines keep the bubble up longer.
 
 What each control does, the file limits, dictation, and the model list belong to
 `docs/operator/composer.md`; this document keeps only how the composer looks.

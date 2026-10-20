@@ -10,7 +10,7 @@ import { HistoryIcon, MoonIcon, SettingsIcon, SunIcon } from "./icons";
 import { useKanaStore, useKanaWorkspace } from "./kana-workspace-context";
 import { useUpdateAvatarLayout } from "./workspace-stage";
 
-export function WorkspaceHeader() {
+export function WorkspaceHeader({ connectionDown = false }: { connectionDown?: boolean }) {
   const workspace = useKanaWorkspace();
   const { theme, toggleTheme } = useTheme();
   const locale = useKanaStore("preferences", (state) => state.preferences.uiLocale);
@@ -47,7 +47,7 @@ export function WorkspaceHeader() {
           <span className="kana-tip">{theme === "dark" ? text.light : text.dark}</span>
         </button>
         {/* Positioning an avatar that is not on screen has nothing to show. */}
-        {avatarVisible ? (
+        {avatarVisible && !connectionDown ? (
           <AvatarLayoutControl
             layout={live2DModelLayout(live2d)}
             copy={copy}

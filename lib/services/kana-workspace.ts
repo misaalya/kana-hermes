@@ -105,7 +105,6 @@ function createActions(parts: {
     },
     stopHermesControl: () => hermesControl.stop(),
     connectHermes: () => setup.connectHermes(),
-    dismissConnectionGate: () => setup.dismissGate(),
     inspectDependencies: () => setup.inspectDependencies(),
     clearError: () => stores.errors.getState().clear(),
   };

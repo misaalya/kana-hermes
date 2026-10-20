@@ -347,6 +347,13 @@ async function installFakeHermes(page: Page): Promise<FakeHermes> {
         const speaks = /\n---\nja: /.test(submitted.slice(noteStart));
         const userMessage = submitted.slice(0, noteStart);
         const language = /\b(halo|aku|kamu|apa)\b/i.test(userMessage) ? "id" : "en";
+        // Hermes's default busy_input_mode redirects the live turn instead of
+        // opening a second one; no second completion may follow.
+        if (session?.running) {
+          session.history.push({ role: "user", text: submitted });
+          result = { status: "redirected" };
+          break;
+        }
         const subtitles: Record<string, string> = {
           en: "Hello! I am here.",
           id: "Halo! Aku di sini.",
@@ -797,6 +804,41 @@ test("keeps a running turn's Hermes activity through a refresh and renders its M
   expect(await chat.evaluate((node) => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(0);
 });
 
+test("a message typed during a turn is redirected into it, not answered twice", async ({
+  page,
+}) => {
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
+  const chat = page.getByRole("log", { name: "Live chat" });
+
+  await composer.fill("Research the Kupang weather");
+  await composer.press("Enter");
+  const activity = chat.getByRole("group").filter({ hasText: "Hermes activity" });
+  await expect(activity).toContainText("web_search");
+  // Send stays Send while Hermes works; stopping lives beside the status.
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeVisible();
+
+  await composer.fill("and the folders too");
+  await composer.press("Enter");
+  // The redirected message is a line under the message that opened the turn,
+  // not a second bubble.
+  const turn = chat.locator("article").filter({ hasText: "Research the Kupang weather" });
+  await expect(
+    turn.getByText("Redirected current turn: 'and the folders too'", { exact: true }),
+  ).toBeVisible();
+  await expect(turn.locator("[data-correction='redirected']")).toHaveCount(1);
+  await expect(chat.locator("article").filter({ hasText: "and the folders too" })).toHaveCount(1);
+  await expect(
+    page.getByText("Message added to the current turn", { exact: true }),
+  ).toBeVisible();
+
+  await hermes.finishHeldTurn();
+  await expect(chat.locator("strong", { hasText: "BMKG warning:" })).toHaveCount(1);
+  await expect(chat.getByText("Hello! I am here.", { exact: true })).toHaveCount(0);
+  await expect(activity).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Stop", exact: true })).not.toBeVisible();
+});
+
 test("a refresh during a new conversation's first turn resumes it without a duplicate", async ({
   page,
 }) => {
@@ -920,21 +962,29 @@ test("Settings → Connection separates Hermes state from its one useful action"
   };
   let hermes = await openConnection();
 
-  // One state, in Kana's words, plus plain facts. The server's technical
-  // message, its PID, and its endpoint stay out of the browser's reading.
+  // One state, in Kana's words, plus plain facts on their own rows. The
+  // server's technical message, its PID, and its endpoint stay out of the
+  // browser's reading.
   await expect(hermes.getByText("Running", { exact: true })).toBeVisible();
-  await expect(hermes.getByText("Port 9119", { exact: true })).toBeVisible();
+  await expect(hermes.getByText("Port", { exact: true })).toBeVisible();
+  await expect(hermes.getByText("9119", { exact: true })).toBeVisible();
+  await expect(hermes.getByText("Managed by", { exact: true })).toBeVisible();
+  await expect(hermes.getByText("Kana", { exact: true })).toBeVisible();
   await expect(hermes.getByTitle("Started by Kana.")).toBeVisible();
   await expect(hermes.getByText(runtimeStatus.message)).toHaveCount(0);
   await expect(hermes.getByText("4242")).toHaveCount(0);
 
-  // One row: the state chip and the two actions, and no refresh button.
+  // One identity row: the state chip and the two actions, and no refresh button.
   await expect(hermes.getByText("Actions", { exact: true })).toHaveCount(0);
   await expect(hermes.getByRole("button", { name: "Refresh status" })).toHaveCount(0);
   const restart = hermes.getByRole("button", { name: "Restart", exact: true });
   const stop = hermes.getByRole("button", { name: "Stop", exact: true });
   await expect(restart).toBeVisible();
   await expect(stop).toBeVisible();
+  // The actions keep the right side of the row at phone width too.
+  const hermesLabel = await hermes.getByText("Hermes", { exact: true }).boundingBox();
+  const restartBox = await restart.boundingBox();
+  expect(restartBox!.x).toBeGreaterThan(hermesLabel!.x + hermesLabel!.width);
 
   // Restarting closes every Hermes session, so it asks before it acts.
   await restart.click();
@@ -1582,6 +1632,156 @@ test("arms the approval before Enter can run, and Deny stays immediately availab
   await expect(heading).toBeHidden();
 });
 
+test("stands the workspace down while Hermes is unreachable and plugs in on connect", async ({
+  page,
+}) => {
+  const gatePage = await page.context().newPage();
+  await gatePage.route(/cubism\.live2d\.com|model\.res\.live2d\.com/, (route) =>
+    route.abort(),
+  );
+  await gatePage.addInitScript(() => {
+    localStorage.setItem(
+      "kana.preferences.v3",
+      JSON.stringify({
+        uiLocale: "en",
+        subtitleLanguage: "en",
+        agentMode: "hermes",
+        voiceEnabled: false,
+        voiceMode: "configured",
+        avatarMode: "live2d",
+      }),
+    );
+    type GateWindow = Window & { __kanaGateAllowConnect?: boolean };
+    const target = window as GateWindow;
+
+    // The relay stream answers unreachable until the test opens it after the
+    // manual attempt, so the waiting and connected states can be observed.
+    class GateEventSource extends EventTarget {
+      static readonly CONNECTING = 0;
+      static readonly OPEN = 1;
+      static readonly CLOSED = 2;
+      readonly CONNECTING = 0;
+      readonly OPEN = 1;
+      readonly CLOSED = 2;
+      readonly url = "/api/hermes/events";
+      readonly withCredentials = true;
+      readyState = GateEventSource.CONNECTING;
+
+      constructor() {
+        super();
+        queueMicrotask(() => {
+          this.readyState = GateEventSource.OPEN;
+          this.dispatchEvent(new Event("open"));
+          const deliver = () =>
+            this.dispatchEvent(
+              new MessageEvent("gateway", {
+                data: JSON.stringify({ connected: Boolean(target.__kanaGateAllowConnect) }),
+              }),
+            );
+          if (target.__kanaGateAllowConnect) setTimeout(deliver, 700);
+          else deliver();
+        });
+      }
+
+      close(): void {
+        this.readyState = GateEventSource.CLOSED;
+      }
+    }
+
+    Object.defineProperty(window, "EventSource", {
+      configurable: true,
+      value: GateEventSource,
+    });
+  });
+  await gatePage.route("**/api/kana/sessions", (route) =>
+    route.fulfill({ json: { sessions: [] } }),
+  );
+  await gatePage.route("**/api/hermes/rpc", (route) =>
+    route.fulfill({ status: 502, json: { error: "Hermes is not running." } }),
+  );
+  const stopped = {
+    controlAvailable: true,
+    state: "stopped",
+    managed: false,
+    executable: "/usr/bin/hermes",
+    port: 9119,
+  };
+  await gatePage.route("**/api/local-runtime/hermes*", (route) =>
+    route.fulfill({ json: stopped }),
+  );
+
+  await gatePage.goto("/");
+  const screen = gatePage.getByRole("region", { name: "Hermes connection" });
+  await expect(screen).toBeVisible();
+  await expect(screen.getByRole("heading", { name: "Hermes is not connected" })).toBeVisible();
+  await expect(
+    screen.getByRole("img", { name: "Hermes cable and plug disconnected" }),
+  ).toBeVisible();
+  await expect(screen.getByText("Connection failed", { exact: true })).toBeVisible();
+  await expect(screen.getByRole("button", { name: "Connect Hermes" })).toBeEnabled();
+
+  // The header stays available; the avatar and the chat step away.
+  await expect(gatePage.getByRole("button", { name: "Open settings" })).toBeVisible();
+  await expect(gatePage.getByRole("button", { name: "Open conversation history" })).toBeVisible();
+  await expect(gatePage.getByRole("button", { name: /^Switch to (light|dark) theme$/ })).toBeVisible();
+  await expect(gatePage.getByRole("button", { name: "Adjust avatar position and size" })).toHaveCount(0);
+  await expect(gatePage.getByRole("textbox", { name: "Message Kana" })).toHaveCount(0);
+  await gatePage.screenshot({
+    path: `test-results/connection-screen-${test.info().project.name}.png`,
+  });
+
+  // The plug waits, seats while the relay connects, then the workspace returns.
+  await gatePage.evaluate(() => {
+    (window as Window & { __kanaGateAllowConnect?: boolean }).__kanaGateAllowConnect = true;
+  });
+  await screen.getByRole("button", { name: "Connect Hermes" }).click();
+  await expect(screen).toHaveClass(/is-busy/);
+  await expect(screen.getByRole("button", { name: "Connecting…" })).toBeDisabled();
+  await gatePage.waitForTimeout(250);
+  await gatePage.screenshot({
+    path: `test-results/connection-plugging-${test.info().project.name}.png`,
+  });
+  await expect(screen.getByRole("img", { name: "Hermes cable and plug connected" })).toBeVisible();
+  await expect(screen).toHaveClass(/is-plugged/);
+  await expect(screen.getByRole("heading", { name: "Connected to Hermes" })).toBeVisible();
+  await gatePage.screenshot({
+    path: `test-results/connection-plugged-${test.info().project.name}.png`,
+  });
+  await expect(screen).toBeHidden({ timeout: 3000 });
+  await expect(gatePage.getByRole("textbox", { name: "Message Kana" })).toBeVisible();
+  await gatePage.close();
+});
+
+test("shows the sudo prompt in the shared dialog shell and sends the password once", async ({
+  page,
+}) => {
+  await page.evaluate(() => {
+    const target = window as Window & { __kanaE2eEmit?: (event: string, data: unknown) => void };
+    target.__kanaE2eEmit?.("hermes", {
+      jsonrpc: "2.0",
+      method: "event",
+      params: {
+        type: "sudo.request",
+        payload: { request_id: "sudo-e2e-1" },
+      },
+    });
+  });
+
+  const dialog = page.getByRole("dialog", { name: "Sudo password required" });
+  await expect(dialog).toBeVisible();
+  await expect(
+    dialog.getByText("Hermes needs a password for the current protected command."),
+  ).toBeVisible();
+  const password = dialog.getByLabel(/^Password/);
+  await expect(password).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Cancel" })).toBeVisible();
+  await page.screenshot({ path: `test-results/sudo-${test.info().project.name}.png` });
+
+  await password.fill("e2e-sudo-password");
+  await dialog.getByRole("button", { name: "Send securely" }).click();
+  await expect(dialog).toBeHidden();
+});
+
 test("updates workspace, history, chat, and settings copy with the interface language", async ({
   page,
 }) => {
@@ -2178,14 +2378,98 @@ test("downloads the local voice engine only when asked and shows progress", asyn
   await dialog.getByRole("button", { name: /^Voice/ }).click();
   const engine = dialog.getByRole("region", { name: "Local voice engine" });
   await expect(engine.getByText("Not downloaded")).toBeVisible();
-  await expect(engine.getByText(/^3\.3 GB download$/)).toBeVisible();
+  await expect(engine.getByText("Model", { exact: true })).toBeVisible();
+  await expect(engine.getByText("Irodori-TTS v4.1 Anime", { exact: true })).toBeVisible();
+  await expect(engine.getByText("Download", { exact: true })).toBeVisible();
+  await expect(engine.getByText("3.3 GB", { exact: true })).toBeVisible();
+  await expect(engine.getByText("Disk", { exact: true })).toBeVisible();
+  await expect(engine.getByText(/needed · .* free/)).toBeVisible();
   expect(actions).toEqual([]);
+  // The toggle and the facts stay beside their labels at phone width too.
+  const voiceLabel = await dialog.getByText("Kana's voice", { exact: true }).boundingBox();
+  const voiceToggle = await dialog.getByRole("switch", { name: "Japanese voice" }).boundingBox();
+  expect(voiceToggle!.x).toBeGreaterThan(voiceLabel!.x + voiceLabel!.width);
+  const diskLabel = await engine.getByText("Disk", { exact: true }).boundingBox();
+  const diskValue = await engine.getByText(/needed · .* free/).boundingBox();
+  expect(diskValue!.x).toBeGreaterThan(diskLabel!.x + diskLabel!.width);
+  await page.screenshot({ path: `test-results/engine-${test.info().project.name}.png` });
 
   await engine.getByRole("button", { name: "Download voice engine" }).click();
   await expect(engine.getByRole("progressbar")).toBeVisible();
   await expect(engine.getByText(/Downloading model · 50%/)).toBeVisible();
   await expect(engine.getByText("Installed")).toBeVisible({ timeout: 10_000 });
+  await expect(engine.getByText("Download", { exact: true })).toHaveCount(0);
+  await expect(engine.getByText("Device", { exact: true })).toBeVisible();
+  await expect(engine.getByText("CPU int8 (AVX-512 VNNI)", { exact: true })).toBeVisible();
   expect(actions).toEqual(["install"]);
+});
+
+test("Settings → Voice shows voice cards and confirms before removing one", async ({ page }) => {
+  let voices = [
+    { id: "kc-default", name: "Kana", kind: "bundled", isDefault: true },
+    { id: "e2e-reference", name: "Studio reference", kind: "reference", isDefault: false },
+    { id: "irodori-model", name: "Irodori", kind: "model", isDefault: false },
+  ];
+  const deletes: string[] = [];
+  await page.route("**/api/voice/tts/engine", (route) => route.fulfill({
+    json: {
+      provider: { id: "irodori-local", type: "irodori-local", name: "Irodori TTS", configured: true, model: "Irodori-TTS v4.1 Anime", capabilities: { instruction: false, localInstall: true, upstreamCancellation: true, voiceLibrary: true } },
+      install: {
+        state: "not_installed",
+        engineInstalled: false,
+        modelInstalled: false,
+        modelSource: null,
+        step: null,
+        phase: null,
+        completedBytes: 0,
+        totalBytes: 0,
+        downloadBytes: 3_544_900_182,
+        requiredDiskBytes: 4_331_065_517,
+        freeDiskBytes: 50_000_000_000,
+        partialDownloadBytes: 0,
+        int8: true,
+        message: "",
+      },
+    },
+  }));
+  await page.route("**/api/kana/voices**", (route) => {
+    if (route.request().method() === "DELETE") {
+      const id = new URL(route.request().url()).searchParams.get("id") ?? "";
+      deletes.push(id);
+      voices = voices.filter((voice) => voice.id !== id);
+      return route.fulfill({ json: { removed: true } });
+    }
+    return route.fulfill({
+      json: {
+        voices,
+        supportsVoiceLibrary: true,
+        provider: { id: "irodori-local", type: "irodori-local", name: "Irodori TTS", configured: true },
+        providerStatus: { state: "ready", voices: [], message: "" },
+      },
+    });
+  });
+  await page.getByRole("button", { name: "Open settings" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: /^Voice/ }).click();
+  await dialog.getByRole("switch", { name: "Japanese voice" }).check();
+
+  const library = dialog.getByRole("radiogroup", { name: "Choose Kana's voice" });
+  await expect(library.getByRole("radio", { name: "Kana" })).toBeVisible();
+  await expect(library.getByRole("radio", { name: "Studio reference" })).toBeVisible();
+  await expect(library.getByRole("radio", { name: "Irodori" })).toBeVisible();
+  await expect(library.getByRole("button", { name: "Add sample" })).toBeVisible();
+
+  await library.getByRole("radio", { name: "Studio reference" }).click();
+  await expect(library.getByRole("radio", { name: "Studio reference" }))
+    .toHaveAttribute("aria-checked", "true");
+
+  await library.getByRole("button", { name: "Remove voice “Studio reference”" }).click();
+  await expect(library.getByRole("button", { name: "Remove voice “Studio reference”?" })).toBeVisible();
+  expect(deletes).toEqual([]);
+  await page.screenshot({ path: `test-results/voice-${test.info().project.name}.png` });
+  await library.getByRole("button", { name: "Remove voice “Studio reference”?" }).click();
+  await expect(library.getByRole("radio", { name: "Studio reference" })).toHaveCount(0);
+  expect(deletes).toEqual(["e2e-reference"]);
 });
 
 test("TTS failure reveals held text with an explicit voice error", async ({ page }) => {

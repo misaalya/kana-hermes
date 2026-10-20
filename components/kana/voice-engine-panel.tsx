@@ -7,7 +7,14 @@ import {
   type VoiceEngineSnapshot,
 } from "@/lib/runtime/voice-engine-client";
 import { getCopy, type UiLocale } from "@/lib/ui/copy";
-import { settingsButton, settingsButtonDanger, SettingsRow, StatusPill } from "./settings-layout";
+import {
+  settingsButton,
+  settingsButtonDanger,
+  SettingsGroup,
+  SettingsRow,
+  SettingsRows,
+  StatusPill,
+} from "./settings-layout";
 
 // Install control for the local voice engine: size before downloading,
 // progress while it runs, and a way to reclaim the disk space afterwards.
@@ -93,72 +100,115 @@ export function VoiceEnginePanel({ locale }: { locale: UiLocale }) {
     install && install.freeDiskBytes !== null && install.requiredDiskBytes > 0 &&
       install.freeDiskBytes < install.requiredDiskBytes,
   );
+  const showFacts = Boolean(
+    install && (install.state === "not_installed" || install.state === "failed"),
+  );
+  const needed = showFacts && install && install.requiredDiskBytes > 0
+    ? formatBytes(install.requiredDiskBytes, locale)
+    : null;
+  const free = showFacts && install && install.freeDiskBytes !== null
+    ? formatBytes(install.freeDiskBytes, locale)
+    : null;
 
-  const details: React.ReactNode[] = [];
+  const notes: string[] = [];
   if (install?.state === "ready") {
-    details.push(copy.device(install.int8));
-    if (install.modelSource === "huggingface-cache") details.push(copy.reusedCache);
-    if (install.modelSource === "config") details.push(copy.configuredModel);
-  } else if (install?.state === "installing" && install.step) {
-    details.push(copy.progress(`${install.phase ? copy.phases[install.phase] : ""} ${copy.steps[install.step].toLowerCase()}`.trim(), percent));
-  } else if (install && (install.state === "not_installed" || install.state === "failed")) {
-    if (install.downloadBytes > 0) details.push(copy.downloadNote(formatBytes(install.downloadBytes, locale)));
-    if (install.freeDiskBytes !== null && install.requiredDiskBytes > 0) {
-      const needed = formatBytes(install.requiredDiskBytes, locale);
-      const free = formatBytes(install.freeDiskBytes, locale);
-      details.push(lowDisk ? copy.lowDisk(needed, free) : copy.diskNote(needed, free));
-    }
+    if (install.modelSource === "huggingface-cache") notes.push(copy.reusedCache);
+    if (install.modelSource === "config") notes.push(copy.configuredModel);
   }
+  const progressLabel = install?.state === "installing" && install.step
+    ? copy.progress(
+        `${install.phase ? copy.phases[install.phase] : ""} ${copy.steps[install.step].toLowerCase()}`.trim(),
+        percent,
+      )
+    : null;
   const message = notice ?? (install?.state === "failed" || install?.state === "unsupported" ? install.message : null);
 
   return (
-    <section aria-label={copy.aria}>
-      <SettingsRow
-        label={copy.title}
-        description={
-          <>
-            {snapshot?.provider?.model ?? "Irodori-TTS"}
-            {details.map((detail, index) => (
-              <span key={index} className={`mt-1 block ${lowDisk && index === details.length - 1 ? "text-danger" : ""}`}>{detail}</span>
-            ))}
-            {message ? <span className="mt-1 block text-danger">{message}</span> : null}
-          </>
-        }
-      >
-        <StatusPill tone={tone} capitalize={false}>{copy.states[state]}</StatusPill>
-        {install?.state === "installing" ? (
-          <button type="button" className={settingsButton} disabled={busy} onClick={() => void run("cancel")}>
-            {copy.cancel}
-          </button>
-        ) : null}
-        {install && (install.state === "not_installed" || install.state === "failed") ? (
-          <button type="button" className={settingsButton} disabled={busy || lowDisk} onClick={() => void run("install")}>
-            {partial ? copy.resume : copy.install}
-          </button>
-        ) : null}
-        {removable ? (
-          <button
-            type="button"
-            className={settingsButtonDanger}
-            disabled={busy}
-            onClick={() => (confirmRemove ? void run("remove") : setConfirmRemove(true))}
-          >
-            {confirmRemove ? copy.confirmRemove : copy.remove}
-          </button>
-        ) : null}
-      </SettingsRow>
+    <SettingsGroup
+      title={copy.title}
+      ariaLabel={copy.aria}
+      action={<StatusPill tone={tone} capitalize={false}>{copy.states[state]}</StatusPill>}
+    >
+      {snapshot ? (
+        <SettingsRows>
+          <SettingsRow label={copy.modelLabel} inline>
+            <span className="text-xs font-semibold text-ink-dim">
+              {snapshot.provider?.model ?? "Irodori-TTS"}
+            </span>
+          </SettingsRow>
+          {showFacts && install && install.downloadBytes > 0 ? (
+            <SettingsRow label={copy.downloadLabel} inline>
+              <span className="text-xs font-semibold text-ink-dim">
+                {formatBytes(install.downloadBytes, locale)}
+              </span>
+            </SettingsRow>
+          ) : null}
+          {needed !== null && free !== null ? (
+            <SettingsRow label={copy.diskLabel} inline>
+              <span className={`text-xs font-semibold ${lowDisk ? "text-danger" : "text-ink-dim"}`}>
+                {copy.diskValue(needed, free)}
+              </span>
+            </SettingsRow>
+          ) : null}
+          {install?.state === "ready" ? (
+            <SettingsRow label={copy.deviceLabel} inline>
+              <span className="text-xs font-semibold text-ink-dim">{copy.device(install.int8)}</span>
+            </SettingsRow>
+          ) : null}
+        </SettingsRows>
+      ) : null}
       {install?.state === "installing" ? (
-        <div
-          className="mb-3 h-2.5 overflow-hidden rounded-full bg-surface-strong"
-          role="progressbar"
-          aria-label={copy.aria}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={percent}
-        >
-          <div className="h-full rounded-full bg-accent transition-[width] duration-500" style={{ width: `${percent}%` }} />
+        <div className="mt-3">
+          <div
+            className="h-2.5 overflow-hidden rounded-full bg-surface-strong"
+            role="progressbar"
+            aria-label={copy.aria}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={percent}
+          >
+            <div className="h-full rounded-full bg-accent transition-[width] duration-500" style={{ width: `${percent}%` }} />
+          </div>
+          {progressLabel ? (
+            <p role="status" className="mt-1.5 text-[11.5px] font-semibold text-muted">{progressLabel}</p>
+          ) : null}
         </div>
       ) : null}
-    </section>
+      {notes.map((note) => (
+        <p key={note} className="mt-2 text-[11.5px] leading-relaxed text-muted">{note}</p>
+      ))}
+      {lowDisk && needed !== null && free !== null ? (
+        <p role="status" className="mt-2 text-[11.5px] font-semibold text-danger">
+          {copy.lowDisk(needed, free)}
+        </p>
+      ) : null}
+      {message ? (
+        <p role="status" className="mt-2 text-[11.5px] font-semibold text-danger">{message}</p>
+      ) : null}
+      {install?.state === "installing" || showFacts || removable ? (
+        <div className="mt-3 flex flex-wrap justify-end gap-2 max-sm:justify-start">
+          {install?.state === "installing" ? (
+            <button type="button" className={settingsButton} disabled={busy} onClick={() => void run("cancel")}>
+              {copy.cancel}
+            </button>
+          ) : null}
+          {showFacts ? (
+            <button type="button" className={settingsButton} disabled={busy || lowDisk} onClick={() => void run("install")}>
+              {partial ? copy.resume : copy.install}
+            </button>
+          ) : null}
+          {removable ? (
+            <button
+              type="button"
+              className={settingsButtonDanger}
+              disabled={busy}
+              onClick={() => (confirmRemove ? void run("remove") : setConfirmRemove(true))}
+            >
+              {confirmRemove ? copy.confirmRemove : copy.remove}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </SettingsGroup>
   );
 }

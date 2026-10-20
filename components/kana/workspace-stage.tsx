@@ -52,14 +52,6 @@ export function WorkspaceStage() {
   const [customBackground, setCustomBackground] = useState<{ id: string; url: string }>();
 
   useEffect(() => {
-    const media = window.matchMedia("(max-width: 1023px)");
-    const sync = () => workspace.stores.workspace.setState({ usesMobileChat: media.matches });
-    sync();
-    media.addEventListener("change", sync);
-    return () => media.removeEventListener("change", sync);
-  }, [workspace]);
-
-  useEffect(() => {
     let active = true;
     let objectUrl: string | undefined;
     if (background !== "custom" || !customBackgroundId) return () => { active = false; };

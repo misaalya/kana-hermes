@@ -111,6 +111,16 @@ export function ReturnIcon(props: IconProps) {
   return <Icon {...props}><path d="M9 10l-5 5 5 5" /><path d="M20 4v7a4 4 0 0 1-4 4H4" /></Icon>;
 }
 
+/** A message folded into the running turn: a corner that turns into an arrow. */
+export function RedirectIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 4v8a5 5 0 0 0 5 5h10" />
+      <polyline points="15 12 20 17 15 22" />
+    </Icon>
+  );
+}
+
 export function PlusIcon(props: IconProps) {
   return <Icon {...props}><path d="M12 5v14M5 12h14" /></Icon>;
 }
@@ -238,8 +248,7 @@ export function RestartIcon(props: IconProps) {
 export function StopIcon(props: IconProps) {
   return (
     <DuoIcon {...props}>
-      <rect opacity={SOFT} x="2.6" y="2.6" width="18.8" height="18.8" rx="5.4" />
-      <rect x="7.8" y="7.8" width="8.4" height="8.4" rx="2.2" />
+      <rect x="4.6" y="4.6" width="14.8" height="14.8" rx="3.8" />
     </DuoIcon>
   );
 }

@@ -110,7 +110,7 @@ export class WorkspaceSetup {
   async connectHermes(): Promise<void> {
     const connectionState = this.deps.agentSession.getState().connectionState;
     if (connectionState === "connecting" || connectionState === "reconnecting") return;
-    this.store.setState({ connectionGateDismissed: false, connectPhase: "connecting", hermesRuntimeNotice: null });
+    this.store.setState({ connectPhase: "connecting", hermesRuntimeNotice: null });
 
     // The server may already run Hermes.
     await this.deps.connect();
@@ -145,10 +145,6 @@ export class WorkspaceSetup {
       automaticConnectFinished: true,
       connectPhase: "idle",
     });
-  }
-
-  dismissGate(): void {
-    this.store.setState({ connectionGateOpen: false, connectionGateDismissed: true });
   }
 
   /** Refresh the runtime status shown inside the gate. */
@@ -227,7 +223,6 @@ export function selectShowGate(input: {
   connectionState: string;
   wizardMode: WizardMode;
   connectionGateOpen: boolean;
-  connectionGateDismissed: boolean;
   automaticConnectFinished: boolean;
 }): boolean {
   const failed =
@@ -237,7 +232,7 @@ export function selectShowGate(input: {
   return (
     input.ready &&
     !input.wizardMode &&
-    (input.connectionGateOpen || (!input.connectionGateDismissed && input.automaticConnectFinished && failed)) &&
+    (input.connectionGateOpen || (input.automaticConnectFinished && failed)) &&
     input.connectionState !== "connected"
   );
 }

@@ -62,6 +62,8 @@ export function parseHermesTranscript(rows: AgentHistoryRow[]): {
   const turns: RestoredTurn[] = [];
   let pendingActivities: ActivityItem[] = [];
   let assistantOrdinal = 0;
+  let rootUser: KanaMessage | undefined;
+  let previousRole: string | undefined;
   const baseTimestamp = Date.now() - rows.length - 1;
 
   rows.forEach((row, rowIndex) => {
@@ -77,15 +79,33 @@ export function parseHermesTranscript(rows: AgentHistoryRow[]): {
         state: "complete",
         timestamp,
       });
+      previousRole = "tool";
       return;
     }
     if (row.role === "user") {
+      // A user row that lands while the turn still has unfinished tools, or
+      // straight after another user row, is Hermes's active-turn redirect: it
+      // belongs under that turn's first message, not beside it as a new turn.
+      const correction =
+        rootUser !== undefined &&
+        (pendingActivities.length > 0 || previousRole === "user")
+          ? ("redirected" as const)
+          : undefined;
       // Strip the Kana note (or the older kana_request JSON wrapper) so the
       // restored bubble shows only what the user typed.
-      messages.push({ ...createUserMessage(unwrapKanaUserPrompt(row.text ?? "")), timestamp });
+      const message: KanaMessage = {
+        ...createUserMessage(unwrapKanaUserPrompt(row.text ?? "")),
+        timestamp,
+        ...(correction ? { correction } : {}),
+      };
+      messages.push(message);
+      if (!correction) rootUser = message;
+      previousRole = "user";
       return;
     }
-    if (row.role !== "assistant" || !row.text?.trim()) return;
+    if (row.role !== "assistant") return;
+    previousRole = "assistant";
+    if (!row.text?.trim()) return;
     const turnIndex = assistantOrdinal;
     assistantOrdinal += 1;
     let turn: RestoredTurn | undefined;
@@ -162,9 +182,14 @@ export function mergeRestoredMessages(
 ): KanaMessage[] {
   if (!restored.length) return local;
   const matched = new Map<KanaMessage, number>();
+  /** Local knowledge of a correction the restored row cannot prove by itself. */
+  const corrections = new Map<number, NonNullable<KanaMessage["correction"]>>();
   restored.forEach((row, index) => {
     const copy = local.find((message) => !matched.has(message) && restoredMessageMatches(message, row));
-    if (copy) matched.set(copy, index);
+    if (copy) {
+      matched.set(copy, index);
+      if (copy.role === "user" && copy.correction) corrections.set(index, copy.correction);
+    }
   });
 
   // Local-only rows by the restored row they follow; -1 is before the first.
@@ -187,7 +212,8 @@ export function mergeRestoredMessages(
   };
   place(-1);
   restored.forEach((row, index) => {
-    merged.push(row);
+    const correction = corrections.get(index);
+    merged.push(correction && row.role === "user" ? { ...row, correction } : row);
     place(index);
   });
   return merged;
