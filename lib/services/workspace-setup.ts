@@ -43,8 +43,9 @@ export function voiceFinding(status: VoiceProviderStatus): DependencyFindings["v
 
 /**
  * Connection gate, dependency checks, and the setup wizard. Each page load
- * makes one automatic connection attempt; the gate appears only after that
- * attempt genuinely fails.
+ * makes one automatic connection attempt; after it, the gate follows the
+ * connection and appears whenever Hermes is unreachable, including a live drop
+ * Kana is still retrying.
  */
 export class WorkspaceSetup {
   private automaticConnectStarted = false;
@@ -225,14 +226,18 @@ export function selectShowGate(input: {
   connectionGateOpen: boolean;
   automaticConnectFinished: boolean;
 }): boolean {
-  const failed =
+  // Any state that leaves Hermes unreachable stands the workspace down, even
+  // while Kana keeps retrying a live drop: the screen reports "Reconnecting".
+  const unreachable =
     input.connectionState === "error" ||
     input.connectionState === "authentication_failed" ||
-    input.connectionState === "incompatible";
+    input.connectionState === "incompatible" ||
+    input.connectionState === "disconnected" ||
+    input.connectionState === "reconnecting";
   return (
     input.ready &&
     !input.wizardMode &&
-    (input.connectionGateOpen || (input.automaticConnectFinished && failed)) &&
+    (input.connectionGateOpen || (input.automaticConnectFinished && unreachable)) &&
     input.connectionState !== "connected"
   );
 }
