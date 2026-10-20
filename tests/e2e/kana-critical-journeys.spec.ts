@@ -1734,7 +1734,8 @@ test("stands the workspace down while Hermes is unreachable and plugs in on conn
     path: `test-results/connection-screen-${test.info().project.name}.png`,
   });
 
-  // The plug waits, seats while the relay connects, then the workspace returns.
+  // The plug waits through the connecting phase, seats when the relay reports
+  // connected, then the workspace returns.
   await gatePage.evaluate(() => {
     (window as Window & { __kanaGateAllowConnect?: boolean }).__kanaGateAllowConnect = true;
   });
@@ -1766,7 +1767,9 @@ test("stands the workspace down while Hermes is unreachable and plugs in on conn
   });
   await expect(screen).toBeVisible();
   await expect(screen.getByText("Reconnecting…", { exact: true })).toBeVisible();
-  await expect(screen.getByRole("button", { name: "Connecting…" })).toBeDisabled();
+  // The retry loop must not trap the user: the button stays usable so a manual
+  // attempt can start a Hermes that died.
+  await expect(screen.getByRole("button", { name: "Connect Hermes" })).toBeEnabled();
   await expect(gatePage.getByRole("textbox", { name: "Message Kana" })).toHaveCount(0);
   await gatePage.screenshot({
     path: `test-results/connection-reconnecting-${test.info().project.name}.png`,

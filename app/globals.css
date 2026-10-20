@@ -1676,8 +1676,8 @@ video.kana-media-preview {
 }
 
 /* The workspace stands down while Hermes is unreachable: the plug and socket
-   wait with a spark between them, meet while the relay connects, and the
-   screen steps away on success. */
+   wait with a spark between them, seat only once the relay reports connected,
+   and the screen steps away on success. */
 .kana-connection-screen {
   /* White plastic hardware with cool shading, drawn in both themes. */
   --kana-plug-top: #fbfcfd;
@@ -1727,12 +1727,12 @@ video.kana-media-preview {
   transition: transform 700ms cubic-bezier(0.22, 0.9, 0.3, 1.08);
 }
 
-.kana-connection-screen.is-busy .kana-connection-plug,
+/* Only a reported connection seats the plug. While Kana is still reaching
+   the relay the two stay apart, their prongs and slots in view. */
 .kana-connection-screen.is-plugged .kana-connection-plug {
   transform: translateX(131px);
 }
 
-.kana-connection-screen.is-busy .kana-connection-socket,
 .kana-connection-screen.is-plugged .kana-connection-socket {
   transform: translateX(-45px);
 }
@@ -1743,7 +1743,6 @@ video.kana-media-preview {
   transition: opacity 280ms ease, transform 360ms ease;
 }
 
-.kana-connection-screen.is-busy .kana-connection-sparks,
 .kana-connection-screen.is-plugged .kana-connection-sparks {
   opacity: 0;
   transform: scale(0.55);
@@ -1753,7 +1752,7 @@ video.kana-media-preview {
   animation: kana-connection-hover 5.2s ease-in-out infinite;
 }
 
-.kana-connection-screen.is-unplugged .kana-connection-spark-pulse {
+.kana-connection-screen:not(.is-plugged) .kana-connection-spark-pulse {
   animation: kana-connection-spark-pulse 2.8s ease-in-out infinite;
 }
 

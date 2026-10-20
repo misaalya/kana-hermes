@@ -84,7 +84,7 @@ Command-generated prompts are different: Hermes's TUI queues slash commands whil
 
 ## Reconnection
 
-An unexpected stream drop rejects pending RPCs, marks a running turn for recovery, and schedules a reconnect (`DEFAULT_RECONNECT_DELAYS_MS`). After reconnecting, the client reopens the durable session, which restores its transcript and reports whether the turn is still running. `reconnectNow` skips the delay when Kana has just restarted `hermes serve`, and a second request joins the reconnect already under way instead of resuming twice. Clarification prompts arrive in two wire shapes — the legacy flat `{request_id, question, choices}` and the batch `{request_id, questions: [...]}` with per-question locks — and a reconnect replay can carry answers already locked (`clarifyRequest`).
+An unexpected stream drop rejects pending RPCs, marks a running turn for recovery, and schedules a reconnect (`DEFAULT_RECONNECT_DELAYS_MS`). After reconnecting, the client reopens the durable session, which restores its transcript and reports whether the turn is still running. `reconnectNow` skips the delay when Kana has just restarted `hermes serve`, and a second request joins the reconnect already under way instead of resuming twice. While the gate is up after a live drop, its Connect Hermes button uses `reconnectNow` instead of waiting for the next scheduled attempt, and starts a stopped `hermes serve` that Kana manages, so a dead process never leaves the button disabled behind its own retry loop. Clarification prompts arrive in two wire shapes — the legacy flat `{request_id, question, choices}` and the batch `{request_id, questions: [...]}` with per-question locks — and a reconnect replay can carry answers already locked (`clarifyRequest`).
 
 ## Events
 

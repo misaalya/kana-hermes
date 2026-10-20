@@ -63,3 +63,66 @@ describe("avatar service portraits", () => {
     assert.equal(saved.length, 1);
   });
 });
+
+function canvas(name: string) {
+  return { name } as unknown as HTMLCanvasElement;
+}
+
+function canvasService() {
+  const loaded: Array<HTMLCanvasElement | undefined> = [];
+  const preferences = new PreferencesAccess(createPreferencesStore(), {
+    load: () => DEFAULT_PREFERENCES,
+    save: () => undefined,
+    consumeWarning: () => null,
+  });
+  preferences.adopt(DEFAULT_PREFERENCES);
+  const provider = {
+    use: async (_provider: unknown, source: { canvas?: HTMLCanvasElement }) => {
+      loaded.push(source.canvas);
+    },
+    unload: () => undefined,
+    getSnapshot: () => EMPTY_AVATAR,
+    subscribe: () => () => undefined,
+  } as unknown as ManagedAvatarProvider;
+  const avatarService = new AvatarService({
+    avatar: createAvatarStore(),
+    errors: createErrorStore(),
+    preferences,
+    provider,
+    controller: {
+      presentEmotion: () => undefined,
+      setLayout: () => undefined,
+    } as unknown as AvatarController,
+    models: { load: async () => null } as unknown as AvatarModelLibrary,
+    portraits: { load: () => ({}), save: (portraits) => portraits },
+  });
+  return { avatarService, loaded };
+}
+
+const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+describe("avatar service canvas", () => {
+  it("loads the model again when the stage hands over a new canvas", async () => {
+    const { avatarService, loaded } = canvasService();
+    const first = canvas("first");
+    avatarService.attachCanvas(first);
+    await settle();
+    assert.equal(loaded.length, 1);
+    assert.equal(loaded[0], first);
+
+    // A connection gate unmounts the stage; the reconnect mounts a new canvas,
+    // so the model must be loaded onto it instead of the detached one.
+    avatarService.attachCanvas(null);
+    const second = canvas("second");
+    avatarService.attachCanvas(second);
+    await settle();
+    assert.equal(loaded.length, 2);
+    assert.equal(loaded[1], second);
+
+    // Reattaching the same canvas must not reload the model.
+    avatarService.attachCanvas(second);
+    await settle();
+    assert.equal(loaded.length, 2);
+    avatarService.dispose();
+  });
+});

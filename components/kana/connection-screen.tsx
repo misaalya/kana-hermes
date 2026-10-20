@@ -70,8 +70,9 @@ export function useConnectionScreen(): ConnectionScreenController {
 
 /**
  * A white plug and socket face each other on their cables with a spark in the
- * gap. Connecting slides them together, the prongs disappear into the socket,
- * and the spark goes out.
+ * gap. While Hermes is unreachable they stay apart, prongs and slots in view;
+ * once the relay reports connected the plug seats, its prongs disappear into
+ * the socket, and the spark goes out.
  */
 function CableIllustration({ label }: { label: string }) {
   return (
@@ -111,9 +112,6 @@ function CableIllustration({ label }: { label: string }) {
         </linearGradient>
         <filter id="kana-connection-slot-soft" x="-30%" y="-30%" width="160%" height="160%">
           <feGaussianBlur stdDeviation="0.3" />
-        </filter>
-        <filter id="kana-connection-collar-shadow" x="-40%" y="-20%" width="180%" height="140%">
-          <feGaussianBlur stdDeviation="3.2" />
         </filter>
         <linearGradient id="kana-connection-metal" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor="#c3ccd5" />
@@ -209,30 +207,30 @@ function CableIllustration({ label }: { label: string }) {
           <rect x="234" y="220" width="28" height="8" rx="4" fill="var(--kana-plug-deep)" opacity="0.22" />
           <rect x="234" y="220" width="28" height="3" rx="1.5" fill="#ffffff" opacity="0.35" />
 
-          <ellipse cx="283" cy="158" rx="5" ry="9" fill="var(--kana-plug-deep)" opacity="0.35" />
-          <ellipse cx="283" cy="202" rx="5" ry="9" fill="var(--kana-plug-deep)" opacity="0.35" />
+          <ellipse cx="278" cy="158" rx="5" ry="9" fill="var(--kana-plug-deep)" opacity="0.35" />
+          <ellipse cx="278" cy="202" rx="5" ry="9" fill="var(--kana-plug-deep)" opacity="0.35" />
           <rect
-            x="282"
+            x="277"
             y="151"
-            width="68"
+            width="83"
             height="14"
             rx="7"
             fill="url(#kana-connection-metal)"
             stroke="var(--kana-metal-dark)"
             strokeWidth="1.5"
           />
-          <rect x="282" y="153" width="60" height="4" rx="2" fill="var(--kana-metal-light)" opacity="0.75" />
+          <rect x="277" y="153" width="75" height="4" rx="2" fill="var(--kana-metal-light)" opacity="0.75" />
           <rect
-            x="282"
+            x="277"
             y="195"
-            width="68"
+            width="83"
             height="14"
             rx="7"
             fill="url(#kana-connection-metal)"
             stroke="var(--kana-metal-dark)"
             strokeWidth="1.5"
           />
-          <rect x="282" y="197" width="60" height="4" rx="2" fill="var(--kana-metal-light)" opacity="0.75" />
+          <rect x="277" y="197" width="75" height="4" rx="2" fill="var(--kana-metal-light)" opacity="0.75" />
         </g>
 
         <g className="kana-connection-sparks">
@@ -289,41 +287,6 @@ function CableIllustration({ label }: { label: string }) {
               fill="var(--kana-plug-deep)"
               opacity="0.16"
             />
-            <path
-              d="M 540 133 C 548 152, 551 172, 551 184 C 551 202, 546 221, 539 237"
-              fill="none"
-              stroke="#6f7d8d"
-              strokeWidth="18"
-              strokeLinecap="round"
-              opacity="0.3"
-              filter="url(#kana-connection-collar-shadow)"
-            />
-
-            <path
-              d="M 448 180 C 448 148, 462 124, 486 118 C 505 117, 521 119, 532 127 C 539 144, 542 164, 542 184 C 542 204, 539 222, 532 232 C 519 240, 504 242, 486 242 C 462 236, 448 212, 448 180 Z"
-              fill="url(#kana-connection-body)"
-              stroke="var(--kana-plug-line)"
-              strokeWidth="2"
-            />
-            <path
-              d="M 452 153 A 36 58 0 0 1 476 125"
-              fill="none"
-              stroke="#ffffff"
-              strokeWidth="3.5"
-              strokeLinecap="round"
-              opacity="0.45"
-            />
-            <path d="M 517 224 A 38 62 0 0 0 522 198" fill="none" stroke="var(--kana-plug-deep)" strokeWidth="6" strokeLinecap="round" opacity="0.18" />
-            <path
-              d="M 535 132 C 540 149, 544 167, 544 184 C 544 202, 540 220, 535 231"
-              fill="none"
-              stroke="var(--kana-plug-deep)"
-              strokeWidth="6"
-              strokeLinecap="round"
-              opacity="0.12"
-              filter="url(#kana-connection-collar-shadow)"
-            />
-
             <circle cx="564" cy="174" r="10" fill="url(#kana-connection-body)" stroke="var(--kana-plug-line)" strokeWidth="2" />
             <circle cx="564" cy="173" r="7" fill="#ffffff" opacity="0.45" />
             <path d="M 557 178 A 9 9 0 0 0 571 175" fill="none" stroke="var(--kana-plug-deep)" strokeWidth="2.2" opacity="0.35" />
@@ -350,44 +313,62 @@ function CableIllustration({ label }: { label: string }) {
               opacity="0.8"
             />
 
-            <g transform="rotate(-2.3 483 182.5)">
-              <ellipse
-                cx="483"
-                cy="182.5"
-                rx="26.7"
-                ry="50.6"
-                fill="url(#kana-connection-face)"
-                stroke="#5a6674"
-                strokeWidth="0.5"
-                strokeOpacity="0.3"
+            <g transform="translate(0 8)">
+              <path
+                d="M 448 180 C 448 148, 462 124, 486 118 C 505 117, 521 119, 532 127 C 539 144, 542 164, 542 184 C 542 204, 539 222, 532 232 C 519 240, 504 242, 486 242 C 462 236, 448 212, 448 180 Z"
+                fill="url(#kana-connection-body)"
+                stroke="var(--kana-plug-line)"
+                strokeWidth="2"
               />
-              <ellipse cx="483" cy="182.5" rx="27.25" ry="51.15" fill="none" stroke="url(#kana-connection-lip)" strokeWidth="1.1" />
-            </g>
+              <path
+                d="M 452 153 A 36 58 0 0 1 476 125"
+                fill="none"
+                stroke="#ffffff"
+                strokeWidth="3.5"
+                strokeLinecap="round"
+                opacity="0.45"
+              />
+              <path d="M 517 224 A 38 62 0 0 0 522 198" fill="none" stroke="var(--kana-plug-deep)" strokeWidth="6" strokeLinecap="round" opacity="0.18" />
 
-            <g transform="translate(488.9 161.8) rotate(-37)">
-              <rect
-                x="-17.2"
-                y="-6.8"
-                width="34.4"
-                height="13.6"
-                rx="6.8"
-                fill="url(#kana-connection-slot-rim)"
-                filter="url(#kana-connection-slot-soft)"
-              />
-              <rect x="-14.1" y="-4.4" width="28.2" height="8.8" rx="4.4" fill="url(#kana-connection-slot)" />
-            </g>
+              <g transform="rotate(-2.3 483 182.5)">
+                <ellipse
+                  cx="483"
+                  cy="182.5"
+                  rx="26.7"
+                  ry="50.6"
+                  fill="url(#kana-connection-face)"
+                  stroke="#5a6674"
+                  strokeWidth="0.5"
+                  strokeOpacity="0.3"
+                />
+                <ellipse cx="483" cy="182.5" rx="27.25" ry="51.15" fill="none" stroke="url(#kana-connection-lip)" strokeWidth="1.1" />
+              </g>
 
-            <g transform="translate(488.9 204.8) rotate(-37)">
-              <rect
-                x="-17.2"
-                y="-6.8"
-                width="34.4"
-                height="13.6"
-                rx="6.8"
-                fill="url(#kana-connection-slot-rim)"
-                filter="url(#kana-connection-slot-soft)"
-              />
-              <rect x="-14.1" y="-4.4" width="28.2" height="8.8" rx="4.4" fill="url(#kana-connection-slot)" />
+              <g transform="translate(488.9 161.8) rotate(-37)">
+                <rect
+                  x="-17.2"
+                  y="-6.8"
+                  width="34.4"
+                  height="13.6"
+                  rx="6.8"
+                  fill="url(#kana-connection-slot-rim)"
+                  filter="url(#kana-connection-slot-soft)"
+                />
+                <rect x="-14.1" y="-4.4" width="28.2" height="8.8" rx="4.4" fill="url(#kana-connection-slot)" />
+              </g>
+
+              <g transform="translate(488.9 204.8) rotate(-37)">
+                <rect
+                  x="-17.2"
+                  y="-6.8"
+                  width="34.4"
+                  height="13.6"
+                  rx="6.8"
+                  fill="url(#kana-connection-slot-rim)"
+                  filter="url(#kana-connection-slot-soft)"
+                />
+                <rect x="-14.1" y="-4.4" width="28.2" height="8.8" rx="4.4" fill="url(#kana-connection-slot)" />
+              </g>
             </g>
           </g>
         </g>
@@ -398,7 +379,7 @@ function CableIllustration({ label }: { label: string }) {
 
 /**
  * The workspace while Hermes is unreachable: the avatar and chat step away,
- * the header stays, and the cable plugs in as the relay connects.
+ * the header stays, and the cable seats once the relay reports connected.
  */
 export function ConnectionScreen({ screen }: { screen: ConnectionScreenController }) {
   const workspace = useKanaWorkspace();
@@ -408,7 +389,7 @@ export function ConnectionScreen({ screen }: { screen: ConnectionScreenControlle
   const hermesRuntime = useKanaStore("workspace", (state) => state.hermesRuntime);
   const hermesRuntimeNotice = useKanaStore("workspace", (state) => state.hermesRuntimeNotice);
   const hermesRuntimeBusy = useKanaStore("workspace", (state) => state.hermesRuntimeBusy);
-  const connectionInTransition = connectionState === "connecting" || connectionState === "reconnecting";
+  const connectionInTransition = connectionState === "connecting";
   const failed =
     connectionState === "error" ||
     connectionState === "authentication_failed" ||
