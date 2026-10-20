@@ -70,7 +70,7 @@ export function useConnectionScreen(): ConnectionScreenController {
 
 /**
  * A white plug and socket face each other on their cables with a spark in the
- * gap. While Hermes is unreachable they stay apart, prongs and slots in view;
+ * gap. While Hermes is unreachable they stay apart, prongs and holes in view;
  * once the relay reports connected the plug seats, its prongs disappear into
  * the socket, and the spark goes out.
  */
@@ -344,30 +344,24 @@ function CableIllustration({ label }: { label: string }) {
                 <ellipse cx="483" cy="182.5" rx="27.25" ry="51.15" fill="none" stroke="url(#kana-connection-lip)" strokeWidth="1.1" />
               </g>
 
-              <g transform="translate(488.9 161.8) rotate(-37)">
-                <rect
-                  x="-17.2"
-                  y="-6.8"
-                  width="34.4"
-                  height="13.6"
-                  rx="6.8"
+              <g transform="translate(488.9 161.8)">
+                <ellipse
+                  rx="8.5"
+                  ry="9.5"
                   fill="url(#kana-connection-slot-rim)"
                   filter="url(#kana-connection-slot-soft)"
                 />
-                <rect x="-14.1" y="-4.4" width="28.2" height="8.8" rx="4.4" fill="url(#kana-connection-slot)" />
+                <ellipse rx="6" ry="7.2" fill="url(#kana-connection-slot)" />
               </g>
 
-              <g transform="translate(488.9 204.8) rotate(-37)">
-                <rect
-                  x="-17.2"
-                  y="-6.8"
-                  width="34.4"
-                  height="13.6"
-                  rx="6.8"
+              <g transform="translate(488.9 204.8)">
+                <ellipse
+                  rx="8.5"
+                  ry="9.5"
                   fill="url(#kana-connection-slot-rim)"
                   filter="url(#kana-connection-slot-soft)"
                 />
-                <rect x="-14.1" y="-4.4" width="28.2" height="8.8" rx="4.4" fill="url(#kana-connection-slot)" />
+                <ellipse rx="6" ry="7.2" fill="url(#kana-connection-slot)" />
               </g>
             </g>
           </g>
