@@ -129,21 +129,21 @@ function CableIllustration({ label }: { label: string }) {
         <g className="kana-connection-plug">
           {/* The plug cable runs in from off frame and enters the gland. */}
           <path
-            d="M -140 246 C -58 258, 20 252, 72 228 C 98 216, 112 200, 130 192"
+            d="M -140 246 C -58 258, 20 252, 72 228 C 98 216, 122 196, 140 192"
             fill="none"
             stroke="var(--kana-cord-shade)"
             strokeWidth="27"
             strokeLinecap="round"
           />
           <path
-            d="M -140 246 C -58 258, 20 252, 72 228 C 98 216, 112 200, 130 192"
+            d="M -140 246 C -58 258, 20 252, 72 228 C 98 216, 122 196, 140 192"
             fill="none"
             stroke="url(#kana-connection-cord)"
             strokeWidth="20"
             strokeLinecap="round"
           />
           <path
-            d="M -140 241 C -58 253, 20 247, 72 223 C 98 211, 112 195, 130 187"
+            d="M -140 241 C -58 253, 20 247, 72 223 C 98 211, 122 191, 140 187"
             fill="none"
             stroke="var(--kana-cord-light)"
             strokeWidth="4"
@@ -152,20 +152,20 @@ function CableIllustration({ label }: { label: string }) {
           />
 
           <rect
-            x="126"
-            y="148"
+            x="136"
+            y="152"
             width="46"
-            height="68"
+            height="56"
             rx="16"
             fill="url(#kana-connection-body)"
             stroke="var(--kana-plug-line)"
             strokeWidth="2"
           />
-          <rect x="134" y="153" width="4" height="58" rx="2" fill="var(--kana-plug-deep)" opacity="0.28" />
-          <rect x="143" y="153" width="4" height="58" rx="2" fill="var(--kana-plug-deep)" opacity="0.28" />
-          <rect x="152" y="153" width="4" height="58" rx="2" fill="var(--kana-plug-deep)" opacity="0.28" />
+          <rect x="144" y="157" width="4" height="46" rx="2" fill="var(--kana-plug-deep)" opacity="0.28" />
+          <rect x="153" y="157" width="4" height="46" rx="2" fill="var(--kana-plug-deep)" opacity="0.28" />
+          <rect x="162" y="157" width="4" height="46" rx="2" fill="var(--kana-plug-deep)" opacity="0.28" />
           <path
-            d="M 136 152 C 136 149, 140 147, 145 148 L 156 150"
+            d="M 146 156 C 146 153, 150 152, 155 153 L 166 155"
             fill="none"
             stroke="#ffffff"
             strokeWidth="3"
@@ -174,20 +174,20 @@ function CableIllustration({ label }: { label: string }) {
           />
 
           <path
-            d="M 185 126 C 171 128, 162 137, 162 150 L 162 210 C 162 223, 171 232, 185 234 L 258 244 C 271 245, 281 238, 281 225 L 281 135 C 281 122, 271 115, 258 117 Z"
+            d="M 194 140 C 214 140, 234 137, 252 134 C 270 131, 281 137, 281 148 L 281 212 C 281 223, 270 229, 252 226 C 234 223, 214 220, 194 220 C 181 219, 172 212, 172 206 L 172 154 C 172 148, 181 141, 194 140 Z"
             fill="url(#kana-connection-body)"
             stroke="var(--kana-plug-line)"
             strokeWidth="2"
           />
           <path
-            d="M 185 130 C 200 123, 244 115, 272 119 L 272 174 C 244 170, 202 174, 165 186 L 164 154 C 164 144, 171 134, 185 130 Z"
+            d="M 194 145 C 214 142, 242 138, 268 139 L 268 182 C 240 179, 210 182, 176 193 L 174 164 C 174 158, 182 151, 194 145 Z"
             fill="url(#kana-connection-gloss)"
             opacity="0.5"
           />
-          <path d="M 258 117 C 252 150, 252 210, 258 244" fill="none" stroke="var(--kana-plug-line)" strokeWidth="2" opacity="0.45" />
-          <path d="M 198 128 C 194 150, 194 212, 198 236" fill="none" stroke="var(--kana-plug-line)" strokeWidth="2" opacity="0.25" />
+          <path d="M 258 134 C 252 162, 252 198, 258 226" fill="none" stroke="var(--kana-plug-line)" strokeWidth="2" opacity="0.45" />
+          <path d="M 204 140 C 200 162, 200 198, 204 220" fill="none" stroke="var(--kana-plug-line)" strokeWidth="2" opacity="0.25" />
           <path
-            d="M 274 124 C 279 128, 281 132, 281 140 L 281 221 C 281 229, 279 233, 274 237"
+            d="M 274 143 C 279 145, 281 148, 281 152 L 281 208 C 281 212, 279 215, 274 217"
             fill="none"
             stroke="#ffffff"
             strokeWidth="3"
@@ -195,42 +195,17 @@ function CableIllustration({ label }: { label: string }) {
             opacity="0.65"
           />
           <path
-            d="M 178 220 C 200 226, 232 231, 266 236 L 257 243 C 230 240, 202 234, 179 228 Z"
+            d="M 194 210 C 214 214, 240 218, 264 222 L 256 226 C 234 223, 210 218, 194 214 Z"
             fill="var(--kana-plug-deep)"
             opacity="0.18"
           />
 
-          <circle cx="232" cy="178" r="11" fill="var(--kana-plug-deep)" opacity="0.32" />
-          <circle cx="232" cy="178" r="8" fill="var(--kana-plug-top)" opacity="0.9" />
-          <path d="M 226 182 A 8 8 0 0 0 238 180" fill="none" stroke="var(--kana-plug-deep)" strokeWidth="2" opacity="0.35" />
+          <circle cx="236" cy="180" r="10" fill="var(--kana-plug-deep)" opacity="0.32" />
+          <circle cx="236" cy="180" r="7.2" fill="var(--kana-plug-top)" opacity="0.9" />
+          <path d="M 230.5 183 A 7 7 0 0 0 241.5 181" fill="none" stroke="var(--kana-plug-deep)" strokeWidth="2" opacity="0.35" />
 
-          <rect x="234" y="220" width="28" height="8" rx="4" fill="var(--kana-plug-deep)" opacity="0.22" />
-          <rect x="234" y="220" width="28" height="3" rx="1.5" fill="#ffffff" opacity="0.35" />
-
-          <ellipse cx="278" cy="158" rx="5" ry="9" fill="var(--kana-plug-deep)" opacity="0.35" />
-          <ellipse cx="278" cy="202" rx="5" ry="9" fill="var(--kana-plug-deep)" opacity="0.35" />
-          <rect
-            x="277"
-            y="151"
-            width="83"
-            height="14"
-            rx="7"
-            fill="url(#kana-connection-metal)"
-            stroke="var(--kana-metal-dark)"
-            strokeWidth="1.5"
-          />
-          <rect x="277" y="153" width="75" height="4" rx="2" fill="var(--kana-metal-light)" opacity="0.75" />
-          <rect
-            x="277"
-            y="195"
-            width="83"
-            height="14"
-            rx="7"
-            fill="url(#kana-connection-metal)"
-            stroke="var(--kana-metal-dark)"
-            strokeWidth="1.5"
-          />
-          <rect x="277" y="197" width="75" height="4" rx="2" fill="var(--kana-metal-light)" opacity="0.75" />
+          <rect x="240" y="208" width="24" height="6" rx="3" fill="var(--kana-plug-deep)" opacity="0.22" />
+          <rect x="240" y="208" width="24" height="2.5" rx="1.25" fill="#ffffff" opacity="0.35" />
         </g>
 
         <g className="kana-connection-sparks">
@@ -365,6 +340,37 @@ function CableIllustration({ label }: { label: string }) {
               </g>
             </g>
           </g>
+        </g>
+
+        {/* The pins ride above the socket face so their tips can enter the
+            slots; the openings stay behind them and their far side still
+            reads as the opening. The upper pin runs a little longer because
+            the rotated socket puts its hole slightly further from the plug. */}
+        <g className="kana-connection-prongs">
+          <ellipse cx="278" cy="158" rx="5" ry="9" fill="var(--kana-plug-deep)" opacity="0.35" />
+          <ellipse cx="278" cy="202" rx="5" ry="9" fill="var(--kana-plug-deep)" opacity="0.35" />
+          <rect
+            x="277"
+            y="153"
+            width="50"
+            height="10"
+            rx="5"
+            fill="url(#kana-connection-metal)"
+            stroke="var(--kana-metal-dark)"
+            strokeWidth="1.5"
+          />
+          <rect x="277" y="155" width="42" height="2.5" rx="1.25" fill="var(--kana-metal-light)" opacity="0.75" />
+          <rect
+            x="277"
+            y="197"
+            width="48"
+            height="10"
+            rx="5"
+            fill="url(#kana-connection-metal)"
+            stroke="var(--kana-metal-dark)"
+            strokeWidth="1.5"
+          />
+          <rect x="277" y="199" width="40" height="2.5" rx="1.25" fill="var(--kana-metal-light)" opacity="0.75" />
         </g>
       </g>
     </svg>
