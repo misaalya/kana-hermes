@@ -1675,45 +1675,22 @@ video.kana-media-preview {
   outline-offset: 3px;
 }
 
-/* The workspace stands down while Hermes is unreachable: the plug and socket
-   wait with a spark between them, seat only once the relay reports connected,
-   and the screen steps away on success. */
+/* The workspace stands down while Hermes is unreachable: the two ends of the
+   cable reach for each other from frame 1 of the recording. A manual connect
+   settles them onto that frame and plays the seating before the screen steps
+   away. */
 .kana-connection-screen {
-  /* White plastic hardware with cool shading, drawn in both themes. */
-  --kana-plug-top: #fbfcfd;
-  --kana-plug-mid: #eef1f5;
-  --kana-plug-shade: #ccd5df;
-  --kana-plug-line: #b7c1cc;
-  --kana-plug-deep: #98a4b1;
-  --kana-cord: #d5dbe2;
-  --kana-cord-shade: #aeb8c3;
-  --kana-cord-light: #f2f5f8;
-  --kana-metal: #5f6873;
-  --kana-metal-light: #98a2ad;
-  --kana-metal-dark: #404750;
   transition: opacity 320ms ease;
-}
-
-[data-theme="light"] .kana-connection-screen {
-  --kana-plug-top: #ffffff;
-  --kana-plug-mid: #f8f9fb;
-  --kana-plug-shade: #dfe4ea;
-  --kana-plug-line: #b9c2cc;
-  --kana-plug-deep: #a9b3be;
-  --kana-cord: #e3e7ec;
-  --kana-cord-shade: #bcc5cf;
-  --kana-cord-light: #f8fafb;
-  --kana-metal: #616a75;
-  --kana-metal-light: #9ba5b0;
-  --kana-metal-dark: #444b54;
 }
 
 .kana-connection-screen.is-leaving {
   opacity: 0;
 }
 
-/* Fade the cables into the screen edges instead of cutting them off. */
+/* The stage is four units wide to one tall; keep it under 40vh on short
+   viewports. Fade the cables into the screen edges instead of cutting them. */
 .kana-connection-art {
+  max-width: min(720px, 160vh);
   mask-image: linear-gradient(to right, transparent, #000 8%, #000 92%, transparent);
   mask-repeat: no-repeat;
   mask-size: 100% 100%;
@@ -1722,50 +1699,104 @@ video.kana-media-preview {
   -webkit-mask-size: 100% 100%;
 }
 
-.kana-connection-plug,
-.kana-connection-prongs,
-.kana-connection-socket {
-  transition: transform 700ms cubic-bezier(0.22, 0.9, 0.3, 1.08);
+.kana-connection-stage {
+  position: relative;
+  width: 100%;
 }
 
-/* Only a reported connection seats the plug. While Kana is still reaching
-   the relay the two stay apart, their prongs and slots in view. The plug
-   dips a little as it meets the socket, whose face sits lower in its cap,
-   and stops short of the cap so the pins are what enters the holes. */
-.kana-connection-screen.is-plugged .kana-connection-plug,
-.kana-connection-screen.is-plugged .kana-connection-prongs {
-  transform: translate(115px, 13px);
+/* Hidden until the settle finishes; it still provides the stage's height. */
+.kana-connection-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  visibility: hidden;
 }
 
-.kana-connection-screen.is-plugged .kana-connection-socket {
-  transform: translateX(-45px);
+/* Both halves are full-stage cutouts of frame 1, so they share the playback
+   frame's coordinate space and the hand-off never has to reposition them. */
+.kana-connection-piece {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  user-select: none;
+  will-change: transform;
 }
 
-.kana-connection-sparks {
-  transform-box: fill-box;
-  transform-origin: center;
-  transition: opacity 280ms ease, transform 360ms ease;
+.kana-connection-piece--plug {
+  transform-origin: 30% 52%;
 }
 
-.kana-connection-screen.is-plugged .kana-connection-sparks {
-  opacity: 0;
-  transform: scale(0.55);
+.kana-connection-piece--socket {
+  transform-origin: 72% 52%;
 }
 
-.kana-connection-screen.is-unplugged .kana-connection-hover {
-  animation: kana-connection-hover 5.2s ease-in-out infinite;
+.kana-connection-stage.is-idle .kana-connection-piece--plug {
+  animation: kana-connection-idle-plug 5.8s ease-in-out infinite;
 }
 
-.kana-connection-screen:not(.is-plugged) .kana-connection-spark-pulse {
-  animation: kana-connection-spark-pulse 2.8s ease-in-out infinite;
+.kana-connection-stage.is-idle .kana-connection-piece--socket {
+  animation: kana-connection-idle-socket 5.8s ease-in-out infinite;
 }
 
-@keyframes kana-connection-hover {
-  50% { transform: translateY(-6px); }
+.kana-connection-stage.is-trying .kana-connection-piece--plug {
+  animation: kana-connection-try-plug 2.2s ease-in-out infinite;
 }
 
-@keyframes kana-connection-spark-pulse {
-  50% { opacity: 0.55; }
+.kana-connection-stage.is-trying .kana-connection-piece--socket {
+  animation: kana-connection-try-socket 2.2s ease-in-out infinite;
+}
+
+/* Idle: a slow, uncertain reach that always slips off the holes. */
+@keyframes kana-connection-idle-plug {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  14% { transform: translate(0.9%, -0.4%) rotate(-0.25deg); }
+  30% { transform: translate(2.5%, -0.7%) rotate(0.4deg); }
+  40% { transform: translate(2.1%, 0.2%) rotate(-0.15deg); }
+  52% { transform: translate(0.6%, 0.5%) rotate(0.15deg); }
+  70% { transform: translate(1.9%, -0.3%) rotate(-0.2deg); }
+  82% { transform: translate(0.8%, 0.1%) rotate(0.1deg); }
+}
+
+@keyframes kana-connection-idle-socket {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  16% { transform: translate(-0.4%, 0.3%) rotate(0.12deg); }
+  32% { transform: translate(-1.5%, 0.6%) rotate(-0.3deg); }
+  44% { transform: translate(-1.2%, -0.2%) rotate(0.18deg); }
+  58% { transform: translate(-0.3%, 0.1%) rotate(-0.08deg); }
+  72% { transform: translate(-1.1%, 0.4%) rotate(0.22deg); }
+  86% { transform: translate(-0.4%, 0) rotate(-0.05deg); }
+}
+
+/* Try: both ends commit to the meeting, shiver at the closest point, and
+   pull back to attempt it again while the connection is still pending. */
+@keyframes kana-connection-try-plug {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  10% { transform: translate(1.4%, -0.5%) rotate(-0.35deg); }
+  24% { transform: translate(4.8%, -1%) rotate(0.5deg); }
+  32% { transform: translate(6.4%, -0.4%) rotate(-0.28deg); }
+  36% { transform: translate(6%, 0.4%) rotate(0.32deg); }
+  40% { transform: translate(6.6%, -0.6%) rotate(-0.2deg); }
+  46% { transform: translate(6.2%, 0.5%) rotate(0.22deg); }
+  58% { transform: translate(3.4%, 0.7%) rotate(-0.12deg); }
+  68% { transform: translate(5.8%, -0.4%) rotate(0.28deg); }
+  76% { transform: translate(5.6%, 0.1%) rotate(-0.18deg); }
+  88% { transform: translate(1.5%, 0) rotate(0.08deg); }
+}
+
+@keyframes kana-connection-try-socket {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  12% { transform: translate(-0.7%, 0.4%) rotate(0.16deg); }
+  27% { transform: translate(-3.3%, 0.8%) rotate(-0.34deg); }
+  34% { transform: translate(-4.2%, -0.3%) rotate(0.22deg); }
+  38% { transform: translate(-3.8%, 0.4%) rotate(-0.18deg); }
+  43% { transform: translate(-4.4%, -0.4%) rotate(0.18deg); }
+  48% { transform: translate(-4%, 0.2%) rotate(-0.12deg); }
+  60% { transform: translate(-2.1%, -0.5%) rotate(0.1deg); }
+  70% { transform: translate(-3.7%, 0.3%) rotate(-0.2deg); }
+  78% { transform: translate(-3.9%, -0.1%) rotate(0.12deg); }
+  90% { transform: translate(-0.9%, 0) rotate(-0.04deg); }
 }
 
 @keyframes kana-pulse {
