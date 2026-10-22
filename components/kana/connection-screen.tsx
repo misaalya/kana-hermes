@@ -83,9 +83,10 @@ export function useConnectionScreen(): ConnectionScreenController {
 }
 
 const PLAY_FRAME_COUNT = 60;
-const PLAY_FRAME_MS = 1000 / 30;
-const PLAY_SETTLE_MS = 180;
+const PLAY_TOTAL_MS = 500;
 const PLAY_TAIL_MS = 120;
+const PLAY_FRAME_MS = (PLAY_TOTAL_MS - PLAY_TAIL_MS) / (PLAY_FRAME_COUNT - 1);
+const PLAY_SETTLE_MS = 180;
 const FRAME_WIDTH = 1120;
 const FRAME_HEIGHT = 280;
 
