@@ -8,6 +8,7 @@ import { TYPESAFE_SYSTEMONE_ENDPOINT } from "@/lib/guardrails/jev";
 import {
   DEFAULT_GUARDRAIL_THRESHOLD,
   loadGuardrailConfig,
+  loadGuardrailRules,
   parseGuardrailsConfig,
   resolveGuardrailPolicy,
   summarizeGuardrail,
@@ -129,7 +130,7 @@ describe("guardrails config", () => {
     assert.equal(load.kind, "disabled", "a fresh install must not refuse every turn");
     assert.ok(
       (defaultUserConfig.guardrails?.rules ?? []).length > 0,
-      "the shipped default carries rules, and they stay inert while the key is empty",
+      "the shipped default carries rules; only the screen stays off while the key is empty",
     );
   });
 
@@ -203,6 +204,44 @@ describe("guardrails config", () => {
     const load = loadGuardrailConfig();
     assert.equal(load.kind, "invalid");
     assert.equal(load.kind === "invalid" && load.whenUnavailable, "allow");
+  });
+});
+
+describe("rules in Kana's prompt", () => {
+  it("reads the owner's rules with no screening key", () => {
+    writeConfig({ guardrails: { apiKey: "", rules: RULES } });
+    assert.deepEqual(loadGuardrailRules(), RULES);
+  });
+
+  it("applies an added rule to the next read, with no restart", () => {
+    writeConfig({ guardrails: { rules: ["Never touch the secrets."] } });
+    assert.deepEqual(loadGuardrailRules(), ["Never touch the secrets."]);
+    writeConfig({
+      guardrails: { rules: ["Never touch the secrets.", "Never wipe a disk."] },
+    });
+    assert.deepEqual(loadGuardrailRules(), ["Never touch the secrets.", "Never wipe a disk."]);
+  });
+
+  it("is not stopped by another broken field in the block", () => {
+    writeConfig({ guardrails: { apiKey: KEY, threshold: 7, rules: RULES } });
+    assert.equal(loadGuardrailConfig().kind, "invalid");
+    assert.deepEqual(loadGuardrailRules(), RULES);
+  });
+
+  it("keeps the readable rules when one entry is malformed", () => {
+    writeConfig({ guardrails: { rules: [RULES[0], 42, RULES[1]] } });
+    assert.deepEqual(loadGuardrailRules(), RULES);
+  });
+
+  it("folds each rule onto one line, as the screen does", () => {
+    writeConfig({ guardrails: { rules: ["  Never\n  touch\t/tmp/x  "] } });
+    assert.deepEqual(loadGuardrailRules(), ["Never touch /tmp/x"]);
+  });
+
+  it("reads nothing from a missing or unreadable config", () => {
+    assert.deepEqual(loadGuardrailRules(), []);
+    writeRawConfig("{ not json");
+    assert.deepEqual(loadGuardrailRules(), []);
   });
 });
 

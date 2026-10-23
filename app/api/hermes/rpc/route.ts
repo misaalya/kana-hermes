@@ -8,7 +8,8 @@ import {
   PROMPT_GUARDRAIL_UNAVAILABLE,
 } from "@/lib/guardrails/protocol";
 import { screenPrompt, type GuardrailOutcome } from "@/lib/guardrails/screen";
-import { unwrapKanaUserPrompt } from "@/lib/presentation/persona";
+import { loadGuardrailRules } from "@/lib/guardrails/policy";
+import { unwrapKanaUserPrompt, withKanaRules } from "@/lib/presentation/persona";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -143,6 +144,13 @@ export const POST = withSession(async (request) => {
   if (screenable !== null) {
     const outcome = await screenPrompt(screenable);
     if (outcome.verdict === "refuse") return guardrailRefusal(outcome);
+  }
+  if (method === "prompt.submit" && typeof params.text === "string") {
+    // The owner's rules ride in Kana's note on every prompt turn, read here so
+    // a new rule applies to the next message. Screening above is the
+    // enforcement; this is the same policy stated to the model.
+    const rules = loadGuardrailRules();
+    if (rules.length) params = { ...params, text: withKanaRules(params.text, rules) };
   }
   try {
     // Restored transcripts carry the same signed media links as live events.

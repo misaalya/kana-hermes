@@ -162,16 +162,20 @@ request, and Kana redacts it from any upstream error it shows.
 
 ## Prompt guardrail
 
-Kana can screen the text a turn is about to send to Hermes before Hermes sees it.
-The screen is optional and belongs entirely to the owner: the `guardrails` block
-lives in `config.json`, which Kana creates once and never rewrites, so no
-setting, route, or browser request can change the rules or read the key.
+The `guardrails` block does two things with the same rules. Kana carries the
+rules in the prompt note it sends to Hermes on every turn, so the model sees the
+owner's standing instructions; and, when a TypeSafe key is set, Kana also screens
+the user's own text against them before the turn reaches Hermes. The rules
+belong entirely to the owner: the block lives in `config.json`, which Kana
+creates once and never rewrites, so no setting, route, or browser request can
+change the rules or read the key.
 
-The layer is off unless `guardrails.apiKey` is set. With an empty key — which is
-what a new `config.json` ships — or with a key and no rules, Kana sends no
-request and behaves exactly as it did without this block. A blank key is the
-layer being off, not a broken block, so the rules Kana ships with never refuse a
-turn before you set a key.
+The screen is off unless `guardrails.apiKey` is set. With an empty key — which
+is what a new `config.json` ships — or with a key and no rules, Kana sends no
+screening request. A blank key is the screen being off, not a broken block, so
+the rules Kana ships with never refuse a turn before you set a key. The rules
+themselves still ride in the prompt: with no key they are instructions to the
+model, and with a key they are also the policy Jev enforces.
 
 | Key | Default | Effect |
 | --- | --- | --- |
@@ -180,7 +184,7 @@ turn before you set a key.
 | `guardrails.threshold` | `0.7` | Kana refuses the turn once Jev's probability reaches this value, 0 to 1. A value near 0.5 means Jev cannot tell; lower the threshold to refuse more borderline attempts, at the cost of refusing more of what you did mean. |
 | `guardrails.whenUnavailable` | `"block"` | `"block"` refuses a turn Kana could not check; `"allow"` forwards it unchecked. Must be one of those two. |
 | `guardrails.timeoutSeconds` | `10` | The whole screening request, 1 to 120. |
-| `guardrails.rules` | five starter rules | Up to 50 rules, each one a plain statement of what Kana must not do. |
+| `guardrails.rules` | five starter rules | Up to 50 rules, each one a plain statement of what Kana must not do. Every rule is carried in each prompt Kana sends Hermes, and screened by Jev when a key is set. |
 
 ```json
 {
@@ -198,22 +202,31 @@ turn before you set a key.
 
 Each rule is one statement in your own words that names exactly what is
 forbidden — the paths, commands, or services it covers. A new `config.json`
-ships five starter rules and an empty key, so nothing runs until you add a key;
-replace the starters with your own, or keep the ones you agree with. You write
-no question,
-no question id, and no per-rule threshold: Kana turns the rules into the one
-question it asks Jev, TypeSafe's System One model, which is whether the message
-asks for, attempts, or enables anything the rules forbid. The rules travel as
-the question's data, the message travels as the state, and Jev is told it is
-screening a message for an agent that can read and write files and run commands.
-Jev is not a language model: it returns a probability and no text, Kana never
-asks it to write, and the returned probability is compared against the threshold
-in Kana's own code. A probability at or above the threshold, or a guardrail that
-cannot run while `whenUnavailable` is `"block"`, refuses the turn before it
-reaches the bridge. Nothing is forwarded, so nothing is written to the Hermes
-transcript, and Kana shows its own fixed sentence instead of a reply. That
-sentence names no rule: the rules travel as one question, so one number comes
-back, and Kana does not invent an attribution it did not ask for.
+ships five starter rules and an empty key, so no screening request runs until
+you add a key; replace the starters with your own, or keep the ones you agree
+with. Those rules are not inert in the meantime: the relay reads the list on
+every turn and places it inside Kana's own `<kana>` note in the prompt, so a
+model that follows its instructions avoids the forbidden action. That is a
+prevention layer, not the control: a model can be talked past it, which is why
+the Jev screen exists. The relay reads the file per turn, so a rule you add or
+edit applies to the next message without a restart, and the note is stripped
+from the transcript by `unwrapKanaUserPrompt`, so a restored conversation never
+shows the rules as something you typed.
+
+For the screen, you write no question, no question id, and no per-rule
+threshold: Kana turns the rules into the one question it asks Jev, TypeSafe's
+System One model, which is whether the message asks for, attempts, or enables
+anything the rules forbid. The rules travel as the question's data, the message
+travels as the state, and Jev is told it is screening a message for an agent
+that can read and write files and run commands. Jev is not a language model: it
+returns a probability and no text, Kana never asks it to write, and the returned
+probability is compared against the threshold in Kana's own code. A probability
+at or above the threshold, or a guardrail that cannot run while
+`whenUnavailable` is `"block"`, refuses the turn before it reaches the bridge.
+Nothing is forwarded, so nothing is written to the Hermes transcript, and Kana
+shows its own fixed sentence instead of a reply. That sentence names no rule:
+the rules travel as one question, so one number comes back, and Kana does not
+invent an attribution it did not ask for.
 
 The screen covers the text a turn starts with: a chat message, a slash command
 with its arguments, and `/steer`. It does not cover an approval or an answer to a
@@ -229,12 +242,14 @@ in English judging text in another language are the arrangement it was built for
 
 An invalid `guardrails` block is reported rather than ignored. The config guide
 at `/docs`, linked from Settings → Connection → Advanced configuration, shows
-whether the guardrail is on and how many rules it would send, or the message
+whether the screen is on and how many rules it would send, or the message
 describing what is wrong with the block. While the block cannot be read, Kana
 refuses turns, because an unreadable policy is not the same as no policy; the
 `whenUnavailable` value is still read from the block, so `"allow"` remains
-available as the way out. `GET /api/kana/config` reports that state and never the
-key or the text of a rule.
+available as the way out. The prompt note reads rules at the same time and is
+more tolerant: entries it can read still reach the model, and a malformed entry
+is left out rather than stopping the turn. `GET /api/kana/config` reports that
+state and never the key or the text of a rule.
 
 `config.json` is the owner's file, not Kana's: Kana creates it once and never
 rewrites it, but Hermes runs as the same user and can change it if a turn goes
