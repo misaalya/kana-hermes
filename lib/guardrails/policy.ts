@@ -10,6 +10,11 @@ import { isJsonRecord } from "./protocol";
  * 0600, and never replaced (lib/server/user-config.ts) — so no route, setting,
  * or browser request can change these rules.
  *
+ * The same rules have two readers: the optional TypeSafe screen
+ * (lib/guardrails/screen.ts) judges a turn against them, and the relay puts
+ * them in Kana's prompt note on every turn (loadGuardrailRules), so they reach
+ * the model even while screening is off.
+ *
  * The block is parsed here rather than through parseKanaUserConfigFile so that
  * a mistake in a rule cannot take down the rest of Kana's configuration, and a
  * mistake in another block cannot silently disable the guardrail.
@@ -35,8 +40,9 @@ export type KanaGuardrailsConfig = {
   timeoutSeconds?: number;
   /**
    * The owner's rules, each written as one natural-language statement of what
-   * Kana must not do. Kana turns them into the question it asks Jev; the owner
-   * never writes a question, an id, or a threshold per rule.
+   * Kana must not do. Kana turns them into the question it asks Jev, and also
+   * carries them in the prompt note it sends the model; the owner never writes
+   * a question, an id, or a threshold per rule.
    */
   rules?: string[];
 };
@@ -260,4 +266,38 @@ export function loadGuardrailConfig(): GuardrailConfigLoad {
     };
   }
   return { kind: "enabled", policy };
+}
+
+/**
+ * The owner's rules for the prompt Kana sends the model, read on every turn so
+ * an added or edited rule applies to the next message without a restart.
+ *
+ * This is independent of `apiKey`: an empty key turns off Jev screening, not
+ * the owner's standing instructions to the model. It is also tolerant by
+ * design: a missing or unreadable file, a non-array, or a malformed entry
+ * leaves that part out instead of stopping a prompt, while
+ * `loadGuardrailConfig` stays the authority that reports a broken block.
+ */
+export function loadGuardrailRules(): string[] {
+  const read = readConfigFile();
+  if (!("raw" in read)) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(read.raw);
+  } catch {
+    return [];
+  }
+  if (!isJsonRecord(parsed) || !isJsonRecord(parsed.guardrails)) return [];
+  const raw = parsed.guardrails.rules;
+  if (!Array.isArray(raw)) return [];
+  const rules: string[] = [];
+  for (const [index, value] of raw.entries()) {
+    if (rules.length === MAX_GUARDRAIL_RULES) break;
+    try {
+      rules.push(parseRule(value, index));
+    } catch {
+      // The guardrail's own status reports the broken entry.
+    }
+  }
+  return rules;
 }

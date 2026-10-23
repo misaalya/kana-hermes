@@ -40,7 +40,7 @@ Numbered records of decisions that were taken and are expensive to reverse. They
 | `docs/decisions/0002-tts-delivery.md` | Why the local Irodori engine is the default speech provider, and why sentence-split delivery stays opt-in. |
 | `docs/decisions/0003-data-root.md` | Why the data root is `~/.kana`, and how an earlier install is moved into it on the next start. |
 | `docs/decisions/0004-migrate-command.md` | Why `kana migrate` exists, why an operator-set root is never moved automatically, and what the command guarantees about a copy. |
-| `docs/decisions/0005-prompt-guardrail.md` | Why the prompt guardrail screens a turn in the relay with a typed judgment instead of an LLM, why its rules live in a file Kana cannot write, and why an unchecked prompt is refused by default. |
+| `docs/decisions/0005-prompt-guardrail.md` | Why the prompt guardrail screens a turn in the relay with a typed judgment instead of an LLM, why its rules live in a file Kana cannot write, why the same rules also ride in the prompt note as a prevention layer, and why an unchecked prompt is refused by default. |
 
 ## Evidence
 

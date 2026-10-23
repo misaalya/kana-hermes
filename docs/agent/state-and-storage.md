@@ -89,7 +89,8 @@ with `flag: "wx"`, owner-only, and never replaces it. That is what makes the
 browser request can change the rules or the TypeSafe key. The block is parsed by
 `lib/guardrails/policy.ts` rather than by `parseKanaUserConfigFile`, so a broken
 rule cannot invalidate the rest of the file and a broken block elsewhere cannot
-silently disable the guardrail.
+silently disable the guardrail. The relay reads the rules on every turn to place
+them in the prompt note, so no copy of them is cached between turns.
 
 `appstate.db` is created and read through `lib/server/app-state-store.ts` so
 the `kana` launcher and the server share one schema and handle. Do not open it

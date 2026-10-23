@@ -35,7 +35,7 @@ automatically trusted. This covers the trust boundaries and enforced controls.
 | Login lockout | Not keyed by IP. A browser that signed in before carries a signed device cookie and has its own bucket; all other attempts share one strict progressive bucket, so guessing cannot lock the owner's devices out. One password check runs per bucket at a time |
 | Delivered files | `MEDIA:` paths become signed links only for regular files outside system paths, home credential folders and files, Hermes's secrets, and Kana's data root; the file is re-checked on every request |
 | Protected input | Password and secret fields are uncontrolled, ephemeral, sent directly to Hermes, and never added to Kana history, activity details, preferences, or local storage |
-| Prompt guardrail | Optional and off without an owner-set key. The owner's rules and key live in `config.json`, which Kana has no writer for, and the key never reaches the browser. A rule that fires, or a check that could not run, refuses the turn before it reaches Hermes |
+| Prompt guardrail | The screen is optional and off without an owner-set key, while the rules still ride in Kana's prompt note as instructions. The owner's rules and key live in `config.json`, which Kana has no writer for, and the key never reaches the browser. A rule that fires, or a check that could not run, refuses the turn before it reaches Hermes |
 | Local voice engine | No listening service: each utterance is a short-lived child process with a minimal environment; every downloaded artifact is pinned by size and SHA-256 and verified before it is unpacked or run |
 | Hermes process | `hermes serve` started by Kana listens on 127.0.0.1 with a minted token and inherits no `KANA_*` setting, so `KANA_JWT_SECRET` never reaches the commands Hermes runs |
 
@@ -97,16 +97,25 @@ The guardrail is a data-sharing decision as much as a control. When the owner
 sets `guardrails.apiKey`, the text of every screened turn — a chat message, a
 slash command, or `/steer` — is sent to `https://api.typesafe.ai/v1/systemone`
 for evaluation, so that text leaves the machine for a third party. With no key,
-or a key and no rules, nothing is sent and the layer costs nothing. A blank key
-is the layer being off, not a broken block: a new `config.json` ships five
-starter rules and an empty key, and none of them runs until the owner adds a key.
+or a key and no rules, nothing is sent to TypeSafe. A blank key is the screen
+being off, not a broken block: a new `config.json` ships five starter rules and
+an empty key.
+
+The same rules are also placed in the prompt note Kana sends Hermes on every
+turn, whether or not a key is set. That adds no new recipient: the note is part
+of the prompt Hermes already sends to its configured model, just as the user's
+message is, and the screen runs before the rules are added, so TypeSafe never
+sees them. It is also not the control: an instruction in the message is
+something a model can be talked past, and the Jev screen exists for that
+reason. It is a prevention layer that costs no request and no second model; a
+rule added to `config.json` reaches the next prompt without a restart.
 
 The rules and the key live in `config.json`, which Kana creates once, owner-only,
 and never rewrites; no route, setting, or browser request can change a rule or
-read the key, and `GET /api/kana/config` reports only whether the layer is on and
-how many rules it would send. A rule that fires, or a check that cannot run while
-`whenUnavailable` is `"block"`, refuses the turn before it reaches the bridge, so
-Hermes never sees it and never stores it.
+read the key, and `GET /api/kana/config` reports only whether the screen is on
+and how many rules it would send. A rule that fires, or a check that cannot run
+while `whenUnavailable` is `"block"`, refuses the turn before it reaches the
+bridge, so Hermes never sees it and never stores it.
 
 The guardrail is not a sandbox. It reads the text a turn starts with, not the
 contents of an attached file, and it cannot stop Hermes from reaching the same
@@ -119,8 +128,9 @@ deliberately out of scope, because it would strand a turn Hermes already started
 read and write when Kana and Hermes run as the same user account. Kana itself
 never writes a `config.json` that already exists, but that says nothing about
 Hermes: a turn that empties `guardrails.rules` — directly, through a shell
-command, or through a subagent or an MCP tool — turns the layer off, because Kana
-reads an empty rule list as the owner not using the guardrail. Kana cannot
+command, or through a subagent or an MCP tool — turns off both the screen and
+the instructions in the prompt note, because Kana reads an empty rule list as the
+owner not using the guardrail. Kana cannot
 prevent that from inside its own process, and the guardrail's server-side nature
 does not change it.
 

@@ -3,7 +3,7 @@
 Every normal Hermes assistant turn returns one structured user-facing response that Kana parses into Japanese speech, a subtitle, a language, and an avatar emotion. This document is that contract and what Kana does with a reply that follows or ignores it.
 
 **Read when:** you are changing the persona prompt, the response parser, voice delivery, avatar emotion handling, or how a restored transcript is shown.
-**Truth in code:** `lib/presentation/persona.ts`, `lib/presentation/response-parser.ts`, `lib/presentation/markdown.ts`, `lib/presentation/spoken-reply-queue.ts`, `lib/services/send-message.ts`, `lib/services/agent-event-handlers.ts`, `lib/avatar/avatar-controller.ts`, `lib/voice/tts-relay-provider.ts`
+**Truth in code:** `lib/presentation/persona.ts`, `app/api/hermes/rpc/route.ts`, `lib/presentation/response-parser.ts`, `lib/presentation/markdown.ts`, `lib/presentation/spoken-reply-queue.ts`, `lib/services/send-message.ts`, `lib/services/agent-event-handlers.ts`, `lib/avatar/avatar-controller.ts`, `lib/voice/tts-relay-provider.ts`
 
 ## The reply (response protocol 3)
 
@@ -40,6 +40,7 @@ The contract rides in the user turn, after the user's words, inside a `<kana>...
 - A failed `prompt.submit` keeps the full contract for the retry: it is cleared only once Hermes accepts the prompt (`submitPrompt`).
 - Turning Kana's voice on or off sends the full contract again, so the header's `ja` rule matches what will be read. The option is read on every submit (`voiceEnabled`).
 - The contract is never sent as a system-role seed on `session.create`: Hermes sends a seed as a second system message that some routes drop before the model sees it, and Hermes never stores it, so a resumed session would lose it anyway.
+- The relay appends the owner's `guardrails.rules` from `config.json` inside that same note on every `prompt.submit` (`withKanaRules`), after the screen has allowed the turn. The list is read per turn, so a rule added or edited applies to the next message without a restart, and it is independent of `guardrails.apiKey`: an empty key turns off screening, not the model's instructions. A rule that contains a note tag is neutralized so it cannot end the note early, and trailing attachment references stay after the note.
 
 The full contract tells Hermes what Kana is: a local app that puts an animated avatar and its own voice on top of the session. Kana's avatar, settings, and text-to-speech (the local Irodori engine or Pollinations) belong to Kana, not to Hermes, so a question about "your voice" or "the local TTS model" is about Kana. With the voice on, Kana reads `ja` aloud, so Hermes must never call a TTS tool to speak and makes an audio file only when the user asks for a file. The full contract also states how Hermes config changes reach Kana and that Hermes must never stop or restart `hermes serve`.
 
@@ -80,4 +81,4 @@ Emotion drives the avatar through `AvatarController.presentEmotion`: an intensit
 
 ## Tests
 
-`tests/presentation/persona.test.ts` covers the delivered note (user words first, header shape, voice on/off, what Kana is) and `tests/presentation/response-parser.test.ts` covers the parser (header, fences, missing rule, quotes, non-Japanese `ja`, protocol 2 envelopes, plain-text fallback). `tests/agent/hermes-agent-client.test.ts` covers contract delivery per prompt and the voice-change resend.
+`tests/presentation/persona.test.ts` covers the delivered note (user words first, header shape, voice on/off, what Kana is, and the owner's rules inside the note) and `tests/presentation/response-parser.test.ts` covers the parser (header, fences, missing rule, quotes, non-Japanese `ja`, protocol 2 envelopes, plain-text fallback). `tests/agent/hermes-agent-client.test.ts` covers contract delivery per prompt and the voice-change resend.

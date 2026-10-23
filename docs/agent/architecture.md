@@ -62,7 +62,7 @@ mock agent mode.
 | Route | What flows through it |
 | --- | --- |
 | `GET /api/hermes/events` (SSE) | Every gateway event frame the bridge receives, with `MEDIA:` paths rewritten to signed links. Ends when the shared socket drops, so each tab reconnects and resumes. |
-| `POST /api/hermes/rpc` | One allow-listed JSON-RPC request forwarded over the shared socket; the response returns correlated. `config.set` accepts only a session-scoped `model` value, and the owner's prompt guardrail may refuse a turn here before it reaches the bridge. |
+| `POST /api/hermes/rpc` | One allow-listed JSON-RPC request forwarded over the shared socket; the response returns correlated. `config.set` accepts only a session-scoped `model` value, the owner's prompt guardrail may refuse a turn here before it reaches the bridge, and the owner's rules are placed in Kana's note on every `prompt.submit`. |
 | `POST /api/hermes/attachments` | One base64 chat attachment, validated then forwarded as Hermes `file.attach`; this method is not on the RPC allow-list. |
 | `GET /api/kana/sessions` | `session.list` filtered server-side to `source: "kana"`, i.e. Kana's cross-browser conversation directory. |
 | `GET`/`PUT /api/kana/activities` | The per-turn activity snapshots read from and written to `activities.db`. |
@@ -143,7 +143,9 @@ Guardrail:
   `protocol.ts` is the browser-safe half — the refusal codes and
   `PromptGuardrailError`. The relay route calls `screenPrompt`, and the relay
   client and `lib/services/send-message.ts` turn a refusal into Kana's fixed
-  wording.
+  wording. The same route calls `loadGuardrailRules()` and `withKanaRules()`
+  (`lib/presentation/persona.ts`) to place the rules inside the prompt note on
+  every prompt turn; that path is a prevention layer and never decides a turn.
 
 Presentation, avatar, voice:
 
@@ -176,4 +178,6 @@ Presentation, avatar, voice:
 - The prompt guardrail reads the text of a turn at the relay and answers allow
   or refuse. It must not grow a second agent, a fallback model, or a way for the
   browser to set its rules: the rules and the key live in `config.json`, which
-  Kana has no writer for.
+  Kana has no writer for. The same rules also ride in the prompt note as
+  instructions, which is a prevention layer; it never replaces the screen or
+  decides a turn.

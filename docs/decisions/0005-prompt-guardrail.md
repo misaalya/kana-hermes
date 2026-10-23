@@ -1,9 +1,9 @@
 # ADR-0005: A prompt guardrail the owner writes
 
-Status: accepted, 2026-10-19; adds an optional, server-side screen on the text Kana forwards to Hermes.
+Status: accepted, 2026-10-19; amended 2026-10-23 to carry the same rules in Kana's prompt note as a prevention layer beside the screen.
 
 **Read when:** you are changing the prompt guardrail, the relay's handling of a refused turn, or the `guardrails` block of `config.json`.
-**Truth in code:** `lib/guardrails/policy.ts`, `lib/guardrails/prompt.ts`, `lib/guardrails/jev.ts`, `lib/guardrails/screen.ts`, `lib/guardrails/protocol.ts`, `app/api/hermes/rpc/route.ts`, `lib/services/send-message.ts`
+**Truth in code:** `lib/guardrails/policy.ts`, `lib/guardrails/prompt.ts`, `lib/guardrails/jev.ts`, `lib/guardrails/screen.ts`, `lib/guardrails/protocol.ts`, `lib/presentation/persona.ts`, `app/api/hermes/rpc/route.ts`, `lib/services/send-message.ts`
 
 Every path into Hermes runs through one server-side relay, and the operator who
 runs Kana may want to refuse some requests before the agent ever sees them. A
@@ -24,6 +24,23 @@ Kana's to phrase and the alternative asks the owner to learn a protocol to state
 a rule they can already state in a sentence. Jev is told what it is screening
 for: a message typed into Kana, whose agent can read and write files, run
 commands, and use tools on the owner's own computer.
+
+The same list also rides in the prompt note Kana sends the model, on every
+`prompt.submit` (`withKanaRules` in `lib/presentation/persona.ts`, called by the
+relay after the screen has allowed the turn). This is a prevention layer, not
+the decision. A model that follows its instructions is less likely to attempt
+the forbidden action in the first place, but an instruction inside the same
+message a jailbreak targets cannot be the control; the Jev screen outside the
+message still decides allow or refuse. The note is the delivery channel Kana
+already uses for its response contract: a system-role seed on `session.create`
+is dropped by some routes and never persisted, so the rules would vanish on a
+resume. They sit inside `<kana>...</kana>`, which `unwrapKanaUserPrompt` strips,
+so a restored transcript never shows them as something the user typed, and a
+rule that contains a note tag is neutralized so it cannot end the note early.
+The list is read from `config.json` on every turn, so a rule the owner adds
+applies to the very next message with no restart; an entry that cannot be read
+is left out of the note rather than stopping the turn, while the screen's own
+status still reports the block as invalid.
 
 The shape was measured rather than assumed, against 34 messages — 17 violations
 and 17 near-misses, in English and Indonesian, including a violation framed as a
@@ -73,13 +90,15 @@ off by the thing it is meant to check. The defence is the operating system's
 immutable flag on the file (`operator/security.md`), which the owner sets and
 clears, and which no process on the machine can write through.
 
-An empty `apiKey` turns the layer off completely: no request is made, nothing is
-spent, and Kana behaves exactly as it did before this decision. A key with no
-rules is the same. The key is read leniently on purpose — absent, empty, or
-blank all mean "off" — because a new `config.json` ships rules and an empty key,
-and a blank key that failed the parse would turn a fresh install into one that
-refuses every turn. The rules ship as starters the owner can keep or replace;
-they are inert until a key exists.
+An empty `apiKey` turns the screen off: no TypeSafe request is made and nothing
+is spent. It does not remove the rules from the prompt note, which is
+independent of the key, so the model still receives the owner's instructions. A
+key with no rules makes no request either. The key is read leniently on purpose
+— absent, empty, or blank all mean "screen off" — because a new `config.json`
+ships rules and an empty key, and a blank key that failed the parse would turn a
+fresh install into one that refuses every turn. The rules ship as starters the
+owner can keep or replace; they reach the model before a key exists, and the
+screen enforces them once one does.
 
 When the guardrail cannot run — TypeSafe is unreachable, rate limits, rejects the
 key, returns an answer Kana cannot read, or does not answer the question — the
@@ -114,8 +133,9 @@ may score differently in a language the model saw less of during training.
 
 The rejected alternatives were a browser-side check, which a modified page can
 skip and which would put the key in the browser; a second language model, which
-costs a turn and can be argued with; embedding the rules in the persona
-contract, which puts the owner's rules inside the same message a jailbreak
-targets; and a per-rule authoring surface of questions, ids, criteria, and
-thresholds, which asks the owner to phrase Kana's judgments and spent more tokens
-for the same measured accuracy.
+costs a turn and can be argued with; making the persona note the screen, which
+puts the owner's rules inside the same message a jailbreak targets — the rules
+do ride there now, but only as a prevention layer, never as the decision; and a
+per-rule authoring surface of questions, ids, criteria, and thresholds, which
+asks the owner to phrase Kana's judgments and spent more tokens for the same
+measured accuracy.

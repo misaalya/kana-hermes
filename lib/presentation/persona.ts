@@ -134,6 +134,34 @@ export function buildKanaUserPrompt(message: string, { full = false, voice = tru
   return message ? `${message}\n\n${note}` : note;
 }
 
+/** One line, and no note tag that could end the note early. */
+function sanitizeRule(rule: string): string {
+  return rule
+    .replaceAll(/\s+/g, " ")
+    .trim()
+    .replaceAll(/<\s*\/?\s*kana\b[^>]*>/gi, "[kana]");
+}
+
+/**
+ * The owner's standing rules, placed inside the Kana note. The relay calls
+ * this on every prompt, so a rule added to config.json applies to the next
+ * turn without a restart, and transcript restore still strips it with the
+ * note. The note is the channel Kana already uses: a system-role seed is
+ * dropped by some routes and lost on resume.
+ */
+export function withKanaRules(text: string, rules: readonly string[]): string {
+  const clean = rules.map(sanitizeRule).filter(Boolean);
+  if (!clean.length) return text;
+  const section = [
+    "Standing rules the owner set in config.json; they apply to this and every later turn:",
+    ...clean.map((rule) => `- ${rule}`),
+  ].join("\n");
+  const close = text.lastIndexOf(`\n${NOTE_CLOSE}`);
+  if (close !== -1) return `${text.slice(0, close)}\n\n${section}${text.slice(close)}`;
+  const note = [NOTE_OPEN, section, NOTE_CLOSE].join("\n");
+  return text ? `${text}\n\n${note}` : note;
+}
+
 /**
  * The user's own words from a stored Hermes user row. Handles the current
  * trailing Kana note and the protocol v1/v2 JSON wrapper (`user_message`).
