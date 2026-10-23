@@ -59,6 +59,33 @@ export async function uploadKanaVoice(
   return value;
 }
 
+/**
+ * The sample for one library voice. Kana and user-added voices play their
+ * reference WAV; the model voice plays a prepared file, so no play ever
+ * starts the engine.
+ */
+export async function previewKanaVoice(
+  voiceId: string,
+  signal?: AbortSignal,
+): Promise<Blob> {
+  const response = await fetch("/api/kana/voices/preview", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    signal,
+    body: JSON.stringify({ id: voiceId }),
+  });
+  if (!response.ok) {
+    const value = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new VoiceLibraryError(value?.error || "Voice preview failed.");
+  }
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.startsWith("audio/")) {
+    throw new VoiceLibraryError("The voice preview did not return audio.");
+  }
+  return response.blob();
+}
+
 export async function deleteKanaVoice(id: string): Promise<void> {
   const response = await fetch(`/api/kana/voices?id=${encodeURIComponent(id)}`, {
     method: "DELETE",

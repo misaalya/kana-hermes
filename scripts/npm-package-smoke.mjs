@@ -45,6 +45,7 @@ try {
     ".npm-package/runtime/server.js",
     ".npm-package/runtime/.next/BUILD_ID",
     ".npm-package/runtime/assets/voices/kana-default.wav",
+    ".npm-package/runtime/assets/voices/irodori-model.wav",
     ".npm-package/runtime/public/backgrounds/kana-room.png",
     "shared/irodori-release.mjs",
   ]) {

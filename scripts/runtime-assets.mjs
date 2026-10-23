@@ -48,10 +48,11 @@ async function copyTrackedDirectory(root, relativeDirectory, targetRoot) {
 }
 
 /**
- * Static assets, public files, and the default voice reference. The local
- * voice engine and model are never packaged: Kana downloads them on request.
- * `launcher: true` also ships the `kana` launcher next to server.js, so a
- * standalone deployment can run `node bin/kana.mjs password|serve`.
+ * Static assets, public files, and the reference voices, including the
+ * prepared sample for the model's own voice. The local voice engine and model
+ * are never packaged: Kana downloads them on request, and previews never need
+ * them. `launcher: true` also ships the `kana` launcher next to server.js, so
+ * a standalone deployment can run `node bin/kana.mjs password|serve`.
  */
 export async function copyRuntimeAssets(root, targetRoot, { launcher }) {
   await mkdir(path.join(targetRoot, ".next"), { recursive: true });

@@ -20,10 +20,7 @@ import type {
 import type { HermesRuntimeStatus } from "@/lib/runtime/hermes-control-client";
 import type { AgentModelCatalog, AgentModelSwitchResult } from "@/lib/agent/types";
 import type { Emotion } from "@/lib/presentation/types";
-import {
-  LIVE2D_SAMPLE_COPYRIGHT_NOTICE,
-  OFFICIAL_LIVE2D_SAMPLES,
-} from "@/lib/avatar/defaults";
+import { OFFICIAL_LIVE2D_SAMPLES } from "@/lib/avatar/defaults";
 import { useDialogFocus } from "@/lib/accessibility/use-dialog-focus";
 import { getCopy } from "@/lib/ui/copy";
 import { HermesControlPanel } from "./hermes-control-panel";
@@ -598,37 +595,13 @@ export function SettingsDialog({
                     />
                   </WardrobeGrid>
                   {avatarNotice ? <p className="mt-3 text-[11px] leading-relaxed text-muted" role="status">{avatarNotice}</p> : null}
-                  <details className="mt-3 text-[11px] leading-relaxed text-faint">
-                    <summary className="kana-details-summary kana-focus kana-plus-summary cursor-pointer font-extrabold text-muted hover:text-ink">
-                      {settingsCopy.includedAvatarAbout}
-                    </summary>
-                    <p className="mt-2">{LIVE2D_SAMPLE_COPYRIGHT_NOTICE}</p>
-                  </details>
                 </SettingsGroup>
                 ) : null}
 
-                {draft.avatarVisible && draft.live2d.modelId ? (
-                  avatarCapabilitiesLoading ? (
-                    <SettingsGroup title={settingsCopy.avatarBehaviorTitle}>
-                      <p className="text-[11px] text-muted" role="status">{settingsCopy.avatarBehaviorLoading}</p>
-                    </SettingsGroup>
-                  ) : avatarCapabilitiesError || !avatarCapabilities ? (
-                    <SettingsGroup title={settingsCopy.avatarBehaviorTitle}>
-                      <p className="text-[11px] text-danger" role="status">{settingsCopy.avatarBehaviorFailed}</p>
-                    </SettingsGroup>
-                  ) : (
-                    <SettingsGroup>
-                      <AvatarExpressionPanel
-                        bindings={activeAvatarBindings}
-                        capabilities={avatarCapabilities}
-                        copy={settingsCopy}
-                        onChange={updateActiveAvatarBindings}
-                        onPreview={(emotion) => onPreviewAvatarEmotion(draft, emotion)}
-                        onPreviewTalking={() => onPreviewAvatarTalking(draft)}
-                      />
-                    </SettingsGroup>
-                  )
-                ) : null}
+                {/* Intentionally not rendered: the avatar expression panel is
+                    still untested, so this section is dead code for now. The
+                    panel, its capability checks, bindings, and preview
+                    handlers stay in place until those tests exist. */}
 
                 <SettingsGroup title={settingsCopy.stageTitle}>
                   <input

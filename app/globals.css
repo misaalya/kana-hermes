@@ -1301,6 +1301,58 @@ video.kana-media-preview {
   user-select: none;
 }
 
+/* The voice portrait is its play control: hover or keyboard focus swaps the
+   resting waveform for a play glyph, and a preview replaces it with the moving
+   wave. Touch devices skip the hover hint and start on the tap. */
+.kana-voice-preview {
+  position: relative;
+  padding: 0;
+}
+
+.kana-voice-preview-play {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: inherit;
+  background: inherit;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.kana-voice-preview:not(.is-active):focus-visible .kana-voice-preview-play {
+  opacity: 1;
+}
+
+@media (hover: hover) {
+  .kana-voice-preview:not(.is-active):hover .kana-voice-preview-play {
+    opacity: 1;
+  }
+}
+
+.kana-voice-preview.is-active .kana-voice-preview-play {
+  opacity: 0;
+}
+
+/* While the sample loads or plays, each waveform bar rises and falls in turn
+   so the icon carries a travelling wave. */
+.kana-voice-preview.is-active svg rect {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: kana-voice-wave-bar 900ms ease-in-out infinite;
+}
+
+.kana-voice-preview.is-active svg > g rect:nth-of-type(1) { animation-delay: -80ms; }
+.kana-voice-preview.is-active svg > rect:nth-of-type(1) { animation-delay: -160ms; }
+.kana-voice-preview.is-active svg > rect:nth-of-type(2) { animation-delay: -320ms; }
+.kana-voice-preview.is-active svg > rect:nth-of-type(3) { animation-delay: -480ms; }
+.kana-voice-preview.is-active svg > g rect:nth-of-type(2) { animation-delay: -560ms; }
+
+@keyframes kana-voice-wave-bar {
+  0%, 100% { transform: scaleY(0.4); }
+  50% { transform: scaleY(1); }
+}
+
 .kana-background-swatch {
   overflow: hidden;
   border-radius: 18px;
@@ -1322,6 +1374,14 @@ video.kana-media-preview {
 .kana-wardrobe-add:disabled {
   cursor: progress;
   opacity: 0.6;
+}
+
+/* Loading placeholders keep the size of the row they stand in for, so the
+   real content settles in without moving the block around it. */
+.kana-skeleton {
+  display: inline-block;
+  background: var(--surface-strong);
+  animation: kana-pulse 1.6s ease-in-out infinite;
 }
 
 /* Square corners in both Settings and the /docs sidebar. */
@@ -1809,6 +1869,66 @@ video.kana-media-preview {
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+/* The 404 and its caption hang in zero gravity on separate paths. Each has
+   its own out-of-step drift and tilt, with different periods, amplitudes, and
+   starting phases, so they wander independently instead of moving as one
+   chained body. Amplitudes are small, the tilt stays under two degrees, and
+   the layout stays centred, keeping both well inside the viewport and the gap
+   between them open. */
+.kana-not-found-code-x {
+  animation: kana-not-found-code-x 17s ease-in-out -4s infinite alternate;
+}
+
+.kana-not-found-code-y {
+  animation: kana-not-found-code-y 12s ease-in-out -7s infinite alternate;
+}
+
+.kana-not-found-code-r {
+  animation: kana-not-found-code-r 19s ease-in-out -6s infinite alternate;
+}
+
+.kana-not-found-caption-x {
+  animation: kana-not-found-caption-x 13s ease-in-out -9s infinite alternate;
+}
+
+.kana-not-found-caption-y {
+  animation: kana-not-found-caption-y 9s ease-in-out -2s infinite alternate;
+}
+
+.kana-not-found-caption-r {
+  animation: kana-not-found-caption-r 11s ease-in-out -3s infinite alternate;
+}
+
+@keyframes kana-not-found-code-x {
+  from { transform: translate3d(-14px, 0, 0); }
+  to { transform: translate3d(14px, 0, 0); }
+}
+
+@keyframes kana-not-found-code-y {
+  from { transform: translate3d(0, 3px, 0); }
+  to { transform: translate3d(0, -3px, 0); }
+}
+
+@keyframes kana-not-found-caption-x {
+  from { transform: translate3d(-18px, 0, 0); }
+  to { transform: translate3d(18px, 0, 0); }
+}
+
+@keyframes kana-not-found-caption-y {
+  from { transform: translate3d(0, 5px, 0); }
+  to { transform: translate3d(0, -5px, 0); }
+}
+
+@keyframes kana-not-found-code-r {
+  from { transform: rotate(-1.2deg); }
+  to { transform: rotate(1.2deg); }
+}
+
+@keyframes kana-not-found-caption-r {
+  from { transform: rotate(-1.8deg); }
+  to { transform: rotate(1.8deg); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -1819,6 +1939,18 @@ video.kana-media-preview {
     transition-duration: 0.01ms !important;
   }
 
+  .kana-not-found-code-x,
+  .kana-not-found-code-y,
+  .kana-not-found-code-r,
+  .kana-not-found-caption-x,
+  .kana-not-found-caption-y,
+  .kana-not-found-caption-r {
+    animation: none;
+  }
+
+  .kana-voice-preview.is-active svg rect {
+    animation: none;
+  }
 }
 
 @media (max-width: 639px) {
@@ -2090,21 +2222,3 @@ video.kana-media-preview {
   background: var(--surface-strong);
 }
 
-/* The fatal error pages (`app/error.tsx`, `app/global-error.tsx`) render outside
-   the workspace, so neither one has a header, a tray, or a panel. The mark is
-   the one shape they share with Kana: a blue disc with her か, the same accent
-   fill and on-accent ink as every pill. It has to be repeated inline in
-   `app/global-error.tsx`, which Next.js renders as its own document without
-   these global styles. */
-.kana-mark {
-  display: grid;
-  place-items: center;
-  width: 74px;
-  height: 74px;
-  border-radius: 999px;
-  background: var(--accent);
-  color: var(--on-accent);
-  font-size: 34px;
-  font-weight: 800;
-  line-height: 1;
-}

@@ -147,6 +147,11 @@ export function SettingsSegmented<T extends string>({
   );
 }
 
+/** A loading placeholder the size of the value it stands in for. */
+export function Skeleton({ className = "" }: { className?: string }) {
+  return <span aria-hidden="true" className={`kana-skeleton ${className}`} />;
+}
+
 /** Small status pill with a dot, for runtime states. */
 /** `capitalize` suits raw runtime states ("running"); pass false for sentences. */
 export function StatusPill({ tone, children, capitalize = true }: { tone: "ok" | "busy" | "error" | "idle"; children: React.ReactNode; capitalize?: boolean }) {

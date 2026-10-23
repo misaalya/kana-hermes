@@ -29,6 +29,8 @@ export type LocalHermesRuntimeStatus = {
   pid?: number;
   port: number;
   websocketUrl: string;
+  /** Kana holds this gateway's session token; the token itself never leaves the server. */
+  tokenAvailable: boolean;
   message: string;
 };
 
@@ -111,6 +113,17 @@ async function discoverProcessTokenByPort(port: number): Promise<string | null> 
 }
 
 /**
+ * Hermes keeps a random token in memory when it was started without
+ * HERMES_DASHBOARD_SESSION_TOKEN, so an adopted gateway with no readable token
+ * can be seen but not authenticated. The status says which case it is.
+ */
+function gatewayFoundMessage(port: number, token: string | null): string {
+  return token
+    ? `A Hermes gateway is already running on port ${port}.`
+    : `A Hermes gateway is running on port ${port}, but its session token could not be read. Stop it and start Hermes from Kana to connect.`;
+}
+
+/**
  * The environment `hermes serve` starts with: this server's, without Kana's
  * own settings, plus the session token. Hermes hands its environment to the
  * commands and code it runs, so KANA_JWT_SECRET (which signs Kana logins)
@@ -171,6 +184,7 @@ function publicStatus(current: ManagedRuntime, available: boolean): LocalHermesR
     ...(current.child?.pid ? { pid: current.child.pid } : {}),
     port: current.port,
     websocketUrl: endpoint(current.port),
+    tokenAvailable: current.token !== null,
     message: available
       ? current.lastMessage
       : "Local process control is available only through the Kana launcher.",
@@ -208,20 +222,24 @@ export async function inspectLocalHermesRuntime(
   const processes = await scanHermesServeProcesses();
   for (const proc of processes) {
     if (proc.port === current.port && (await probe(proc.port))) {
+      // The scanned process owns the target: an earlier token belonged to a
+      // process that has since exited and must not be reused.
+      const token = await readHermesProcessToken(proc.pid);
       current.state = "running";
       current.child = null;
-      current.token = (await readHermesProcessToken(proc.pid)) ?? current.token;
-      current.lastMessage = `Hermes already running on port ${proc.port}.`;
+      current.token = token;
+      current.lastMessage = gatewayFoundMessage(proc.port, token);
       return publicStatus(current, true);
     }
   }
   for (const proc of processes) {
     if (await probe(proc.port)) {
+      const token = await readHermesProcessToken(proc.pid);
       current.port = proc.port;
       current.state = "running";
       current.child = null;
-      current.token = (await readHermesProcessToken(proc.pid)) ?? current.token;
-      current.lastMessage = `A Hermes gateway was found on port ${proc.port}.`;
+      current.token = token;
+      current.lastMessage = gatewayFoundMessage(proc.port, token);
       return publicStatus(current, true);
     }
   }
@@ -247,9 +265,7 @@ export async function inspectLocalHermesRuntime(
     current.state = "running";
     current.child = null;
     current.token = await discoverProcessTokenByPort(detectedPort);
-    current.lastMessage = current.token
-      ? `A Hermes gateway is already running on port ${detectedPort}.`
-      : `A Hermes gateway is running on port ${detectedPort}, but its session token could not be read. Restart it from Kana to connect.`;
+    current.lastMessage = gatewayFoundMessage(detectedPort, current.token);
     return publicStatus(current, true);
   }
 
@@ -296,7 +312,7 @@ export async function startLocalHermesRuntime(options: {
     current.token = await discoverProcessTokenByPort(port);
     current.lastMessage = current.token
       ? "This port already has a Hermes server. Kana will connect without taking ownership."
-      : "This port already has a Hermes server, but its session token could not be read. Restart it from Kana to connect.";
+      : "This port already has a Hermes server, but its session token could not be read. Stop it and start Hermes from Kana to connect.";
     return publicStatus(current, true);
   }
   const executable = await resolveHermesExecutable();

@@ -6,6 +6,8 @@ export type HermesRuntimeStatus = {
   pid?: number;
   port: number;
   websocketUrl: string;
+  /** Kana holds a session token for this gateway. The token stays on the server. */
+  tokenAvailable: boolean;
   message: string;
 };
 

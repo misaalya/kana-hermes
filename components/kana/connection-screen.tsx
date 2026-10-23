@@ -1,10 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { selectShowGate } from "@/lib/services/workspace-setup";
 import { getCopy } from "@/lib/ui/copy";
 import { useKanaStore, useKanaWorkspace } from "./kana-workspace-context";
-import { StatusPill } from "./settings-layout";
 import { btnPrimary } from "./ui";
 
 /** Whether the workspace should stand down and show the cable screen. */
@@ -12,15 +11,7 @@ export function useConnectionGate(): boolean {
   const ready = useKanaStore("conversations", (state) => state.ready);
   const connectionState = useKanaStore("agentSession", (state) => state.connectionState);
   const wizardMode = useKanaStore("workspace", (state) => state.wizardMode);
-  const connectionGateOpen = useKanaStore("workspace", (state) => state.connectionGateOpen);
-  const automaticConnectFinished = useKanaStore("workspace", (state) => state.automaticConnectFinished);
-  return selectShowGate({
-    ready,
-    connectionState,
-    wizardMode,
-    connectionGateOpen,
-    automaticConnectFinished,
-  });
+  return selectShowGate({ ready, connectionState, wizardMode });
 }
 
 /** Matches the screen's opacity transition in app/globals.css. */
@@ -35,37 +26,30 @@ export type ConnectionScreenController = {
   leaving: boolean;
   /** The workspace's avatar and chat should stay unmounted. */
   connectionDown: boolean;
-  /** A manual attempt succeeded and the seating animation is playing. */
+  /** The relay reported connected and the seating animation is playing. */
   playing: boolean;
-  /** The user asked to connect; keep the screen up through the animation. */
-  start(): void;
   /** The seating animation ended; step the screen away. */
   finish(): void;
 };
 
 /** One state for the screen and the workspace that steps aside for it. */
 export function useConnectionScreen(): ConnectionScreenController {
+  const workspace = useKanaWorkspace();
   const blocked = useConnectionGate();
   const connectionState = useKanaStore("agentSession", (state) => state.connectionState);
+  const seatPending = useKanaStore("workspace", (state) => state.seatPending);
   const plugged = connectionState === "connected";
-  // A manual attempt keeps the screen up so the seating animation plays out.
-  const [linger, setLinger] = useState(false);
   const [leaving, setLeaving] = useState(false);
-  const playing = linger && plugged && !blocked && !leaving;
+  const playing = seatPending && plugged && !blocked && !leaving;
 
   useEffect(() => {
     if (!leaving) return;
     const done = window.setTimeout(() => {
       setLeaving(false);
-      setLinger(false);
+      workspace.stores.workspace.setState({ seatPending: false });
     }, GATE_LEAVE_MS);
     return () => window.clearTimeout(done);
-  }, [leaving]);
-
-  const start = useCallback(() => {
-    setLinger(true);
-    setLeaving(false);
-  }, []);
+  }, [leaving, workspace]);
 
   const finish = useCallback(() => {
     setLeaving(true);
@@ -73,11 +57,10 @@ export function useConnectionScreen(): ConnectionScreenController {
 
   return {
     blocked,
-    visible: blocked || (linger && plugged),
+    visible: blocked || (seatPending && plugged),
     leaving,
-    connectionDown: blocked || (linger && !leaving),
+    connectionDown: blocked || (seatPending && plugged && !leaving),
     playing,
-    start,
     finish,
   };
 }
@@ -87,6 +70,7 @@ const PLAY_TOTAL_MS = 500;
 const PLAY_TAIL_MS = 120;
 const PLAY_FRAME_MS = (PLAY_TOTAL_MS - PLAY_TAIL_MS) / (PLAY_FRAME_COUNT - 1);
 const PLAY_SETTLE_MS = 180;
+const IDLE_SETTLE_MS = 240;
 const FRAME_WIDTH = 1120;
 const FRAME_HEIGHT = 280;
 
@@ -99,7 +83,7 @@ function frameSource(index: number): string {
 
 /**
  * The two ends of the Hermes cable. While Hermes is unreachable they reach for
- * each other from frame 1 of the recording. When a manual connect succeeds
+ * each other from frame 1 of the recording. When the relay reports connected
  * they settle back onto that frame's exact marks, then the recording plays.
  */
 function ConnectionStage({
@@ -141,8 +125,72 @@ function ConnectionStage({
     };
   }, []);
 
+  // The rendered pose lags the requested one only on the way back: a failed
+  // attempt eases into the idle reach instead of restarting it from frame 1.
+  const [visualPose, setVisualPose] = useState<GatePose>(pose);
+  const idleSettleRef = useRef<Animation[] | null>(null);
+
+  const releaseIdleSettle = useCallback(() => {
+    const animations = idleSettleRef.current;
+    if (!animations) return;
+    idleSettleRef.current = null;
+    for (const animation of animations) animation.cancel();
+    const stage = stageRef.current;
+    if (!stage) return;
+    const pieces = Array.from(
+      stage.querySelectorAll<HTMLElement>(".kana-connection-piece"),
+    );
+    for (const piece of pieces) piece.style.animation = "";
+  }, []);
+
+  useEffect(() => {
+    if (pose === "try") {
+      releaseIdleSettle();
+      if (visualPose === "try") return;
+      const frame = window.requestAnimationFrame(() => setVisualPose("try"));
+      return () => window.cancelAnimationFrame(frame);
+    }
+    if (visualPose !== "try" || mode === "play") return;
+    const stage = stageRef.current;
+    if (!stage || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      const frame = window.requestAnimationFrame(() => setVisualPose("idle"));
+      return () => window.cancelAnimationFrame(frame);
+    }
+    const pieces = Array.from(
+      stage.querySelectorAll<HTMLElement>(".kana-connection-piece"),
+    );
+    const animations = pieces.map((piece) => {
+      const current = getComputedStyle(piece).transform;
+      piece.style.animation = "none";
+      return piece.animate(
+        [{ transform: current }, { transform: "none" }],
+        {
+          duration: IDLE_SETTLE_MS,
+          easing: "cubic-bezier(0.3, 0.7, 0.3, 1)",
+          fill: "forwards",
+        },
+      );
+    });
+    idleSettleRef.current = animations;
+    void Promise.all(
+      animations.map((animation) => animation.finished.catch(() => {})),
+    ).then(() => {
+      // Hold the eased pose until the idle class lands; the layout effect then
+      // releases the override so the idle loop starts from that same pose.
+      if (idleSettleRef.current === animations) setVisualPose("idle");
+    });
+  }, [mode, pose, releaseIdleSettle, visualPose]);
+
+  useLayoutEffect(() => {
+    if (visualPose === "idle") releaseIdleSettle();
+  }, [releaseIdleSettle, visualPose]);
+
+  useEffect(() => releaseIdleSettle, [releaseIdleSettle]);
+
   useEffect(() => {
     if (mode !== "play") return;
+    // A failed attempt may still be easing back; the recording owns the handoff.
+    releaseIdleSettle();
     const stage = stageRef.current;
     const canvas = canvasRef.current;
     const context = canvas?.getContext("2d");
@@ -240,14 +288,14 @@ function ConnectionStage({
       }
       canvas.style.visibility = "hidden";
     };
-  }, [mode]);
+  }, [mode, releaseIdleSettle]);
 
   return (
     <div
       ref={stageRef}
       role="img"
       aria-label={label}
-      className={`kana-connection-stage ${pose === "try" ? "is-trying" : "is-idle"}`}
+      className={`kana-connection-stage ${visualPose === "try" ? "is-trying" : "is-idle"}`}
     >
       <canvas
         ref={canvasRef}
@@ -321,21 +369,17 @@ export function ConnectionScreen({ screen }: { screen: ConnectionScreenControlle
   const copy = getCopy(locale);
   const text = copy.workspace;
   const gateCopy = copy.gate;
+  // A gateway Kana can see but not authenticate: Hermes was started without a
+  // session token in its environment, so only that process knows the token.
+  const adoptionBlocked =
+    hermesRuntime &&
+    hermesRuntime.state === "running" &&
+    !hermesRuntime.managed &&
+    !hermesRuntime.tokenAvailable
+      ? hermesRuntime
+      : null;
   const detectedExternalGateway = Boolean(hermesRuntime?.state === "running" && !hermesRuntime.managed);
-  // Only a real outcome needs a pill: the heading carries the idle and
-  // connecting states, so the gate never says the same thing twice.
-  const statusText = plugged
-    ? gateCopy.connected
-    : busy
-      ? null
-      : connectionState === "authentication_failed"
-        ? gateCopy.authInvalid
-        : connectionState === "incompatible"
-          ? gateCopy.incompatible
-          : connectionState === "error"
-            ? gateCopy.failed
-            : null;
-  const runtimeHint = !hermesRuntime
+  const runtimeHint = !hermesRuntime || adoptionBlocked
     ? null
     : detectedExternalGateway
       ? gateCopy.detectedExternal(hermesRuntime.port)
@@ -354,16 +398,16 @@ export function ConnectionScreen({ screen }: { screen: ConnectionScreenControlle
   const stagePose = stageMode === "play" || busy ? "try" : "idle";
 
   const connect = () => {
-    screen.start();
     void workspace.actions.connectHermes();
   };
 
   return (
     <section
       aria-label={text.gatewayAria}
-      className={`kana-connection-screen absolute inset-0 z-10 flex flex-col items-center justify-center overflow-hidden bg-bg px-6 pb-10 pt-24 text-center ${screen.leaving && !screen.blocked ? "is-leaving" : ""}`}
+      className={`kana-connection-screen absolute inset-0 z-10 flex flex-col items-center overflow-hidden bg-bg px-6 pb-10 pt-24 text-center ${screen.leaving && !screen.blocked ? "is-leaving" : ""}`}
     >
-      <div className="kana-connection-art w-full animate-kana-in">
+      {/* The art keeps its own slot so a longer status text never moves it. */}
+      <div className="kana-connection-art mt-[16vh] w-full animate-kana-in">
         <ConnectionStage
           mode={stageMode}
           pose={stagePose}
@@ -372,55 +416,65 @@ export function ConnectionScreen({ screen }: { screen: ConnectionScreenControlle
         />
       </div>
 
-      <h2
-        aria-live="polite"
-        className={`mt-2 text-xl font-bold sm:text-2xl ${plugged || busy ? "text-ink" : "text-danger"}`}
-      >
-        {plugged ? (
-          gateCopy.connectedTitle
-        ) : busy ? (
-          <>
-            {gateCopy.reconnecting}
-            <ConnectingDots />
-          </>
-        ) : (
-          text.gatewayTitle
-        )}
-      </h2>
+      <div className="flex w-full flex-1 flex-col items-center">
+        <h2
+          aria-live="polite"
+          className={`mt-2 text-xl font-bold sm:text-2xl ${plugged || busy ? "text-ink" : "text-danger"}`}
+        >
+          {plugged ? (
+            gateCopy.connectedTitle
+          ) : busy ? (
+            <>
+              {gateCopy.reconnecting}
+              <ConnectingDots />
+            </>
+          ) : adoptionBlocked ? (
+            gateCopy.externalTokenStatus
+          ) : connectionState === "authentication_failed" ? (
+            gateCopy.authInvalid
+          ) : connectionState === "incompatible" ? (
+            gateCopy.incompatible
+          ) : connectionState === "error" ? (
+            gateCopy.failed
+          ) : (
+            text.gatewayTitle
+          )}
+        </h2>
 
-      {statusText ? (
-        <div role="status" className="mt-2.5">
-          <StatusPill tone={plugged ? "ok" : "error"} capitalize={false}>
-            {statusText}
-          </StatusPill>
-        </div>
-      ) : null}
+        {adoptionBlocked && !busy ? (
+          <p className="mt-4 w-full max-w-prose text-center text-sm leading-6 text-muted">
+            {gateCopy.externalTokenBody(adoptionBlocked.port)}
+          </p>
+        ) : null}
 
-      <button
-        type="button"
-        className={`${btnPrimary} mt-7 min-w-52 text-sm`}
-        onClick={connect}
-        disabled={busy || plugged}
-      >
-        {plugged
-          ? gateCopy.connected
-          : connectionInTransition || connectPhase === "connecting"
-            ? gateCopy.connecting
-            : connectPhase === "auto_starting"
-              ? gateCopy.startButton
-              : gateCopy.connectButton}
-      </button>
+        <button
+          type="button"
+          className={`${btnPrimary} mt-7 min-w-52 text-sm`}
+          onClick={connect}
+          disabled={busy || plugged}
+        >
+          {plugged
+            ? gateCopy.connected
+            : connectionInTransition || connectPhase === "connecting"
+              ? gateCopy.connecting
+              : connectPhase === "auto_starting"
+                ? gateCopy.startButton
+                : adoptionBlocked
+                  ? gateCopy.connectAgain
+                  : gateCopy.connectButton}
+        </button>
 
-      {showRuntimeHint ? (
-        <div className="mt-4 flex max-w-xs flex-col items-center gap-1 text-[11px] leading-relaxed">
-          {runtimeHint ? <p className="text-faint">{runtimeHint}</p> : null}
-          {hermesRuntimeNotice ? (
-            <p role="status" className="max-w-full break-words text-faint">
-              {hermesRuntimeNotice}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
+        {showRuntimeHint ? (
+          <div className="mt-4 flex max-w-xs flex-col items-center gap-1 text-[11px] leading-relaxed">
+            {runtimeHint ? <p className="text-faint">{runtimeHint}</p> : null}
+            {hermesRuntimeNotice ? (
+              <p role="status" className="max-w-full break-words text-faint">
+                {hermesRuntimeNotice}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
     </section>
   );
 }

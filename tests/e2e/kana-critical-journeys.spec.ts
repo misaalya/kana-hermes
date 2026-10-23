@@ -1,4 +1,11 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import {
+  expect,
+  test,
+  type Browser,
+  type BrowserContext,
+  type Locator,
+  type Page,
+} from "@playwright/test";
 import { E2E_ACCESS_PASSWORD } from "./access-password";
 
 /** A reply in the Markdown Hermes writes, with a URL too long to wrap at a space. */
@@ -179,6 +186,7 @@ async function installFakeHermes(page: Page): Promise<FakeHermes> {
         executable: "/usr/bin/hermes",
         port: 9119,
         websocketUrl: "ws://127.0.0.1:9119/api/ws",
+        tokenAvailable: true,
         message: "Hermes test relay is ready.",
       }),
     }),
@@ -936,6 +944,7 @@ test("Settings → Connection separates Hermes state from its one useful action"
     pid: 4242,
     port: 9119,
     websocketUrl: "ws://127.0.0.1:9119/api/ws",
+    tokenAvailable: true,
     message: "Hermes UI gateway is running under Kana.",
   };
   const actions: string[] = [];
@@ -1632,14 +1641,57 @@ test("arms the approval before Enter can run, and Deny stays immediately availab
   await expect(heading).toBeHidden();
 });
 
-test("stands the workspace down while Hermes is unreachable and plugs in on connect", async ({
-  page,
-}) => {
-  const gatePage = await page.context().newPage();
+/**
+ * A fresh signed-in context whose relay and runtime answer before its first
+ * page. A second page in the fixture's context raced the first fetches and
+ * left them paused forever.
+ */
+async function openGatePage(
+  browser: Browser,
+  page: Page,
+  options: {
+    runtime: "running" | "stopped" | "external-unreadable";
+    connectOnFirstAttempt: boolean;
+    runtimeDelayMs?: number;
+  },
+): Promise<{ context: BrowserContext; gatePage: Page }> {
+  const { baseURL, viewport, userAgent, deviceScaleFactor, isMobile, hasTouch } =
+    test.info().project.use;
+  const context = await browser.newContext({
+    baseURL,
+    viewport,
+    userAgent,
+    deviceScaleFactor,
+    isMobile,
+    hasTouch,
+    serviceWorkers: "block",
+    storageState: { cookies: await page.context().cookies(), origins: [] },
+  });
+  const runtime = {
+    controlAvailable: true,
+    state: options.runtime === "stopped" ? "stopped" : "running",
+    managed: false,
+    executable: "/usr/bin/hermes",
+    port: 9119,
+    websocketUrl: "ws://127.0.0.1:9119/api/ws",
+    tokenAvailable: options.runtime === "running",
+    message: "Hermes gateway detected.",
+  };
+  await context.route("**/api/kana/sessions", (route) =>
+    route.fulfill({ json: { sessions: [] } }),
+  );
+  await context.route("**/api/hermes/rpc", (route) =>
+    route.fulfill({ status: 502, json: { error: "Hermes is not running." } }),
+  );
+  await context.route("**/api/local-runtime/hermes*", async (route) => {
+    if (options.runtimeDelayMs) await new Promise((resolve) => setTimeout(resolve, options.runtimeDelayMs));
+    await route.fulfill({ json: runtime });
+  });
+  const gatePage = await context.newPage();
   await gatePage.route(/cubism\.live2d\.com|model\.res\.live2d\.com/, (route) =>
     route.abort(),
   );
-  await gatePage.addInitScript(() => {
+  await gatePage.addInitScript((connectOnFirstAttempt: boolean) => {
     localStorage.setItem(
       "kana.preferences.v3",
       JSON.stringify({
@@ -1656,9 +1708,10 @@ test("stands the workspace down while Hermes is unreachable and plugs in on conn
       __kanaGateDrop?: () => void;
     };
     const target = window as GateWindow;
+    target.__kanaGateAllowConnect = connectOnFirstAttempt;
 
-    // The relay stream answers unreachable until the test opens it after the
-    // manual attempt, so the waiting and connected states can be observed.
+    // The relay stream answers unreachable until the test opens it, so the
+    // waiting and connected states can be observed.
     class GateEventSource extends EventTarget {
       static readonly CONNECTING = 0;
       static readonly OPEN = 1;
@@ -1676,14 +1729,15 @@ test("stands the workspace down while Hermes is unreachable and plugs in on conn
         queueMicrotask(() => {
           this.readyState = GateEventSource.OPEN;
           this.dispatchEvent(new Event("open"));
-          const deliver = () =>
+          const deliver = () => {
             this.dispatchEvent(
               new MessageEvent("gateway", {
                 data: JSON.stringify({ connected: Boolean(target.__kanaGateAllowConnect) }),
               }),
             );
-          if (target.__kanaGateAllowConnect) setTimeout(deliver, 700);
-          else deliver();
+          };
+          // Keep the attempt pending long enough to observe the gate it owns.
+          setTimeout(deliver, target.__kanaGateAllowConnect ? 700 : 400);
         });
       }
 
@@ -1696,32 +1750,100 @@ test("stands the workspace down while Hermes is unreachable and plugs in on conn
       configurable: true,
       value: GateEventSource,
     });
-  });
-  await gatePage.route("**/api/kana/sessions", (route) =>
-    route.fulfill({ json: { sessions: [] } }),
-  );
-  await gatePage.route("**/api/hermes/rpc", (route) =>
-    route.fulfill({ status: 502, json: { error: "Hermes is not running." } }),
-  );
-  const stopped = {
-    controlAvailable: true,
-    state: "stopped",
-    managed: false,
-    executable: "/usr/bin/hermes",
-    port: 9119,
-  };
-  await gatePage.route("**/api/local-runtime/hermes*", (route) =>
-    route.fulfill({ json: stopped }),
-  );
+  }, options.connectOnFirstAttempt);
+  return { context, gatePage };
+}
 
+test("plays the seating animation for the automatic connection", async ({
+  page,
+  browser,
+}) => {
+  test.setTimeout(90_000);
+  const { context, gatePage } = await openGatePage(browser, page, {
+    runtime: "running",
+    connectOnFirstAttempt: true,
+  });
+  await gatePage.goto("/");
+  const screen = gatePage.getByRole("region", { name: "Hermes connection" });
+  // The automatic attempt shows the gate while the relay connects.
+  await expect(screen.locator(".kana-connection-stage")).toHaveClass(/is-trying/);
+  await expect(screen.getByRole("heading", { name: "Reconnecting" })).toBeVisible();
+  // Connected is not the end: the cable seats, the workspace stays down until
+  // the seating animation has played.
+  await expect(screen.getByRole("heading", { name: "Connected to Hermes" })).toBeVisible();
+  await expect(screen.locator(".kana-connection-canvas")).toBeVisible();
+  await expect(gatePage.getByRole("textbox", { name: "Message Kana" })).toHaveCount(0);
+  await expect(screen).toBeHidden({ timeout: 5000 });
+  await expect(gatePage.getByRole("textbox", { name: "Message Kana" })).toBeVisible();
+  await context.close();
+});
+
+test("names an external Hermes whose session token Kana cannot read", async ({
+  page,
+  browser,
+}) => {
+  test.setTimeout(90_000);
+  const { context, gatePage } = await openGatePage(browser, page, {
+    runtime: "external-unreadable",
+    connectOnFirstAttempt: false,
+    runtimeDelayMs: 800,
+  });
   await gatePage.goto("/");
   const screen = gatePage.getByRole("region", { name: "Hermes connection" });
   await expect(screen).toBeVisible();
-  await expect(screen.getByRole("heading", { name: "Hermes is not connected" })).toHaveClass(/text-danger/);
+  const art = screen.locator(".kana-connection-art");
+  const gateHeading = screen.getByRole("heading");
+  const before = { art: await art.boundingBox(), heading: await gateHeading.boundingBox() };
+  // A visible gateway with no readable token is its own outcome, not a plain
+  // connection failure: the heading says what happened and what to do.
+  await expect(
+    screen.getByRole("heading", { name: "Session token unavailable" }),
+  ).toBeVisible();
+  // The explanation arrives after the runtime check; the art and the heading
+  // must stay where they were instead of re-centering with the new text.
+  const after = { art: await art.boundingBox(), heading: await gateHeading.boundingBox() };
+  expect(before.art).not.toBeNull();
+  expect(after.art).not.toBeNull();
+  expect(before.heading).not.toBeNull();
+  expect(after.heading).not.toBeNull();
+  expect(Math.abs(after.art!.y - before.art!.y)).toBeLessThan(1);
+  expect(Math.abs(after.heading!.y - before.heading!.y)).toBeLessThan(1);
+  await expect(screen.getByRole("status")).toHaveCount(0);
+  await expect(screen.getByText(/found a Hermes gateway on port 9119/)).toBeVisible();
+  await expect(screen.getByText(/Ctrl\+C/)).toBeVisible();
+  await expect(screen.getByText("Connection failed", { exact: true })).toHaveCount(0);
+  await expect(screen.getByRole("button", { name: "Connect again" })).toBeEnabled();
+  await gatePage.screenshot({
+    path: `test-results/connection-external-token-${test.info().project.name}.png`,
+  });
+  await context.close();
+});
+
+test("stands the workspace down while Hermes is unreachable and plugs in on connect", async ({
+  page,
+  browser,
+}) => {
+  // This journey spends real time in each connection phase, including the
+  // first automatic attempt, so the default timeout is not enough.
+  test.setTimeout(90_000);
+  const { context, gatePage } = await openGatePage(browser, page, {
+    runtime: "stopped",
+    connectOnFirstAttempt: false,
+  });
+  await gatePage.goto("/");
+  const screen = gatePage.getByRole("region", { name: "Hermes connection" });
+  // The first automatic attempt belongs to the gate too: the workspace and its
+  // composer must never show while the relay is still connecting.
+  await expect(screen).toBeVisible();
+  await expect(screen.locator(".kana-connection-stage")).toHaveClass(/is-trying/);
+  await expect(screen.getByRole("heading", { name: "Reconnecting" })).toBeVisible();
+  // Scope to the app: the Next.js dev overlay has its own empty alert region.
+  await expect(gatePage.locator("main").getByRole("alert")).toHaveCount(0);
+  await expect(screen.getByRole("heading", { name: "Connection failed" })).toHaveClass(/text-danger/);
   await expect(
     screen.getByRole("img", { name: "Hermes cable and plug disconnected" }),
   ).toBeVisible();
-  await expect(screen.getByText("Connection failed", { exact: true })).toBeVisible();
+  await expect(screen.getByRole("status")).toHaveCount(0);
   await expect(screen.getByRole("button", { name: "Connect Hermes" })).toBeEnabled();
 
   // The header stays available; the avatar and the chat step away.
@@ -1740,7 +1862,7 @@ test("stands the workspace down while Hermes is unreachable and plugs in on conn
     (window as Window & { __kanaGateAllowConnect?: boolean }).__kanaGateAllowConnect = true;
   });
   await screen.getByRole("button", { name: "Connect Hermes" }).click();
-  await expect(screen).toHaveClass(/is-busy/);
+  await expect(screen.locator(".kana-connection-stage")).toHaveClass(/is-trying/);
   await expect(screen.getByRole("heading", { name: "Reconnecting" })).toBeVisible();
   await expect(screen.getByRole("button", { name: "Connecting…" })).toBeDisabled();
   await gatePage.waitForTimeout(250);
@@ -1748,7 +1870,6 @@ test("stands the workspace down while Hermes is unreachable and plugs in on conn
     path: `test-results/connection-plugging-${test.info().project.name}.png`,
   });
   await expect(screen.getByRole("img", { name: "Hermes cable and plug connected" })).toBeVisible();
-  await expect(screen).toHaveClass(/is-plugged/);
   await expect(screen.getByRole("heading", { name: "Connected to Hermes" })).toBeVisible();
   await gatePage.screenshot({
     path: `test-results/connection-plugged-${test.info().project.name}.png`,
@@ -1767,9 +1888,10 @@ test("stands the workspace down while Hermes is unreachable and plugs in on conn
     target.__kanaGateDrop?.();
   });
   await expect(screen).toBeVisible();
-  // No separate "Reconnecting" pill: the heading owns the status and turns
-  // red only when the gate is waiting without an attempt in flight.
+  // The heading is the only status label, and it turns red only when the gate
+  // is waiting without an attempt in flight.
   await expect(screen.getByRole("heading", { name: "Hermes is not connected" })).toHaveClass(/text-danger/);
+  await expect(screen.getByRole("status")).toHaveCount(0);
   await expect(screen.getByText("Reconnecting…", { exact: true })).toHaveCount(0);
   // The retry loop must not trap the user: the button stays usable so a manual
   // attempt can start a Hermes that died.
@@ -1778,7 +1900,7 @@ test("stands the workspace down while Hermes is unreachable and plugs in on conn
   await gatePage.screenshot({
     path: `test-results/connection-reconnecting-${test.info().project.name}.png`,
   });
-  await gatePage.close();
+  await context.close();
 });
 
 test("shows the sudo prompt in the shared dialog shell and sends the password once", async ({
@@ -2327,8 +2449,8 @@ test("serves security headers and keeps the composer reachable at target widths"
   expect(landscape.composerBottom).toBeLessThanOrEqual(landscape.viewportHeight);
 });
 
-function testToneWav(): Buffer {
-  const samples = 16000;
+function testToneWav(seconds = 1): Buffer {
+  const samples = 16000 * seconds;
   const wav = Buffer.alloc(44 + samples * 2);
   wav.write("RIFF", 0); wav.writeUInt32LE(wav.length - 8, 4); wav.write("WAVEfmt ", 8);
   wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
@@ -2440,6 +2562,8 @@ test("Settings → Voice shows voice cards and confirms before removing one", as
     { id: "irodori-model", name: "Irodori", kind: "model", isDefault: false },
   ];
   const deletes: string[] = [];
+  const previews: Array<{ id?: string }> = [];
+  let rejectPreview = false;
   await page.route("**/api/voice/tts/engine", (route) => route.fulfill({
     json: {
       provider: { id: "irodori-local", type: "irodori-local", name: "Irodori TTS", configured: true, model: "Irodori-TTS v4.1 Anime", capabilities: { instruction: false, localInstall: true, upstreamCancellation: true, voiceLibrary: true } },
@@ -2462,8 +2586,16 @@ test("Settings → Voice shows voice cards and confirms before removing one", as
     },
   }));
   await page.route("**/api/kana/voices**", (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/kana/voices/preview") {
+      previews.push(route.request().postDataJSON());
+      if (rejectPreview) {
+        return route.fulfill({ status: 503, json: { error: "Preview unavailable" } });
+      }
+      return route.fulfill({ contentType: "audio/wav", body: testToneWav(5) });
+    }
     if (route.request().method() === "DELETE") {
-      const id = new URL(route.request().url()).searchParams.get("id") ?? "";
+      const id = url.searchParams.get("id") ?? "";
       deletes.push(id);
       voices = voices.filter((voice) => voice.id !== id);
       return route.fulfill({ json: { removed: true } });
@@ -2488,7 +2620,38 @@ test("Settings → Voice shows voice cards and confirms before removing one", as
   await expect(library.getByRole("radio", { name: "Irodori" })).toBeVisible();
   await expect(library.getByRole("button", { name: "Add sample" })).toBeVisible();
 
-  await library.getByRole("radio", { name: "Studio reference" }).click();
+  const kanaCard = library
+    .locator(".kana-wardrobe-card")
+    .filter({ has: page.getByRole("radio", { name: "Kana", exact: true }) });
+  const kanaPreview = kanaCard.locator(".kana-voice-preview");
+  await expect(kanaPreview).toHaveAccessibleName("Preview the voice “Kana”");
+  if (test.info().project.name === "desktop-chrome") {
+    await kanaPreview.hover();
+    await expect(kanaPreview.locator(".kana-voice-preview-play")).toHaveCSS("opacity", "1");
+  }
+  await kanaPreview.click();
+  await expect(kanaPreview).toHaveAccessibleName("Stop the preview of “Kana”");
+  await expect(kanaPreview).toHaveAttribute("aria-pressed", "true");
+  await expect(kanaPreview.locator(".kana-voice-preview-play")).toHaveCSS("opacity", "0");
+  await expect
+    .poll(async () => kanaPreview.locator("rect").first().evaluate((node) => getComputedStyle(node).animationName))
+    .toBe("kana-voice-wave-bar");
+  expect(previews).toEqual([{ id: "kc-default" }]);
+  await kanaPreview.click();
+  await expect(kanaPreview).toHaveAttribute("aria-pressed", "false");
+  await expect(kanaPreview).toHaveAccessibleName("Preview the voice “Kana”");
+  await expect
+    .poll(async () => kanaPreview.locator("rect").first().evaluate((node) => getComputedStyle(node).animationName))
+    .toBe("none");
+
+  rejectPreview = true;
+  await kanaPreview.click();
+  await expect(dialog.getByText("Preview unavailable")).toBeVisible();
+  await expect(kanaPreview).toHaveAttribute("aria-pressed", "false");
+
+  await library
+    .getByRole("radio", { name: "Studio reference" })
+    .click({ position: { x: 12, y: 12 } });
   await expect(library.getByRole("radio", { name: "Studio reference" }))
     .toHaveAttribute("aria-checked", "true");
 

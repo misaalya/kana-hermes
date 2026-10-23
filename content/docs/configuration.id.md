@@ -187,6 +187,16 @@ Hermes adalah agen AI yang memproses pesan dan menyusun balasan Kana. Kana menem
 
 Perubahan pada bagian `hermes` baru berlaku setelah Kana dimulai ulang.
 
+### Gateway Hermes yang sudah berjalan
+
+Di Linux, apabila `hermes serve` sudah mendengarkan port, Kana mengadopsinya hanya jika proses tersebut dijalankan dengan `HERMES_DASHBOARD_SESSION_TOKEN` pada lingkungannya. Tanpa variabel itu, Hermes membuat token acak yang hanya diketahui prosesnya sendiri, sehingga program lain tidak dapat terhubung. Layar koneksi Kana menyebutkan keadaan ini dan meminta Anda menghentikan proses tersebut di terminal asalnya (Ctrl+C), lalu memilih "Hubungkan lagi"; Kana akan menjalankan Hermes sendiri dengan token yang dibuat dan disimpannya di server. Untuk tetap memakai gateway yang dijalankan manual, sediakan tokennya sendiri:
+
+```bash
+HERMES_DASHBOARD_SESSION_TOKEN=<token> hermes serve --host 127.0.0.1 --port 9119
+```
+
+Kana membaca token dari lingkungan proses itu, dan token tetap tersimpan di server, bukan di browser.
+
 ## Guardrail prompt {#guardrail}
 
 Bagian `guardrails` memeriksa pesan Anda sebelum Kana mengirimkannya ke Hermes. Anda menulis aturan sebagai pernyataan biasa tentang apa yang tidak boleh dilakukan Kana; Kana mengubahnya menjadi satu pertanyaan ya/tidak yang diajukan kepada Jev, model TypeSafe. Jev mengembalikan probabilitas, bukan teks, dan Kana sendiri yang membandingkan probabilitas itu dengan ambang batas Anda lalu menolak pesannya.

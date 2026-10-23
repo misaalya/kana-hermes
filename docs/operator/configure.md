@@ -49,8 +49,10 @@ adds host names that a local-mode Kana also answers.
 ## Hermes
 
 These keys matter only for a `hermes serve` that Kana itself starts. A gateway
-that is already running keeps its own port and working directory, and Kana
-adopts it instead.
+that is already running keeps its own port and working directory; Kana adopts
+it when its session token can be read from the process environment, and
+otherwise the connection screen asks for that process to be stopped so Kana can
+start Hermes itself.
 
 | Key | Default | Effect |
 | --- | --- | --- |

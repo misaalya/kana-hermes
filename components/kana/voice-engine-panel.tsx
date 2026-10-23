@@ -13,6 +13,7 @@ import {
   SettingsGroup,
   SettingsRow,
   SettingsRows,
+  Skeleton,
   StatusPill,
 } from "./settings-layout";
 
@@ -129,7 +130,24 @@ export function VoiceEnginePanel({ locale }: { locale: UiLocale }) {
       ariaLabel={copy.aria}
       action={<StatusPill tone={tone} capitalize={false}>{copy.states[state]}</StatusPill>}
     >
-      {snapshot ? (
+      {!snapshot && !notice ? (
+        <>
+          <SettingsRows>
+            <SettingsRow label={copy.modelLabel} inline>
+              <Skeleton className="h-3.5 w-24" />
+            </SettingsRow>
+            <SettingsRow label={<Skeleton className="h-3 w-16" />} inline>
+              <Skeleton className="h-3.5 w-20" />
+            </SettingsRow>
+            <SettingsRow label={<Skeleton className="h-3 w-12" />} inline>
+              <Skeleton className="h-3.5 w-24" />
+            </SettingsRow>
+          </SettingsRows>
+          <div className="mt-3 flex flex-wrap justify-end gap-2 max-sm:justify-start" aria-hidden="true">
+            <Skeleton className="h-9 w-24 rounded-full" />
+          </div>
+        </>
+      ) : snapshot ? (
         <SettingsRows>
           <SettingsRow label={copy.modelLabel} inline>
             <span className="text-xs font-semibold text-ink-dim">

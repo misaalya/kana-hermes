@@ -253,6 +253,14 @@ export function StopIcon(props: IconProps) {
   );
 }
 
+export function PlayIcon(props: IconProps) {
+  return (
+    <DuoIcon {...props}>
+      <path d="M8 5.4v13.2L18.8 12Z" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round" />
+    </DuoIcon>
+  );
+}
+
 export function ServerIcon(props: IconProps) {
   return (
     <DuoIcon {...props}>

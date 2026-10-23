@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, openSync, closeSync, ftruncateSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, openSync, closeSync, ftruncateSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -17,6 +17,9 @@ import {
   IRODORI_ASSETS_ARCHIVE,
   IRODORI_ENGINE_ARCHIVE,
   IRODORI_MODEL_FILE,
+  IRODORI_MODEL_MARKER,
+  IRODORI_MODEL_REVISION,
+  irodoriInstalledModel,
   irodoriInstallPaths,
 } from "@/lib/server/irodori/release";
 import { installFakeEngine, useSupportedPlatform } from "./irodori-fixtures";
@@ -144,6 +147,26 @@ describe("install state", () => {
     assert.equal(inspectIrodoriInstall().engineInstalled, false);
     assert.equal(existsSync(configuredModel), true, "a model named in config.json belongs to the user");
     assert.equal(existsSync(huggingFaceCachedModel()), true, "the Hugging Face cache belongs to the user");
+  });
+
+  it("finds a verified model after the data root moves", () => {
+    const paths = irodoriInstallPaths({ dataRoot: process.env.KANA_DATA_DIR! });
+    mkdirSync(paths.modelDirectory, { recursive: true });
+    const handle = openSync(paths.modelFile, "w");
+    ftruncateSync(handle, IRODORI_MODEL_FILE.sizeBytes);
+    closeSync(handle);
+    const stalePath = path.join(root, "old-root", "irodori", "models", IRODORI_MODEL_REVISION, "model.safetensors");
+    writeFileSync(
+      path.join(paths.modelDirectory, IRODORI_MODEL_MARKER),
+      JSON.stringify({
+        sha256: IRODORI_MODEL_FILE.sha256,
+        path: stalePath,
+        mtimeMs: statSync(paths.modelFile).mtimeMs,
+      }),
+    );
+    const model = irodoriInstalledModel(paths, undefined);
+    assert.equal(model?.path, paths.modelFile);
+    assert.equal(model?.source, "download");
   });
 
   it("explains an unsupported host instead of offering a download", () => {

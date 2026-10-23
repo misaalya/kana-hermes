@@ -29,10 +29,9 @@ export type WorkspaceState = {
   chatOpen: boolean;
   usesMobileChat: boolean;
 
-  connectionGateOpen: boolean;
-  /** The one automatic connection attempt of this page load has finished. */
-  automaticConnectFinished: boolean;
   connectPhase: ConnectPhase;
+  /** The gate is seating the cable after a connection success; the workspace waits. */
+  seatPending: boolean;
   hermesRuntime: HermesRuntimeStatus | null;
   hermesRuntimeNotice: string | null;
   hermesRuntimeBusy: boolean;
@@ -61,9 +60,8 @@ export function createWorkspaceStore(): WorkspaceStore {
     greeting: false,
     chatOpen: true,
     usesMobileChat: false,
-    connectionGateOpen: false,
-    automaticConnectFinished: false,
     connectPhase: "idle",
+    seatPending: false,
     hermesRuntime: null,
     hermesRuntimeNotice: null,
     hermesRuntimeBusy: false,

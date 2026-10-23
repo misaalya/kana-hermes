@@ -4,13 +4,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   deleteKanaVoice,
   listKanaVoices,
+  previewKanaVoice,
   uploadKanaVoice,
   VoiceLibraryError,
   type LibraryVoice,
 } from "@/lib/runtime/voice-library-client";
 import { AudioConversionError, convertToWav } from "@/lib/voice/audio-to-wav";
 import { MAX_VOICE_REFERENCE_BYTES } from "@/lib/limits";
-import { CheckIcon, WaveformIcon } from "./icons";
+import { CheckIcon, PlayIcon, WaveformIcon } from "./icons";
 import { AddCard, WardrobeGrid } from "./settings-avatar-cards";
 import { fieldLabel } from "./ui";
 import {
@@ -20,6 +21,7 @@ import {
   SettingsGroup,
   SettingsRow,
   SettingsRows,
+  Skeleton,
   StatusPill,
 } from "./settings-layout";
 import { getCopy, type UiLocale } from "@/lib/ui/copy";
@@ -33,6 +35,20 @@ type VoicePanelProps = {
 
 const MAX_VOICE_REFERENCE_MIB = MAX_VOICE_REFERENCE_BYTES / (1024 * 1024);
 const DEFAULT_VOICE_ID = "kc-default";
+
+type PreviewState = { voiceId: string; phase: "loading" | "playing" };
+
+/** A wardrobe card before the library arrives, sized like a real voice card. */
+function VoiceCardSkeleton() {
+  return (
+    <div className="kana-choice kana-wardrobe-card pointer-events-none flex flex-col rounded-[26px]" aria-hidden="true">
+      <div className="flex flex-1 flex-col items-center gap-2 px-2 pb-3 pt-4">
+        <Skeleton className="aspect-square w-[clamp(60px,64%,80px)] rounded-full" />
+        <Skeleton className="h-3 w-16 rounded-full" />
+      </div>
+    </div>
+  );
+}
 
 // Voice management backed by Kana's persistent library (data/voices +
 // SQLite). The bundled Kana voice and the model's own voice are always
@@ -56,7 +72,12 @@ export function VoicePanel({
   const [providerName, setProviderName] = useState("");
   const [providerStatus, setProviderStatus] = useState<VoiceProviderStatus | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [preview, setPreview] = useState<PreviewState | null>(null);
   const audioInputRef = useRef<HTMLInputElement | null>(null);
+  const previewToken = useRef(0);
+  const previewAbort = useRef<AbortController | null>(null);
+  const previewAudio = useRef<HTMLAudioElement | null>(null);
+  const previewUrl = useRef<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoadingVoices(true);
@@ -73,6 +94,30 @@ export function VoicePanel({
       setLoadingVoices(false);
     }
   }, [copy.checkFailed]);
+
+  const stopPreview = useCallback(() => {
+    previewToken.current += 1;
+    previewAbort.current?.abort();
+    previewAbort.current = null;
+    const audio = previewAudio.current;
+    if (audio) {
+      audio.onended = null;
+      audio.pause();
+      previewAudio.current = null;
+    }
+    if (previewUrl.current) {
+      URL.revokeObjectURL(previewUrl.current);
+      previewUrl.current = null;
+    }
+    setPreview(null);
+  }, []);
+
+  useEffect(() => () => {
+    previewToken.current += 1;
+    previewAbort.current?.abort();
+    previewAudio.current?.pause();
+    if (previewUrl.current) URL.revokeObjectURL(previewUrl.current);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -107,7 +152,41 @@ export function VoicePanel({
     return error instanceof Error ? error.message : fallback;
   };
 
+  const togglePreview = async (voice: LibraryVoice) => {
+    if (preview?.voiceId === voice.id) {
+      stopPreview();
+      return;
+    }
+    stopPreview();
+    const token = previewToken.current;
+    const controller = new AbortController();
+    previewAbort.current = controller;
+    setNotice(null);
+    setPreview({ voiceId: voice.id, phase: "loading" });
+    try {
+      const blob = await previewKanaVoice(voice.id, controller.signal);
+      if (token !== previewToken.current) return;
+      const url = URL.createObjectURL(blob);
+      previewUrl.current = url;
+      const audio = new Audio(url);
+      previewAudio.current = audio;
+      audio.onended = () => {
+        if (token === previewToken.current) stopPreview();
+      };
+      setPreview({ voiceId: voice.id, phase: "playing" });
+      await audio.play();
+    } catch (error) {
+      if (token !== previewToken.current) return;
+      stopPreview();
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      // A provider refusal explains itself ("engine not installed", "voice
+      // missing"); only playback and transport failures need the generic line.
+      setNotice(error instanceof VoiceLibraryError ? error.message : copy.previewFailed);
+    }
+  };
+
   const selectVoice = (id: string) => {
+    stopPreview();
     setConfirmDelete(null);
     onVoiceSelect(id);
   };
@@ -139,6 +218,7 @@ export function VoicePanel({
   };
 
   const remove = async (id: string) => {
+    stopPreview();
     setConfirmDelete(null);
     setNotice(null);
     setBusy(true);
@@ -164,7 +244,9 @@ export function VoicePanel({
       <SettingsGroup title={copy.providerTitle}>
         <SettingsRows>
           <SettingsRow
-            label={providerName || copy.externalFallback}
+            label={loadingVoices && !providerName
+              ? <Skeleton className="h-3.5 w-28" />
+              : providerName || copy.externalFallback}
             description={providerStatus?.message ? (
               <span className={providerReady ? undefined : "text-danger"}>
                 {providerStatus.message}
@@ -205,7 +287,20 @@ export function VoicePanel({
     <SettingsGroup ariaLabel={copy.title}>
       <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted">{copy.title}</p>
       {loadingVoices && voices.length === 0 ? (
-        <p className="mt-3 text-[11.5px] text-muted">{copy.loading}</p>
+        <>
+          <p role="status" className="sr-only">{copy.loading}</p>
+          <WardrobeGrid label={copy.chooseAria} busy>
+            <VoiceCardSkeleton />
+            <VoiceCardSkeleton />
+            <div
+              className="kana-wardrobe-add pointer-events-none flex flex-col items-center justify-center gap-2 rounded-[26px] px-3 py-4"
+              aria-hidden="true"
+            >
+              <Skeleton className="size-11 rounded-full" />
+              <Skeleton className="h-3 w-20 rounded-full" />
+            </div>
+          </WardrobeGrid>
+        </>
       ) : (
         <>
           {voices.length === 0 ? (
@@ -214,34 +309,50 @@ export function VoicePanel({
           <WardrobeGrid label={copy.chooseAria}>
             {voices.map((voice) => {
               const active = voice.id === effectiveSelected;
+              const previewing = preview?.voiceId === voice.id;
               return (
                 <div
                   key={voice.id}
-                  className={`kana-choice kana-wardrobe-card flex flex-col rounded-[26px] ${active ? "is-selected" : ""}`}
+                  className={`kana-choice kana-wardrobe-card relative flex flex-col rounded-[26px] ${active ? "is-selected" : ""}`}
                 >
                   <button
                     type="button"
                     role="radio"
                     aria-checked={active}
                     aria-label={voice.name}
-                    className="kana-focus flex w-full flex-1 flex-col items-center gap-2 rounded-[23px] px-2 pb-3 pt-4"
+                    className="kana-focus absolute inset-0 rounded-[23px]"
                     onClick={() => selectVoice(voice.id)}
-                  >
-                    <span className="kana-portrait" aria-hidden="true">
+                  />
+                  <div className="pointer-events-none relative z-[1] flex flex-1 flex-col items-center gap-2 px-2 pb-3 pt-4">
+                    <button
+                      type="button"
+                      className={`kana-focus kana-voice-preview kana-portrait pointer-events-auto disabled:cursor-not-allowed disabled:opacity-50 ${previewing ? "is-active" : ""}`}
+                      disabled={busy}
+                      aria-busy={previewing && preview?.phase === "loading" ? true : undefined}
+                      aria-pressed={previewing}
+                      aria-label={previewing
+                        ? copy.stopPreviewAria(voice.name)
+                        : copy.previewAria(voice.name)}
+                      onClick={() => void togglePreview(voice)}
+                    >
                       <WaveformIcon className="size-[46%]" />
-                    </span>
+                      <span className="kana-voice-preview-play" aria-hidden="true">
+                        <PlayIcon className="size-[32%]" />
+                      </span>
+                    </button>
                     <span
                       className="max-w-full truncate px-1 text-[12.5px] font-extrabold text-ink"
                       title={voice.name}
+                      aria-hidden="true"
                     >
                       {voice.name}
                     </span>
-                  </button>
+                  </div>
                   {voice.kind === "reference" ? (
-                    <div className="flex justify-center pb-2.5">
+                    <div className="relative z-[1] flex justify-center pb-2.5">
                       <button
                         type="button"
-                        className={`kana-focus rounded-full px-2.5 py-1 text-[10.5px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                        className={`kana-focus whitespace-nowrap rounded-full px-2.5 py-1 text-[10.5px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                           confirmDelete === voice.id
                             ? "text-danger"
                             : "text-muted hover:text-danger"
