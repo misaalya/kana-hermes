@@ -125,11 +125,8 @@ export function VoiceEnginePanel({ locale }: { locale: UiLocale }) {
   const message = notice ?? (install?.state === "failed" || install?.state === "unsupported" ? install.message : null);
 
   return (
-    <SettingsGroup
-      title={copy.title}
-      ariaLabel={copy.aria}
-      action={<StatusPill tone={tone} capitalize={false}>{copy.states[state]}</StatusPill>}
-    >
+    <SettingsGroup title={copy.title} ariaLabel={copy.aria}>
+      <StatusPill tone={tone} capitalize={false}>{copy.states[state]}</StatusPill>
       {!snapshot && !notice ? (
         <>
           <SettingsRows>
