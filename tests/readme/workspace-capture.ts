@@ -184,6 +184,7 @@ async function installStandInHermes(page: Page): Promise<void> {
         executable: "/usr/local/bin/hermes",
         port: 9119,
         websocketUrl: "ws://127.0.0.1:9119/api/ws",
+        tokenAvailable: true,
         message: "Hermes is running.",
       }),
     }),

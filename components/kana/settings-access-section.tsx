@@ -16,6 +16,7 @@ import {
   settingsInput,
   SettingsRow,
   SettingsRows,
+  Skeleton,
 } from "./settings-layout";
 
 // Settings → System/Privacy: access password, logout, and the server config
@@ -113,6 +114,7 @@ export function AdvancedConfigCard({ locale }: { locale: UiLocale }) {
   const [configPath, setConfigPath] = useState("$KANA_DATA_DIR/config.json");
   const [deploymentMode, setDeploymentMode] = useState<"local" | "deployment">("local");
   const [configError, setConfigError] = useState<string | null>(null);
+  const [configLoaded, setConfigLoaded] = useState(false);
   useEffect(() => {
     let active = true;
     void fetch("/api/kana/config", { credentials: "same-origin", cache: "no-store" })
@@ -126,7 +128,10 @@ export function AdvancedConfigCard({ locale }: { locale: UiLocale }) {
         if (active && value?.path) setConfigPath(value.path);
         if (active && value?.deploymentMode) setDeploymentMode(value.deploymentMode);
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setConfigLoaded(true);
+      });
     return () => { active = false; };
   }, []);
 
@@ -146,23 +151,35 @@ export function AdvancedConfigCard({ locale }: { locale: UiLocale }) {
         </a>
       )}
     >
-      <SettingsRows>
-        <SettingsRow label="config.json" stacked>
-          <code className="block overflow-x-auto rounded-[18px] bg-surface-strong px-3.5 py-2 text-[11.5px] text-ink-dim">
-            {configPath}
-          </code>
-          {configError ? (
-            <p className="mt-2 text-[11.5px] leading-relaxed text-danger" role="alert">
-              {copy.advancedConfigError} {configError}
-            </p>
-          ) : null}
-        </SettingsRow>
-        <SettingsRow label={copy.advancedMode}>
-          <span className="text-xs font-semibold text-ink-dim">
-            {deploymentMode === "deployment" ? copy.advancedModeDeployment : copy.advancedModeLocal}
-          </span>
-        </SettingsRow>
-      </SettingsRows>
+      <div aria-busy={!configLoaded || undefined}>
+        <SettingsRows>
+          <SettingsRow label="config.json" stacked>
+            {configLoaded ? (
+              <code className="block overflow-x-auto rounded-[18px] bg-surface-strong px-3.5 py-2 text-[11.5px] text-ink-dim">
+                {configPath}
+              </code>
+            ) : (
+              <code className="flex items-center rounded-[18px] bg-surface-strong px-3.5 py-2">
+                <Skeleton className="h-4 w-56 max-w-full rounded-full" />
+              </code>
+            )}
+            {configError ? (
+              <p className="mt-2 text-[11.5px] leading-relaxed text-danger" role="alert">
+                {copy.advancedConfigError} {configError}
+              </p>
+            ) : null}
+          </SettingsRow>
+          <SettingsRow label={copy.advancedMode}>
+            {configLoaded ? (
+              <span className="text-xs font-semibold text-ink-dim">
+                {deploymentMode === "deployment" ? copy.advancedModeDeployment : copy.advancedModeLocal}
+              </span>
+            ) : (
+              <Skeleton className="h-3.5 w-24" />
+            )}
+          </SettingsRow>
+        </SettingsRows>
+      </div>
     </SettingsGroup>
   );
 }

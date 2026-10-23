@@ -108,9 +108,11 @@ HERMES_DASHBOARD_SESSION_TOKEN=<token> hermes serve --host 127.0.0.1 --port 9119
 ```
 
 Without that variable the token is random and in-memory, and no other process
-can learn it; let Kana start Hermes instead. If an adopted gateway restarts with
-a new token or port, Kana re-discovers it on the next failed connection.
-`kana doctor` reports what was found, including token readability.
+can learn it; let Kana start Hermes instead. The connection screen names this
+case and asks for the process to be stopped, and the next attempt starts Hermes
+under Kana. If an adopted gateway restarts with a new token or port, Kana
+re-discovers it on the next failed connection. `kana doctor` reports what was
+found, including token readability.
 
 ## VPS deploy checklist
 

@@ -230,9 +230,14 @@ export class HermesSessionManager {
       }
       this.status((copy) => copy.connected);
     } catch (connectError) {
-      stores.errors
-        .getState()
-        .report("agent", connectError instanceof Error ? connectError.message : "Could not connect to the agent.");
+      // While the relay is down the gate owns the failure and the workspace is
+      // unmounted; a connected client that cannot open its conversation still
+      // needs the banner, because the workspace is what the user is using.
+      if (this.agent?.connectionState === "connected") {
+        stores.errors
+          .getState()
+          .report("agent", connectError instanceof Error ? connectError.message : "Could not connect to the agent.");
+      }
     }
   }
 

@@ -66,8 +66,6 @@ export default function KanaErrorBoundary({
       {/* The auto margins centre the block on a tall screen and leave the top
           reachable on a short one, where a centred box would be clipped. */}
       <div className="m-auto flex w-full max-w-[560px] flex-col items-center gap-4">
-        <div className="kana-mark" aria-hidden="true">か</div>
-        <p className="kana-label-bubble">{copy.attentionEyebrow}</p>
         <h1 className="text-[22px] font-extrabold leading-snug text-ink">
           {copy.attentionTitle}
         </h1>

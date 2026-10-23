@@ -118,13 +118,20 @@ export function irodoriInstalledModel(paths, configuredModelPath) {
   if (configuredModelPath) return existsSync(/* turbopackIgnore: true */ configuredModelPath) ? { path: configuredModelPath, source: "config" } : null;
   const marker = readJson(path.join(paths.modelDirectory, IRODORI_MODEL_MARKER));
   if (!marker || marker.sha256 !== IRODORI_MODEL_FILE.sha256 || typeof marker.path !== "string") return null;
-  let details;
-  try {
-    details = statSync(/* turbopackIgnore: true */ marker.path);
-  } catch {
-    return null;
+  // The marker holds the absolute path used at install time. Kana's data root
+  // can move, so accept the identical file at the current model path too;
+  // checksum, size, and mtime together still prove it is the verified copy.
+  const candidates = marker.path === paths.modelFile ? [marker.path] : [marker.path, paths.modelFile];
+  for (const candidate of candidates) {
+    let details;
+    try {
+      details = statSync(/* turbopackIgnore: true */ candidate);
+    } catch {
+      continue;
+    }
+    // A replaced file (different size or mtime) must be verified again.
+    if (details.size !== IRODORI_MODEL_FILE.sizeBytes || details.mtimeMs !== marker.mtimeMs) continue;
+    return { path: candidate, source: candidate === paths.modelFile ? "download" : "huggingface-cache" };
   }
-  // A replaced file (different size or mtime) must be verified again.
-  if (details.size !== IRODORI_MODEL_FILE.sizeBytes || details.mtimeMs !== marker.mtimeMs) return null;
-  return { path: marker.path, source: marker.path === paths.modelFile ? "download" : "huggingface-cache" };
+  return null;
 }

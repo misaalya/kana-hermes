@@ -8,14 +8,21 @@ import { AvatarIcon, CheckIcon, MoreIcon, PlusIcon } from "./icons";
 // card at the end of each grid that adds a new one.
 
 /** One wardrobe grid; cards wrap and keep their width. */
-export function WardrobeGrid({ label, wide = false, children }: {
+export function WardrobeGrid({ label, wide = false, busy = false, children }: {
   label: string;
   /** Wider cards, for 16:10 background previews. */
   wide?: boolean;
+  /** Cards are placeholders while the list loads. */
+  busy?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <div role="radiogroup" aria-label={label} className={`kana-wardrobe ${wide ? "is-wide" : ""}`}>
+    <div
+      role="radiogroup"
+      aria-label={label}
+      aria-busy={busy || undefined}
+      className={`kana-wardrobe ${wide ? "is-wide" : ""}`}
+    >
       {children}
     </div>
   );

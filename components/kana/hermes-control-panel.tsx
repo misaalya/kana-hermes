@@ -11,6 +11,7 @@ import {
   settingsButtonDanger,
   SettingsRow,
   SettingsRows,
+  Skeleton,
   StatusPill,
 } from "./settings-layout";
 
@@ -113,6 +114,28 @@ export function HermesControlPanel({
       setBusy(false);
     }
   };
+
+  // The first check holds the row shapes the panel settles into, so the
+  // status, the action, and the facts do not push the section around.
+  if (!status && !notice) {
+    return (
+      <section aria-label={copy.hermesAria} aria-busy="true">
+        <p role="status" className="sr-only">{copy.states.checking}</p>
+        <SettingsRows>
+          <SettingsRow
+            label={copy.hermesTitle}
+            inline
+            description={<Skeleton className="h-3.5 w-20" />}
+          >
+            <Skeleton className="h-9 w-24 rounded-full" />
+          </SettingsRow>
+          <SettingsRow label={<Skeleton className="h-3 w-14" />} inline>
+            <Skeleton className="h-3.5 w-10" />
+          </SettingsRow>
+        </SettingsRows>
+      </section>
+    );
+  }
 
   const state = status?.state ?? "checking";
   const running = state === "running";

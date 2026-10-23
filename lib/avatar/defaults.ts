@@ -68,9 +68,6 @@ export const OFFICIAL_HARU_MODEL_URL =
 export const OFFICIAL_MAO_MODEL_URL =
   `${OFFICIAL_SAMPLE_ROOT}/Mao/Mao.model3.json`;
 
-export const LIVE2D_SAMPLE_COPYRIGHT_NOTICE =
-  "This content uses sample data owned and copyrighted by Live2D Inc. The sample data are utilized in accordance with terms and conditions set by Live2D Inc. This content itself is created at the author's sole discretion.";
-
 export const DEFAULT_HARU_BINDINGS: Live2DModelBindings = {
   mouthOpenParameter: "ParamMouthOpenY",
   emotionExpressions: {

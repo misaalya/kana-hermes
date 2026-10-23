@@ -436,6 +436,36 @@ describe("HermesSessionManager", () => {
     assert.equal(harness.stores.activity.getState().activities[0].title, "Hermes input could not be delivered");
   });
 
+  it("leaves a failed connection attempt to the gate instead of the workspace banner", async () => {
+    const harness = createHarness({
+      setupAgent: (agent) => {
+        agent.connect = async () => {
+          throw new Error("Kana is not managing a Hermes gateway with a known session token.");
+        };
+      },
+    });
+    harness.conversations.initialize();
+
+    await harness.sessions.connect();
+
+    assert.equal(harness.stores.errors.getState().error, null);
+  });
+
+  it("still reports a conversation that cannot open after the relay is connected", async () => {
+    const harness = createHarness({
+      setupAgent: (agent) => {
+        agent.openSession = async () => {
+          throw new Error("session not found");
+        };
+      },
+    });
+    harness.conversations.initialize();
+
+    await harness.sessions.connect();
+
+    assert.match(harness.stores.errors.getState().error ?? "", /session not found/);
+  });
+
   it("lands on the most recent non-empty Hermes session when nothing is selected", async () => {
     const harness = createHarness();
     harness.fetchResponses.set("/api/kana/sessions", {

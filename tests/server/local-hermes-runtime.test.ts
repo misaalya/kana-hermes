@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -32,6 +33,20 @@ function freePort(): Promise<number> {
   });
 }
 
+async function waitForHealth(port: number): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/api/health`, { cache: "no-store" });
+      if (response.ok) return;
+    } catch {
+      // Not listening yet.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error("Fake Hermes did not start.");
+}
+
 describe("Kana-managed hermes serve restart", () => {
   before(() => {
     const executable = path.join(root, "hermes");
@@ -59,6 +74,7 @@ describe("Kana-managed hermes serve restart", () => {
     const first = await runtime.startLocalHermesRuntime({ port });
     assert.equal(first.state, "running");
     assert.equal(first.managed, true);
+    assert.equal(first.tokenAvailable, true);
     const firstToken = runtime.managedRuntimeToken();
 
     // A second request while one runs joins it instead of stopping the new process.
@@ -69,6 +85,7 @@ describe("Kana-managed hermes serve restart", () => {
     assert.equal(joined, restarted);
     assert.equal(restarted.state, "running");
     assert.equal(restarted.managed, true);
+    assert.equal(restarted.tokenAvailable, true);
     assert.equal(restarted.port, port);
     assert.notEqual(restarted.pid, first.pid);
     assert.ok(runtime.managedRuntimeToken());
@@ -76,6 +93,60 @@ describe("Kana-managed hermes serve restart", () => {
 
     await runtime.stopLocalHermesRuntime();
     await assert.rejects(runtime.restartLocalHermesRuntime(), /not started by Kana/);
+  });
+
+  it("adopts a gateway Kana did not start only when its session token is readable", async () => {
+    const runtime = await import("@/lib/server/local-hermes-runtime");
+    const executable = path.join(root, "hermes");
+
+    const startExternal = async (token: string | null) => {
+      const port = await freePort();
+      const env: NodeJS.ProcessEnv = { ...process.env };
+      delete env.HERMES_DASHBOARD_SESSION_TOKEN;
+      if (token) env.HERMES_DASHBOARD_SESSION_TOKEN = token;
+      const child = spawn(executable, ["serve", "--host", "127.0.0.1", "--port", String(port)], { env });
+      await waitForHealth(port);
+      return {
+        port,
+        stop: async () => {
+          child.kill("SIGTERM");
+          await new Promise<void>((resolve) => child.once("exit", () => resolve()));
+        },
+      };
+    };
+
+    // Hermes started without the variable generates a token only its own
+    // process knows, so the gateway is visible but not adoptable.
+    const unreadable = await startExternal(null);
+    try {
+      const started = await runtime.startLocalHermesRuntime({ port: unreadable.port });
+      assert.equal(started.state, "running");
+      assert.equal(started.managed, false);
+      assert.equal(started.tokenAvailable, false);
+      assert.match(started.message, /session token could not be read/);
+
+      const inspected = await runtime.inspectLocalHermesRuntime();
+      assert.equal(inspected.tokenAvailable, false);
+      assert.match(inspected.message, /session token could not be read/);
+    } finally {
+      await unreadable.stop();
+    }
+
+    // A starter that supplies the variable gives Kana the token to adopt.
+    const token = "external-session-token";
+    const readable = await startExternal(token);
+    try {
+      const started = await runtime.startLocalHermesRuntime({ port: readable.port });
+      assert.equal(started.state, "running");
+      assert.equal(started.managed, false);
+      assert.equal(started.tokenAvailable, true);
+      assert.equal(runtime.managedRuntimeToken(), token);
+
+      const inspected = await runtime.inspectLocalHermesRuntime();
+      assert.equal(inspected.tokenAvailable, true);
+    } finally {
+      await readable.stop();
+    }
   });
 });
 

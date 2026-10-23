@@ -1,3 +1,4 @@
+import type { AgentConnectionState } from "@/lib/agent/types";
 import type { HermesRuntimeStatus } from "@/lib/runtime/hermes-control-client";
 import type { SetupState } from "@/lib/runtime/setup-client";
 import type { AgentSessionStore } from "@/lib/store/agent-session-store";
@@ -45,15 +46,19 @@ export function voiceFinding(status: VoiceProviderStatus): DependencyFindings["v
 
 /**
  * Connection gate, dependency checks, and the setup wizard. Each page load
- * makes one automatic connection attempt; after it, the gate follows the
- * connection and appears whenever Hermes is unreachable, including a live drop
- * Kana is still retrying.
+ * makes one automatic connection attempt. The gate follows the connection
+ * from the first frame: it is on screen for that attempt and every retry,
+ * including a live drop Kana is still recovering from.
  */
 export class WorkspaceSetup {
   private automaticConnectStarted = false;
   private active = true;
   private repairTimer: ReturnType<typeof setInterval> | null = null;
   private unsubscribeDeps: (() => void) | null = null;
+  private unsubscribeConnection: (() => void) | null = null;
+  /** Orders runtime reads against a start, which is authoritative when it lands. */
+  private runtimeSequence = 0;
+  private runtimeApplied = 0;
 
   constructor(private readonly deps: WorkspaceSetupDependencies) {}
 
@@ -65,18 +70,44 @@ export class WorkspaceSetup {
     return this.deps.agentSession.getState().connectionState === "connected";
   }
 
-  async inspectDependencies(): Promise<DependencyFindings> {
-    const connected = this.connected();
-    let hermes: DependencyFindings["hermes"] = connected ? "running" : "installed";
+  /**
+   * Read the runtime without letting a slower, older read overwrite a newer
+   * one or a start result. A live relay or a successful start is the truth.
+   */
+  private async refreshRuntime(): Promise<HermesRuntimeStatus | null> {
+    const sequence = ++this.runtimeSequence;
     try {
       const status = await this.deps.hermesControl.inspect();
-      this.store.setState({ hermesRuntime: status });
-      hermes = status.state === "running" || this.connected() ? "running" : status.executable ? "installed" : "missing";
+      if (this.active && sequence > this.runtimeApplied) {
+        this.runtimeApplied = sequence;
+        this.store.setState({ hermesRuntime: status });
+      }
+      return status;
     } catch {
-      // A live relay is stronger evidence than the optional process controller,
-      // particularly for externally managed VPS services.
-      hermes = this.connected() ? "running" : "missing";
+      if (this.active && sequence > this.runtimeApplied) {
+        this.runtimeApplied = sequence;
+        this.store.setState({ hermesRuntime: null });
+      }
+      return null;
     }
+  }
+
+  private applyRuntime(status: HermesRuntimeStatus): void {
+    this.runtimeSequence += 1;
+    this.runtimeApplied = this.runtimeSequence;
+    this.store.setState({ hermesRuntime: status });
+  }
+
+  async inspectDependencies(): Promise<DependencyFindings> {
+    const status = await this.refreshRuntime();
+    // A live relay is stronger evidence than the optional process controller,
+    // particularly for externally managed VPS services.
+    const hermes: DependencyFindings["hermes"] =
+      this.connected() || status?.state === "running"
+        ? "running"
+        : status?.executable
+          ? "installed"
+          : "missing";
 
     // Always inspect: the check is a cheap install lookup, and first-run setup
     // needs it before the voice preference is saved.
@@ -87,7 +118,7 @@ export class WorkspaceSetup {
       voice = "error";
     }
     const findings = { hermes, voice };
-    this.store.setState({ deps: findings });
+    if (this.active) this.store.setState({ deps: findings });
     return findings;
   }
 
@@ -96,26 +127,20 @@ export class WorkspaceSetup {
     this.store.setState({ hermesRuntimeBusy: true, hermesRuntimeNotice: null });
     try {
       const status = await this.deps.hermesControl.start({ port: this.store.getState().hermesRuntime?.port });
-      this.store.setState({ hermesRuntime: status });
+      this.applyRuntime(status);
     } catch (error) {
       this.store.setState({
         hermesRuntimeNotice: error instanceof Error ? error.message : "Could not start the Hermes gateway.",
       });
-      try {
-        this.store.setState({ hermesRuntime: await this.deps.hermesControl.inspect() });
-      } catch {}
+      await this.refreshRuntime();
     } finally {
       this.store.setState({ hermesRuntimeBusy: false });
     }
   }
 
-  /** Close the gate once the connection is up. */
+  /** End the attempt once the connection is up. */
   private finishConnection(): void {
-    this.store.setState({
-      automaticConnectFinished: true,
-      connectionGateOpen: false,
-      connectPhase: "idle",
-    });
+    this.store.setState({ connectPhase: "idle" });
   }
 
   /**
@@ -128,7 +153,7 @@ export class WorkspaceSetup {
     // One attempt owns the gate: the auto-connect and the button must not race.
     if (connectionState === "connecting" || this.store.getState().connectPhase !== "idle") return;
     const reconnecting = connectionState === "reconnecting";
-    this.store.setState({ connectPhase: "connecting", hermesRuntimeNotice: null });
+    this.store.setState({ connectPhase: "connecting", hermesRuntimeNotice: null, seatPending: true });
 
     // A scheduled retry is waiting; ask for the connection now.
     if (reconnecting && (await this.deps.reconnect())) {
@@ -146,15 +171,11 @@ export class WorkspaceSetup {
       }
     }
 
-    let runtime = this.store.getState().hermesRuntime;
-    if (!runtime) {
-      try {
-        runtime = await this.deps.hermesControl.inspect();
-        this.store.setState({ hermesRuntime: runtime });
-      } catch {
-        runtime = null;
-      }
-    }
+    // A failed attempt can change the runtime: an adopted gateway may have
+    // been stopped, or Kana's own child may have died, while the relay was
+    // unreachable. A snapshot from before the attempt cannot decide whether
+    // Kana should start Hermes now.
+    const runtime = await this.refreshRuntime();
     if (runtime?.executable && runtime.state !== "running") {
       this.store.setState({ connectPhase: "auto_starting" });
       try {
@@ -167,21 +188,13 @@ export class WorkspaceSetup {
       }
     }
     await this.deps.settle(0);
-    this.store.setState({
-      connectionGateOpen: !this.connected(),
-      automaticConnectFinished: true,
-      connectPhase: "idle",
-    });
+    this.store.setState({ connectPhase: "idle" });
   }
 
   /** Refresh the runtime status shown inside the gate. */
   async inspectForGate(): Promise<void> {
-    try {
-      const status = await this.deps.hermesControl.inspect();
-      if (this.active) this.store.setState({ hermesRuntime: status });
-    } catch {
-      if (this.active) this.store.setState({ hermesRuntime: null });
-    }
+    if (!this.active) return;
+    await this.refreshRuntime();
   }
 
   /**
@@ -192,6 +205,7 @@ export class WorkspaceSetup {
   async startAfterReady(): Promise<void> {
     this.active = true;
     this.watchRepairs();
+    this.watchConnection();
     if (!this.automaticConnectStarted) {
       this.automaticConnectStarted = true;
       void this.connectHermes();
@@ -216,7 +230,22 @@ export class WorkspaceSetup {
     this.active = false;
     this.unsubscribeDeps?.();
     this.unsubscribeDeps = null;
+    this.unsubscribeConnection?.();
+    this.unsubscribeConnection = null;
     this.setRepairPolling(false);
+  }
+
+  /**
+   * A drop arms the gate's seating animation too: a retry that succeeds on the
+   * timer, without a button press, still seats the cable before the workspace
+   * returns.
+   */
+  private watchConnection(): void {
+    if (this.unsubscribeConnection) return;
+    this.unsubscribeConnection = this.deps.agentSession.subscribe((state, previous) => {
+      if (state.connectionState === previous.connectionState) return;
+      if (state.connectionState !== "connected") this.store.setState({ seatPending: true });
+    });
   }
 
   /**
@@ -247,23 +276,11 @@ export class WorkspaceSetup {
 
 export function selectShowGate(input: {
   ready: boolean;
-  connectionState: string;
+  connectionState: AgentConnectionState;
   wizardMode: WizardMode;
-  connectionGateOpen: boolean;
-  automaticConnectFinished: boolean;
 }): boolean {
-  // Any state that leaves Hermes unreachable stands the workspace down, even
-  // while Kana keeps retrying a live drop: the screen reports "Reconnecting".
-  const unreachable =
-    input.connectionState === "error" ||
-    input.connectionState === "authentication_failed" ||
-    input.connectionState === "incompatible" ||
-    input.connectionState === "disconnected" ||
-    input.connectionState === "reconnecting";
-  return (
-    input.ready &&
-    !input.wizardMode &&
-    (input.connectionGateOpen || (input.automaticConnectFinished && unreachable)) &&
-    input.connectionState !== "connected"
-  );
+  // From the first automatic attempt through every retry, an unreachable
+  // Hermes leaves the workspace with nothing to show: the gate owns the state
+  // and the cable animation for as long as the relay is not connected.
+  return input.ready && !input.wizardMode && input.connectionState !== "connected";
 }

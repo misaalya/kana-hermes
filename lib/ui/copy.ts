@@ -175,8 +175,11 @@ export type Copy = {
     illustration: string;
     illustrationPlugged: string;
     connectButton: string;
+    connectAgain: string;
     startButton: string;
     detectedExternal(port: number): string;
+    externalTokenStatus: string;
+    externalTokenBody(port: number): string;
     managedRunning(pid: number | null): string;
     missingBinary: string;
   };
@@ -320,7 +323,6 @@ export type Copy = {
    * the failure itself.
    */
   fatalError: {
-    attentionEyebrow: string;
     attentionTitle: string;
     attentionBody: string;
     startEyebrow: string;
@@ -409,7 +411,6 @@ export type Copy = {
     avatarMapped: string;
     avatarNotMapped: string;
     avatarEmotionNames: Record<Emotion, string>;
-    includedAvatarAbout: string;
     hermesTitle: string;
     modelTitle: string;
     modelLoading: string;
@@ -462,6 +463,9 @@ export type Copy = {
     confirmRemove: string;
     removeAria(name: string): string;
     confirmRemoveAria(name: string): string;
+    previewAria(name: string): string;
+    stopPreviewAria(name: string): string;
+    previewFailed: string;
     providerTitle: string;
     externalFallback: string;
     externalReady: string;
@@ -694,8 +698,12 @@ const id: Copy = {
     illustration: "Kabel dan colokan Hermes terlepas",
     illustrationPlugged: "Kabel dan colokan Hermes tersambung",
     connectButton: "Koneksikan Hermes",
+    connectAgain: "Hubungkan lagi",
     startButton: "Memulai Hermes…",
     detectedExternal: (port: number) => `Gateway Hermes terdeteksi di port ${port}.`,
+    externalTokenStatus: "Token sesi tidak terbaca",
+    externalTokenBody: (port: number) =>
+      `Kana menemukan gateway Hermes di port ${port}, tetapi token sesinya hanya diketahui proses yang menjalankannya. Hentikan proses itu di terminal asalnya (Ctrl+C), lalu tekan tombol di bawah. Kana akan menjalankan Hermes sendiri dengan token yang dikelolanya.`,
     managedRunning: (pid: number | null) => `Hermes sedang berjalan (PID ${pid ?? "—"}).`,
     missingBinary: "Hermes tidak ditemukan. Jalankan `kana doctor`.",
   },
@@ -832,9 +840,8 @@ const id: Copy = {
     sendSecurely: "Kirim dengan aman",
   },
   fatalError: {
-    attentionEyebrow: "Kana butuh perhatian",
-    attentionTitle: "Ruang kerja tidak bisa dilanjutkan dengan aman.",
-    attentionBody: "Data percakapan lokalmu tidak dihapus. Coba buka ruang kerjanya lagi; kalau masalahnya berulang, muat ulang Kana lalu salin diagnostik aman dari halaman ini.",
+    attentionTitle: "Kana mengalami kesalahan tak terduga.",
+    attentionBody: "Ada kesalahan saat menampilkan antarmuka Kana. Data percakapanmu tidak dihapus dan tetap tersimpan di perangkat ini. Coba lagi; kalau kesalahan ini terulang, muat ulang halaman lalu tekan tombol “Salin diagnostik” agar bisa dilaporkan.",
     startEyebrow: "Kana tidak bisa dimulai",
     startTitle: "Antarmuka lokal menemui kesalahan yang tak terduga.",
     startBody: "Hermes tidak diubah. Coba lagi, atau muat ulang halaman kalau masalahnya berlanjut.",
@@ -945,7 +952,6 @@ const id: Copy = {
       confused: "Bingung",
       excited: "Antusias",
     },
-    includedAvatarAbout: "Tentang avatar bawaan",
     hermesTitle: "Hermes",
     modelTitle: "Model AI",
     modelLoading: "Memuat model dari Hermes…",
@@ -998,6 +1004,9 @@ const id: Copy = {
     confirmRemove: "Yakin hapus?",
     removeAria: (name) => `Hapus suara “${name}”`,
     confirmRemoveAria: (name) => `Yakin hapus suara “${name}”?`,
+    previewAria: (name) => `Putar pratinjau suara “${name}”`,
+    stopPreviewAria: (name) => `Hentikan pratinjau suara “${name}”`,
+    previewFailed: "Pratinjau suara tidak dapat diputar.",
     providerTitle: "Penyedia suara eksternal",
     externalFallback: "TTS eksternal",
     externalReady: "Siap digunakan",
@@ -1263,8 +1272,12 @@ const en: Copy = {
     illustration: "Hermes cable and plug disconnected",
     illustrationPlugged: "Hermes cable and plug connected",
     connectButton: "Connect Hermes",
+    connectAgain: "Connect again",
     startButton: "Starting Hermes…",
     detectedExternal: (port: number) => `Hermes gateway detected on port ${port}.`,
+    externalTokenStatus: "Session token unavailable",
+    externalTokenBody: (port: number) =>
+      `Kana found a Hermes gateway on port ${port}, but only the process that started it knows its session token. Stop that process in its terminal (Ctrl+C), then press the button below. Kana will start Hermes itself with a token it manages.`,
     managedRunning: (pid: number | null) => `Hermes is running (PID ${pid ?? "—"}).`,
     missingBinary: "Hermes was not found. Run `kana doctor`.",
   },
@@ -1401,9 +1414,8 @@ const en: Copy = {
     sendSecurely: "Send securely",
   },
   fatalError: {
-    attentionEyebrow: "Kana needs attention",
-    attentionTitle: "The workspace could not continue safely.",
-    attentionBody: "Your local conversation data was not removed. Try the workspace again; if the problem repeats, reload Kana and copy the safe diagnostics from this page.",
+    attentionTitle: "Kana ran into an unexpected error.",
+    attentionBody: "Something went wrong while showing Kana's interface. Your conversation data was not deleted and stays on this device. Try again; if the error repeats, reload the page and press “Copy diagnostics” so it can be reported.",
     startEyebrow: "Kana could not start",
     startTitle: "The local interface encountered an unexpected error.",
     startBody: "Hermes has not been modified. Try again, or reload the page if the problem continues.",
@@ -1514,7 +1526,6 @@ const en: Copy = {
       confused: "Confused",
       excited: "Excited",
     },
-    includedAvatarAbout: "About included avatars",
     hermesTitle: "Hermes",
     modelTitle: "AI model",
     modelLoading: "Loading models from Hermes…",
@@ -1567,6 +1578,9 @@ const en: Copy = {
     confirmRemove: "Remove it?",
     removeAria: (name) => `Remove voice “${name}”`,
     confirmRemoveAria: (name) => `Remove voice “${name}”?`,
+    previewAria: (name) => `Preview the voice “${name}”`,
+    stopPreviewAria: (name) => `Stop the preview of “${name}”`,
+    previewFailed: "The voice preview could not be played.",
     providerTitle: "External voice provider",
     externalFallback: "External TTS",
     externalReady: "Ready to use",

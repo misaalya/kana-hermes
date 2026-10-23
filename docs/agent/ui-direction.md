@@ -204,8 +204,8 @@ text only ("Step 1 of 3").
 ## The fatal error pages
 
 `app/error.tsx` is the workspace boundary. It keeps the root layout, so the
-theme tokens and Kana's vocabulary apply: the mark is `kana-mark`, the kicker a
-`kana-label-bubble`, and its two controls are a `kana-pill-accent` and a
+theme tokens and Kana's vocabulary apply: the headline opens the page without
+a mark or a kicker, and its two controls are a `kana-pill-accent` and a
 `kana-pill-soft`. It renders outside the workspace stores, so the agent, voice,
 avatar, and preference state it would usually report are what failed to load.
 
