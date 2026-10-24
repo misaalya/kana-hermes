@@ -329,7 +329,7 @@ Contributor rules are in [AGENTS.md](AGENTS.md).
 
 Kana's Live2D stage is modelled on [Project AIRI](https://github.com/moeru-ai/airi):
 its Pixi 6 stage architecture, model fitting, motion-manager and lip-sync hooks,
-guarded render, and cursor-following gaze were the reference implementation for
+guarded render, design style, and cursor-following gaze were the reference implementation for
 Kana's avatar layer.
 
 The security and installation shape follows
