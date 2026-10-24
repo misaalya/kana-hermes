@@ -1,5 +1,104 @@
 # Changelog
 
+## 0.6.0 — 2026-10-24
+
+### Added
+
+- A connection screen that owns the whole workspace while Hermes is
+  unreachable. The old gate opened only after the first automatic attempt
+  failed, so a connection that dropped later left the workspace mounted over a
+  dead relay. The screen now follows every state that leaves Hermes unreachable
+  — disconnected and reconnecting included — and stays until the relay reports
+  connected. It is drawn as a white plug and socket on their cables with a spark
+  in the gap: they meet while the relay connects, the prongs disappear into the
+  socket, and the spark goes out. Connect Hermes retries at once through
+  `reconnectNow` instead of waiting for the next scheduled attempt, and starts a
+  stopped `hermes serve` that Kana manages, so the button is never disabled
+  behind its own retry loop. The stage unmounts while the screen is up; the
+  avatar layer remembers which canvas held the model and reloads it when the
+  stage hands over a new one.
+- Voice previews in Settings → Voice. Playing a voice returns its stored
+  reference WAV, and the model voice returns a prepared Irodori sample, through
+  `POST /api/kana/voices/preview`; a preview never starts the voice engine or
+  waits for synthesis. The model sample is generated once from the greeting
+  "こんにちは、カナです。" and ships with the package. Settings → Connection and
+  Voice hold skeleton rows and cards while their checks run.
+- The owner's guardrail rules now also travel in Kana's prompt note on every
+  turn, beside the optional TypeSafe screen. The rules are read from
+  `config.json` on each turn, so an added or edited rule applies to the next
+  message without a restart, and they are independent of `guardrails.apiKey`:
+  an empty key turns the Jev screen off but does not withdraw the owner's
+  standing instructions. The note is the delivery channel Kana already uses for
+  its response contract, and transcript restore strips it again. A rule that
+  contains a Kana note tag is neutralized so it cannot end the note early. The
+  screen still decides allow or refuse; the prompt copy is a prevention layer,
+  not the control.
+- Mid-turn messages follow Hermes's own busy policy. A plain message typed while
+  a turn runs is submitted without a `queued` flag, so
+  `display.busy_input_mode` applies: the default `interrupt` redirects the live
+  turn, `steer` injects the text after the next tool call, and `queue` runs it
+  as the next turn. A redirected or steered correction is attached to the user
+  message that opened the turn and drawn as `Redirected current turn: '…'`, as
+  in the Hermes TUI, without a second `agent.started` or a second activity log.
+  A restored transcript recognises the persisted correction row, and a steered
+  marker is restored from the local copy on a same-browser reload.
+- Approval, clarify, sudo, and secret prompts share one dialog shell.
+
+### Changed
+
+- Settings → Voice is rebuilt, with short controls kept beside their labels on
+  phones.
+- The connection modal is gone; its job belongs to the connection screen above.
+- The guardrail documentation and ADR-0005 now describe both layers: the Jev
+  screen decides, and the prompt note prevents. A `config.json` whose key is
+  empty screens nothing but still carries its rules to the model.
+- The not-found page drifts its artwork and caption independently.
+- README credits Project AIRI for the Live2D stage and 9router for the security
+  and installation shape.
+
+### Fixed
+
+- The gate's Connect button no longer disables itself behind its own retry timer
+  after a live drop, so a stopped gateway can be started without reloading the
+  page.
+- A Live2D model reloads onto the remounted canvas after the gate unmounts and
+  restores the stage.
+- The gate heading owns its connection status; a manual attempt turns the idle
+  heading into "Menghubungkan ulang" with animated dots instead of showing a
+  second status pill.
+- The gate's plug seats only once the relay reports connected, with its prongs
+  entering the socket holes. The holes were shrunk to the prong gauge, the
+  recorded frames were cleaned up, and the unused animation clip was removed.
+- The local voice status sits under its title instead of beside it.
+
+### Migration notes
+
+- No configuration or stored-data migration is required. One behavioural change
+  to review: if an existing `config.json` keeps its starter rules and an empty
+  `guardrails.apiKey`, those rules now reach the model on every prompt even
+  though no TypeSafe request is made. Clear `guardrails.rules` if you want
+  neither the screen nor the instructions.
+
+### Known limitations
+
+- Field validation is incomplete and is published as it stands. The dogfood
+  journal has 0 of 7 recorded days and 6 of 13 required matrix cases pending —
+  `hermes-only`, `hermes-local-voice`, `custom-live2d-model-a`,
+  `custom-live2d-model-b`, `hermes-restart-active`, and
+  `voice-cancel-and-replay` — so this release makes no extended-compatibility
+  claim. `npm run dogfood:check` reports the same result.
+- The guardrail is an intent filter, not a sandbox. It reads the text of a turn
+  and cannot stop Hermes from reaching the same file by another route, and it
+  does not screen an answer given in the middle of a turn, such as an approval.
+  The text of a screened turn is sent to TypeSafe, a third party; with an empty
+  key, no request is made, but the rules still ride in the prompt.
+- Hermes 0.21's batch clarify and its replayed pending input are implemented from
+  its documented protocol. The tested baseline is Hermes 0.20.1, and no 0.21
+  install has validated them here.
+- Local speech latency on small CPUs, the opt-in sentence delivery, and the
+  browser-local avatar packages and preferences are unchanged; the supported
+  environment document carries the measured numbers.
+
 ## 0.5.1 — 2026-10-19
 
 ### Added
