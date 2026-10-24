@@ -8,7 +8,7 @@ direction, not a temporary theme.
 
 **Read when:** you are changing any component, `app/globals.css`, the composer, Settings, the avatar wardrobe, the chat feed, a stage pattern, or the fatal error pages.
 
-**Truth in code:** `app/globals.css`, `app/error.tsx`, `app/global-error.tsx`, `components/kana/chat-composer.tsx`, `components/kana/live-chat-feed.tsx`, `components/kana/settings-avatar-cards.tsx`, `components/kana/kana-select.tsx`, `components/kana/config-guide.tsx`, `app/docs/page.tsx`, `lib/ui/copy.ts`, `lib/presentation/markdown.ts`, `lib/presentation/json-highlight.ts`, `scripts/generate-stage-patterns.py`
+**Truth in code:** `app/globals.css`, `app/error.tsx`, `app/global-error.tsx`, `components/kana/chat-composer.tsx`, `components/kana/chat-dock.tsx`, `components/kana/focus-rail.tsx`, `components/kana/conversation-sidebar.tsx`, `components/kana/live-chat-feed.tsx`, `components/kana/settings-avatar-cards.tsx`, `components/kana/kana-select.tsx`, `components/kana/config-guide.tsx`, `app/docs/page.tsx`, `lib/ui/copy.ts`, `lib/presentation/markdown.ts`, `lib/presentation/json-highlight.ts`, `scripts/generate-stage-patterns.py`
 
 ## Colours
 
@@ -119,11 +119,17 @@ The Avatar section opens with one row, "Show avatar"
 (`preferences.avatarVisible`, default on, anything but `false` in a stored or
 restored record). Off is a chat-only workspace: the avatar layer goes
 `visibility: hidden` so the canvas keeps its box and the WebGL runtime stops its
-ticker, while the room's pattern stays as the wallpaper. The conversation
-becomes a centred 720 px column (`is-sole`) instead of an unreadable full-width
-wall, the phone tile and the hide-chat tab disappear, and the "Scale" header tab
-is not rendered. Kana's first-run greeting always keeps the stage, because it
-introduces her face to face.
+ticker, while the room's pattern stays as the wallpaper. On a desktop the
+workspace becomes two surfaces (`components/kana/focus-rail.tsx`): a persistent
+conversation rail on the left, holding the same list, search, and New action as
+the History dialog, and a chat column of at most 760 px centred in the space to
+its right (`is-sole`). The rail spans from the header down to 16 px above the
+bottom, is 264–288 px wide, and its footer holds "Show avatar", which turns the
+stage back on; notices start to the right of the rail. The History dialog still
+works. Below 1024 px the chat keeps the full viewport and history stays in the
+dialog. The phone tile and the hide-chat tab disappear, and the "Scale" header
+tab is not rendered. Kana's first-run greeting always keeps the stage and hides
+the rail, because it introduces her face to face.
 
 ## The config guide at /docs
 

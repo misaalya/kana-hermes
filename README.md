@@ -72,11 +72,11 @@ into `~/.kana` when you ask for it.
 <table>
   <tr>
     <td width="50%"><img src=".github/readme/workspace-dark-v5.jpg" alt="Kana in the dark theme on the Seigaiha pattern, next to the same conversation in the dark palette"></td>
-    <td width="50%"><img src=".github/readme/focus-mode-v2.jpg" alt="Kana with the avatar hidden: the conversation fills a single centred column instead"></td>
+    <td width="50%"><img src=".github/readme/focus-mode-v3.jpg" alt="Kana with the avatar hidden: a conversation rail sits beside the wider centred chat column"></td>
   </tr>
   <tr>
     <td align="center"><sub>Dark theme and stage patterns</sub></td>
-    <td align="center"><sub>Focus mode: the conversation and nothing else</sub></td>
+    <td align="center"><sub>Focus mode: your conversations beside the chat</sub></td>
   </tr>
   <tr>
     <td width="50%"><img src=".github/readme/slash-commands-v5.jpg" alt="The slash menu completing /re with Kana's /restart and Hermes's /retry, /refine, /reasoning, and /reload"></td>

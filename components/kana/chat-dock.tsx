@@ -5,6 +5,7 @@ import type { KanaMessage } from "@/lib/conversation/types";
 import { selectActiveConversation } from "@/lib/store/conversation-store";
 import { getCopy } from "@/lib/ui/copy";
 import { ChatComposer } from "./chat-composer";
+import { FocusRail } from "./focus-rail";
 import { ChevronLeftIcon, ChevronRightIcon } from "./icons";
 import { useKanaStore, useKanaWorkspace } from "./kana-workspace-context";
 import { LiveChatFeed } from "./live-chat-feed";
@@ -42,13 +43,17 @@ export function ChatDock() {
   const locale = useKanaStore("preferences", (state) => state.preferences.uiLocale);
   const chatVisible = useChatVisible();
   const greeting = useKanaStore("workspace", (state) => state.greeting);
-  // Without the avatar there is nothing left to hide, so the conversation
-  // takes the whole workspace.
+  // Without the avatar there is nothing left to hide; desktop adds the focus
+  // rail beside the conversation.
   const avatarVisible = useKanaStore("preferences", (state) => state.preferences.avatarVisible);
+  const usesMobileChat = useKanaStore("workspace", (state) => state.usesMobileChat);
   const text = getCopy(locale).workspace;
+  const showRail = !avatarVisible && !usesMobileChat;
 
   return (
-    <div className={`kana-chat-dock absolute bottom-4 right-4 top-[var(--kana-header-clear)] z-10 w-[min(34vw,480px)] min-w-[390px] transition-transform duration-300 ease-out max-lg:inset-x-0 max-lg:bottom-0 max-lg:top-[var(--kana-compact-band)] max-lg:w-full max-lg:min-w-0 ${chatVisible ? "" : "is-closed"} ${avatarVisible ? "" : "is-sole"} ${greeting ? "is-away" : ""}`}>
+    <>
+      {showRail ? <FocusRail /> : null}
+      <div className={`kana-chat-dock absolute bottom-4 right-4 top-[var(--kana-header-clear)] z-10 w-[min(34vw,480px)] min-w-[390px] transition-transform duration-300 ease-out max-lg:inset-x-0 max-lg:bottom-0 max-lg:top-[var(--kana-compact-band)] max-lg:w-full max-lg:min-w-0 ${chatVisible ? "" : "is-closed"} ${avatarVisible ? "" : "is-sole"} ${greeting ? "is-away" : ""}`}>
       <button
         type="button"
         className="kana-chat-toggle absolute -left-12 top-1/2 z-20 h-28 w-12 -translate-y-1/2 text-accent hover:text-accent-hover max-lg:hidden"
@@ -84,6 +89,7 @@ export function ChatDock() {
         </div>
         <ChatComposer />
       </section>
-    </div>
+      </div>
+    </>
   );
 }

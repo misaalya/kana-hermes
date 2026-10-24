@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Conversation } from "@/lib/conversation/types";
 import { CheckIcon, CloseIcon, MoreIcon, PlusIcon, SearchIcon } from "./icons";
 import { getCopy, type UiLocale } from "@/lib/ui/copy";
@@ -26,6 +26,10 @@ type ConversationSidebarProps = {
   hermesSessions?: HermesSessionEntry[];
   onAdopt?(session: HermesSessionEntry): void;
   locale: UiLocale;
+  className?: string;
+  footer?: ReactNode;
+  headingLevel?: 1 | 2;
+  ariaLabel?: string;
 };
 
 export const ConversationSidebar = memo(function ConversationSidebar({
@@ -40,8 +44,13 @@ export const ConversationSidebar = memo(function ConversationSidebar({
   hermesSessions = [],
   onAdopt,
   locale,
+  className,
+  footer,
+  headingLevel = 1,
+  ariaLabel,
 }: ConversationSidebarProps) {
   const copy = getCopy(locale).history;
+  const Heading = headingLevel === 2 ? "h2" : "h1";
   const dateLocale = getCopy(locale).dateLocale;
   const dateFormatter = useMemo(
     () => new Intl.DateTimeFormat(dateLocale, {
@@ -118,10 +127,10 @@ export const ConversationSidebar = memo(function ConversationSidebar({
     }`;
 
   return (
-    <aside className="flex h-full min-h-0 flex-col" aria-label={copy.aria}>
+    <aside className={`flex h-full min-h-0 flex-col ${className ?? ""}`} aria-label={ariaLabel ?? copy.aria}>
       <header className="flex items-center justify-between gap-3 px-5 pb-2 pt-5">
-        <h1 className="text-xl font-extrabold text-ink">{copy.title}</h1>
-        <div className="flex items-center gap-2">
+        <Heading className="min-w-0 truncate text-xl font-extrabold text-ink">{copy.title}</Heading>
+        <div className="flex shrink-0 items-center gap-2">
           <button
             type="button"
             className="kana-focus kana-pill kana-pill-accent min-h-9 pl-3.5 pr-4 text-[13px] disabled:cursor-not-allowed disabled:opacity-50"
@@ -279,6 +288,12 @@ export const ConversationSidebar = memo(function ConversationSidebar({
           </div>
         ) : null}
       </div>
+
+      {footer ? (
+        <div className="shrink-0 border-t-[3px] border-dotted border-line-strong p-4">
+          {footer}
+        </div>
+      ) : null}
     </aside>
   );
 });

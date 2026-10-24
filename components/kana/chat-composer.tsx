@@ -28,6 +28,8 @@ import { SlashCommandMenu } from "./slash-command-menu";
 
 const MIB = 1024 * 1024;
 const NO_FILES: File[] = [];
+/** Matches the textarea's `max-h-28` class; the bar grows upward up to it. */
+const COMPOSER_MAX_HEIGHT = 112;
 /** Commands Hermes accepts while a turn is still running. */
 const BUSY_COMMANDS = ["approve", "deny", "queue", "steer", "status", "agents", "goal", "heartbeat", "background"];
 
@@ -91,6 +93,18 @@ export function ChatComposer() {
       setWorkspace({ composerNotice: "" });
     });
   }, [activeConversationId, setWorkspace]);
+
+  // Shift+Enter adds a line: grow the bar upward, capped by max-h-28. Collapse
+  // to auto first, or scrollHeight keeps the old height and a shortened draft
+  // never gives the space back.
+  useEffect(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    const scrollTop = input.scrollTop;
+    input.style.height = "auto";
+    input.style.height = `${Math.min(input.scrollHeight, COMPOSER_MAX_HEIGHT)}px`;
+    input.scrollTop = scrollTop;
+  }, [message]);
 
   // Slash completion follows the draft, debounced so typing stays responsive.
   useEffect(() => {
@@ -170,7 +184,7 @@ export function ChatComposer() {
   return (
     <div className="kana-composer-shell shrink-0 border-t px-4 pb-3 pt-2.5 max-sm:px-3 max-sm:pb-[max(12px,env(safe-area-inset-bottom))]">
       {error ? (
-        <div role="alert" className="mb-2 flex items-start gap-2 rounded-[20px] border-2 border-red-300/40 bg-red-500/10 px-3.5 py-2 text-xs">
+        <div role="alert" className="mb-2 flex items-start gap-2 rounded-[20px] border-2 border-[#ca2a30] bg-[#ca2a30] px-3.5 py-2 text-xs font-semibold text-white">
           <p className="min-w-0 flex-1 break-words">{error}</p>
           <button type="button" onClick={actions.clearError} className="kana-focus min-h-8 shrink-0 rounded-full px-2"
             aria-label={copy.composer.dismissError}>
@@ -258,7 +272,9 @@ export function ChatComposer() {
                   return;
                 }
               }
-              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+              // On phones Enter belongs to the keyboard: only the send button
+              // submits, so a new line never sends the draft by accident.
+              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && !usesMobileChat) {
                 event.preventDefault();
                 void submitMessage();
               }

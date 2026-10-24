@@ -2,6 +2,18 @@
 
 ## 0.6.1 — 2026-10-24
 
+### Changed
+
+- Focus mode on a desktop is now two surfaces: a persistent conversation rail
+  beside a wider, centred chat column (`focus-rail.tsx`). The rail carries the
+  same list, search, and New action as the History dialog, keeps the room's
+  wallpaper visible, and offers "Show avatar" in its footer. Phones keep the
+  full-bleed chat and the History dialog unchanged.
+- The composer grows upward as the draft gains lines and gives the space back
+  when lines are removed, instead of keeping its tallest height until reload.
+- On phones Enter only adds a newline; only the Send button submits a message.
+  Desktops keep Enter to send and Shift+Enter for a new line.
+
 ### Fixed
 
 - The repository no longer tracks Qoder's local project settings.

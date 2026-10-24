@@ -55,6 +55,8 @@
   --kana-chat-fade: 200ms;
   /* The strip the header bar needs, so chat and panels clear it. */
   --kana-header-clear: 84px;
+  /* Desktop focus mode: the persistent conversation rail on the left. */
+  --kana-focus-rail-w: clamp(264px, 20vw, 288px);
   /* White sticker stroke around the phone avatar tile, in both themes. */
   --sticker: #ffffff;
   --bg: #1c1c1c;
@@ -820,16 +822,42 @@ details[open] > .kana-plus-summary::before {
   transform: translateX(calc(100% - 2px));
 }
 
-/* With the avatar switched off the conversation is the whole workspace: it
-   becomes a centred reading column on the room's wallpaper, and there is
-   nothing left for the hide-chat tab to hide. */
+/* With the avatar switched off desktop becomes a two-surface workspace: a
+   persistent conversation rail on the left and a centred reading column on the
+   room's wallpaper. There is nothing left for the hide-chat tab to hide. */
 @media (min-width: 1024px) {
-  .kana-chat-dock.is-sole {
-    right: auto;
-    left: 50%;
-    width: min(720px, calc(100vw - 2rem));
-    transform: translateX(-50%);
+  .kana-focus-rail {
+    position: absolute;
+    z-index: 10;
+    top: var(--kana-header-clear);
+    bottom: 1rem;
+    left: 1rem;
+    display: flex;
+    width: var(--kana-focus-rail-w);
+    flex-direction: column;
+    overflow: hidden;
+    border: 2px solid var(--line);
+    border-radius: 32px;
+    background: var(--surface);
   }
+
+  .kana-chat-dock.is-sole {
+    left: calc(2rem + var(--kana-focus-rail-w));
+    right: 1rem;
+    width: min(760px, calc(100vw - var(--kana-focus-rail-w) - 3rem));
+    margin-inline: auto;
+    transform: none;
+  }
+
+  /* Corner notices step past the rail instead of covering its rows. */
+  .is-focus-mode .kana-notices {
+    left: calc(2rem + var(--kana-focus-rail-w));
+  }
+}
+
+.kana-focus-rail.is-away {
+  opacity: 0;
+  visibility: hidden;
 }
 
 .kana-chat-dock.is-sole .kana-chat-toggle {
