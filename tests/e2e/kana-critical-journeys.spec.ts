@@ -791,11 +791,47 @@ test("keeps the avatar chat tray blue and gives focus mode a plain reading colum
     expect(focus.field?.borderTop).toBe("0px");
     expect(focus.send?.background).toBe(focus.accent);
 
-    // The reading column takes most of the desktop's working width.
+    // The panel spans the desktop's working width, but the conversation and
+    // the composer bar stay on one narrow measure, centred inside it.
     const dock = await page.locator(".kana-chat-dock").boundingBox();
     expect(dock?.width ?? 0).toBeGreaterThanOrEqual(
-      (page.viewportSize()?.width ?? 0) * 0.44,
+      (page.viewportSize()?.width ?? 0) * 0.7,
     );
+    const scroll = await page.locator(".kana-chat-scroll").boundingBox();
+    const bar = await page.locator(".kana-composer").boundingBox();
+    expect(scroll && bar && dock).toBeTruthy();
+    expect(scroll!.width).toBeLessThanOrEqual(808);
+    expect(bar!.width).toBeLessThanOrEqual(760);
+    for (const narrow of [scroll!, bar!]) {
+      const leftGap = narrow.x - dock!.x;
+      const rightGap = dock!.x + dock!.width - (narrow.x + narrow.width);
+      expect(Math.abs(leftGap - rightGap)).toBeLessThan(2);
+    }
+    // The bar shares the transcript's text edges, not the panel's.
+    expect(Math.abs(bar!.x - (scroll!.x + 24))).toBeLessThan(2);
+    expect(
+      Math.abs(bar!.x + bar!.width - (scroll!.x + scroll!.width - 24)),
+    ).toBeLessThan(2);
+
+    // The bar is one pill row: attach, draft, model, mic, Send.
+    const attachBox = await page.locator(".kana-composer-attach").boundingBox();
+    const textBox = await page.locator(".kana-composer textarea").boundingBox();
+    const modelBox = await page.locator(".kana-model-pill").boundingBox();
+    const micBox = await page
+      .locator(".kana-composer-tool:not(.kana-composer-attach)")
+      .boundingBox();
+    const sendBox = await page.locator(".kana-send").boundingBox();
+    expect(attachBox && textBox && modelBox && micBox && sendBox).toBeTruthy();
+    const centers = [attachBox, textBox, modelBox, micBox, sendBox].map(
+      (box) => box!.y + box!.height / 2,
+    );
+    for (const center of centers) {
+      expect(Math.abs(center - centers[0])).toBeLessThan(2);
+    }
+    expect(attachBox!.x + attachBox!.width).toBeLessThanOrEqual(textBox!.x + 1);
+    expect(textBox!.x + textBox!.width).toBeLessThanOrEqual(modelBox!.x + 1);
+    expect(modelBox!.x + modelBox!.width).toBeLessThanOrEqual(micBox!.x + 1);
+    expect(micBox!.x + micBox!.width).toBeLessThanOrEqual(sendBox!.x + 1);
 
     // The reader's own words keep a bubble on the right.
     const feed = await page.locator(".kana-chat-feed").boundingBox();
@@ -2413,7 +2449,6 @@ test("turns the workspace into a chat-only view for a focused conversation", asy
   const composer = page.getByRole("textbox", { name: "Message Kana" });
   await expect(stage).toBeVisible();
   await expect(avatarLayer).toBeVisible();
-  const withAvatar = (await dock.boundingBox())?.width ?? 0;
 
   await page.getByRole("button", { name: "Open settings" }).click();
   const dialog = page.getByRole("dialog");
@@ -2443,23 +2478,20 @@ test("turns the workspace into a chat-only view for a focused conversation", asy
       Math.abs((railBox?.y ?? 0) + (railBox?.height ?? 0) - (viewportHeight - 16)),
     ).toBeLessThan(2);
 
-    // The chat column is centred in the region right of the rail, not in the
-    // viewport, so the two surfaces read as one composition.
+    // The panel fills the space right of the rail, edge to edge, while the
+    // conversation inside it keeps its narrow measure.
     await expect
       .poll(async () => {
         const box = await dock.boundingBox();
         if (!box || !railBox) return Number.NaN;
-        const expected =
-          (railBox.x + railBox.width + 16 + viewport - 16) / 2;
-        return Math.abs(box.x + box.width / 2 - expected);
+        return Math.abs(
+          box.x - (railBox.x + railBox.width + 16),
+        );
       })
       .toBeLessThan(2);
     const solo = await dock.boundingBox();
-    expect(solo?.width ?? 0).toBeGreaterThan(withAvatar * 1.5);
-    expect(solo?.width ?? 0).toBeLessThanOrEqual(761);
-    expect(solo?.x ?? 0).toBeGreaterThanOrEqual(
-      (railBox?.x ?? 0) + (railBox?.width ?? 0) + 15,
-    );
+    expect(solo?.width ?? 0).toBeGreaterThan(viewport * 0.7);
+    expect(Math.round((solo?.x ?? 0) + (solo?.width ?? 0))).toBe(viewport - 16);
   } else {
     // Phones keep their full-bleed chat and never mount the rail.
     await expect(rail).toHaveCount(0);
