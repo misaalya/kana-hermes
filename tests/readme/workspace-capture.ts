@@ -436,7 +436,11 @@ export async function expectWorkspaceReady(
     await expect(avatar).toBeVisible();
   } else {
     await expect(avatar).toBeHidden();
-    await expect(page.locator(".kana-chat-dock")).toHaveClass(/is-sole/);
+    const dock = page.locator(".kana-chat-dock");
+    await expect(dock).toHaveClass(/is-sole/);
+    await expect(page.locator(".kana-focus-rail")).toBeVisible();
+    await expect(page.getByRole("complementary", { name: "Conversations" })).toBeVisible();
+    expect((await dock.boundingBox())?.width ?? 0).toBeLessThanOrEqual(761);
   }
   // Two exchanges: a reader's bubble and a reply each.
   await expect(page.locator(".kana-chat-feed article")).toHaveCount(4);

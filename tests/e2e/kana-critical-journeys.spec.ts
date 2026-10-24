@@ -8,6 +8,15 @@ import {
 } from "@playwright/test";
 import { E2E_ACCESS_PASSWORD } from "./access-password";
 
+/** Submit the draft as the current device does: Enter on desktop, Send on a phone. */
+async function submitDraft(page: Page, composer: Locator) {
+  if ((page.viewportSize()?.width ?? 0) < 1024) {
+    await page.getByRole("button", { name: "Send", exact: true }).click();
+  } else {
+    await composer.press("Enter");
+  }
+}
+
 /** A reply in the Markdown Hermes writes, with a URL too long to wrap at a space. */
 const RESEARCH_REPLY = [
   "Here is the latest on **Kupang weather**:",
@@ -576,7 +585,7 @@ test("renders text replies without entering the TTS pipeline when voice is off",
 
   const composer = page.getByRole("textbox", { name: "Message Kana" });
   await composer.fill("Voice-off latency check");
-  await composer.press("Enter");
+  await submitDraft(page, composer);
 
   // No fixed latency budget: slower laptops render later, and what matters is
   // that the reply shows without ever waiting on speech synthesis.
@@ -612,7 +621,7 @@ test("shows files Hermes delivers as a player and download buttons, never as pat
 
   const composer = page.getByRole("textbox", { name: "Message Kana" });
   await composer.fill("Send me the files");
-  await composer.press("Enter");
+  await submitDraft(page, composer);
   await expect(page.getByText("Hello! I am here.", { exact: true }).first()).toBeVisible();
 
   const audio = page.locator("audio.kana-media-audio");
@@ -635,7 +644,7 @@ test("copies a bubble's text, and a reply's words rather than its hidden file li
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   const composer = page.getByRole("textbox", { name: "Message Kana" });
   await composer.fill("Keep this prompt");
-  await composer.press("Enter");
+  await submitDraft(page, composer);
 
   const feed = await page.locator(".kana-chat-feed").boundingBox();
   const feedMiddle = (feed?.x ?? 0) + (feed?.width ?? 0) / 2;
@@ -660,7 +669,7 @@ test("copies a bubble's text, and a reply's words rather than its hidden file li
   // A reply that delivered files copies its words: the MEDIA: links are a
   // player and download buttons on screen, never text to paste somewhere else.
   await composer.fill("Send me the files");
-  await composer.press("Enter");
+  await submitDraft(page, composer);
   await expect(page.getByText("Hello! I am here.", { exact: true })).toHaveCount(2);
   const withFiles = page.locator("article").filter({ hasText: "Hello! I am here." }).last();
   await withFiles.getByRole("button", { name: "Copy message" }).click();
@@ -698,13 +707,13 @@ test("subtitles follow the language the user writes in and survive reloads", asy
 }) => {
   const composer = page.getByRole("textbox", { name: "Message Kana" });
   await composer.fill("Hello Kana");
-  await composer.press("Enter");
+  await submitDraft(page, composer);
 
   const overlay = page.getByText("Hello! I am here.", { exact: true });
   await expect(overlay.first()).toBeVisible();
 
   await composer.fill("Halo Kana, apa kabar?");
-  await composer.press("Enter");
+  await submitDraft(page, composer);
   await expect(
     page.getByText("Halo! Aku di sini.", { exact: true }).first(),
   ).toBeVisible();
@@ -730,10 +739,10 @@ test("walks this conversation's sent prompts with the arrow keys", async ({
 }) => {
   const composer = page.getByRole("textbox", { name: "Message Kana" });
   await composer.fill("First prompt");
-  await composer.press("Enter");
+  await submitDraft(page, composer);
   await expect(page.getByText("Hello! I am here.", { exact: true }).first()).toBeVisible();
   await composer.fill("Second prompt");
-  await composer.press("Enter");
+  await submitDraft(page, composer);
   await expect(page.getByText("Hello! I am here.", { exact: true })).toHaveCount(2);
 
   // Only the desktop walks history; a phone keeps the keys for its caret.
@@ -773,11 +782,11 @@ test("keeps a running turn's Hermes activity through a refresh and renders its M
   const chat = page.getByRole("log", { name: "Live chat" });
   // A finished turn makes the session one a refresh resumes.
   await composer.fill("Hello Kana");
-  await composer.press("Enter");
+  await submitDraft(page, composer);
   await expect(chat.getByText("Hello! I am here.", { exact: true })).toBeVisible();
 
   await composer.fill("Research the Kupang weather");
-  await composer.press("Enter");
+  await submitDraft(page, composer);
   const activity = chat.getByRole("group").filter({ hasText: "Hermes activity" });
   await expect(activity).toContainText("web_search");
   await expect(activity).toHaveAttribute("open", "");
@@ -819,7 +828,7 @@ test("a message typed during a turn is redirected into it, not answered twice", 
   const chat = page.getByRole("log", { name: "Live chat" });
 
   await composer.fill("Research the Kupang weather");
-  await composer.press("Enter");
+  await submitDraft(page, composer);
   const activity = chat.getByRole("group").filter({ hasText: "Hermes activity" });
   await expect(activity).toContainText("web_search");
   // Send stays Send while Hermes works; stopping lives beside the status.
@@ -827,7 +836,7 @@ test("a message typed during a turn is redirected into it, not answered twice", 
   await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeVisible();
 
   await composer.fill("and the folders too");
-  await composer.press("Enter");
+  await submitDraft(page, composer);
   // The redirected message is a line under the message that opened the turn,
   // not a second bubble.
   const turn = chat.locator("article").filter({ hasText: "Research the Kupang weather" });
@@ -855,7 +864,7 @@ test("a refresh during a new conversation's first turn resumes it without a dupl
   await openHistory(page);
   await page.getByText("New", { exact: true }).click();
   await composer.fill("Research the forest fires");
-  await composer.press("Enter");
+  await submitDraft(page, composer);
   const activity = chat.getByRole("group").filter({ hasText: "Hermes activity" });
   await expect(activity).toContainText("web_search");
 
@@ -1481,6 +1490,33 @@ test("composer uploads files, preserves failed drafts, and removes attachments",
   await expect(page.getByRole("list", { name: "Attachments" })).toHaveCount(0);
 });
 
+test("composer grows upward, shrinks back, and phone Enter only adds a line", async ({ page }) => {
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
+  const height = async () => (await composer.boundingBox())?.height ?? 0;
+
+  await composer.fill("First line");
+  const oneLine = await height();
+
+  await composer.press("Shift+Enter");
+  await composer.type("Second line");
+  await expect.poll(height).toBeGreaterThan(oneLine);
+  const twoLines = await height();
+
+  await composer.press("Enter");
+  if ((page.viewportSize()?.width ?? 0) < 1024) {
+    // Enter belongs to the phone keyboard: the draft keeps its new line until
+    // the reader taps Send.
+    await expect(composer).toHaveValue("First line\nSecond line\n");
+    await page.getByRole("button", { name: "Send", exact: true }).click();
+  }
+  await expect(composer).toHaveValue("");
+  await expect(composer).toBeEditable();
+
+  await composer.fill("Short");
+  await expect.poll(height).toBeLessThan(twoLines);
+  expect(await height()).toBeLessThanOrEqual(oneLine + 1);
+});
+
 test("composer selects the Hermes model and returns keyboard focus", async ({ page }) => {
   const trigger = page.getByRole("button", { name: "Choose model", exact: true });
   await trigger.click();
@@ -1551,7 +1587,7 @@ test("the composer names the session's model even when the list loads slower tha
   await page.getByText("New", { exact: true }).click();
   const composer = page.getByRole("textbox", { name: "Message Kana" });
   await composer.fill("Hello Kana");
-  await composer.press("Enter");
+  await submitDraft(page, composer);
   await expect(page.getByRole("log", { name: "Live chat" }).getByText("Hello! I am here.", { exact: true })).toBeVisible();
   await expect(chip).toHaveText(/deepseek-v4-flash-0731/);
 });
@@ -2137,7 +2173,7 @@ test("supports keyboard slash commands end to end", async ({ page }) => {
   await expect(composer).toBeFocused();
   await composer.press("Tab");
   await expect(composer).toHaveValue("/status");
-  await composer.press("Enter");
+  await submitDraft(page, composer);
   await openHistory(page);
   await expect(
     page.getByText("fake hermes session status ok").first(),
@@ -2158,7 +2194,7 @@ test("sends the nearest command Hermes offered when Enter runs an unknown one", 
   await composer.fill("/codex-run");
   // Hermes's own completer offers /codex-runtime for the /codex-run prefix.
   await page.getByRole("option", { name: /\/codex-runtime/ }).first().waitFor();
-  await composer.press("Enter");
+  await submitDraft(page, composer);
   await expect.poll(() => hermes.commands).toContain("codex-runtime");
   expect(hermes.commands).not.toContain("codex-run");
   // The chat shows the command that actually ran, not what was typed. Phones
@@ -2174,7 +2210,7 @@ test("never rewrites a command that is already real", async ({ page }) => {
   await composer.click();
   await composer.fill("/new Deal with the report");
   await page.getByRole("option", { name: /\/new/ }).first().waitFor();
-  await composer.press("Enter");
+  await submitDraft(page, composer);
   // Kana answers /new itself, so it never reaches Hermes as a slash command:
   // a name that is already real is still not rewritten.
   await expect.poll(() => hermes.commands).not.toContain("new");
@@ -2256,8 +2292,10 @@ test("turns the workspace into a chat-only view for a focused conversation", asy
   const stage = page.getByRole("region", { name: "Kana avatar stage" });
   const avatarLayer = page.locator(".kana-avatar-viewport");
   const dock = page.locator(".kana-chat-dock");
+  const rail = page.locator(".kana-focus-rail");
   const canvas = page.getByTestId("live2d-canvas");
   const scale = page.getByRole("button", { name: "Adjust avatar position and size" });
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
   await expect(stage).toBeVisible();
   await expect(avatarLayer).toBeVisible();
   const withAvatar = (await dock.boundingBox())?.width ?? 0;
@@ -2268,49 +2306,83 @@ test("turns the workspace into a chat-only view for a focused conversation", asy
   await dialog.getByRole("switch", { name: "Show avatar" }).click();
   await dialog.getByRole("button", { name: "Close settings" }).click();
 
-  // The avatar is gone, the room is still there, and the conversation reads as
-  // a centred column instead of an unreadable wall of text.
+  // The avatar is gone, the room is still there, and desktop becomes a rail
+  // plus a readable column instead of one card in an empty workspace.
   await expect(avatarLayer).toBeHidden();
   await expect(stage).toBeVisible();
   await expect(scale).toHaveCount(0);
   await expect(dock).toHaveClass(/is-sole/);
-  const viewport = page.viewportSize()?.width ?? 0;
-  // The dock slides into its column with a transform transition, so wait until
-  // it stops moving before reading the layout: the column is centred, not a
-  // card pinned to one edge. The width is not transitioned, and the phone
-  // layout only moves the top edge, so this settles within the transition.
-  await expect
-    .poll(async () => {
-      const box = await dock.boundingBox();
-      if (!box) return Number.NaN;
-      return Math.abs(box.x - (viewport - box.width) / 2);
-    })
-    .toBeLessThan(2);
-  const solo = await dock.boundingBox();
-  // Phones are chat-first already, so the conversation keeps the screen it had
-  // and only the band the avatar reserved goes away; above the phone breakpoint
-  // it must have grown past the panel it shared with the avatar.
+  const viewportSize = page.viewportSize();
+  const viewport = viewportSize?.width ?? 0;
+  const viewportHeight = viewportSize?.height ?? 0;
+
   if (viewport >= 1024) {
+    await expect(rail).toBeVisible();
+    const railBox = await rail.boundingBox();
+    expect(railBox?.x ?? 0).toBeGreaterThanOrEqual(15);
+    expect(railBox?.x ?? 0).toBeLessThanOrEqual(17);
+    expect(Math.round(railBox?.y ?? 0)).toBe(84);
+    expect(railBox?.width ?? 0).toBeGreaterThanOrEqual(264);
+    expect(railBox?.width ?? 0).toBeLessThanOrEqual(288);
+    expect(
+      Math.abs((railBox?.y ?? 0) + (railBox?.height ?? 0) - (viewportHeight - 16)),
+    ).toBeLessThan(2);
+
+    // The chat column is centred in the region right of the rail, not in the
+    // viewport, so the two surfaces read as one composition.
+    await expect
+      .poll(async () => {
+        const box = await dock.boundingBox();
+        if (!box || !railBox) return Number.NaN;
+        const expected =
+          (railBox.x + railBox.width + 16 + viewport - 16) / 2;
+        return Math.abs(box.x + box.width / 2 - expected);
+      })
+      .toBeLessThan(2);
+    const solo = await dock.boundingBox();
     expect(solo?.width ?? 0).toBeGreaterThan(withAvatar * 1.5);
+    expect(solo?.width ?? 0).toBeLessThanOrEqual(761);
+    expect(solo?.x ?? 0).toBeGreaterThanOrEqual(
+      (railBox?.x ?? 0) + (railBox?.width ?? 0) + 15,
+    );
   } else {
+    // Phones keep their full-bleed chat and never mount the rail.
+    await expect(rail).toHaveCount(0);
+    const solo = await dock.boundingBox();
     expect(solo?.width ?? 0).toBeGreaterThanOrEqual(viewport - 2);
   }
-  expect(solo?.width ?? 0).toBeLessThanOrEqual(721);
-  expect(solo?.width ?? 0).toBeLessThanOrEqual(viewport);
+  expect((await dock.boundingBox())?.width ?? 0).toBeLessThanOrEqual(viewport);
+
   // The canvas stays mounted, so the model and its WebGL context survive.
   await expect(canvas).toHaveCount(1);
-  await expect(page.getByRole("textbox", { name: "Message Kana" })).toBeVisible();
+  await expect(composer).toBeVisible();
+
+  if (viewport >= 1024) {
+    // The rail is a working surface: creating a conversation never opens the
+    // modal, and focus lands back in the composer.
+    const conversations = page.getByRole("complementary", { name: "Conversations" });
+    await expect(conversations).toBeVisible();
+    await conversations.locator("button.kana-pill-accent").click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(composer).toBeFocused();
+  }
 
   // It survives a reload, because the choice is a local preference.
   await page.reload();
   await expect(avatarLayer).toBeHidden();
-  await page.getByRole("button", { name: "Open settings" }).click();
-  await dialog.getByRole("button", { name: /^Avatar(?: Avatar and stage)?$/ }).click();
-  await dialog.getByRole("switch", { name: "Show avatar" }).click();
-  await dialog.getByRole("button", { name: "Close settings" }).click();
+  if (viewport >= 1024) {
+    await expect(rail).toBeVisible();
+    await rail.getByRole("button", { name: "Show avatar" }).click();
+  } else {
+    await page.getByRole("button", { name: "Open settings" }).click();
+    await dialog.getByRole("button", { name: /^Avatar(?: Avatar and stage)?$/ }).click();
+    await dialog.getByRole("switch", { name: "Show avatar" }).click();
+    await dialog.getByRole("button", { name: "Close settings" }).click();
+  }
   await expect(stage).toBeVisible();
   await expect(avatarLayer).toBeVisible();
   await expect(scale).toBeVisible();
+  await expect(rail).toHaveCount(0);
   await page.screenshot({ path: `test-results/chat-only-restored-${test.info().project.name}.png` });
 });
 
@@ -2384,7 +2456,7 @@ test("keeps a separate draft per conversation and searches stored history", asyn
 }) => {
   const composer = page.getByRole("textbox", { name: "Message Kana" });
   await composer.fill("Make the first conversation non-empty");
-  await composer.press("Enter");
+  await submitDraft(page, composer);
   await expect(page.getByText("Hello! I am here.", { exact: true }).first()).toBeVisible();
   await composer.fill("draft for the first conversation");
 
@@ -2495,7 +2567,7 @@ for (const provider of ["irodori-local", "pollinations"]) {
       await route.fulfill({ contentType: "audio/wav", body: testToneWav() });
     });
     const composer = page.getByRole("textbox", { name: "Message Kana" });
-    await composer.fill("Please speak after the audio is ready"); await composer.press("Enter");
+    await composer.fill("Please speak after the audio is ready"); await submitDraft(page, composer);
     try {
       await expect.poll(() => requests).toBe(1);
       await expect(page.getByText("Hello! I am here.", { exact: true })).toHaveCount(0);
@@ -2668,7 +2740,7 @@ test("TTS failure reveals held text with an explicit voice error", async ({ page
   await enableTestVoice(page);
   await page.route("**/api/voice/tts/speech", (route) => route.fulfill({ status: 503, json: { error: "Test voice unavailable" } }));
   const composer = page.getByRole("textbox", { name: "Message Kana" });
-  await composer.fill("Handle an unavailable voice"); await composer.press("Enter");
+  await composer.fill("Handle an unavailable voice"); await submitDraft(page, composer);
   await expect(page.getByText("Hello! I am here.", { exact: true }).first()).toBeVisible();
   await expect(page.getByText(/Test voice unavailable/).first()).toBeVisible();
 });
@@ -2683,9 +2755,9 @@ test("a failed spoken reply does not suppress an identical answer to a new user 
       : route.fulfill({ contentType: "audio/wav", body: testToneWav() });
   });
   const composer = page.getByRole("textbox", { name: "Message Kana" });
-  await composer.fill("First greeting"); await composer.press("Enter");
+  await composer.fill("First greeting"); await submitDraft(page, composer);
   await expect(page.getByText("Hello! I am here.", { exact: true })).toHaveCount(1);
-  await composer.fill("Say that again"); await composer.press("Enter");
+  await composer.fill("Say that again"); await submitDraft(page, composer);
   await expect.poll(() => count).toBe(2);
   await expect(page.getByText("Hello! I am here.", { exact: true })).toHaveCount(2);
 });
@@ -2699,7 +2771,7 @@ test("Stop reveals held text and cancels synthesis before playback", async ({ pa
     cancelled = true; return route.fulfill({ json: { cancelled: true } });
   });
   const composer = page.getByRole("textbox", { name: "Message Kana" });
-  await composer.fill("Stop this pending voice"); await composer.press("Enter");
+  await composer.fill("Stop this pending voice"); await submitDraft(page, composer);
   await expect.poll(() => requested).toBe(true);
   await expect(page.getByText("Hello! I am here.", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Stop", exact: true }).click();

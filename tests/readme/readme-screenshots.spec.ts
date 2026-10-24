@@ -34,12 +34,12 @@ test("desktop: the workspace and focus mode", async ({ page }) => {
     ...JPEG,
   });
 
-  // Focus mode: the avatar goes, the room stays, and the conversation takes the
-  // whole workspace.
+  // Focus mode: the avatar goes, the room stays, and the conversation gains a
+  // persistent rail beside a centred reading column.
   await hideAvatarFromSettings(page);
   await expectWorkspaceReady(page, { avatarVisible: false });
   await page.screenshot({
-    path: path.join(README_DIR, "focus-mode-v2.jpg"),
+    path: path.join(README_DIR, "focus-mode-v3.jpg"),
     ...JPEG,
   });
 });

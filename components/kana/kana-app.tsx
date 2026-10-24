@@ -22,6 +22,7 @@ function Workspace() {
   const workspace = useKanaWorkspace();
   const ready = useKanaStore("conversations", (state) => state.ready);
   const locale = useKanaStore("preferences", (state) => state.preferences.uiLocale);
+  const avatarVisible = useKanaStore("preferences", (state) => state.preferences.avatarVisible);
   const connection = useConnectionScreen();
   const connectionDown = connection.connectionDown;
 
@@ -55,7 +56,7 @@ function Workspace() {
   }
 
   return (
-    <main className="relative h-dvh w-full overflow-hidden bg-bg">
+    <main className={`relative h-dvh w-full overflow-hidden bg-bg ${!avatarVisible && !connectionDown ? "is-focus-mode" : ""}`}>
       {connectionDown ? null : <WorkspaceStage />}
       <WorkspaceHeader connectionDown={connectionDown} />
       {connectionDown ? null : <ChatDock />}

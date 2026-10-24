@@ -9,10 +9,12 @@ the Hermes model. This page covers its controls and limits.
 ## Sending a message
 
 Text sits on the first row; the second row holds the attach button, the
-microphone, the current model, and Send. Enter sends and Shift+Enter inserts a
-newline. Send keeps its icon while Hermes works; Stop appears beside the working
-status in the conversation and remains there while the reply's voice is still
-being generated. A plain message typed during a turn follows Hermes's
+microphone, the current model, and Send. On a desktop, Enter sends and
+Shift+Enter inserts a newline; on a phone, Enter inserts a newline and only Send
+submits. The text area grows upward as lines are added, up to its maximum
+height, and then scrolls. Send keeps its icon while Hermes works; Stop appears
+beside the working status in the conversation and remains there while the
+reply's voice is still being generated. A plain message typed during a turn follows Hermes's
 `display.busy_input_mode`: by default it is redirected into the running turn,
 which still answers once; with `queue` it runs as the next turn, and with
 `steer` it reaches Hermes after the next tool call. A redirected or steered
