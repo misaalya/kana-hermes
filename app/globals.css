@@ -2019,6 +2019,117 @@ video.kana-media-preview {
   }
 }
 
+/* Focus mode only: the plain reading surface inside the blue frame. With the
+   avatar visible the dock keeps its original blue tray. */
+@media (min-width: 1024px) {
+  .kana-chat-dock.is-sole .kana-chat-panel,
+  .kana-chat-dock.is-sole .kana-chat-feed {
+    background: var(--surface);
+  }
+
+  .kana-chat-dock.is-sole .kana-chat-scroll {
+    gap: 1.25rem;
+    padding: 1.5rem;
+  }
+
+  .kana-chat-dock.is-sole .kana-chat-scroll > article[data-role="assistant"] {
+    max-width: 100%;
+  }
+
+  .kana-chat-dock.is-sole .kana-chat-scroll > article[data-role="user"] {
+    max-width: 85%;
+  }
+
+  .kana-chat-dock.is-sole .kana-message-assistant {
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: var(--ink);
+  }
+
+  .kana-chat-dock.is-sole .kana-message-user {
+    border: 0;
+    padding: 0.625rem 1rem;
+  }
+
+  .kana-chat-dock.is-sole .kana-message-text {
+    font-size: 14px;
+    line-height: 1.7;
+  }
+
+  .kana-chat-dock.is-sole .kana-typing {
+    padding: 6px 0;
+    color: var(--muted);
+  }
+
+  .kana-chat-dock.is-sole .kana-typing > span {
+    width: 6px;
+    height: 6px;
+  }
+
+  .kana-chat-dock.is-sole .kana-composer-shell {
+    border-color: transparent;
+    background: var(--surface);
+    padding: 0.75rem 1.5rem 1.25rem;
+  }
+
+  .kana-chat-dock.is-sole .kana-composer {
+    border: 0;
+    border-radius: 28px;
+    background: var(--surface-strong);
+    padding: 4px 10px 8px;
+  }
+
+  .kana-chat-dock.is-sole .kana-composer textarea {
+    color: var(--ink);
+  }
+
+  .kana-chat-dock.is-sole .kana-composer textarea::placeholder {
+    color: var(--muted);
+  }
+
+  .kana-chat-dock.is-sole .kana-composer button {
+    color: var(--ink);
+  }
+
+  .kana-chat-dock.is-sole .kana-composer button:disabled {
+    color: var(--faint);
+  }
+
+  .kana-chat-dock.is-sole .kana-composer ul li {
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
+  }
+
+  .kana-chat-dock.is-sole .kana-composer .kana-composer-tool:not(:disabled):hover {
+    background: color-mix(in srgb, var(--ink) 10%, transparent);
+  }
+
+  .kana-chat-dock.is-sole .kana-composer .kana-model-pill {
+    background: transparent;
+    color: var(--muted);
+  }
+
+  .kana-chat-dock.is-sole .kana-composer .kana-model-pill:not(:disabled):hover {
+    background: color-mix(in srgb, var(--ink) 10%, transparent);
+    color: var(--ink);
+  }
+
+  .kana-chat-dock.is-sole .kana-composer .kana-model-pill:disabled {
+    background: transparent;
+    color: var(--faint);
+  }
+
+  .kana-chat-dock.is-sole .kana-composer .kana-send:not(:disabled) {
+    background: var(--accent);
+    color: var(--on-accent);
+  }
+
+  .kana-chat-dock.is-sole .kana-typing-stop:not(:disabled):hover {
+    background: color-mix(in srgb, var(--ink) 10%, transparent);
+    color: var(--accent-strong);
+  }
+}
+
 /* Touch browsers (notably iOS Safari) zoom into form fields below 16px. */
 @media (pointer: coarse) {
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),

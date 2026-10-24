@@ -208,6 +208,7 @@ export const LiveChatFeed = memo(function LiveChatFeed({
           return (
             <article
               key={message.id}
+              data-role={message.role}
               className={`flex min-w-0 max-w-[88%] flex-col gap-1.5 max-sm:max-w-[90%] ${
                 isAssistant ? "self-start" : "self-end"
               }`}
@@ -217,7 +218,7 @@ export const LiveChatFeed = memo(function LiveChatFeed({
                   isAssistant ? "kana-message-assistant" : "kana-message-user"
                 }`}
               >
-                <div className="text-[13px] font-medium leading-relaxed max-sm:text-[13px] max-sm:leading-[1.5]" data-copy-text="">
+                <div className="kana-message-text text-[13px] font-medium leading-relaxed max-sm:text-[13px] max-sm:leading-[1.5]" data-copy-text="">
                   {isAssistant ? (
                     <AssistantReply text={messageCopy} copy={copy.chat} />
                   ) : (
@@ -280,7 +281,7 @@ export const LiveChatFeed = memo(function LiveChatFeed({
                   type="button"
                   onClick={onStop}
                   aria-label={copy.workspace.stop}
-                  className="kana-focus inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold text-muted transition-colors hover:bg-white/16 hover:text-accent"
+                  className="kana-focus kana-typing-stop inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold text-muted transition-colors hover:bg-white/16 hover:text-accent"
                 >
                   <StopIcon className="size-3" />
                   {copy.workspace.stop}

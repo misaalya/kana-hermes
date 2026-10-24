@@ -373,9 +373,11 @@ export async function openWorkspace(
   await page.request.put("/api/kana/setup");
   await installStandInHermes(page);
   await page.goto("/");
+  // The stand-in handshake can trail the first paint when the capture suite
+  // runs several browsers in a row; the workspace is ready only past the gate.
   await expect(
     page.getByRole("textbox", { name: "Message Kana" }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 60_000 });
 }
 
 /** Sends one prompt through the composer and waits for its reply to arrive. */
@@ -386,7 +388,12 @@ async function sendPrompt(
 ): Promise<void> {
   const composer = page.getByRole("textbox", { name: "Message Kana" });
   await composer.fill(prompt);
-  await composer.press("Enter");
+  // Phones only submit through Send; Enter adds a newline there.
+  if ((page.viewportSize()?.width ?? 0) < 1024) {
+    await page.getByRole("button", { name: "Send", exact: true }).click();
+  } else {
+    await composer.press("Enter");
+  }
   // Hermes titles the session after the first words, so the prompt is both the
   // title and a bubble: only the feed matters here.
   const feed = page.getByRole("log", { name: "Live chat" });
@@ -441,6 +448,38 @@ export async function expectWorkspaceReady(
     await expect(page.locator(".kana-focus-rail")).toBeVisible();
     await expect(page.getByRole("complementary", { name: "Conversations" })).toBeVisible();
     expect((await dock.boundingBox())?.width ?? 0).toBeLessThanOrEqual(761);
+  }
+  // A frame must show the state it claims: the avatar keeps the original blue
+  // tray, while focus mode shows the plain reading surface.
+  if ((page.viewportSize()?.width ?? 0) >= 1024) {
+    const interior = await page.evaluate(() => {
+      const probe = (name: string) => {
+        const element = document.createElement("span");
+        element.style.color = `var(${name})`;
+        document.body.append(element);
+        const value = getComputedStyle(element).color;
+        element.remove();
+        return value;
+      };
+      const bubble = document.querySelector(".kana-message-assistant");
+      const field = document.querySelector(".kana-composer");
+      return {
+        bubbleToken: probe("--chat-bubble"),
+        surfaceStrong: probe("--surface-strong"),
+        bubble: bubble ? getComputedStyle(bubble).backgroundColor : "",
+        field: field ? getComputedStyle(field).backgroundColor : "",
+        border: field ? getComputedStyle(field).borderTopWidth : "",
+      };
+    });
+    if (options.avatarVisible) {
+      expect(interior.bubble).toBe(interior.bubbleToken);
+      expect((await page.locator(".kana-chat-dock").boundingBox())?.width ?? 0)
+        .toBeLessThanOrEqual(481);
+    } else {
+      expect(interior.bubble).toBe("rgba(0, 0, 0, 0)");
+      expect(interior.field).toBe(interior.surfaceStrong);
+      expect(interior.border).toBe("0px");
+    }
   }
   // Two exchanges: a reader's bubble and a reply each.
   await expect(page.locator(".kana-chat-feed article")).toHaveCount(4);
