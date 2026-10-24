@@ -842,10 +842,11 @@ details[open] > .kana-plus-summary::before {
   }
 
   .kana-chat-dock.is-sole {
+    /* Width of the reading measure and the composer bar, not of the panel. */
+    --kana-focus-measure: 760px;
     left: calc(2rem + var(--kana-focus-rail-w));
     right: 1rem;
-    width: min(760px, calc(100vw - var(--kana-focus-rail-w) - 3rem));
-    margin-inline: auto;
+    width: auto;
     transform: none;
   }
 
@@ -2027,7 +2028,13 @@ video.kana-media-preview {
     background: var(--surface);
   }
 
+  /* The panel spans the workspace, but the conversation does not: the
+     transcript and the bar stay on the same centred measure, and the scroll's
+     1.5rem gutters are added around it so their text edges line up. */
   .kana-chat-dock.is-sole .kana-chat-scroll {
+    width: 100%;
+    max-width: calc(var(--kana-focus-measure) + 3rem);
+    margin-inline: auto;
     gap: 1.25rem;
     padding: 1.5rem;
   }
@@ -2073,15 +2080,52 @@ video.kana-media-preview {
     padding: 0.75rem 1.5rem 1.25rem;
   }
 
+  .kana-chat-dock.is-sole .kana-composer-shell > .kana-composer-body,
+  .kana-chat-dock.is-sole .kana-composer-shell > [role="alert"] {
+    max-width: var(--kana-focus-measure);
+    margin-inline: auto;
+  }
+
   .kana-chat-dock.is-sole .kana-composer {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+    align-items: center;
+    gap: 2px;
     border: 0;
-    border-radius: 28px;
+    border-radius: 999px;
     background: var(--surface-strong);
-    padding: 4px 10px 8px;
+    padding: 4px 6px;
+  }
+
+  .kana-chat-dock.is-sole .kana-composer > ul,
+  .kana-chat-dock.is-sole .kana-composer > p {
+    grid-column: 1 / -1;
+    padding-inline: 0.5rem;
+  }
+
+  .kana-chat-dock.is-sole .kana-composer > div {
+    display: contents;
   }
 
   .kana-chat-dock.is-sole .kana-composer textarea {
+    grid-column: 2;
+    grid-row: 2;
     color: var(--ink);
+  }
+
+  .kana-chat-dock.is-sole .kana-composer .kana-composer-tool:not(.kana-composer-attach) {
+    grid-column: 4;
+    grid-row: 2;
+  }
+
+  .kana-chat-dock.is-sole .kana-composer .kana-composer-attach {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .kana-chat-dock.is-sole .kana-composer .kana-send {
+    grid-column: 5;
+    grid-row: 2;
   }
 
   .kana-chat-dock.is-sole .kana-composer textarea::placeholder {
@@ -2105,6 +2149,10 @@ video.kana-media-preview {
   }
 
   .kana-chat-dock.is-sole .kana-composer .kana-model-pill {
+    grid-column: 3;
+    grid-row: 2;
+    max-width: 260px;
+    margin-left: 0;
     background: transparent;
     color: var(--muted);
   }

@@ -192,7 +192,7 @@ export function ChatComposer() {
           </button>
         </div>
       ) : null}
-      <div className="relative">
+      <div className="kana-composer-body relative">
         <SlashCommandMenu
           suggestions={suggestions}
           loading={suggestionsLoading}
@@ -296,7 +296,7 @@ export function ChatComposer() {
               }} />
             <button type="button" aria-label={copy.composer.attachFiles}
               title={copy.composer.attachFiles}
-              disabled={submitting || !activeConversationId} className="kana-focus kana-composer-tool inline-flex size-10 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-white/16 disabled:opacity-40"
+              disabled={submitting || !activeConversationId} className="kana-focus kana-composer-tool kana-composer-attach inline-flex size-10 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-white/16 disabled:opacity-40"
               onClick={() => fileInputRef.current?.click()}><PlusIcon className="size-5" /></button>
             <ComposerDictation key={activeConversationId} locale={locale}
               disabled={submitting || busy || voiceActive || !activeConversationId}

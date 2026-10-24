@@ -447,7 +447,15 @@ export async function expectWorkspaceReady(
     await expect(dock).toHaveClass(/is-sole/);
     await expect(page.locator(".kana-focus-rail")).toBeVisible();
     await expect(page.getByRole("complementary", { name: "Conversations" })).toBeVisible();
-    expect((await dock.boundingBox())?.width ?? 0).toBeLessThanOrEqual(761);
+    const viewport = page.viewportSize()?.width ?? 0;
+    const box = await dock.boundingBox();
+    expect(box?.width ?? 0).toBeGreaterThanOrEqual(viewport * 0.7);
+    expect(Math.round((box?.x ?? 0) + (box?.width ?? 0))).toBe(viewport - 16);
+    // The panel is wide; the conversation and its bar are not.
+    expect((await page.locator(".kana-chat-scroll").boundingBox())?.width ?? 0)
+      .toBeLessThanOrEqual(808);
+    expect((await page.locator(".kana-composer").boundingBox())?.width ?? 0)
+      .toBeLessThanOrEqual(760);
   }
   // A frame must show the state it claims: the avatar keeps the original blue
   // tray, while focus mode shows the plain reading surface.

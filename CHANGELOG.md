@@ -5,15 +5,17 @@
 ### Changed
 
 - Focus mode on a desktop is now two surfaces: a persistent conversation rail
-  beside a wider, centred chat column (`focus-rail.tsx`). The rail carries the
-  same list, search, and New action as the History dialog, keeps the room's
-  wallpaper visible, and offers "Show avatar" in its footer. Phones keep the
-  full-bleed chat and the History dialog unchanged.
-- In focus mode on a desktop the chat column is wider and reads like a plain
-  chat workspace: replies are unboxed Markdown on the panel surface, the
-  reader's own messages keep a quiet grey bubble, and the composer is a filled
-  neutral bar with an accent Send. With the avatar visible the panel keeps its
-  original blue tray, and phones keep the blue chat band and bubble styling.
+  beside a chat panel that fills the rest of the window (`focus-rail.tsx`). The
+  rail carries the same list, search, and New action as the History dialog,
+  keeps the room's wallpaper visible, and offers "Show avatar" in its footer.
+  Phones keep the full-bleed chat and the History dialog unchanged.
+- In focus mode on a desktop the panel fills the space beside the rail while the
+  transcript and the composer bar stay on one narrow, centred measure and read
+  like a plain chat workspace: replies are unboxed Markdown on the panel
+  surface, the reader's own messages keep a quiet grey bubble, and the composer
+  is one filled pill row with attach, the model, dictation, and an accent Send.
+  With the avatar visible the panel keeps its original blue tray, and phones
+  keep the blue chat band and bubble styling.
 - The composer grows upward as the draft gains lines and gives the space back
   when lines are removed, instead of keeping its tallest height until reload.
 - On phones Enter only adds a newline; only the Send button submits a message.

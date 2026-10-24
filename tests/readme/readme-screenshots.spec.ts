@@ -39,7 +39,7 @@ test("desktop: the workspace and focus mode", async ({ page }) => {
   await hideAvatarFromSettings(page);
   await expectWorkspaceReady(page, { avatarVisible: false });
   await page.screenshot({
-    path: path.join(README_DIR, "focus-mode-v4.jpg"),
+    path: path.join(README_DIR, "focus-mode-v5.jpg"),
     ...JPEG,
   });
 });
