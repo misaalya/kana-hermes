@@ -72,7 +72,7 @@ into `~/.kana` when you ask for it.
 <table>
   <tr>
     <td width="50%"><img src=".github/readme/workspace-dark-v5.jpg" alt="Kana in the dark theme on the Seigaiha pattern, next to the same conversation in the dark palette"></td>
-    <td width="50%"><img src=".github/readme/focus-mode-v3.jpg" alt="Kana with the avatar hidden: a conversation rail sits beside the wider centred chat column"></td>
+    <td width="50%"><img src=".github/readme/focus-mode-v4.jpg" alt="Kana with the avatar hidden: a conversation rail sits beside the wider centred chat column, where replies read as plain text"></td>
   </tr>
   <tr>
     <td align="center"><sub>Dark theme and stage patterns</sub></td>

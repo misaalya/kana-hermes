@@ -702,6 +702,121 @@ test("copies a bubble's text, and a reply's words rather than its hidden file li
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("Keep this prompt");
 });
 
+test("keeps the avatar chat tray blue and gives focus mode a plain reading column", async ({
+  page,
+}) => {
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
+  await composer.fill("Style check");
+  await submitDraft(page, composer);
+  await expect(page.getByText("Hello! I am here.", { exact: true }).first()).toBeVisible();
+
+  const readStyles = () =>
+    page.evaluate(() => {
+      const resolve = (name: string) => {
+        const probe = document.createElement("span");
+        probe.style.color = `var(${name})`;
+        document.body.append(probe);
+        const value = getComputedStyle(probe).color;
+        probe.remove();
+        return value;
+      };
+      const read = (selector: string) => {
+        const node = document.querySelector(selector);
+        if (!node) return null;
+        const computed = getComputedStyle(node);
+        return {
+          background: computed.backgroundColor,
+          borderTop: computed.borderTopWidth,
+          paddingTop: computed.paddingTop,
+        };
+      };
+      return {
+        surface: resolve("--surface"),
+        surfaceStrong: resolve("--surface-strong"),
+        accent: resolve("--accent"),
+        frame: resolve("--chat-frame"),
+        depth: resolve("--chat-depth"),
+        bubble: resolve("--chat-bubble"),
+        panel: read(".kana-chat-panel"),
+        feed: read(".kana-chat-feed"),
+        shell: read(".kana-composer-shell"),
+        field: read(".kana-composer"),
+        assistant: read(".kana-message-assistant"),
+        send: read(".kana-send"),
+      };
+    });
+
+  const desktop = (page.viewportSize()?.width ?? 0) >= 1024;
+  const withAvatar = await readStyles();
+  if (desktop) {
+    // The avatar keeps the original tray: blue replies, blue composer band,
+    // the depth fill, and the narrow dock.
+    expect(withAvatar.assistant?.background).toBe(withAvatar.bubble);
+    expect(withAvatar.shell?.background).toBe(withAvatar.frame);
+    expect(withAvatar.feed?.background).toBe(withAvatar.depth);
+    expect(withAvatar.field?.borderTop).toBe("0px");
+    const avatarDock = await page.locator(".kana-chat-dock").boundingBox();
+    expect(avatarDock?.width ?? 0).toBeGreaterThanOrEqual(390);
+    expect(avatarDock?.width ?? 0).toBeLessThanOrEqual(481);
+  } else {
+    expect(withAvatar.shell?.background).toBe(withAvatar.frame);
+    expect(withAvatar.assistant?.background).toBe(withAvatar.bubble);
+    expect(withAvatar.feed?.background).toBe("rgba(0, 0, 0, 0)");
+    expect(withAvatar.field?.borderTop).toBe("0px");
+  }
+
+  await page.getByRole("button", { name: "Open settings" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: /^Avatar(?: Avatar and stage)?$/ }).click();
+  await dialog.getByRole("switch", { name: "Show avatar" }).click();
+  await dialog.getByRole("button", { name: "Close settings" }).click();
+  await expect(page.locator(".kana-chat-dock")).toHaveClass(/is-sole/);
+
+  // Enables Send so its painted state can be read, too.
+  await composer.fill("draft");
+  const focus = await readStyles();
+  if (desktop) {
+    // Focus mode is one clean reading surface inside the blue frame.
+    expect(focus.panel?.background).toBe(focus.surface);
+    expect(focus.feed?.background).toBe(focus.surface);
+    expect(focus.shell?.background).toBe(focus.surface);
+
+    // A reply is plain text, not a fill or a box.
+    expect(focus.assistant?.background).toBe("rgba(0, 0, 0, 0)");
+    expect(focus.assistant?.borderTop).toBe("0px");
+    expect(focus.assistant?.paddingTop).toBe("0px");
+
+    // The composer is a filled bar with an accent Send.
+    expect(focus.field?.background).toBe(focus.surfaceStrong);
+    expect(focus.field?.borderTop).toBe("0px");
+    expect(focus.send?.background).toBe(focus.accent);
+
+    // The reading column takes most of the desktop's working width.
+    const dock = await page.locator(".kana-chat-dock").boundingBox();
+    expect(dock?.width ?? 0).toBeGreaterThanOrEqual(
+      (page.viewportSize()?.width ?? 0) * 0.44,
+    );
+
+    // The reader's own words keep a bubble on the right.
+    const feed = await page.locator(".kana-chat-feed").boundingBox();
+    const sent = await page
+      .locator('article[data-role="user"]')
+      .first()
+      .boundingBox();
+    expect(sent && feed).toBeTruthy();
+    expect((sent?.x ?? 0) + (sent?.width ?? 0)).toBeGreaterThan(
+      (feed?.x ?? 0) + (feed?.width ?? 0) * 0.75,
+    );
+  } else {
+    // Phones keep today's blue band and bubble with the avatar off, too.
+    expect(focus.shell?.background).toBe(focus.frame);
+    expect(focus.assistant?.background).toBe(focus.bubble);
+    expect(focus.feed?.background).toBe("rgba(0, 0, 0, 0)");
+    expect(focus.field?.borderTop).toBe("0px");
+    expect(focus.field?.background).toBe("rgba(0, 0, 0, 0)");
+  }
+});
+
 test("subtitles follow the language the user writes in and survive reloads", async ({
   page,
 }) => {

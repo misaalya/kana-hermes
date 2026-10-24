@@ -237,15 +237,23 @@ copy shows that snapshot in a selectable block instead of failing silently.
 ## The chat panel and composer
 
 The chat panel is the plain tray inside the blue `--chat-frame` border: no
-texture. The composer stays the blue band with a transparent text field and white
-text; its model chooser is a white pill and Send becomes a white disc when there
-is something to send. While Hermes works, or while the reply's voice is still
-being generated, the transcript shows a chat-app typing bubble (`kana-typing`,
-three hopping dots) with the status beside it, and Stop is a small icon-and-label
-pill next to that status rather than a replacement for Send. A message Hermes
-takes into the running turn is a right-aligned icon line (`RedirectIcon`) under
-the user bubble that opened the turn, never a second bubble. Voice generation has
-no short time limit on the client; slow machines keep the bubble up longer.
+texture. With the avatar visible it keeps its original styling: a dock no wider
+than 480px, `--chat-depth` behind the transcript, `--chat-bubble` replies, and
+the blue composer band with white text, white model pill, and white Send disc.
+Only focus mode (the avatar hidden on a desktop, `>=1024px`) changes the
+interior: the column widens to up to 760px and becomes one reading surface
+(`--surface`), where a reply is unwrapped Markdown, the reader's own message
+keeps a quiet `--chat-bubble-user` bubble on the right, the composer is a filled
+rounded `--surface-strong` bar, the model chooser is a quiet text pill, and Send
+is an accent disc while there is something to send. Phones keep the blue band
+and bubble in both states. While Hermes works, or while the reply's voice is
+still being generated, the transcript shows a chat-app typing indicator
+(`kana-typing`, three hopping dots) with the status beside it, and Stop is a
+small icon-and-label pill next to that status rather than a replacement for
+Send. A message Hermes takes into the running turn is a right-aligned icon line
+(`RedirectIcon`) under the user bubble that opened the turn, never a second
+bubble. Voice generation has no short time limit on the client; slow machines
+keep the indicator up longer.
 
 What each control does, the file limits, dictation, and the model list belong to
 `docs/operator/composer.md`; this document keeps only how the composer looks.
@@ -256,7 +264,7 @@ Hermes replies are Markdown. `ChatMarkdown` renders them through the small reade
 in `lib/presentation/markdown.ts` as React elements, never as HTML; links survive
 only for http(s) and mailto and open in a new tab, and images become links (Kana
 does not load remote pictures into chat). Long words and URLs wrap inside the
-bubble; code blocks and tables scroll inside it. The feed keeps `min-w-0` so one
+message; code blocks and tables scroll inside it. The feed keeps `min-w-0` so one
 unbroken string cannot widen it past the panel.
 
 ## Activity blocks
@@ -267,10 +275,10 @@ remounts it under the reply's key). Finished turns start collapsed.
 
 ## Copying a message
 
-`live-chat-feed.tsx` renders one copy control per message row, below the bubble
-and under its fill, so the bubble's fill holds only the message. The control is a
-round button with a `size-3` icon (`max-sm:size-3.5`), smaller than the bubble's
-text, and it shows a check mark for about 1.6 s after a successful copy with
+`live-chat-feed.tsx` renders one copy control per message row, below the message
+and outside its fill, so the fill holds only the message. The control is a round
+button with a `size-3` icon (`max-sm:size-3.5`), smaller than the message text,
+and it shows a check mark for about 1.6 s after a successful copy with
 `aria-live="polite"`. The row places the control at the reply's left edge
 (`justify-start pl-1`) and at the reader's own message's right edge
 (`justify-end pr-1`), matching the assistant rows being left-aligned
