@@ -30,6 +30,7 @@ Hermes stays the only agent: its tools, files, memory, and sessions work exactly
 - [How it works](#how-it-works)
 - [Development](#development)
 - [Documentation](#documentation)
+- [Credits](#credits)
 
 ## Quick start
 
@@ -323,6 +324,22 @@ Contributor rules are in [AGENTS.md](AGENTS.md).
 | Quality gates and releases | [Quality gates](docs/agent/quality-gates.md) · [Release checklist](docs/evidence/release-checklist.md) |
 | The documentation map | [docs/README.md](docs/README.md) |
 | Changes and migration notes | [CHANGELOG.md](CHANGELOG.md) |
+
+## Credits
+
+Kana's Live2D stage is modelled on [Project AIRI](https://github.com/moeru-ai/airi):
+its Pixi 6 stage architecture, model fitting, motion-manager and lip-sync hooks,
+guarded render, and cursor-following gaze were the reference implementation for
+Kana's avatar layer.
+
+The security and installation shape follows
+[9router](https://github.com/decolua/9router): the deny-by-default proxy and
+dashboard sign-in pattern, the login limiter, the JWT session cookie, the
+manual-update dialog, and the split between a private app and a published CLI
+package.
+
+Both projects are references for the implementation; Kana does not bundle
+either repository.
 
 ## License
 
