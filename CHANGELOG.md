@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.1 — 2026-10-24
+
+### Fixed
+
+- The repository no longer tracks Qoder's local project settings.
+  `.qoder/settings.local.json` held a maintainer's local checkout path and was
+  committed by accident. It is removed from the tree, ignored at the repository
+  root, and never entered the npm package; no runtime behaviour changes.
+
+### Migration notes
+
+- None. This release changes no configuration, stored data, or runtime code.
+
 ## 0.6.0 — 2026-10-24
 
 ### Added
