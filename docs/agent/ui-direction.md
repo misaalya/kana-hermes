@@ -124,7 +124,7 @@ workspace becomes two surfaces (`components/kana/focus-rail.tsx`): a persistent
 conversation rail on the left, holding the same list, search, and New action as
 the History dialog, and a chat panel that fills the space to its right
 (`is-sole`), from 16 px past the rail to 16 px from the window edge, while the
-transcript and composer keep one narrow measure centred inside it. The rail
+transcript keeps a wider, centred measure inside it. The rail
 spans from the header down to 16 px above the bottom, is 264–288 px wide, and
 its footer holds "Show avatar", which turns the stage back on; notices start to
 the right of the rail. The History dialog still works. Below 1024 px the chat
@@ -244,20 +244,22 @@ than 480px, `--chat-depth` behind the transcript, `--chat-bubble` replies, and
 the blue composer band with white text, white model pill, and white Send disc.
 Only focus mode (the avatar hidden on a desktop, `>=1024px`) changes the
 interior: the panel fills the space between the conversation rail and the
-window's right edge, while the transcript and the composer bar keep a 760 px
-measure centred inside it, on one reading surface (`--surface`), where a reply
-is unwrapped Markdown and the reader's own message keeps a quiet
-`--chat-bubble-user` bubble on the right. Its composer is one pill row on a
-`--surface-strong` fill: attach at the left, the draft, the model as a quiet
-text control, dictation, and Send as an accent disc while there is something to
-send. Phones keep the blue band and bubble in both states. While Hermes works,
-or while the reply's voice is still being generated, the transcript shows a
-chat-app typing indicator (`kana-typing`, three hopping dots) with the status
-beside it, and Stop is a small icon-and-label pill next to that status rather
-than a replacement for Send. A message Hermes takes into the running turn is a
-right-aligned icon line (`RedirectIcon`) under the user bubble that opened the
-turn, never a second bubble. Voice generation has no short time limit on the
-client; slow machines keep the indicator up longer.
+window's right edge, while the transcript keeps a centred measure of up to
+900 px, on one reading surface (`--surface`), where a reply is unwrapped
+Markdown and the reader's own message keeps a quiet `--chat-bubble-user` bubble
+on the right. Its composer is one pill row on a `--surface-strong` fill: attach
+at the left, the draft, the model as a quiet text control, dictation, and Send
+as an accent disc while there is something to send. The bar rests at 380 px
+with its placeholder hidden and opens to 760 px with a width transition
+whenever it is focused, holds a draft, or carries attachments. Phones keep the
+blue band and bubble in both states.
+While Hermes works, or while the reply's voice is still being generated, the
+transcript shows a chat-app typing indicator (`kana-typing`, three hopping dots)
+with the status beside it, and Stop is a small icon-and-label pill next to that
+status rather than a replacement for Send. A message Hermes takes into the
+running turn is a right-aligned icon line (`RedirectIcon`) under the user bubble
+that opened the turn, never a second bubble. Voice generation has no short time
+limit on the client; slow machines keep the indicator up longer.
 
 What each control does, the file limits, dictation, and the model list belong to
 `docs/operator/composer.md`; this document keeps only how the composer looks.

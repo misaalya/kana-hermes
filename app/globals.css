@@ -842,8 +842,10 @@ details[open] > .kana-plus-summary::before {
   }
 
   .kana-chat-dock.is-sole {
-    /* Width of the reading measure and the composer bar, not of the panel. */
-    --kana-focus-measure: 760px;
+    /* The transcript's text measure and the composer's wide state, neither of
+       which is the panel's width. */
+    --kana-focus-measure: clamp(760px, 66vw, 900px);
+    --kana-focus-composer: 760px;
     left: calc(2rem + var(--kana-focus-rail-w));
     right: 1rem;
     width: auto;
@@ -934,6 +936,7 @@ details[open] > .kana-plus-summary::before {
 
 .kana-composer textarea::placeholder {
   color: rgb(255 255 255 / 62%);
+  transition: color 240ms ease;
 }
 
 .kana-composer button {
@@ -2082,7 +2085,7 @@ video.kana-media-preview {
 
   .kana-chat-dock.is-sole .kana-composer-shell > .kana-composer-body,
   .kana-chat-dock.is-sole .kana-composer-shell > [role="alert"] {
-    max-width: var(--kana-focus-measure);
+    max-width: min(var(--kana-focus-composer), 100%);
     margin-inline: auto;
   }
 
@@ -2091,10 +2094,25 @@ video.kana-media-preview {
     grid-template-columns: auto minmax(0, 1fr) auto auto auto;
     align-items: center;
     gap: 2px;
+    width: min(var(--kana-focus-composer), 100%);
+    margin-inline: auto;
     border: 0;
     border-radius: 999px;
     background: var(--surface-strong);
     padding: 4px 6px;
+    transition: width 340ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* At rest the bar is narrower. Focusing it, typing, or attaching a file
+     widens it; the width animates so the change reads as the bar opening. */
+  .kana-chat-dock.is-sole .kana-composer:not(:focus-within):not(:has(textarea:not(:placeholder-shown))):not(:has(> ul)) {
+    width: min(380px, 100%);
+  }
+
+  /* The resting bar is too narrow for the hint: it fades out with the bar and
+     comes back when the bar opens. */
+  .kana-chat-dock.is-sole .kana-composer:not(:focus-within):not(:has(textarea:not(:placeholder-shown))):not(:has(> ul)) textarea::placeholder {
+    color: transparent;
   }
 
   .kana-chat-dock.is-sole .kana-composer > ul,

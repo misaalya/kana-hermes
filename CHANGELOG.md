@@ -10,12 +10,14 @@
   keeps the room's wallpaper visible, and offers "Show avatar" in its footer.
   Phones keep the full-bleed chat and the History dialog unchanged.
 - In focus mode on a desktop the panel fills the space beside the rail while the
-  transcript and the composer bar stay on one narrow, centred measure and read
-  like a plain chat workspace: replies are unboxed Markdown on the panel
-  surface, the reader's own messages keep a quiet grey bubble, and the composer
-  is one filled pill row with attach, the model, dictation, and an accent Send.
-  With the avatar visible the panel keeps its original blue tray, and phones
-  keep the blue chat band and bubble styling.
+  transcript keeps a wider, centred measure (up to 900 px) and reads like a
+  plain chat workspace: replies are unboxed Markdown on the panel surface and
+  the reader's own messages keep a quiet grey bubble. The composer is one filled
+  pill row with attach, the model, dictation, and an accent Send; it rests at
+  380 px with its placeholder hidden and animates open to 760 px when it is
+  focused, holds a draft, or carries attachments. With the avatar visible the
+  panel keeps its original blue tray, and phones keep the blue chat band and
+  bubble styling.
 - The composer grows upward as the draft gains lines and gives the space back
   when lines are removed, instead of keeping its tallest height until reload.
 - On phones Enter only adds a newline; only the Send button submits a message.
