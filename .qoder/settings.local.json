@@ -1,7 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(cd /home/kenobu/development/kana-alya && echo \"=== pickaxe -S 9router ===\" && git log --all -i -S'9router' --oneline ; echo \"=== -G 9router ===\" && git log --all -i -G'9router' --oneline ; echo \"=== pickaxe -S airi ===\" && git log --all -i -S'airi' --oneline ; echo \"=== -G airi ===\" && git log --all -i -G'airi' --oneline ; echo \"=== case sensitive AIRI ===\" && git log --all -S'AIRI' --oneline ; echo \"=== moeru-ai ===\" && git log --all -i -S'moeru-ai' --oneline)"
-    ]
-  }
-}
