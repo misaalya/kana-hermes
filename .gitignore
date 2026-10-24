@@ -75,7 +75,9 @@ reference/
 /.codegraph/
 /.hermes/
 /.omo/
-# Qoder's local project settings, created inside the served public tree.
+# Qoder's local project settings, in the repository root and inside the served
+# public tree.
+/.qoder/
 /public/.qoder/
 *.log
 /*.png
