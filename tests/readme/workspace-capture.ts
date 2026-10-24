@@ -451,9 +451,10 @@ export async function expectWorkspaceReady(
     const box = await dock.boundingBox();
     expect(box?.width ?? 0).toBeGreaterThanOrEqual(viewport * 0.7);
     expect(Math.round((box?.x ?? 0) + (box?.width ?? 0))).toBe(viewport - 16);
-    // The panel is wide; the conversation and its bar are not.
-    expect((await page.locator(".kana-chat-scroll").boundingBox())?.width ?? 0)
-      .toBeLessThanOrEqual(808);
+    // The panel is wide, the transcript narrower, and the bar narrower still.
+    const scroll = await page.locator(".kana-chat-scroll").boundingBox();
+    expect(scroll?.width ?? 0).toBeGreaterThanOrEqual(900);
+    expect(scroll?.width ?? 0).toBeLessThan(box?.width ?? 0);
     expect((await page.locator(".kana-composer").boundingBox())?.width ?? 0)
       .toBeLessThanOrEqual(760);
   }

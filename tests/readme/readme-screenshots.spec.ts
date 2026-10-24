@@ -38,8 +38,11 @@ test("desktop: the workspace and focus mode", async ({ page }) => {
   // persistent rail beside a centred reading column.
   await hideAvatarFromSettings(page);
   await expectWorkspaceReady(page, { avatarVisible: false });
+  // The still shows the composer's open state; at rest it is narrower.
+  await page.getByRole("textbox", { name: "Message Kana" }).focus();
+  await page.waitForTimeout(450);
   await page.screenshot({
-    path: path.join(README_DIR, "focus-mode-v5.jpg"),
+    path: path.join(README_DIR, "focus-mode-v6.jpg"),
     ...JPEG,
   });
 });

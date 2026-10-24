@@ -791,27 +791,30 @@ test("keeps the avatar chat tray blue and gives focus mode a plain reading colum
     expect(focus.field?.borderTop).toBe("0px");
     expect(focus.send?.background).toBe(focus.accent);
 
-    // The panel spans the desktop's working width, but the conversation and
-    // the composer bar stay on one narrow measure, centred inside it.
+    // The panel spans the desktop's working width, while the conversation
+    // stays on a wider, centred measure inside it.
     const dock = await page.locator(".kana-chat-dock").boundingBox();
     expect(dock?.width ?? 0).toBeGreaterThanOrEqual(
       (page.viewportSize()?.width ?? 0) * 0.7,
     );
     const scroll = await page.locator(".kana-chat-scroll").boundingBox();
-    const bar = await page.locator(".kana-composer").boundingBox();
-    expect(scroll && bar && dock).toBeTruthy();
-    expect(scroll!.width).toBeLessThanOrEqual(808);
-    expect(bar!.width).toBeLessThanOrEqual(760);
-    for (const narrow of [scroll!, bar!]) {
+    const bar = page.locator(".kana-composer");
+    expect(scroll && dock).toBeTruthy();
+    expect(scroll!.width).toBeGreaterThanOrEqual(880);
+    expect(scroll!.width).toBeLessThan(dock!.width);
+
+    // With a draft in it the bar is at its wide state.
+    await expect
+      .poll(async () => (await bar.boundingBox())?.width ?? 0)
+      .toBeGreaterThanOrEqual(750);
+    const barBox = await bar.boundingBox();
+    expect(barBox).toBeTruthy();
+    expect(barBox!.width).toBeLessThanOrEqual(760);
+    for (const narrow of [scroll!, barBox!]) {
       const leftGap = narrow.x - dock!.x;
       const rightGap = dock!.x + dock!.width - (narrow.x + narrow.width);
       expect(Math.abs(leftGap - rightGap)).toBeLessThan(2);
     }
-    // The bar shares the transcript's text edges, not the panel's.
-    expect(Math.abs(bar!.x - (scroll!.x + 24))).toBeLessThan(2);
-    expect(
-      Math.abs(bar!.x + bar!.width - (scroll!.x + scroll!.width - 24)),
-    ).toBeLessThan(2);
 
     // The bar is one pill row: attach, draft, model, mic, Send.
     const attachBox = await page.locator(".kana-composer-attach").boundingBox();
@@ -832,6 +835,55 @@ test("keeps the avatar chat tray blue and gives focus mode a plain reading colum
     expect(textBox!.x + textBox!.width).toBeLessThanOrEqual(modelBox!.x + 1);
     expect(modelBox!.x + modelBox!.width).toBeLessThanOrEqual(micBox!.x + 1);
     expect(micBox!.x + micBox!.width).toBeLessThanOrEqual(sendBox!.x + 1);
+
+    // At rest the bar narrows, and the change is animated.
+    const transition = await bar.evaluate((node) => {
+      const style = getComputedStyle(node);
+      return {
+        property: style.transitionProperty,
+        duration: style.transitionDuration,
+      };
+    });
+    expect(transition.property).toContain("width");
+    expect(transition.duration).not.toBe("0s");
+    await composer.fill("");
+    await page.evaluate(() =>
+      (document.activeElement as HTMLElement | null)?.blur(),
+    );
+    await expect
+      .poll(async () => (await bar.boundingBox())?.width ?? 760)
+      .toBeLessThanOrEqual(400);
+    // Narrow enough that the placeholder is gone.
+    await expect
+      .poll(() =>
+        page
+          .locator(".kana-composer textarea")
+          .evaluate((node) => getComputedStyle(node, "::placeholder").color),
+      )
+      .toMatch(/rgba\(0, 0, 0, 0\)|transparent/);
+    await page.screenshot({
+      path: `test-results/focus-idle-${test.info().project.name}.png`,
+    });
+    // Focusing the empty bar opens it again for writing.
+    await composer.focus();
+    await expect
+      .poll(async () => (await bar.boundingBox())?.width ?? 0)
+      .toBeGreaterThanOrEqual(750);
+    await expect
+      .poll(() =>
+        page
+          .locator(".kana-composer textarea")
+          .evaluate((node) => getComputedStyle(node, "::placeholder").color),
+      )
+      .not.toMatch(/rgba\(0, 0, 0, 0\)|transparent/);
+    // An unsent draft keeps the bar open even without focus.
+    await composer.fill("kept draft");
+    await page.evaluate(() =>
+      (document.activeElement as HTMLElement | null)?.blur(),
+    );
+    await expect
+      .poll(async () => (await bar.boundingBox())?.width ?? 0)
+      .toBeGreaterThanOrEqual(750);
 
     // The reader's own words keep a bubble on the right.
     const feed = await page.locator(".kana-chat-feed").boundingBox();
