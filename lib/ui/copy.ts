@@ -443,8 +443,6 @@ export type Copy = {
     modelUse: string;
     modelRefreshList: string;
     hostTitle: string;
-    hostLive: string;
-    hostStale: string;
     hostLoading: string;
     hostFailed: string;
     hostCpu: string;
@@ -1008,8 +1006,6 @@ const id: Copy = {
     modelUse: "Gunakan model ini",
     modelRefreshList: "Segarkan",
     hostTitle: "Mesin",
-    hostLive: "Langsung",
-    hostStale: "Menyambung ulang…",
     hostLoading: "Membaca metrik mesin…",
     hostFailed: "Metrik mesin tidak tersedia.",
     hostCpu: "CPU",
@@ -1606,8 +1602,6 @@ const en: Copy = {
     modelUse: "Use this model",
     modelRefreshList: "Refresh",
     hostTitle: "Host",
-    hostLive: "Live",
-    hostStale: "Reconnecting…",
     hostLoading: "Reading host metrics…",
     hostFailed: "Host metrics are unavailable.",
     hostCpu: "CPU",

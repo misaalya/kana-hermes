@@ -8,9 +8,9 @@ import { getCopy, type UiLocale } from "@/lib/ui/copy";
 const POLL_MS = 3_000;
 
 /**
- * A read-only snapshot of the machine Kana runs on. Polling lives only while
- * this panel is mounted, so switching Settings away or closing it stops the
- * requests; nothing is stored.
+ * A read-only snapshot of the machine Kana runs on, as four stat tiles.
+ * Polling lives only while this panel is mounted, so switching Settings away
+ * or closing it stops the requests; nothing is stored.
  */
 export function HostPanel({ locale }: { locale: UiLocale }) {
   const copy = getCopy(locale).settings;
@@ -63,90 +63,91 @@ export function HostPanel({ locale }: { locale: UiLocale }) {
     : 0;
 
   return (
-    <div className="space-y-3.5">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="text-[12.5px] font-extrabold text-ink">{snapshot.hostname}</p>
-        <span role="status" className="inline-flex items-center gap-1.5 text-[10.5px] font-bold text-muted">
-          <span className={`size-1.5 rounded-full ${error ? "bg-danger" : "bg-accent animate-kana-pulse"}`} />
-          {error ? copy.hostStale : copy.hostLive}
-        </span>
-      </div>
-      <p className="-mt-2 text-[10.5px] font-bold text-faint">
-        {snapshot.platform} {snapshot.release} · {snapshot.arch}
-      </p>
-
-      <Metric
-        label={copy.hostCpu}
-        value={cpu === null ? "—" : `${Math.round(cpu)}%`}
-        detail={copy.hostCpuDetail(snapshot.cpu.cores, snapshot.load[0].toFixed(2))}
-        percent={cpu ?? 0}
-      />
-      <Metric
-        label={copy.hostMemory}
-        value={`${Math.round(memoryPercent)}%`}
-        detail={copy.hostUsage(
-          formatBytes(snapshot.memory.total - snapshot.memory.available),
-          formatBytes(snapshot.memory.total),
-        )}
-        percent={memoryPercent}
-      />
-      {snapshot.disk ? (
-        <Metric
-          label={copy.hostDisk}
-          value={`${Math.round(diskPercent)}%`}
-          detail={copy.hostUsage(
-            formatBytes(snapshot.disk.total - snapshot.disk.available),
-            formatBytes(snapshot.disk.total),
-          )}
-          percent={diskPercent}
-        />
-      ) : null}
+    <div className="space-y-3">
       <div>
-        <div className="flex items-baseline justify-between gap-3">
-          <span className="text-[11.5px] font-extrabold text-muted">{copy.hostUptime}</span>
-          <span className="text-[12px] font-extrabold text-ink">{formatDuration(snapshot.uptime)}</span>
-        </div>
-        <p className="mt-1 text-[10.5px] font-bold text-faint">
-          {copy.hostKanaDetail(formatDuration(snapshot.kana.uptime), formatBytes(snapshot.kana.rss))}
+        <p className="text-[13px] font-extrabold text-ink">{snapshot.hostname}</p>
+        <p className="mt-0.5 text-[10.5px] font-bold text-faint">
+          {snapshot.platform} {snapshot.release} · {snapshot.arch}
         </p>
       </div>
+
+      <div className="grid grid-cols-2 gap-2.5">
+        <Tile
+          label={copy.hostCpu}
+          value={cpu === null ? "—" : `${Math.round(cpu)}%`}
+          valueKey="cpu"
+          detail={copy.hostCpuDetail(snapshot.cpu.cores, snapshot.load[0].toFixed(2))}
+          percent={cpu ?? 0}
+        />
+        <Tile
+          label={copy.hostMemory}
+          value={`${Math.round(memoryPercent)}%`}
+          detail={copy.hostUsage(
+            formatBytes(snapshot.memory.total - snapshot.memory.available),
+            formatBytes(snapshot.memory.total),
+          )}
+          percent={memoryPercent}
+        />
+        {snapshot.disk ? (
+          <Tile
+            label={copy.hostDisk}
+            value={`${Math.round(diskPercent)}%`}
+            detail={copy.hostUsage(
+              formatBytes(snapshot.disk.total - snapshot.disk.available),
+              formatBytes(snapshot.disk.total),
+            )}
+            percent={diskPercent}
+          />
+        ) : null}
+        <Tile
+          label={copy.hostUptime}
+          value={formatDuration(snapshot.uptime)}
+          detail={copy.hostKanaDetail(
+            formatDuration(snapshot.kana.uptime),
+            formatBytes(snapshot.kana.rss),
+          )}
+        />
+      </div>
+
       {error ? <p role="alert" className="text-[10.5px] font-bold text-danger">{copy.hostFailed}</p> : null}
     </div>
   );
 }
 
-function Metric({
+function Tile({
   label,
   value,
+  valueKey,
   detail,
   percent,
 }: {
   label: string;
   value: string;
+  valueKey?: string;
   detail: string;
-  percent: number;
+  percent?: number;
 }) {
-  const rounded = Math.round(percent);
+  const rounded = Math.round(percent ?? 0);
   return (
-    <div>
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="text-[11.5px] font-extrabold text-muted">{label}</span>
-        <span className="text-[12px] font-extrabold text-ink">{value}</span>
-      </div>
-      <div
-        role="progressbar"
-        aria-label={label}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={rounded}
-        className="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-strong"
-      >
+    <div className="flex h-full flex-col rounded-[18px] bg-surface-strong/50 p-3">
+      <p className="text-[10.5px] font-extrabold text-muted">{label}</p>
+      <p data-host-value={valueKey} className="mt-1 text-[20px] font-extrabold leading-none text-ink">{value}</p>
+      {percent === undefined ? null : (
         <div
-          className="h-full rounded-full bg-accent transition-[width] duration-500"
-          style={{ width: `${rounded}%` }}
-        />
-      </div>
-      <p className="mt-1 text-[10.5px] font-bold text-faint">{detail}</p>
+          role="progressbar"
+          aria-label={label}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={rounded}
+          className="mt-2 h-1 overflow-hidden rounded-full bg-surface-strong"
+        >
+          <div
+            className="h-full rounded-full bg-accent transition-[width] duration-500"
+            style={{ width: `${rounded}%` }}
+          />
+        </div>
+      )}
+      <p className="mt-auto pt-1.5 text-[10px] font-bold leading-relaxed text-faint">{detail}</p>
     </div>
   );
 }

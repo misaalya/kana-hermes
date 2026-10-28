@@ -1456,6 +1456,7 @@ test("reports host metrics only while the Connection panel is open", async ({ pa
   await expect(host).toContainText("Uptime");
   // The second poll gives the CPU bar a real delta, not only a first sample.
   await expect.poll(() => requests.length, { timeout: 8000 }).toBeGreaterThanOrEqual(2);
+  await page.screenshot({ path: `test-results/host-tiles-${test.info().project.name}.png` });
 
   // Leaving the panel stops the sampler; nothing arrives afterwards.
   await dialog.getByRole("button", { name: "Close settings" }).click();

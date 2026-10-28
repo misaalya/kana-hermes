@@ -4,10 +4,10 @@
 
 ### Added
 
-- Settings → Connection has a read-only Host card: hostname and OS, CPU/load,
-  memory, root disk, host uptime, and Kana's own uptime and RSS. It polls
-  `/api/kana/host` every three seconds only while the card is mounted, takes no
-  input, and persists nothing.
+- Settings → Connection has a read-only Host card with four stat tiles:
+  CPU/load, memory, root disk, and host uptime with Kana's own uptime and RSS.
+  It polls `/api/kana/host` every three seconds only while the card is mounted,
+  takes no input, and persists nothing.
 
 ## 0.6.1 — 2026-10-24
 
