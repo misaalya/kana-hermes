@@ -45,10 +45,11 @@ Components copy Clara's vocabulary (shared classes in `app/globals.css`):
 - Header actions are a blue pill tray (`kana-bar`) of round tabs. An open tab
   turns into the white disc, and a label bubble (`kana-tip`) appears under a tab
   while it is pointed at or open.
-- On a desktop the header's free middle carries a quiet host HUD: CPU, memory,
-  and disk with thin accent bars, then uptime, in one neutral `surface-strong`
-  pill. It is read-only, polls only while mounted, and is not rendered on
-  phones.
+- On a desktop the header's free middle carries a wide host widget (380–520
+  px): CPU, memory, and disk each with a big value over a 12-tick accent meter,
+  then uptime with Kana's own uptime and RSS, on one neutral `surface-strong`
+  panel split by dotted rules. It is read-only, polls only while mounted, and
+  is not rendered on phones.
 - The conversation title is a blue name chip.
 - Buttons are heavy pills (`kana-pill`, with `kana-pill-accent` striped blue for
   primary actions and `kana-pill-soft` for secondary ones) that hop up on hover.

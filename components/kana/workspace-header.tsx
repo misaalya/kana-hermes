@@ -32,8 +32,8 @@ export function WorkspaceHeader({ connectionDown = false }: { connectionDown?: b
       inert={greeting || undefined}
     >
       {/* Phones and tablets use that corner for the avatar tile. */}
-      <div className="pointer-events-auto col-start-1 min-w-0 max-lg:hidden">
-        <p className="kana-session-title w-fit max-w-[34vw] truncate">
+      <div className="pointer-events-auto col-start-1 min-w-0 max-w-[34vw] max-lg:hidden">
+        <p className="kana-session-title w-fit max-w-full truncate">
           {title ?? text.newMoment}
         </p>
       </div>

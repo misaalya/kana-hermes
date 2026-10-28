@@ -1455,6 +1455,11 @@ test("shows host metrics in the Connection panel and the desktop header", async 
     await expect(hud).toContainText("Memory");
     await expect(hud).toContainText("Disk");
     await expect(hud).toContainText("Uptime");
+    await expect(hud).toContainText("Kana");
+    await expect(hud.locator("[data-host-ticks]")).toHaveCount(3);
+    await expect(hud.locator("[data-host-ticks] > span")).toHaveCount(36);
+    const box = await hud.boundingBox();
+    expect(box?.width ?? 0).toBeGreaterThan(360);
   } else {
     await expect(hud).toHaveCount(0);
   }

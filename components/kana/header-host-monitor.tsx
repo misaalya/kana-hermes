@@ -1,13 +1,16 @@
 "use client";
 
-import { formatDuration, percentUsed } from "@/lib/host/host-metrics";
+import { formatBytes, formatDuration, percentUsed } from "@/lib/host/host-metrics";
 import { getCopy, type UiLocale } from "@/lib/ui/copy";
 import { useHostSnapshot } from "./use-host-snapshot";
 
+const TICKS = 12;
+
 /**
- * The desktop header's quiet host HUD: CPU, memory, disk, and uptime in one
- * neutral pill. It is read-only, takes no input, and lives only while the
- * header shows it (never on phones).
+ * The desktop header's host widget: CPU, memory, and disk each get a big value
+ * over a segmented meter, and uptime carries Kana's own uptime and RSS. It is
+ * read-only, takes no input, and lives only while the header shows it (never
+ * on phones).
  */
 export function HeaderHostMonitor({ locale }: { locale: UiLocale }) {
   const copy = getCopy(locale).settings;
@@ -28,7 +31,7 @@ export function HeaderHostMonitor({ locale }: { locale: UiLocale }) {
     <div
       role="group"
       aria-label={snapshot.hostname}
-      className="kana-header-host pointer-events-none hidden items-start gap-3.5 rounded-full bg-surface-strong px-3.5 py-1.5 lg:flex"
+      className="kana-header-host pointer-events-none hidden w-[38vw] min-w-[380px] max-w-[520px] grid-cols-[1fr_1fr_1fr_1.5fr] gap-3 rounded-[22px] bg-surface-strong px-3.5 py-2 lg:grid"
     >
       <Metric
         label={copy.hostCpu}
@@ -36,30 +39,69 @@ export function HeaderHostMonitor({ locale }: { locale: UiLocale }) {
         percent={cpu ?? 0}
       />
       <Metric label={copy.hostMemory} value={`${Math.round(memory)}%`} percent={memory} />
-      {disk === null ? null : (
-        <Metric label={copy.hostDisk} value={`${Math.round(disk)}%`} percent={disk} />
-      )}
-      <Metric label={copy.hostUptime} value={formatDuration(snapshot.uptime)} />
-      {error ? (
-        <span role="img" aria-label={copy.hostFailed} className="text-[11px] font-extrabold text-danger">
-          !
-        </span>
-      ) : null}
+      <Metric
+        label={copy.hostDisk}
+        value={disk === null ? "—" : `${Math.round(disk)}%`}
+        percent={disk ?? undefined}
+      />
+      <Metric
+        label={copy.hostUptime}
+        value={formatDuration(snapshot.uptime)}
+        detail={copy.hostKanaDetail(
+          formatDuration(snapshot.kana.uptime),
+          formatBytes(snapshot.kana.rss),
+        )}
+        error={error}
+        errorLabel={copy.hostFailed}
+      />
     </div>
   );
 }
 
-function Metric({ label, value, percent }: { label: string; value: string; percent?: number }) {
+function Metric({
+  label,
+  value,
+  percent,
+  detail,
+  error = false,
+  errorLabel,
+}: {
+  label: string;
+  value: string;
+  percent?: number;
+  detail?: string;
+  error?: boolean;
+  errorLabel?: string;
+}) {
+  const filled = percent === undefined ? 0 : Math.round((percent / 100) * TICKS);
+
   return (
-    <div className="flex min-w-[44px] flex-col gap-1">
-      <span className="text-[9px] font-extrabold leading-none text-muted">{label}</span>
-      <span className="text-[11.5px] font-extrabold leading-none text-ink">{value}</span>
-      {percent === undefined ? null : (
-        <span aria-hidden="true" className="h-[3px] overflow-hidden rounded-full bg-raised">
-          <span
-            className="block h-full rounded-full bg-accent transition-[width] duration-500"
-            style={{ width: `${Math.round(percent)}%` }}
-          />
+    <div className="flex min-w-0 flex-col gap-1 border-l-2 border-dotted border-line-strong pl-3 first:border-l-0 first:pl-0">
+      <span className="flex min-w-0 items-center gap-1 text-[9px] font-extrabold leading-none text-muted">
+        <span className="truncate">{label}</span>
+        {error ? (
+          <span role="img" aria-label={errorLabel} className="text-[9px] font-extrabold text-danger">
+            !
+          </span>
+        ) : null}
+      </span>
+      <span className="truncate text-[17px] font-extrabold leading-none text-ink tabular-nums">
+        {value}
+      </span>
+      {percent === undefined ? (
+        detail ? (
+          <span className="truncate text-[9px] font-bold leading-none text-faint">{detail}</span>
+        ) : null
+      ) : (
+        <span aria-hidden="true" data-host-ticks="" className="flex h-2.5 items-end gap-[2px]">
+          {Array.from({ length: TICKS }, (_, index) => (
+            <span
+              key={index}
+              className={`h-full w-[3px] rounded-full transition-colors duration-500 ${
+                index < filled ? "bg-accent" : "bg-line"
+              }`}
+            />
+          ))}
         </span>
       )}
     </div>

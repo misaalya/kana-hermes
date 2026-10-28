@@ -25,9 +25,10 @@
   CPU/load, memory, root disk, and host uptime with Kana's own uptime and RSS.
   It polls `/api/kana/host` every three seconds only while the card is mounted,
   takes no input, and persists nothing.
-- The desktop header shows the same reading as a quiet HUD in its free middle:
-  CPU, memory, disk, and uptime in one neutral pill. It takes no input, polls
-  `/api/kana/host` only while mounted, and never renders on phones.
+- The desktop header shows the same reading as a wide host widget: CPU, memory,
+  and disk with big values over 12-tick meters, and uptime with Kana's own
+  uptime and RSS. It takes no input, polls `/api/kana/host` only while mounted,
+  and never renders on phones.
 
 ## 0.6.1 — 2026-10-24
 
