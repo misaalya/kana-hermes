@@ -169,7 +169,7 @@ export function AdvancedConfigCard({ locale }: { locale: UiLocale }) {
               </p>
             ) : null}
           </SettingsRow>
-          <SettingsRow label={copy.advancedMode}>
+          <SettingsRow label={copy.advancedMode} inline>
             {configLoaded ? (
               <span className="text-xs font-semibold text-ink-dim">
                 {deploymentMode === "deployment" ? copy.advancedModeDeployment : copy.advancedModeLocal}

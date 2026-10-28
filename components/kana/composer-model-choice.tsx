@@ -8,7 +8,7 @@ import { MODAL_EXIT_MS, prefersReducedMotion } from "@/lib/ui/use-modal-presence
 import { BotIcon, ChevronDownIcon } from "./icons";
 import { ComposerModelPicker } from "./composer-model-picker";
 
-type Placement = { left: number; bottom: number; maxHeight: number };
+type Placement = { left: number; bottom: number; height: number };
 
 export function ComposerModelChoice({ locale, sessionKey, connected, disabled, catalog, defaultModel, onList, onSelect, onNotice }: {
   locale: UiLocale;
@@ -53,7 +53,9 @@ export function ComposerModelChoice({ locale, sessionKey, connected, disabled, c
     setPlacement({
       left: Math.min(Math.max(12, bounds.left), Math.max(12, window.innerWidth - 12 - width)),
       bottom: Math.round(window.innerHeight - bounds.top + 8),
-      maxHeight: Math.max(160, Math.min(520, Math.round(bounds.top - 20))),
+      // One stable height per layout, never the list's own height. The list
+      // scrolls inside it, so filtering or a short catalog cannot resize it.
+      height: Math.max(160, Math.min(520, Math.round(bounds.top - 20))),
     });
   }, []);
 
@@ -103,7 +105,7 @@ export function ComposerModelChoice({ locale, sessionKey, connected, disabled, c
       onCancel={(event) => { event.preventDefault(); close(); }} onClose={() => setOpen(false)}
       onClick={(event) => { if (event.target === event.currentTarget) close(); }}
       style={placement ?? undefined}
-      className={`kana-model-dialog kana-modal-panel fixed inset-auto m-0 flex max-h-[80dvh] w-full max-w-none flex-col overflow-hidden border-2 border-line-strong bg-surface text-ink backdrop:bg-transparent max-lg:inset-x-0 max-lg:bottom-0 max-lg:top-auto max-lg:max-h-[75dvh] max-lg:backdrop:bg-[var(--backdrop)] lg:w-[380px] ${closing ? "is-closing" : ""}`}>
+      className={`kana-model-dialog kana-modal-panel fixed inset-auto m-0 flex h-[75dvh] max-h-[80dvh] w-full max-w-none flex-col overflow-hidden border-2 border-line-strong bg-surface text-ink backdrop:bg-transparent max-lg:inset-x-0 max-lg:bottom-0 max-lg:top-auto max-lg:backdrop:bg-[var(--backdrop)] lg:w-[380px] ${closing ? "is-closing" : ""}`}>
       {open ? (
         <ComposerModelPicker
           locale={locale}

@@ -6,6 +6,7 @@ import { useTheme } from "@/lib/state/use-theme";
 import { selectActiveConversation } from "@/lib/store/conversation-store";
 import { getCopy } from "@/lib/ui/copy";
 import { AvatarLayoutControl } from "./avatar-layout-control";
+import { HeaderHostMonitor } from "./header-host-monitor";
 import { HistoryIcon, MoonIcon, SettingsIcon, SunIcon } from "./icons";
 import { useKanaStore, useKanaWorkspace } from "./kana-workspace-context";
 import { useUpdateAvatarLayout } from "./workspace-stage";
@@ -19,6 +20,7 @@ export function WorkspaceHeader({ connectionDown = false }: { connectionDown?: b
   const avatarLayoutOpen = useKanaStore("workspace", (state) => state.avatarLayoutOpen);
   const avatarVisible = useKanaStore("preferences", (state) => state.preferences.avatarVisible);
   const greeting = useKanaStore("workspace", (state) => state.greeting);
+  const usesMobileChat = useKanaStore("workspace", (state) => state.usesMobileChat);
   const updateAvatarLayout = useUpdateAvatarLayout();
   const copy = getCopy(locale);
   const text = copy.workspace;
@@ -26,17 +28,23 @@ export function WorkspaceHeader({ connectionDown = false }: { connectionDown?: b
 
   return (
     <header
-      className={`kana-workspace-header pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-4 p-4 max-sm:p-3 ${greeting ? "is-away" : ""}`}
+      className={`kana-workspace-header pointer-events-none absolute inset-x-0 top-0 z-20 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 p-4 max-sm:p-3 ${greeting ? "is-away" : ""}`}
       inert={greeting || undefined}
     >
       {/* Phones and tablets use that corner for the avatar tile. */}
-      <div className="pointer-events-auto min-w-0 max-lg:hidden">
-        <p className="kana-session-title max-w-[34vw] truncate">
+      <div className="pointer-events-auto col-start-1 min-w-0 max-lg:hidden">
+        <p className="kana-session-title w-fit max-w-[34vw] truncate">
           {title ?? text.newMoment}
         </p>
       </div>
 
-      <nav className="kana-bar pointer-events-auto ml-auto" aria-label={text.actions}>
+      {!usesMobileChat && !greeting ? (
+        <div className="col-start-2">
+          <HeaderHostMonitor locale={locale} />
+        </div>
+      ) : null}
+
+      <nav className="kana-bar pointer-events-auto col-start-3 justify-self-end" aria-label={text.actions}>
         <button
           type="button"
           className="kana-workspace-action kana-focus"

@@ -598,7 +598,7 @@ export function SettingsDialog({
               <>
                 <SettingsGroup>
                   <SettingsRows>
-                    <SettingsRow label={settingsCopy.avatarVisible}>
+                    <SettingsRow label={settingsCopy.avatarVisible} inline>
                       <Toggle
                         checked={draft.avatarVisible}
                         label={settingsCopy.avatarVisible}

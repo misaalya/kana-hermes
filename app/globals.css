@@ -516,14 +516,21 @@ button,
 
 @media (hover: hover) {
   .kana-choice.is-plain:not(:disabled):hover {
-    background: var(--surface-strong);
     transform: translateX(3px);
+  }
+
+  .kana-choice.is-plain:not(.is-selected):not(:disabled):hover {
+    background: var(--surface-strong);
   }
 }
 
+/* The open conversation is the sidebar's selected item, dimmed for real: a
+   square neutral block on the raised panel, with ordinary ink. No accent fill,
+   stroke, ring, or corner badge. */
 .kana-choice.is-plain.is-selected {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 10%, var(--raised));
+  border-color: transparent;
+  border-radius: 0;
+  background: var(--surface-strong);
 }
 
 .kana-check {
@@ -932,6 +939,22 @@ details[open] > .kana-plus-summary::before {
 
 .kana-chat-feed {
   background: var(--chat-depth);
+}
+
+/* An empty conversation: one kaomoji. Each eye keeps a fixed slot, so closing
+   the eyes to bullets never shifts the rest of the line. */
+.kana-empty-face {
+  color: var(--accent);
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: pre;
+}
+
+.kana-empty-eye {
+  display: inline-block;
+  width: 0.65em;
+  text-align: center;
 }
 
 .kana-composer-shell {

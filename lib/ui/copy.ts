@@ -222,7 +222,6 @@ export type Copy = {
   };
   chat: {
     aria: string;
-    emptyTitle: string;
     emptyBody: string;
     hermesNote: string;
     copyMessage: string;
@@ -765,7 +764,6 @@ const id: Copy = {
   },
   chat: {
     aria: "Chat langsung",
-    emptyTitle: "Sejenak tenang bersama Kana",
     emptyBody: "Tanyakan apa saja. Hermes akan bekerja di balik layar sementara Kana tetap menemanimu di sini.",
     hermesNote: "Catatan Hermes",
     copyMessage: "Salin pesan",
@@ -1361,7 +1359,6 @@ const en: Copy = {
   },
   chat: {
     aria: "Live chat",
-    emptyTitle: "A quiet moment with Kana",
     emptyBody: "Ask anything. Hermes will work behind the scenes while Kana stays here with you.",
     hermesNote: "Hermes note",
     copyMessage: "Copy message",

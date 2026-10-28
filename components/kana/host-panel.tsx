@@ -1,11 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { cpuPercent, formatBytes, formatDuration, percentUsed } from "@/lib/host/host-metrics";
-import { readHostSnapshot, type HostSnapshot } from "@/lib/runtime/host-client";
+import { formatBytes, formatDuration, percentUsed } from "@/lib/host/host-metrics";
 import { getCopy, type UiLocale } from "@/lib/ui/copy";
-
-const POLL_MS = 3_000;
+import { useHostSnapshot } from "./use-host-snapshot";
 
 /**
  * A read-only snapshot of the machine Kana runs on, as four stat tiles.
@@ -14,37 +11,7 @@ const POLL_MS = 3_000;
  */
 export function HostPanel({ locale }: { locale: UiLocale }) {
   const copy = getCopy(locale).settings;
-  const [snapshot, setSnapshot] = useState<HostSnapshot | null>(null);
-  const [cpu, setCpu] = useState<number | null>(null);
-  const [error, setError] = useState(false);
-  const previousCpu = useRef<HostSnapshot["cpu"]["times"] | null>(null);
-
-  useEffect(() => {
-    let live = true;
-    let controller: AbortController | null = null;
-    const tick = async () => {
-      controller?.abort();
-      controller = new AbortController();
-      try {
-        const next = await readHostSnapshot(controller.signal);
-        if (!live) return;
-        setSnapshot(next);
-        setCpu(cpuPercent(previousCpu.current, next.cpu.times));
-        previousCpu.current = next.cpu.times;
-        setError(false);
-      } catch (reason) {
-        if (!live || (reason instanceof DOMException && reason.name === "AbortError")) return;
-        setError(true);
-      }
-    };
-    void tick();
-    const timer = window.setInterval(() => void tick(), POLL_MS);
-    return () => {
-      live = false;
-      controller?.abort();
-      window.clearInterval(timer);
-    };
-  }, []);
+  const { snapshot, cpu, error } = useHostSnapshot();
 
   if (!snapshot) {
     return (

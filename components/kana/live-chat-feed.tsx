@@ -37,6 +37,33 @@ const AssistantReply = memo(function AssistantReply({ text, copy }: { text: stri
   );
 });
 
+/** The empty conversation's face. Its eye slots keep one width, so closing the
+    eyes to bullets never changes the spacing of the rest of the line. */
+function KanaEmptyFace() {
+  const [blink, setBlink] = useState(false);
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    let close: number | undefined;
+    const timer = window.setInterval(() => {
+      setBlink(true);
+      close = window.setTimeout(() => setBlink(false), 220);
+    }, 6000);
+    return () => {
+      window.clearInterval(timer);
+      if (close !== undefined) window.clearTimeout(close);
+    };
+  }, []);
+  return (
+    <span className="kana-empty-face" aria-hidden="true">
+      {"(๑ "}
+      <span className="kana-empty-eye">{blink ? "•" : ">"}</span>
+      {" ᴗ "}
+      <span className="kana-empty-eye">{blink ? "•" : "<"}</span>
+      {" ๑)"}
+    </span>
+  );
+}
+
 /**
  * What a bubble's copy button takes: the words on screen. A reply's MEDIA:
  * links render as players and download buttons, so the invisible links stay out
@@ -110,13 +137,9 @@ export const LiveChatFeed = memo(function LiveChatFeed({
   onStop,
 }: LiveChatFeedProps) {
   const copy = getCopy(locale);
-  const dateLocale = copy.dateLocale;
-  const dateFormatter = useMemo(
-    () => new Intl.DateTimeFormat(dateLocale, {
-      hour: "2-digit", minute: "2-digit",
-    }),
-    [dateLocale],
-  );
+  const dateFormatter = new Intl.DateTimeFormat(copy.dateLocale, {
+    hour: "2-digit", minute: "2-digit",
+  });
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [pinnedToBottom, setPinnedToBottom] = useState(true);
 
@@ -160,7 +183,7 @@ export const LiveChatFeed = memo(function LiveChatFeed({
     const node = scrollRef.current;
     if (!node) return;
     setPinnedToBottom(node.scrollHeight - node.scrollTop - node.clientHeight < 32);
-  }, []);
+  }, [setPinnedToBottom]);
 
   return (
     // min-w-0: one long unbroken word must not widen the feed past the panel.
@@ -175,10 +198,8 @@ export const LiveChatFeed = memo(function LiveChatFeed({
       >
         {!entries.length && !typing ? (
           <div className="m-auto flex max-w-[280px] flex-col items-center py-12 text-center max-sm:hidden">
-            <h2 className="text-base font-extrabold text-ink">{copy.chat.emptyTitle}</h2>
-            <p className="mt-1.5 text-[11px] leading-relaxed text-muted">
-              {copy.chat.emptyBody}
-            </p>
+            <KanaEmptyFace />
+            <p className="sr-only">{copy.chat.emptyBody}</p>
           </div>
         ) : null}
 

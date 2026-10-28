@@ -1440,11 +1440,25 @@ async function copyInstallCommand(page: Page): Promise<void> {
   await expect(page.getByRole("dialog")).toHaveCount(1);
 }
 
-test("reports host metrics only while the Connection panel is open", async ({ page }) => {
+test("shows host metrics in the Connection panel and the desktop header", async ({ page }) => {
+  const desktop = (page.viewportSize()?.width ?? 0) >= 1024;
   const requests: string[] = [];
   page.on("request", (request) => {
     if (new URL(request.url()).pathname === "/api/kana/host") requests.push(request.url());
   });
+
+  // The desktop header carries the same read-only reading as a quiet HUD.
+  const hud = page.locator(".kana-header-host");
+  if (desktop) {
+    await expect(hud).toBeVisible();
+    await expect(hud).toContainText("CPU");
+    await expect(hud).toContainText("Memory");
+    await expect(hud).toContainText("Disk");
+    await expect(hud).toContainText("Uptime");
+  } else {
+    await expect(hud).toHaveCount(0);
+  }
+
   await page.getByRole("button", { name: "Open settings" }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: /^Connection/ }).click();
@@ -1458,12 +1472,50 @@ test("reports host metrics only while the Connection panel is open", async ({ pa
   await expect.poll(() => requests.length, { timeout: 8000 }).toBeGreaterThanOrEqual(2);
   await page.screenshot({ path: `test-results/host-tiles-${test.info().project.name}.png` });
 
-  // Leaving the panel stops the sampler; nothing arrives afterwards.
+  // Closing the panel stops the card's sampler. A desktop keeps the header
+  // HUD, so new samples keep arriving; phones have no HUD, so they stop.
   await dialog.getByRole("button", { name: "Close settings" }).click();
   await expect(dialog).toHaveCount(0);
   const atClose = requests.length;
   await page.waitForTimeout(4000);
-  expect(requests.length).toBe(atClose);
+  if (desktop) {
+    expect(requests.length).toBeGreaterThan(atClose);
+  } else {
+    expect(requests.length).toBe(atClose);
+  }
+});
+
+test("keeps short settings rows on one line on phones", async ({ page }) => {
+  test.skip(
+    (page.viewportSize()?.width ?? 0) >= 1024,
+    "This is the phone settings layout.",
+  );
+  const center = (box: { y: number; height: number } | null) =>
+    (box?.y ?? 0) + (box?.height ?? 0) / 2;
+  await page.getByRole("button", { name: "Open settings" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: /^Avatar/ }).click();
+  const avatarLabel = dialog.getByText("Show avatar", { exact: true });
+  const avatarSwitch = dialog.getByRole("switch", { name: "Show avatar" });
+  await expect(avatarLabel).toBeVisible();
+  const [labelBox, switchBox] = await Promise.all([
+    avatarLabel.boundingBox(),
+    avatarSwitch.boundingBox(),
+  ]);
+  expect(Math.abs(center(labelBox) - center(switchBox))).toBeLessThan(2);
+  expect(switchBox?.x ?? 0).toBeGreaterThan(labelBox?.x ?? 0);
+
+  await dialog.getByRole("button", { name: /^Connection/ }).click();
+  const modeLabel = dialog.getByText("Installation mode", { exact: true });
+  const modeValue = dialog.getByText("Local", { exact: true });
+  await modeLabel.scrollIntoViewIfNeeded();
+  await expect(modeLabel).toBeVisible();
+  const [modeBox, valueBox] = await Promise.all([
+    modeLabel.boundingBox(),
+    modeValue.boundingBox(),
+  ]);
+  expect(Math.abs(center(modeBox) - center(valueBox))).toBeLessThan(2);
+  expect(valueBox?.x ?? 0).toBeGreaterThan(modeBox?.x ?? 0);
 });
 
 test("shows the workspace update notice and stops Kana only after Copy & Shutdown", async ({
@@ -2005,6 +2057,29 @@ test("keeps the model picker legible in focus mode", async ({ page }) => {
   expect(colors.row).toBe(colors.ink);
   expect(colors.provider).toBe(colors.muted);
   expect(colors.check).toBe(colors.accent);
+});
+
+test("keeps the model chooser a stable height as the list narrows", async ({ page }) => {
+  await page.getByRole("button", { name: "Choose model", exact: true }).click();
+  const chooser = page.getByRole("dialog", { name: "Choose model", exact: true });
+  const search = chooser.getByRole("textbox", { name: "Search models…" });
+  await expect(chooser.getByRole("option")).toHaveCount(2);
+  await chooser.evaluate((node) =>
+    Promise.all(node.getAnimations().map((animation) => animation.finished)).then(() => undefined),
+  );
+
+  const height = async () => (await chooser.boundingBox())?.height ?? 0;
+  const full = await height();
+  expect(full).toBeGreaterThan(0);
+
+  await search.fill("flash");
+  await expect(chooser.getByRole("option")).toHaveCount(1);
+  expect(await height()).toBe(full);
+
+  await search.fill("zzz");
+  await expect(chooser.getByRole("option")).toHaveCount(0);
+  await expect(chooser.getByRole("status")).toContainText("Nothing matches.");
+  expect(await height()).toBe(full);
 });
 
 test("animates every modal in and out", async ({ page }) => {
@@ -3454,4 +3529,70 @@ test("Stop reveals held text and cancels synthesis before playback", async ({ pa
   await page.getByRole("button", { name: "Stop", exact: true }).click();
   await expect(page.getByText("Hello! I am here.", { exact: true }).first()).toBeVisible();
   await expect.poll(() => cancelled).toBe(true);
+});
+
+test("marks the open conversation as a square, dimmed neutral row without a stroke", async ({ page }) => {
+  await openHistory(page);
+  await page.mouse.move(0, 0);
+  const active = page.locator('[aria-current="true"]');
+  await expect(active).toHaveCount(1);
+  await expect(active).toHaveClass(/is-selected/);
+  await expect(active.locator(".kana-check")).toHaveCount(0);
+
+  const styles = await active.evaluate((row) => {
+    const computed = getComputedStyle(row);
+    const title = row.querySelector(".kana-row-title");
+    const resolveColor = (property: "color" | "backgroundColor", value: string) => {
+      const probe = document.createElement("span");
+      probe.style[property] = value;
+      row.append(probe);
+      const resolved = getComputedStyle(probe)[property];
+      probe.remove();
+      return resolved;
+    };
+    return {
+      border: computed.borderTopColor,
+      radius: computed.borderRadius,
+      background: computed.backgroundColor,
+      title: title ? getComputedStyle(title).color : "",
+      marker: getComputedStyle(row, "::before").content,
+      accent: resolveColor("color", "var(--accent)"),
+      ink: resolveColor("color", "var(--ink)"),
+      dimmed: resolveColor("color", "var(--surface-strong)"),
+    };
+  });
+  // A real dim, not a forced blue tint: one square neutral block with ordinary
+  // ink, no stroke, and no extra marker.
+  expect(styles.background).toBe(styles.dimmed);
+  expect(styles.background).not.toBe(styles.accent);
+  expect(styles.radius).toBe("0px");
+  expect(styles.border).toBe("rgba(0, 0, 0, 0)");
+  expect(styles.title).toBe(styles.ink);
+  expect(styles.marker).toBe("none");
+});
+
+test("shows a blinking kaomoji while the conversation is empty", async ({ page }) => {
+  test.skip(
+    (page.viewportSize()?.width ?? 0) < 640,
+    "The empty state is hidden on phone layouts.",
+  );
+  const face = page.locator(".kana-empty-face");
+  await expect(face).toBeVisible();
+  await expect(face).toHaveAttribute("aria-hidden", "true");
+  await expect(face).toHaveText("(๑ > ᴗ < ๑)");
+  await expect(page.getByText("A quiet moment with Kana")).toHaveCount(0);
+
+  const eyes = face.locator(".kana-empty-eye");
+  await expect(eyes).toHaveCount(2);
+  const widths = await eyes.evaluateAll((nodes) =>
+    nodes.map((node) => getComputedStyle(node).width),
+  );
+  // The fixed slots are what keep the rest of the line still while the eyes
+  // change glyph.
+  expect(widths[0]).toBe(widths[1]);
+  expect(widths[0]).not.toBe("0px");
+
+  const eyeText = () => eyes.first().textContent();
+  await expect.poll(eyeText, { timeout: 8000, intervals: [50] }).toBe("•");
+  await expect.poll(eyeText, { timeout: 2500, intervals: [50] }).toBe(">");
 });

@@ -45,6 +45,10 @@ Components copy Clara's vocabulary (shared classes in `app/globals.css`):
 - Header actions are a blue pill tray (`kana-bar`) of round tabs. An open tab
   turns into the white disc, and a label bubble (`kana-tip`) appears under a tab
   while it is pointed at or open.
+- On a desktop the header's free middle carries a quiet host HUD: CPU, memory,
+  and disk with thin accent bars, then uptime, in one neutral `surface-strong`
+  pill. It is read-only, polls only while mounted, and is not rendered on
+  phones.
 - The conversation title is a blue name chip.
 - Buttons are heavy pills (`kana-pill`, with `kana-pill-accent` striped blue for
   primary actions and `kana-pill-soft` for secondary ones) that hop up on hover.
@@ -107,6 +111,10 @@ the greeting dialogue box (`kana-greeting`) is not a modal. On phones the
 sidebar becomes a sideways tab row that scrolls the active tab to its centre,
 so a selected section is never left half cut at an edge.
 
+On phones, a Settings row with a short control — the Show avatar switch and
+Installation mode — keeps its label and control on one line; rows with wide
+controls stack.
+
 Settings → Connection ends with the Host card: the hostname and OS line, then
 a 2×2 grid of flat tiles for CPU/load, memory, root disk, and uptime. CPU,
 memory, and disk carry a thin accent bar with their percentage and usage;
@@ -126,7 +134,10 @@ composes. A menu or dialog is never cropped at the window edge.
 Conversation history has no "Recent" label. A dotted stroke like the Settings
 sidebar edge, inset to the search field's edges with room above and below,
 separates the search from the list. Only a search result count gets a label
-bubble.
+bubble. A conversation row is rounded and plain until hovered. The open
+conversation is a square, dimmed neutral block (`surface-strong`) with ordinary
+ink: no accent fill, stroke, or corner check badge. It is a real dim, not a
+tinted or desaturated blue.
 
 ## Settings
 
@@ -267,6 +278,10 @@ The chat panel is the plain tray inside the blue `--chat-frame` border: no
 texture. With the avatar visible it keeps its original styling: a dock no wider
 than 480px, `--chat-depth` behind the transcript, `--chat-bubble` replies, and
 the blue composer band with white text, white model pill, and white Send disc.
+An empty conversation shows one large `--accent` kaomoji, `(๑ > ᴗ < ๑)`, whose
+eyes close to `•` for a blink now and then; the eye slots keep one width so the
+rest of the line never shifts. The quiet description is hidden text for screen
+readers, not a visible greeting.
 Only focus mode (the avatar hidden on a desktop, `>=1024px`) changes the
 interior: the panel fills the space between the conversation rail and the
 window's right edge, while the transcript keeps a centred measure of up to
@@ -288,7 +303,9 @@ words on top and the controls on a row underneath. Phones keep the blue band and
 bubble in both states. The model chooser is a compact square popover above the
 pill on desktop and a bottom sheet on phones, with one searchable flat list:
 each row is the model over its provider, the model in use carries a check, and
-Kana's default carries a small Default pill. Choosing a row applies at once,
+Kana's default carries a small Default pill. The chooser keeps one fixed height
+for the whole layout, so filtering, loading, or a short catalog never resizes
+it; only the list inside scrolls. Choosing a row applies at once,
 with Hermes's cost confirmation when it asks for one. The chooser and the slash
 menu are popovers, not bar controls: the focus ink and attachment-chip rules
 stop at the bar's own buttons, so the list keeps its own text colours and the

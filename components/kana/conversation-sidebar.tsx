@@ -2,7 +2,7 @@
 
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Conversation } from "@/lib/conversation/types";
-import { CheckIcon, CloseIcon, MoreIcon, PlusIcon, SearchIcon } from "./icons";
+import { CloseIcon, MoreIcon, PlusIcon, SearchIcon } from "./icons";
 import { getCopy, type UiLocale } from "@/lib/ui/copy";
 import { mediaPreviewText } from "@/lib/presentation/media";
 
@@ -122,8 +122,8 @@ export const ConversationSidebar = memo(function ConversationSidebar({
   };
 
   const rowClass = (active: boolean) =>
-    `kana-focus kana-choice grid w-full grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-[22px] py-2.5 pl-3.5 text-left disabled:opacity-50 ${
-      active ? "is-plain is-selected pr-7" : "is-plain pr-3.5"
+    `kana-focus kana-choice is-plain grid w-full grid-cols-[minmax(0,1fr)_auto] items-start gap-3 py-2.5 pl-3.5 pr-3.5 text-left disabled:opacity-50 ${
+      active ? "is-selected" : "rounded-[22px]"
     }`;
 
   return (
@@ -214,7 +214,7 @@ export const ConversationSidebar = memo(function ConversationSidebar({
                   aria-current={active ? "true" : undefined}
                 >
                   <span className="min-w-0">
-                    <span className="block truncate text-[13px] font-extrabold text-ink">{conversation.title}</span>
+                    <span className="kana-row-title block truncate text-[13px] font-extrabold text-ink">{conversation.title}</span>
                     <span className={`mt-0.5 block truncate text-[11.5px] ${conversation.agent?.status === "missing" ? "text-danger" : "text-muted"}`}>
                       {conversation.agent?.status === "missing"
                         ? copy.sessionUnavailable
@@ -225,7 +225,6 @@ export const ConversationSidebar = memo(function ConversationSidebar({
                     {dateFormatter.format(conversation.updatedAt)}
                   </span>
                 </button>
-                {active ? <span className="kana-check" aria-hidden="true"><CheckIcon className="size-3.5" /></span> : null}
 
                 <button
                   type="button"
