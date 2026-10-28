@@ -123,6 +123,33 @@ describe("LocalPreferencesStore", () => {
     );
   });
 
+  it("persists Kana's default model for new conversations and drops malformed values", () => {
+    const persistent = new MemoryStorage();
+    const store = new LocalPreferencesStore(persistent);
+    assert.equal(store.load().defaultAgentModel, null);
+
+    store.save({
+      ...DEFAULT_PREFERENCES,
+      defaultAgentModel: { provider: "openrouter", model: "deepseek/deepseek-v4" },
+    });
+    assert.deepEqual(store.load().defaultAgentModel, {
+      provider: "openrouter",
+      model: "deepseek/deepseek-v4",
+    });
+
+    persistent.setItem(
+      "kana.preferences.v5",
+      JSON.stringify({ defaultAgentModel: { provider: "openrouter" } }),
+    );
+    assert.equal(store.load().defaultAgentModel, null);
+
+    persistent.setItem(
+      "kana.preferences.v5",
+      JSON.stringify({ defaultAgentModel: { provider: "  ", model: "deepseek/deepseek-v4" } }),
+    );
+    assert.equal(store.load().defaultAgentModel, null);
+  });
+
   it("keeps the chatbar collapse delay within 0-600 seconds", () => {
     const persistent = new MemoryStorage();
     // A record from a build without the setting starts at 30 seconds.

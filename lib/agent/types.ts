@@ -192,6 +192,9 @@ export type AgentSessionOptions = {
   title?: string;
   persistentSessionId?: string;
   cwd?: string;
+  /** A per-session model override; Hermes never writes it to config. */
+  model?: string;
+  provider?: string;
 };
 
 export type AgentMessageInput = {

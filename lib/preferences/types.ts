@@ -29,6 +29,12 @@ export type HostedAvatarModel = {
   addedAt: number;
 };
 
+/** The model Kana opens new conversations with; absent means Hermes's own. */
+export type AgentModelChoice = {
+  provider: string;
+  model: string;
+};
+
 export type KanaPreferences = {
   onboardingCompleted: boolean;
   /** Interface copy language; dictionary lives in lib/ui/copy.ts. */
@@ -39,6 +45,11 @@ export type KanaPreferences = {
   avatarMode: AvatarMode;
   /** Off means a plain chat workspace: the stage, its pattern, and its canvas stay unmounted. */
   avatarVisible: boolean;
+  /**
+   * Kana's own default for new conversations, applied as a per-session Hermes
+   * override at session.create. Null follows Hermes's configured default.
+   */
+  defaultAgentModel: AgentModelChoice | null;
   /**
    * How long the focus-mode composer holds its wide state after the draft,
    * focus, attachments, and dictation are gone, in seconds (0..600).

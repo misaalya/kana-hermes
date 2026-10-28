@@ -37,6 +37,22 @@
   (`kana-modal-content-in`). On close the text leaves first, then the panel and
   dim layer fade out; this covers Settings, History, the update and Hermes
   input dialogs, the setup wizard, and the composer's model chooser.
+- The composer's model chooser is now a compact square popover above the model
+  pill (a bottom sheet on phones): one searchable flat list with the provider
+  under each model, a check on the model in use, and a Default pill for Kana's
+  default. Clicking a row switches at once, with Hermes's cost confirmation
+  inline when it asks for one.
+- Settings → AI model gains **Set as default** for the provider and model
+  selected in the panel; it reads **Default** once that pair is Kana's default.
+  The model dropdown marks that default with a Default pill, the same marker
+  the composer list uses. The three action pills keep stable minimum widths on
+  desktop; on phones the primary stays a text button and Set as default and
+  Refresh move into a labeled ⋮ menu, so labels never rely on ambiguous icons
+  and never move the layout.
+  New Kana conversations pass the default on `session.create` as a per-session
+  override; Hermes's `config.yaml` and other clients stay untouched, existing
+  conversations keep their model, and an unavailable default falls back to
+  Hermes's default with a visible notice.
 - Kana draws no scrollbar anywhere: the transcript, settings, dialogs, and code
   blocks hide the scroll line but still scroll with the wheel, trackpad, touch,
   and keyboard.
@@ -45,6 +61,10 @@
 
 ### Fixed
 
+- On phones, Settings scrolls the active section tab to the centre of the
+  sideways nav instead of leaving it half cut at the edge.
+- The Settings shell and the model actions ⋮ menu detect when they would cross
+  a window edge and shift back into view instead of being cropped.
 - The composer's model chooser keeps its own palette in focus mode: the accent
   "In use" action and the blue selected model row no longer inherit the focus
   bar's ink colour and attachment-chip tint, and the slash menu keeps the

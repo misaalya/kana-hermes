@@ -168,9 +168,22 @@ function parsePreferences(value: unknown): KanaPreferences {
   // Backups from builds with the Qwen3-TTS service kept voice choices in qwen3Tts.
   const voice = isRecord(value.voice) ? value.voice : isRecord(value.qwen3Tts) ? value.qwen3Tts : {};
   const live2d = isRecord(value.live2d) ? value.live2d : {};
+  const defaultAgentModel = isRecord(value.defaultAgentModel)
+    ? {
+        provider:
+          typeof value.defaultAgentModel.provider === "string"
+            ? value.defaultAgentModel.provider
+            : "",
+        model:
+          typeof value.defaultAgentModel.model === "string"
+            ? value.defaultAgentModel.model
+            : "",
+      }
+    : null;
   return sanitizeBackupPreferences({
     ...DEFAULT_PREFERENCES,
     onboardingCompleted: true,
+    defaultAgentModel,
     stageBackground: isStageBackground(value.stageBackground)
       ? value.stageBackground
       : "plain",

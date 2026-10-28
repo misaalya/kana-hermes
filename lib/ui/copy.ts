@@ -75,6 +75,7 @@ export type Copy = {
     attachmentLimits(maxFiles: number, maxFileMib: number, maxTotalMib: number): string;
     chooseModel: string;
     closeModelChooser: string;
+    defaultModelFallback(model: string): string;
     dictationStopped: string;
     listening: string;
     listeningOnline: string;
@@ -418,6 +419,9 @@ export type Copy = {
     avatarEmotionNames: Record<Emotion, string>;
     hermesTitle: string;
     modelTitle: string;
+    defaultModelBadge: string;
+    modelSetDefault: string;
+    modelActions: string;
     modelLoading: string;
     modelLoadFailed: string;
     modelEmpty: string;
@@ -434,6 +438,7 @@ export type Copy = {
     modelChangeFailed: string;
     modelSwitching: string;
     modelConfirmSwitch: string;
+    modelCancel: string;
     modelInUse: string;
     modelUse: string;
     modelRefreshList: string;
@@ -594,6 +599,8 @@ const id: Copy = {
       `Maksimal ${maxFiles} file, ${maxFileMib} MiB per file, ${maxTotalMib} MiB total. File tidak boleh kosong.`,
     chooseModel: "Pilih model",
     closeModelChooser: "Tutup pilihan model",
+    defaultModelFallback: (model) =>
+      `Model default “${model}” tidak tersedia; Kana memakai default Hermes untuk percakapan ini.`,
     dictationStopped: "Dikte dihentikan.",
     listening: "Mendengarkan…",
     listeningOnline: "Mendengarkan… layanan browser dapat menggunakan internet.",
@@ -965,6 +972,9 @@ const id: Copy = {
     },
     hermesTitle: "Hermes",
     modelTitle: "Model AI",
+    defaultModelBadge: "Default",
+    modelSetDefault: "Jadikan default",
+    modelActions: "Aksi model",
     modelLoading: "Memuat model dari Hermes…",
     modelLoadFailed: "Model tidak dapat dimuat.",
     modelEmpty: "Hermes belum melaporkan provider dengan model yang siap digunakan.",
@@ -980,10 +990,11 @@ const id: Copy = {
     modelChanged: "Model untuk percakapan ini sudah diganti.",
     modelChangeFailed: "Model tidak dapat diganti.",
     modelSwitching: "Mengganti…",
-    modelConfirmSwitch: "Konfirmasi dan ganti",
+    modelConfirmSwitch: "Konfirmasi",
+    modelCancel: "Batal",
     modelInUse: "Sedang digunakan",
     modelUse: "Gunakan model ini",
-    modelRefreshList: "Segarkan daftar",
+    modelRefreshList: "Segarkan",
     accessTitle: "Perlindungan akses",
     avatarNamePrompt: "Nama avatar",
     removeAvatarConfirm: (name) => `Hapus “${name}” dari browser ini?`,
@@ -1174,6 +1185,8 @@ const en: Copy = {
       `Up to ${maxFiles} non-empty files, ${maxFileMib} MiB per file, ${maxTotalMib} MiB total.`,
     chooseModel: "Choose model",
     closeModelChooser: "Close model chooser",
+    defaultModelFallback: (model) =>
+      `The default model “${model}” is unavailable; Kana used Hermes's default for this conversation.`,
     dictationStopped: "Dictation stopped.",
     listening: "Listening…",
     listeningOnline: "Listening… the browser service may use the internet.",
@@ -1545,6 +1558,9 @@ const en: Copy = {
     },
     hermesTitle: "Hermes",
     modelTitle: "AI model",
+    defaultModelBadge: "Default",
+    modelSetDefault: "Set as default",
+    modelActions: "Model actions",
     modelLoading: "Loading models from Hermes…",
     modelLoadFailed: "Could not load models.",
     modelEmpty: "Hermes did not report any configured provider with usable models.",
@@ -1560,10 +1576,11 @@ const en: Copy = {
     modelChanged: "The model for this conversation has been changed.",
     modelChangeFailed: "Could not change the model.",
     modelSwitching: "Switching…",
-    modelConfirmSwitch: "Confirm and switch",
+    modelConfirmSwitch: "Confirm",
+    modelCancel: "Cancel",
     modelInUse: "In use",
     modelUse: "Use this model",
-    modelRefreshList: "Refresh list",
+    modelRefreshList: "Refresh",
     accessTitle: "Access protection",
     avatarNamePrompt: "Avatar name",
     removeAvatarConfirm: (name) => `Remove “${name}” from this browser?`,

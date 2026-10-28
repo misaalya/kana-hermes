@@ -90,12 +90,23 @@ server's, and adds no speech-output provider or credential.
 ## Model picker
 
 The model button names the model of the open Hermes session; selecting it opens
-the provider and model chooser. The list Kana loaded last for this session
-appears at once while Kana asks Hermes for it again in the background;
-**Refresh list** waits for that full reload. Switching models, running `/model`
-or `/reload`, a new session, or a lost connection drops the saved list. The
-choice applies to the current Hermes conversation, not to the global
-configuration, and Hermes may report that it starts from the next turn. Any
-expensive-model confirmation is shown before the switch, and a model change is
-refused while a turn is running. Escape closes the chooser, which is also
-reachable as Settings → AI model with the same cached list.
+a compact popover above the pill (a bottom sheet on phones) with one flat,
+searchable list. Each row shows the model over its provider; the model in use
+carries a check and Kana's default carries a Default pill. Clicking a row
+applies at once; when Hermes asks for a cost confirmation, the confirm and
+cancel actions appear in the same popover. A switch is refused while a turn is
+running, and Hermes may report that it starts from the next turn. Escape or a
+click outside closes the chooser and returns focus to the pill. The list Kana
+loaded last for this session appears at once while Kana asks Hermes for it again
+in the background; **Refresh** waits for that full reload. Switching
+models, running `/model` or `/reload`, a new session, or a lost connection drops
+the saved list. The choice applies to the current Hermes conversation, not to
+the global configuration.
+
+Settings → AI model adds **Set as default** for the provider and model currently
+selected there; when that pair is already Kana's default the button reads
+**Default**. The default is Kana's own: new Kana conversations send it on
+`session.create` as a per-session override, so Hermes's `config.yaml` and other
+Hermes clients are untouched, and existing conversations keep their model. If a
+saved default is no longer available, Kana opens the conversation with Hermes's
+default and says so.

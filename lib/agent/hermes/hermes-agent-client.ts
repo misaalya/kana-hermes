@@ -461,6 +461,10 @@ export class HermesAgentClient implements AgentClient {
         source: "kana",
         close_on_disconnect: false,
         ...(options.cwd ? { cwd: options.cwd } : {}),
+        // Kana's default model for new conversations: Hermes applies it as a
+        // per-session override and never writes it to config.
+        ...(options.model ? { model: options.model } : {}),
+        ...(options.provider ? { provider: options.provider } : {}),
         // No system-role seed: Hermes sends it as a second system message,
         // which some routes drop, and never stores it. The contract rides in
         // the user turn instead (see lib/presentation/persona.ts).

@@ -1823,31 +1823,121 @@ test("composer grows upward, shrinks back, and phone Enter only adds a line", as
 
 test("composer selects the Hermes model and returns keyboard focus", async ({ page }) => {
   const trigger = page.getByRole("button", { name: "Choose model", exact: true });
+  const desktop = (page.viewportSize()?.width ?? 0) >= 1024;
   await trigger.click();
   const dialog = page.getByRole("dialog", { name: "Choose model", exact: true });
-  await chooseOption(dialog, "Provider", "OpenRouter");
-  // Model lists can be long: the dropdown filters as you type and Enter picks.
-  await dialog.getByRole("combobox", { name: "Model", exact: true }).click();
-  const search = dialog.getByRole("combobox", { name: "Search models…" });
-  await expect(search).toBeFocused();
+  await expect(dialog).toBeVisible();
+  const dialogBox = await dialog.boundingBox();
+  const triggerBox = await trigger.boundingBox();
+  if (desktop) {
+    // A popover above the pill, not a centred modal.
+    expect(Math.round((dialogBox?.y ?? 0) + (dialogBox?.height ?? 0))).toBeLessThanOrEqual(
+      Math.round(triggerBox?.y ?? 0),
+    );
+    await expect(dialog.getByRole("textbox", { name: "Search models…" })).toBeFocused();
+    // The model in use is checked and says which provider serves it.
+    const current = dialog.getByRole("option", { name: /deepseek-v4-flash-0731/ });
+    await expect(current).toHaveAttribute("aria-selected", "true");
+    await expect(current).toContainText("Fireworks AI");
+  } else {
+    // A bottom sheet on a phone, edge to edge.
+    expect(Math.round((dialogBox?.y ?? 0) + (dialogBox?.height ?? 0))).toBeGreaterThanOrEqual(
+      (page.viewportSize()?.height ?? 0) - 2,
+    );
+    expect(dialogBox?.width ?? 0).toBeGreaterThanOrEqual((page.viewportSize()?.width ?? 0) - 2);
+  }
+
+  // One flat, searchable list: provider travels under each model.
+  const search = dialog.getByRole("textbox", { name: "Search models…" });
   await search.fill("no such model");
   await expect(dialog.getByText("Nothing matches.")).toBeVisible();
   await search.fill("deepseek v4");
-  await expect(dialog.getByRole("option", { name: "deepseek/deepseek-v4", exact: true })).toBeVisible();
-  await search.press("Enter");
-  await expect(dialog.getByRole("combobox", { name: "Model", exact: true })).toHaveText("deepseek/deepseek-v4");
-  await dialog.getByRole("button", { name: "Use this model" }).click();
+  const option = dialog.getByRole("option", { name: /deepseek\/deepseek-v4/ });
+  await expect(option).toBeVisible();
+  await expect(option).toContainText("OpenRouter");
+  // The current Fireworks model also matches "deepseek v4"; pick this row.
+  await option.click();
+
+  // The row applies at once; the chooser leaves and focus returns to the pill.
+  await expect(dialog).toBeHidden();
   // Exact: the model it replaces, deepseek-v4-flash-0731, contains this name.
   await expect(trigger).toHaveText(/^deepseek-v4$/);
   // The chip carries the model glyph and a real chevron, never a typed "⌄".
   await expect(trigger.locator("svg")).toHaveCount(2);
-  await page.keyboard.press("Escape");
-  await expect(dialog).not.toBeVisible();
   await expect(trigger).toBeFocused();
   await page.screenshot({ path: `test-results/composer-${test.info().project.name}.png` });
 });
 
-test("keeps the model chooser's own colours in focus mode", async ({ page }) => {
+test("keeps a Kana default model for new conversations", async ({ page }) => {
+  const desktop = (page.viewportSize()?.width ?? 0) >= 1024;
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
+  await page.getByRole("button", { name: "Open settings" }).click();
+  const settings = page.getByRole("dialog");
+  await settings.getByRole("button", { name: /^AI model/ }).click();
+  const session = settings.getByRole("region", { name: "AI model", exact: true });
+  await chooseOption(session, "Provider", "OpenRouter");
+  await chooseOption(session, "Model", "deepseek/deepseek-v4");
+  if (desktop) {
+    await session.getByRole("button", { name: "Set as default" }).click();
+  } else {
+    await session.getByRole("button", { name: "Model actions" }).click();
+    await session.getByRole("menuitem", { name: "Set as default" }).click();
+  }
+  const storedDefault = () =>
+    page.evaluate(() => {
+      const raw = localStorage.getItem("kana.preferences.v5");
+      return raw ? JSON.parse(raw).defaultAgentModel : null;
+    });
+  await expect.poll(storedDefault).toEqual({
+    provider: "openrouter",
+    model: "deepseek/deepseek-v4",
+  });
+  // The same action now reads as the default; no extra description.
+  if (desktop) {
+    await expect(session.getByRole("button", { name: "Default", exact: true })).toBeDisabled();
+  } else {
+    await session.getByRole("button", { name: "Model actions" }).click();
+    await expect(session.getByRole("menuitem", { name: "Default", exact: true })).toBeDisabled();
+    await page.keyboard.press("Escape");
+  }
+  // The model list marks the Kana default too, next to the active badge.
+  await session.getByRole("combobox", { name: "Model", exact: true }).click();
+  await expect(session.getByRole("option", { name: "deepseek/deepseek-v4" })).toContainText("Default");
+  await page.keyboard.press("Escape");
+  await settings.getByRole("button", { name: "Close settings" }).click();
+  await expect(settings).toHaveCount(0);
+
+  // The composer list marks the Kana default while the session keeps its model.
+  const trigger = page.getByRole("button", { name: "Choose model", exact: true });
+  await trigger.click();
+  const chooser = page.getByRole("dialog", { name: "Choose model", exact: true });
+  const search = chooser.getByRole("textbox", { name: "Search models…" });
+  await search.fill("deepseek v4");
+  await expect(chooser.getByRole("option", { name: /deepseek\/deepseek-v4/ })).toContainText("Default");
+  await expect(trigger).toHaveAttribute("title", "accounts/fireworks/models/deepseek-v4-flash-0731");
+  await page.keyboard.press("Escape");
+  await expect(chooser).toBeHidden({ timeout: 2000 });
+
+  // A new conversation opens its Hermes session with that model, as a
+  // per-session override; no config write is involved. Make this conversation
+  // real first: New reuses a still-blank one instead of opening a session.
+  await composer.fill("Make this conversation real");
+  await submitDraft(page, composer);
+  await expect(page.getByRole("button", { name: "Choose model", exact: true })).toBeEnabled();
+  await openHistory(page);
+  const createRequest = page.waitForRequest(
+    (request) =>
+      request.url().endsWith("/api/hermes/rpc") &&
+      request.postDataJSON()?.method === "session.create",
+  );
+  await page.getByText("New", { exact: true }).click();
+  expect((await createRequest).postDataJSON().params).toMatchObject({
+    model: "deepseek/deepseek-v4",
+    provider: "openrouter",
+  });
+});
+
+test("keeps the model picker legible in focus mode", async ({ page }) => {
   test.skip(
     (page.viewportSize()?.width ?? 0) < 1024,
     "The focus composer is a desktop layout.",
@@ -1861,12 +1951,12 @@ test("keeps the model chooser's own colours in focus mode", async ({ page }) => 
 
   await page.getByRole("button", { name: "Choose model", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Choose model", exact: true });
-  await expect(dialog.getByRole("combobox", { name: "Provider", exact: true })).toBeVisible();
-  await dialog.getByRole("combobox", { name: "Model", exact: true }).click();
+  const current = dialog.getByRole("option", { name: /deepseek-v4-flash-0731/ });
+  await expect(current).toHaveAttribute("aria-selected", "true");
 
-  // The chooser is a dialog, not a composer control: its accent button and
-  // selected list row keep the accent pairing instead of the bar's ink rules.
-  const colors = await dialog.evaluate((node) => {
+  // The picker is a dialog, not a composer control: the focus bar's ink rule
+  // must not repaint the provider line or the current-model check.
+  const colors = await current.evaluate((node) => {
     const resolve = (token: string) => {
       const probe = document.createElement("span");
       probe.style.color = `var(${token})`;
@@ -1875,21 +1965,20 @@ test("keeps the model chooser's own colours in focus mode", async ({ page }) => 
       probe.remove();
       return value;
     };
-    const selected = node.querySelector('li[aria-selected="true"]');
-    const primary = node.querySelector<HTMLButtonElement>(".kana-pill-accent");
+    const provider = node.querySelector("[data-model-provider]");
+    const check = node.querySelector("svg");
     return {
-      accent: resolve("--accent"),
-      onAccent: resolve("--on-accent"),
-      selectedBackground: selected ? getComputedStyle(selected).backgroundColor : "",
-      selectedColor: selected ? getComputedStyle(selected).color : "",
-      primaryDisabled: primary?.disabled ?? false,
-      primaryColor: primary ? getComputedStyle(primary).color : "",
+      ink: resolve("--ink"),
+      muted: resolve("--muted"),
+      accent: resolve("--accent-strong"),
+      row: getComputedStyle(node).color,
+      provider: provider ? getComputedStyle(provider).color : "",
+      check: check ? getComputedStyle(check).color : "",
     };
   });
-  expect(colors.primaryDisabled).toBe(true);
-  expect(colors.primaryColor).toBe(colors.onAccent);
-  expect(colors.selectedBackground).toBe(colors.accent);
-  expect(colors.selectedColor).toBe(colors.onAccent);
+  expect(colors.row).toBe(colors.ink);
+  expect(colors.provider).toBe(colors.muted);
+  expect(colors.check).toBe(colors.accent);
 });
 
 test("animates every modal in and out", async ({ page }) => {
@@ -2071,21 +2160,67 @@ test("the composer names the session's model even when the list loads slower tha
 });
 
 test("changes the active Hermes model with an explicit provider", async ({ page }) => {
+  const desktop = (page.viewportSize()?.width ?? 0) >= 1024;
   await page.getByRole("button", { name: "Open settings" }).click();
+  if (!desktop) {
+    // The whole shell must stay inside this window, never cropped sideways.
+    const shell = await page.locator(".kana-settings-shell").boundingBox();
+    const viewport = page.viewportSize();
+    expect(shell?.x ?? -1).toBeGreaterThanOrEqual(0);
+    expect((shell?.x ?? 0) + (shell?.width ?? 0)).toBeLessThanOrEqual((viewport?.width ?? 0) + 1);
+  }
   await page.getByRole("button", { name: /^AI model/ }).click();
+  if (!desktop) {
+    // The active tab must not sit half cut at the edge of the sideways nav.
+    const nav = page.locator(".kana-settings-nav");
+    const tab = nav.getByRole("button", { name: /^AI model/ });
+    await expect
+      .poll(async () => {
+        const [navBox, tabBox] = await Promise.all([nav.boundingBox(), tab.boundingBox()]);
+        if (!navBox || !tabBox) return false;
+        return tabBox.x >= navBox.x - 1 && tabBox.x + tabBox.width <= navBox.x + navBox.width + 1;
+      })
+      .toBe(true);
+  }
 
-  // The composer's model button and its dialog are also labelled "Model"; pick the settings selects.
+  // Both the Kana default and the session panel have Provider/Model selects;
+  // scope this journey to the session panel.
   const dialog = page.getByRole("dialog");
-  const modelSelect = dialog.getByRole("combobox", { name: "Model", exact: true });
+  const session = dialog.getByRole("region", { name: "AI model", exact: true });
+  const modelSelect = session.getByRole("combobox", { name: "Model", exact: true });
   await expect(modelSelect).toHaveText("accounts/fireworks/models/deepseek-v4-flash-0731");
-  await expect(dialog.getByRole("button", { name: "In use" })).toBeDisabled();
-  await chooseOption(dialog, "Provider", "OpenRouter");
-  await chooseOption(dialog, "Model", "deepseek/deepseek-v4");
-  await page.getByRole("button", { name: "Use this model" }).click();
+  await expect(session.getByRole("button", { name: "In use" })).toBeDisabled();
+  if (!desktop) {
+    // With the short "In use" primary the ⋮ sits near the left; a right-aligned
+    // menu would leave the screen. The viewport shift keeps it fully visible.
+    await session.getByRole("button", { name: "Model actions" }).click();
+    const menu = session.getByRole("menu", { name: "Model actions" });
+    await expect(menu).toBeVisible();
+    const menuBox = await menu.boundingBox();
+    const viewport = page.viewportSize();
+    expect(menuBox?.x ?? -1).toBeGreaterThanOrEqual(0);
+    expect((menuBox?.x ?? 0) + (menuBox?.width ?? 0)).toBeLessThanOrEqual((viewport?.width ?? 0));
+    await page.keyboard.press("Escape");
+  }
+  await chooseOption(session, "Provider", "OpenRouter");
+  await chooseOption(session, "Model", "deepseek/deepseek-v4");
+  if (!desktop) {
+    // Phones keep one row: the primary text action plus a labeled ⋮ menu.
+    const primary = session.getByRole("button", { name: "Use this model" });
+    const more = session.getByRole("button", { name: "Model actions" });
+    const [primaryBox, moreBox] = await Promise.all([primary.boundingBox(), more.boundingBox()]);
+    expect(Math.abs((primaryBox?.y ?? 0) - (moreBox?.y ?? 0))).toBeLessThan(2);
+    expect(moreBox?.width ?? Infinity).toBeLessThanOrEqual(44);
+    await more.click();
+    await expect(session.getByRole("menuitem", { name: "Set as default" })).toBeVisible();
+    await expect(session.getByRole("menuitem", { name: "Refresh" })).toBeVisible();
+    await page.keyboard.press("Escape");
+  }
+  await session.getByRole("button", { name: "Use this model" }).click();
 
   await expect(page.getByText("The model for this conversation has been changed.")).toBeVisible();
   await expect(modelSelect).toHaveText("deepseek/deepseek-v4");
-  await expect(dialog.getByRole("button", { name: "In use" })).toBeDisabled();
+  await expect(session.getByRole("button", { name: "In use" })).toBeDisabled();
   // The composer's model button follows the switch through the cached catalog.
   await expect(page.getByRole("button", { name: "Choose model", exact: true })).toHaveAttribute("title", "deepseek/deepseek-v4");
 });

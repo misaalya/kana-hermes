@@ -97,18 +97,40 @@ export class HermesSessionManager {
       // second caller joins the first open rather than creating a session.
       if (this.opening?.conversationId !== conversation.id) {
         this.tracking.openingId = conversation.id;
-        const promise = agent
-          .openSession({
-            // Automatic titles (the default, or the first message) are left to
-            // Hermes, which names the session itself.
-            title: conversation.titleChosen ? conversation.title : undefined,
-            // A session Hermes never stored cannot be resumed; open a new one.
-            persistentSessionId: resumableSessionId(conversation),
-            cwd: this.deps.preferences.current().hermes.cwd || undefined,
-          })
-          .finally(() => {
-            if (this.opening?.promise === promise) this.opening = null;
-          });
+        const preferences = this.deps.preferences.current();
+        const persistentSessionId = resumableSessionId(conversation);
+        const defaultModel = persistentSessionId ? null : preferences.defaultAgentModel;
+        const openOptions = {
+          // Automatic titles (the default, or the first message) are left to
+          // Hermes, which names the session itself.
+          title: conversation.titleChosen ? conversation.title : undefined,
+          // A session Hermes never stored cannot be resumed; open a new one.
+          persistentSessionId,
+          cwd: preferences.hermes.cwd || undefined,
+        };
+        const open = defaultModel
+          ? agent
+              .openSession({
+                ...openOptions,
+                model: defaultModel.model,
+                provider: defaultModel.provider,
+              })
+              .catch(async () => {
+                // A saved default can outlive its provider or model. Never let
+                // that block the conversation: open with Hermes's own default
+                // and say what happened.
+                const opened = await agent.openSession(openOptions);
+                this.deps.stores.errors.getState().report(
+                  "agent",
+                  getCopy(preferences.uiLocale).composer.defaultModelFallback(defaultModel.model),
+                  "session",
+                );
+                return opened;
+              })
+          : agent.openSession(openOptions);
+        const promise = open.finally(() => {
+          if (this.opening?.promise === promise) this.opening = null;
+        });
         this.opening = { conversationId: conversation.id, promise };
       }
       await this.opening.promise;

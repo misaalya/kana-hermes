@@ -52,6 +52,10 @@ export function ChatComposer() {
     "preferences",
     (state) => state.preferences.composerCollapseDelaySeconds,
   );
+  const defaultAgentModel = useKanaStore(
+    "preferences",
+    (state) => state.preferences.defaultAgentModel,
+  );
   const activeConversationId = useKanaStore("conversations", (state) => state.activeConversationId ?? undefined);
   const conversation = useKanaStore("conversations", (state) => findConversation(state, state.activeConversationId));
   const busy = useKanaStore("agentSession", (state) => state.busy);
@@ -339,7 +343,8 @@ export function ChatComposer() {
               } />
             <ComposerModelChoice key={`model-${activeConversationId}`} locale={locale} sessionKey={activeConversationId}
               connected={connected} disabled={busy || submitting} catalog={modelCatalog}
-              onList={actions.listAgentModels} onSelect={actions.selectAgentModel} />
+              defaultModel={defaultAgentModel}
+              onList={actions.listAgentModels} onSelect={actions.selectAgentModel} onNotice={setNotice} />
             <button
               type="button"
               aria-label={text.send}

@@ -8,6 +8,7 @@ import {
 } from "@/lib/avatar/defaults";
 import { normalizeLive2DLayoutProfiles } from "@/lib/avatar/model-layout";
 import type {
+  AgentModelChoice,
   KanaPreferences,
   PreferencesStore,
 } from "./types";
@@ -21,6 +22,19 @@ export type BrowserStorage = Pick<
 /** Upper bound shared by the Settings field and the stored value. */
 export const MAX_COMPOSER_COLLAPSE_DELAY_SECONDS = 600;
 export const DEFAULT_COMPOSER_COLLAPSE_DELAY_SECONDS = 30;
+
+function normalizeDefaultAgentModel(value: unknown): AgentModelChoice | null {
+  if (!value || typeof value !== "object") return null;
+  const { provider, model } = value as { provider?: unknown; model?: unknown };
+  if (typeof provider !== "string" || typeof model !== "string") return null;
+  const trimmedProvider = provider.trim();
+  const trimmedModel = model.trim();
+  if (!trimmedProvider || !trimmedModel) return null;
+  return {
+    provider: trimmedProvider.slice(0, 200),
+    model: trimmedModel.slice(0, 500),
+  };
+}
 
 function normalizeComposerCollapseDelay(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -66,6 +80,7 @@ export const DEFAULT_PREFERENCES: KanaPreferences = {
   voiceMode: "configured",
   avatarMode: "live2d",
   avatarVisible: true,
+  defaultAgentModel: null,
   composerCollapseDelaySeconds: DEFAULT_COMPOSER_COLLAPSE_DELAY_SECONDS,
   stageBackground: "plain",
   hermes: {
@@ -115,6 +130,7 @@ export function normalizeKanaPreferences(
     // Anything but an explicit false keeps the stage: stored records from
     // builds without the setting, and restored values, stay chat-and-avatar.
     avatarVisible: preferences.avatarVisible !== false,
+    defaultAgentModel: normalizeDefaultAgentModel(preferences.defaultAgentModel),
     composerCollapseDelaySeconds: normalizeComposerCollapseDelay(
       preferences.composerCollapseDelaySeconds,
     ),

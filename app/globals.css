@@ -1954,6 +1954,12 @@ video.kana-media-preview {
   animation: kana-dialog-backdrop-in 200ms ease both;
 }
 
+/* The open dialog lays itself out with flex; the closed one must not keep
+   that display and sit invisibly over the composer. */
+.kana-model-dialog:not([open]) {
+  display: none;
+}
+
 .kana-modal-panel {
   animation: kana-modal-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
 }

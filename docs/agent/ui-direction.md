@@ -79,6 +79,7 @@ Components copy Clara's vocabulary (shared classes in `app/globals.css`):
 | Waveform | Kana's voice settings |
 | Avatar figure | Avatar settings |
 | Bot | AI model, never a sparkle |
+| Star | Kana's default model |
 | Server | Deployment and server settings |
 | Shield | Security settings |
 
@@ -102,7 +103,16 @@ setup screens, conversation history, the Hermes approval/input dialog, the
 connection gate, the composer's model chooser, and the avatar layout ("Scale")
 popover. The Settings sidebar items (`kana-settings-nav-item`, the selected one
 included) are square too. Controls inside a modal keep their rounded shapes, and
-the greeting dialogue box (`kana-greeting`) is not a modal.
+the greeting dialogue box (`kana-greeting`) is not a modal. On phones the
+sidebar becomes a sideways tab row that scrolls the active tab to its centre,
+so a selected section is never left half cut at an edge.
+
+Floating surfaces and dialogs keep themselves inside the window horizontally:
+`useShiftIntoViewport` measures the surface and shifts it right when it crosses
+the left edge, left when it crosses the right edge. The Settings shell moves
+with relative `left` (so its fixed-position dropdowns still measure from the
+viewport); menus move with `translate` so their entrance transform still
+composes. A menu or dialog is never cropped at the window edge.
 
 ## Conversation history
 
@@ -268,10 +278,22 @@ segmented preset in Settings → Experience: Off, 15 s, 30 s, 1 min, or 2 min
 seconds, so an older custom value keeps its own segment). A draft with a line
 break turns the bar into a rounded card, with the
 words on top and the controls on a row underneath. Phones keep the blue band and
-bubble in both states. The model chooser is a dialog and the slash menu a
-popover, not bar controls: the focus ink and attachment-chip rules stop at the
-bar's own buttons, so the chooser keeps its accent button and blue selected row
-and the slash menu keeps the selected row's accent ink.
+bubble in both states. The model chooser is a compact square popover above the
+pill on desktop and a bottom sheet on phones, with one searchable flat list:
+each row is the model over its provider, the model in use carries a check, and
+Kana's default carries a small Default pill. Choosing a row applies at once,
+with Hermes's cost confirmation when it asks for one. The chooser and the slash
+menu are popovers, not bar controls: the focus ink and attachment-chip rules
+stop at the bar's own buttons, so the list keeps its own text colours and the
+slash menu keeps the selected row's accent ink. Settings → AI model adds a
+quiet Set as default action for the provider and model currently selected in
+the panel; once that pair is Kana's default the same action reads Default and
+stays disabled. There is no separate default-model panel, no summary line, and
+no description: the button says what it does, and the model dropdown marks the Kana default
+with the same Default pill as the composer list. The three model actions keep
+one minimum width
+(and fill the row on phones), so changing labels never reflow the row. The
+default is Kana-only and never changes Hermes's own configuration.
 While Hermes works, or while the reply's voice is still being generated, the
 transcript shows a chat-app typing indicator (`kana-typing`, three hopping dots)
 with the status beside it, and Stop is a small icon-and-label pill next to that

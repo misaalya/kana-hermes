@@ -23,6 +23,7 @@ import type { Emotion } from "@/lib/presentation/types";
 import { OFFICIAL_LIVE2D_SAMPLES } from "@/lib/avatar/defaults";
 import { useDialogFocus } from "@/lib/accessibility/use-dialog-focus";
 import { getCopy } from "@/lib/ui/copy";
+import { useShiftIntoViewport } from "@/lib/ui/use-shift-into-viewport";
 import { HermesControlPanel } from "./hermes-control-panel";
 import { VoiceEnginePanel } from "./voice-engine-panel";
 import { VoicePanel } from "./voice-panel";
@@ -131,6 +132,9 @@ export function SettingsDialog({
   closing = false,
 }: SettingsDialogProps) {
   const { dialogRef, onDialogKeyDown } = useDialogFocus(onClose);
+  // A dialog wider than the window is shifted in, never cropped; `left` keeps
+  // its fixed-position dropdowns measured from the viewport.
+  useShiftIntoViewport(dialogRef, true, { mode: "left", edge: 0 });
   const [draft, setDraft] = useState(() => structuredClone(preferences));
   const copy = getCopy(draft.uiLocale);
   const settingsCopy = copy.settings;
@@ -155,6 +159,22 @@ export function SettingsDialog({
     }));
   })();
   const [section, setSection] = useState<SettingsSection>("experience");
+  const navRef = useRef<HTMLElement | null>(null);
+
+  // Phones scroll the section tabs sideways; center the active one so it is
+  // never left half cut at an edge.
+  useEffect(() => {
+    const nav = navRef.current;
+    const active = nav?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!nav || !active || nav.scrollWidth <= nav.clientWidth) return;
+    const navRect = nav.getBoundingClientRect();
+    const activeRect = active.getBoundingClientRect();
+    const centered = nav.scrollLeft + (activeRect.left - navRect.left) - (nav.clientWidth - activeRect.width) / 2;
+    nav.scrollTo({
+      left: Math.max(0, Math.min(centered, nav.scrollWidth - nav.clientWidth)),
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+    });
+  }, [section]);
   const [saveState, setSaveState] = useState<"saved" | "saving" | "error">("saved");
   const [avatarModels, setAvatarModels] = useState<AvatarModelSummary[]>([]);
   const [avatarBusy, setAvatarBusy] = useState(false);
@@ -485,7 +505,7 @@ export function SettingsDialog({
             <div className="md:hidden">{closeButton}</div>
           </div>
           {saveState === "error" ? <div className="px-4 pb-2 md:hidden">{saveStatus}</div> : null}
-          <nav className="kana-settings-nav flex flex-col gap-1 max-md:flex-row max-md:gap-1 max-md:overflow-x-auto max-md:px-3 max-md:pb-2" aria-label={settingsCopy.sectionsAria}>
+          <nav ref={navRef} className="kana-settings-nav flex flex-col gap-1 max-md:flex-row max-md:gap-1 max-md:overflow-x-auto max-md:px-3 max-md:pb-2" aria-label={settingsCopy.sectionsAria}>
             {navItems.map((item) => {
               const active = item.id === section;
               const NavIcon = SECTION_ICONS[item.id];
@@ -707,16 +727,22 @@ export function SettingsDialog({
             ) : null}
 
             {section === "model" ? (
-              <SettingsGroup title={settingsCopy.modelTitle}>
-                <div className="mt-2">
-                  <ModelControlPanel
-                    locale={draft.uiLocale}
-                    catalog={agentModelCatalog}
-                    onList={onListAgentModels}
-                    onSelect={onSelectAgentModel}
-                  />
-                </div>
-              </SettingsGroup>
+              <>
+                <SettingsGroup title={settingsCopy.modelTitle} ariaLabel={settingsCopy.modelTitle}>
+                  <div className="mt-2">
+                    <ModelControlPanel
+                      locale={draft.uiLocale}
+                      catalog={agentModelCatalog}
+                      onList={onListAgentModels}
+                      onSelect={onSelectAgentModel}
+                      defaultModel={draft.defaultAgentModel}
+                      onSetDefault={(defaultAgentModel) =>
+                        setDraft((current) => ({ ...current, defaultAgentModel }))
+                      }
+                    />
+                  </div>
+                </SettingsGroup>
+              </>
             ) : null}
 
             {section === "system" ? (

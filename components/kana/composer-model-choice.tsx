@@ -2,25 +2,34 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentModelCatalog, AgentModelSwitchResult } from "@/lib/agent/types";
+import type { AgentModelChoice } from "@/lib/preferences/types";
 import { getCopy, type UiLocale } from "@/lib/ui/copy";
 import { MODAL_EXIT_MS, prefersReducedMotion } from "@/lib/ui/use-modal-presence";
 import { BotIcon, ChevronDownIcon } from "./icons";
-import { ModelControlPanel } from "./model-control-panel";
+import { ComposerModelPicker } from "./composer-model-picker";
 
-export function ComposerModelChoice({ locale, sessionKey, connected, disabled, catalog, onList, onSelect }: {
+type Placement = { left: number; bottom: number; maxHeight: number };
+
+export function ComposerModelChoice({ locale, sessionKey, connected, disabled, catalog, defaultModel, onList, onSelect, onNotice }: {
   locale: UiLocale;
   sessionKey?: string;
   connected: boolean;
   disabled: boolean;
   /** Cached catalog from the workspace; its model labels the button. */
   catalog: AgentModelCatalog | null;
+  /** Kana's default for new conversations, marked in the list. */
+  defaultModel: AgentModelChoice | null;
   onList(refresh?: boolean): Promise<AgentModelCatalog>;
   onSelect(provider: string, model: string, confirm?: boolean): Promise<AgentModelSwitchResult>;
+  /** A switch Hermes defers to the next turn still needs saying. */
+  onNotice(text: string): void;
 }) {
   const model = catalog?.model ?? "";
   const [open, setOpen] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [placement, setPlacement] = useState<Placement | null>(null);
   const dialog = useRef<HTMLDialogElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
   const closeTimer = useRef<number | null>(null);
   // Load the catalog once connected; later conversations reuse the cache.
   useEffect(() => {
@@ -30,6 +39,35 @@ export function ComposerModelChoice({ locale, sessionKey, connected, disabled, c
     if (open) dialog.current?.showModal();
     else dialog.current?.close();
   }, [open]);
+
+  // The native dialog is in the top layer, so a popover anchored to the pill
+  // needs viewport coordinates rather than flow placement.
+  const updatePlacement = useCallback(() => {
+    if (!window.matchMedia("(min-width: 1024px)").matches) {
+      setPlacement(null);
+      return;
+    }
+    const bounds = trigger.current?.getBoundingClientRect();
+    if (!bounds) return;
+    const width = 380;
+    setPlacement({
+      left: Math.min(Math.max(12, bounds.left), Math.max(12, window.innerWidth - 12 - width)),
+      bottom: Math.round(window.innerHeight - bounds.top + 8),
+      maxHeight: Math.max(160, Math.min(520, Math.round(bounds.top - 20))),
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const follow = () => updatePlacement();
+    window.addEventListener("resize", follow);
+    document.addEventListener("scroll", follow, true);
+    return () => {
+      window.removeEventListener("resize", follow);
+      document.removeEventListener("scroll", follow, true);
+    };
+  }, [open, updatePlacement]);
+
   useEffect(() => () => {
     if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
   }, []);
@@ -46,13 +84,17 @@ export function ComposerModelChoice({ locale, sessionKey, connected, disabled, c
       setClosing(false);
     }, MODAL_EXIT_MS);
   }, [closing]);
+  const openPicker = () => {
+    updatePlacement();
+    setOpen(true);
+  };
   const text = getCopy(locale).composer;
   const label = text.chooseModel;
   return <>
-    <button type="button" aria-label={label} title={model || label} disabled={disabled || !connected}
+    <button ref={trigger} type="button" aria-label={label} title={model || label} disabled={disabled || !connected}
       aria-haspopup="dialog" aria-expanded={open}
       className="kana-model-pill kana-focus ml-auto flex min-h-10 min-w-0 max-w-[min(55%,260px)] items-center gap-1.5 rounded-full px-4 text-[12.5px]"
-      onClick={() => setOpen(true)}>
+      onClick={openPicker}>
       <BotIcon className="size-[15px] shrink-0" />
       <span className="truncate">{connected && model ? model.split("/").pop() : label}</span>
       <ChevronDownIcon className="size-3.5 shrink-0" />
@@ -60,13 +102,19 @@ export function ComposerModelChoice({ locale, sessionKey, connected, disabled, c
     <dialog ref={dialog} aria-label={label} inert={closing || undefined}
       onCancel={(event) => { event.preventDefault(); close(); }} onClose={() => setOpen(false)}
       onClick={(event) => { if (event.target === event.currentTarget) close(); }}
-      className={`kana-model-dialog fixed inset-0 m-auto max-h-[80dvh] w-[min(440px,calc(100vw-24px))] overflow-y-auto border-0 bg-surface p-6 text-ink backdrop:bg-[var(--backdrop)] kana-modal-panel ${closing ? "is-closing" : ""}`}>
-      {open ? <>
-        <div className="mb-4 flex items-center justify-between"><h2 className="text-lg font-extrabold">{label}</h2>
-          <button type="button" className="kana-focus grid size-9 place-items-center rounded-full bg-surface-strong text-lg leading-none" onClick={close} aria-label={text.closeModelChooser}>×</button>
-        </div>
-        <ModelControlPanel locale={locale} catalog={catalog} onList={onList} onSelect={onSelect} />
-      </> : null}
+      style={placement ?? undefined}
+      className={`kana-model-dialog kana-modal-panel fixed inset-auto m-0 flex max-h-[80dvh] w-full max-w-none flex-col overflow-hidden border-2 border-line-strong bg-surface text-ink backdrop:bg-transparent max-lg:inset-x-0 max-lg:bottom-0 max-lg:top-auto max-lg:max-h-[75dvh] max-lg:backdrop:bg-[var(--backdrop)] lg:w-[380px] ${closing ? "is-closing" : ""}`}>
+      {open ? (
+        <ComposerModelPicker
+          locale={locale}
+          catalog={catalog}
+          defaultModel={defaultModel}
+          onList={onList}
+          onSelect={onSelect}
+          onNotice={onNotice}
+          onDone={close}
+        />
+      ) : null}
     </dialog>
   </>;
 }
