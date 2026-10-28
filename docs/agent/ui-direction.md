@@ -107,6 +107,13 @@ the greeting dialogue box (`kana-greeting`) is not a modal. On phones the
 sidebar becomes a sideways tab row that scrolls the active tab to its centre,
 so a selected section is never left half cut at an edge.
 
+Settings → Connection ends with the Host card: the hostname and OS line, then
+CPU, memory, and root-disk bars with their percentage and usage, then host
+uptime with the Kana process's own uptime and RSS. A small Live dot says the
+sample on screen is current; a failed poll turns it into Reconnecting and keeps
+the last values. Nothing is charted or stored, and the card polls only while it
+is mounted.
+
 Floating surfaces and dialogs keep themselves inside the window horizontally:
 `useShiftIntoViewport` measures the surface and shifts it right when it crosses
 the left edge, left when it crosses the right edge. The Settings shell moves

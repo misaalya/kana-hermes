@@ -442,6 +442,18 @@ export type Copy = {
     modelInUse: string;
     modelUse: string;
     modelRefreshList: string;
+    hostTitle: string;
+    hostLive: string;
+    hostStale: string;
+    hostLoading: string;
+    hostFailed: string;
+    hostCpu: string;
+    hostMemory: string;
+    hostDisk: string;
+    hostUptime: string;
+    hostCpuDetail(cores: number, load: string): string;
+    hostUsage(used: string, total: string): string;
+    hostKanaDetail(uptime: string, rss: string): string;
     accessTitle: string;
     avatarNamePrompt: string;
     removeAvatarConfirm(name: string): string;
@@ -995,6 +1007,18 @@ const id: Copy = {
     modelInUse: "Sedang digunakan",
     modelUse: "Gunakan model ini",
     modelRefreshList: "Segarkan",
+    hostTitle: "Mesin",
+    hostLive: "Langsung",
+    hostStale: "Menyambung ulang…",
+    hostLoading: "Membaca metrik mesin…",
+    hostFailed: "Metrik mesin tidak tersedia.",
+    hostCpu: "CPU",
+    hostMemory: "Memori",
+    hostDisk: "Disk",
+    hostUptime: "Waktu aktif",
+    hostCpuDetail: (cores, load) => `${cores} inti · beban ${load}`,
+    hostUsage: (used, total) => `${used} dari ${total}`,
+    hostKanaDetail: (uptime, rss) => `Kana ${uptime} · ${rss}`,
     accessTitle: "Perlindungan akses",
     avatarNamePrompt: "Nama avatar",
     removeAvatarConfirm: (name) => `Hapus “${name}” dari browser ini?`,
@@ -1581,6 +1605,18 @@ const en: Copy = {
     modelInUse: "In use",
     modelUse: "Use this model",
     modelRefreshList: "Refresh",
+    hostTitle: "Host",
+    hostLive: "Live",
+    hostStale: "Reconnecting…",
+    hostLoading: "Reading host metrics…",
+    hostFailed: "Host metrics are unavailable.",
+    hostCpu: "CPU",
+    hostMemory: "Memory",
+    hostDisk: "Disk",
+    hostUptime: "Uptime",
+    hostCpuDetail: (cores, load) => `${cores} cores · load ${load}`,
+    hostUsage: (used, total) => `${used} of ${total}`,
+    hostKanaDetail: (uptime, rss) => `Kana ${uptime} · ${rss}`,
     accessTitle: "Access protection",
     avatarNamePrompt: "Avatar name",
     removeAvatarConfirm: (name) => `Remove “${name}” from this browser?`,

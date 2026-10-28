@@ -29,6 +29,7 @@ import { VoiceEnginePanel } from "./voice-engine-panel";
 import { VoicePanel } from "./voice-panel";
 import { AvatarExpressionPanel } from "./avatar-expression-panel";
 import { fadeAvatarModeChange } from "./avatar-mode-transition";
+import { HostPanel } from "./host-panel";
 import { ModelControlPanel } from "./model-control-panel";
 import { AdvancedConfigCard, SecuritySection } from "./settings-access-section";
 import { AddCard, AvatarCard, WardrobeGrid } from "./settings-avatar-cards";
@@ -754,6 +755,11 @@ export function SettingsDialog({
                     onStart={onStartHermesControl}
                     onStop={onStopHermesControl}
                   />
+                </SettingsGroup>
+                <SettingsGroup title={settingsCopy.hostTitle} ariaLabel={settingsCopy.hostTitle}>
+                  <div className="mt-2">
+                    <HostPanel locale={draft.uiLocale} />
+                  </div>
                 </SettingsGroup>
                 <AdvancedConfigCard locale={draft.uiLocale} />
               </>

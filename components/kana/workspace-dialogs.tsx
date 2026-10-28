@@ -18,9 +18,18 @@ function SettingsHost() {
   const modelCatalog = useKanaStore("models", (state) => state.entry?.catalog ?? null);
   const avatarPortraits = useKanaStore("avatar", (state) => state.portraits);
   const presence = useModalPresence(open);
+  // Reopening during the exit must be a fresh open: a reused instance would
+  // keep the previous section and its one-shot Hermes read.
+  const [generation, setGeneration] = useState(0);
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) setGeneration((current) => current + 1);
+  }
   if (!presence.mounted) return null;
   return (
     <SettingsDialog
+      key={generation}
       closing={presence.closing}
       preferences={preferences}
       onSave={actions.savePreferences}

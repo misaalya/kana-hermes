@@ -68,6 +68,7 @@ mock agent mode.
 | `GET`/`PUT /api/kana/activities` | The per-turn activity snapshots read from and written to `activities.db`. |
 | `GET`/`PUT /api/kana/setup` | Install-level onboarding completion in `appstate.db`, shared by every browser of this user. |
 | `GET /api/kana/config` | The `config.json` path, whether it exists, the deployment mode, and the prompt guardrail's state and rule count; never the file's contents, the key, or a rule's text. |
+| `GET /api/kana/host` | A read-only snapshot of the machine Kana runs on: CPU counters and load, memory, root disk, uptime, and the Kana process's own uptime and RSS. No input and nothing persisted; the browser polls only while the Host card is open. |
 | `GET`/`POST`/`DELETE /api/kana/voices` | The voice library: reference WAVs on disk plus rows in `appstate.db`. |
 | `POST /api/kana/voices/preview` | The sample for one voice: the bundled or user-uploaded reference WAV itself, or a prepared generation for the model voice. It never starts the engine. |
 | `GET`/`HEAD /api/media/<token>/<name>` | One delivered file, streamed with byte ranges and ETag revalidation; the token is the only input that picks the file. |

@@ -1440,6 +1440,31 @@ async function copyInstallCommand(page: Page): Promise<void> {
   await expect(page.getByRole("dialog")).toHaveCount(1);
 }
 
+test("reports host metrics only while the Connection panel is open", async ({ page }) => {
+  const requests: string[] = [];
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname === "/api/kana/host") requests.push(request.url());
+  });
+  await page.getByRole("button", { name: "Open settings" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: /^Connection/ }).click();
+  const host = dialog.getByRole("region", { name: "Host", exact: true });
+  await expect(host).toBeVisible();
+  await expect(host.getByRole("progressbar", { name: "CPU" })).toBeVisible();
+  await expect(host.getByRole("progressbar", { name: "Memory" })).toBeVisible();
+  await expect(host.getByRole("progressbar", { name: "Disk" })).toBeVisible();
+  await expect(host).toContainText("Uptime");
+  // The second poll gives the CPU bar a real delta, not only a first sample.
+  await expect.poll(() => requests.length, { timeout: 8000 }).toBeGreaterThanOrEqual(2);
+
+  // Leaving the panel stops the sampler; nothing arrives afterwards.
+  await dialog.getByRole("button", { name: "Close settings" }).click();
+  await expect(dialog).toHaveCount(0);
+  const atClose = requests.length;
+  await page.waitForTimeout(4000);
+  expect(requests.length).toBe(atClose);
+});
+
 test("shows the workspace update notice and stops Kana only after Copy & Shutdown", async ({
   page,
   context,

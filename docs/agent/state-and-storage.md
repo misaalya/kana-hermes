@@ -103,6 +103,10 @@ legacy v1 rows. One live write and one reconstructed write for the same turn
 converge on a single row, which is what lets the feed splice a turn's tools
 back in after a refresh or in another browser.
 
+Host metrics are not stored either: `/api/kana/host` reads the OS and `/proc`
+per request, and the browser keeps only the current snapshot while the Host
+card is mounted. Closing Settings stops the polling.
+
 Process-held state is deliberately not persisted: the Hermes session token and
 the shared gateway socket (`lib/server/hermes-bridge.ts`), the managed runtime
 (`lib/server/local-hermes-runtime.ts`), the login lockout buckets
