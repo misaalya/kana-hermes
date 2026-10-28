@@ -17,6 +17,7 @@ export function UpdateDialog({
   stopping,
   stopFailed,
   locale,
+  closing = false,
   onCancel,
   onShutdown,
 }: {
@@ -28,6 +29,8 @@ export function UpdateDialog({
   /** The stop was refused or never arrived: honest, and retryable. */
   stopFailed: boolean;
   locale: UiLocale;
+  /** The notice host is keeping this mounted for its exit animation. */
+  closing?: boolean;
   onCancel(): void;
   onShutdown(): void;
 }) {
@@ -40,14 +43,15 @@ export function UpdateDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-[var(--backdrop)] p-3"
+      className={`kana-modal-backdrop fixed inset-0 z-50 grid place-items-center bg-[var(--backdrop)] p-3 ${closing ? "is-closing" : ""}`}
+      inert={closing || undefined}
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onCancel();
       }}
     >
       <section
-        className="kana-notice-dialog w-[min(460px,100%)] max-h-[calc(100dvh-1.5rem)] overflow-y-auto border-2 border-line-strong bg-surface-strong p-5 outline-none"
+        className={`kana-notice-dialog w-[min(460px,100%)] max-h-[calc(100dvh-1.5rem)] overflow-y-auto border-2 border-line-strong bg-surface-strong p-5 outline-none kana-modal-panel ${closing ? "is-closing" : ""}`}
         ref={dialogRef}
         tabIndex={-1}
         role="dialog"

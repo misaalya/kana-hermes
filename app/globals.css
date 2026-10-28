@@ -133,18 +133,14 @@ button,
 
 ::selection { background: color-mix(in srgb, var(--accent) 35%, transparent); }
 
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+/* Kana draws no scroll lines anywhere. Every scroller still answers to the
+   wheel, trackpad, touch, and keyboard. */
+* {
+  scrollbar-width: none;
 }
 
-::-webkit-scrollbar-track { background: transparent; }
-
-::-webkit-scrollbar-thumb {
-  border: 2px solid transparent;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--muted) 45%, transparent);
-  background-clip: padding-box;
+::-webkit-scrollbar {
+  display: none;
 }
 
 .kana-stage-pattern {
@@ -308,6 +304,26 @@ button,
 
 .kana-avatar-viewport[data-chat-open="true"] .kana-avatar-content {
   transform: translateX(max(-17.5vw, -255px));
+}
+
+/* Switching between the avatar workspace and focus mode cross-fades instead of
+   snapping: the preference write runs inside a View Transition, so the browser
+   blends a snapshot of each layout and the rail, the dock's geometry, and the
+   avatar change under one fade. Browsers without View Transitions switch
+   immediately. */
+::view-transition {
+  pointer-events: none;
+}
+
+::view-transition-group(root) {
+  animation-duration: 340ms;
+  animation-timing-function: ease;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 340ms;
+  animation-timing-function: ease;
 }
 
 [data-theme="light"] .kana-stage-pattern[data-background="room"] .kana-stage-backdrop {
@@ -842,10 +858,10 @@ details[open] > .kana-plus-summary::before {
   }
 
   .kana-chat-dock.is-sole {
-    /* The transcript's text measure and the composer's wide state, neither of
-       which is the panel's width. */
+    /* The transcript's text measure; the composer's wide state matches it, and
+       neither is the panel's width. */
     --kana-focus-measure: clamp(760px, 66vw, 900px);
-    --kana-focus-composer: 760px;
+    --kana-focus-composer: var(--kana-focus-measure);
     left: calc(2rem + var(--kana-focus-rail-w));
     right: 1rem;
     width: auto;
@@ -1446,10 +1462,6 @@ video.kana-media-preview {
   color: currentColor;
 }
 
-.kana-settings-nav {
-  scrollbar-width: none;
-}
-
 /* Material Symbols glyphs (the /docs guide): drawn from ligature names in a
    subset icon font. In the components layer so size and colour utilities
    still apply. */
@@ -1689,10 +1701,6 @@ video.kana-media-preview {
   white-space: nowrap;
 }
 
-.kana-settings-nav::-webkit-scrollbar {
-  display: none;
-}
-
 /* Text, number, and password fields: a soft grey pill at rest that turns
    white with one solid accent ring while active, like a picked Clara card.
    None of the browser's own field chrome shows: no focus ring, no search
@@ -1901,6 +1909,88 @@ video.kana-media-preview {
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+/* A modal's dim layer eases in while its panel lifts into place. The panel
+   deliberately keeps no transform after the entrance: a retained identity
+   transform would become the containing block for the fixed-position
+   dropdowns inside Settings and the model chooser. The native model chooser
+   fades its own ::backdrop, a separate layer from the panel. */
+@keyframes kana-modal-backdrop-in {
+  from { background-color: transparent; }
+}
+
+@keyframes kana-dialog-backdrop-in {
+  from { opacity: 0; }
+}
+
+@keyframes kana-modal-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+}
+
+@keyframes kana-modal-content-in {
+  from { opacity: 0; transform: translateY(6px); }
+}
+
+@keyframes kana-modal-content-out {
+  to { opacity: 0; transform: translateY(-4px); }
+}
+
+@keyframes kana-modal-out {
+  to { opacity: 0; transform: scale(0.985); }
+}
+
+@keyframes kana-modal-backdrop-out {
+  to { background-color: transparent; }
+}
+
+@keyframes kana-dialog-backdrop-out {
+  to { opacity: 0; }
+}
+
+.kana-modal-backdrop {
+  animation: kana-modal-backdrop-in 200ms ease both;
+}
+
+.kana-model-dialog::backdrop {
+  animation: kana-dialog-backdrop-in 200ms ease both;
+}
+
+.kana-modal-panel {
+  animation: kana-modal-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+
+/* The panel's content follows it in as one block. On the way out the content
+   leaves first, then the panel and its dim layer; useModalPresence keeps the
+   modal mounted for the whole exit (MODAL_EXIT_MS). */
+.kana-modal-panel > * {
+  animation: kana-modal-content-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1) 70ms backwards;
+}
+
+.kana-modal-panel.is-closing > * {
+  animation: kana-modal-content-out 140ms ease both;
+}
+
+.kana-modal-panel.is-closing {
+  animation: kana-modal-out 180ms ease 120ms both;
+}
+
+.kana-modal-backdrop.is-closing {
+  animation: kana-modal-backdrop-out 300ms ease both;
+}
+
+.kana-model-dialog.is-closing::backdrop {
+  animation: kana-dialog-backdrop-out 300ms ease both;
+}
+
+/* An exiting modal never blocks the workspace underneath. */
+.kana-modal-backdrop.is-closing,
+.kana-model-dialog.is-closing {
+  pointer-events: none;
+}
+
+.kana-greeting.is-closing {
+  animation: kana-modal-out 180ms ease both;
+}
+
 /* The 404 and its caption hang in zero gravity on separate paths. Each has
    its own out-of-step drift and tilt, with different periods, amplitudes, and
    starting phases, so they wander independently instead of moving as one
@@ -1971,6 +2061,17 @@ video.kana-media-preview {
     transition-duration: 0.01ms !important;
   }
 
+  /* The mode cross-fade is a document-level pseudo tree, outside `*`. */
+  ::view-transition-group(root),
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 0.01ms !important;
+  }
+
+  .kana-model-dialog::backdrop {
+    animation-duration: 0.01ms !important;
+  }
+
   .kana-not-found-code-x,
   .kana-not-found-code-y,
   .kana-not-found-code-r,
@@ -2005,13 +2106,8 @@ video.kana-media-preview {
 
   .kana-chat-scroll {
     padding: 0.75rem 0.75rem 0.625rem;
-    scrollbar-width: none;
     -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 1.25rem);
     mask-image: linear-gradient(to bottom, transparent 0, #000 1.25rem);
-  }
-
-  .kana-chat-scroll::-webkit-scrollbar {
-    display: none;
   }
 
   .kana-composer-shell {
@@ -2097,22 +2193,37 @@ video.kana-media-preview {
     width: min(var(--kana-focus-composer), 100%);
     margin-inline: auto;
     border: 0;
-    border-radius: 999px;
+    /* One fixed radius for the pill and the card: at the pill's height it is
+       already past half, so it draws as a full round; when a line break grows
+       the box the same curve reads as a card. Nothing to animate here. */
+    border-radius: 1.75rem;
     background: var(--surface-strong);
     padding: 4px 6px;
     transition: width 340ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition-delay: 0s;
   }
 
-  /* At rest the bar is narrower. Focusing it, typing, or attaching a file
-     widens it; the width animates so the change reads as the bar opening. */
-  .kana-chat-dock.is-sole .kana-composer:not(:focus-within):not(:has(textarea:not(:placeholder-shown))):not(:has(> ul)) {
+  /* At rest the bar is narrower. Only the textarea open for writing, a draft,
+     an attachment, or an active dictation keep it wide: focusing the model
+     chooser or the mic is not enough. The delay applies on the way back only,
+     so opening stays immediate. */
+  .kana-chat-dock.is-sole .kana-composer:not(.is-dictating):not(:has(textarea:focus)):not(:has(textarea:not(:placeholder-shown))):not(:has(> ul)) {
     width: min(380px, 100%);
+    transition-delay: var(--kana-composer-collapse-delay, 30s);
   }
 
   /* The resting bar is too narrow for the hint: it fades out with the bar and
-     comes back when the bar opens. */
-  .kana-chat-dock.is-sole .kana-composer:not(:focus-within):not(:has(textarea:not(:placeholder-shown))):not(:has(> ul)) textarea::placeholder {
+     comes back when the bar opens. The fade follows the collapse delay, so a
+     wide bar that is merely waiting keeps its hint. */
+  .kana-chat-dock.is-sole .kana-composer:not(.is-dictating):not(:has(textarea:focus)):not(:has(textarea:not(:placeholder-shown))):not(:has(> ul)) textarea::placeholder {
     color: transparent;
+    transition-delay: var(--kana-composer-collapse-delay, 30s);
+  }
+
+  /* The resting bar has nothing to scroll, so the input is not a scroll
+     surface either. */
+  .kana-chat-dock.is-sole .kana-composer:not(.is-dictating):not(:has(textarea:focus)):not(:has(textarea:not(:placeholder-shown))):not(:has(> ul)) textarea {
+    overflow: hidden;
   }
 
   .kana-chat-dock.is-sole .kana-composer > ul,
@@ -2129,6 +2240,7 @@ video.kana-media-preview {
     grid-column: 2;
     grid-row: 2;
     color: var(--ink);
+    transition: min-height 180ms ease;
   }
 
   .kana-chat-dock.is-sole .kana-composer .kana-composer-tool:not(.kana-composer-attach) {
@@ -2146,6 +2258,26 @@ video.kana-media-preview {
     grid-row: 2;
   }
 
+  /* A multi-line draft turns the pill into a card: the words own the top of the
+     box and the controls move to their own row underneath. */
+  .kana-chat-dock.is-sole .kana-composer.is-multiline {
+    padding: 6px;
+  }
+
+  .kana-chat-dock.is-sole .kana-composer.is-multiline textarea {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    min-height: 5.5rem;
+    padding-inline: 0.625rem;
+  }
+
+  .kana-chat-dock.is-sole .kana-composer.is-multiline .kana-composer-attach,
+  .kana-chat-dock.is-sole .kana-composer.is-multiline .kana-composer-tool:not(.kana-composer-attach),
+  .kana-chat-dock.is-sole .kana-composer.is-multiline .kana-model-pill,
+  .kana-chat-dock.is-sole .kana-composer.is-multiline .kana-send {
+    grid-row: 3;
+  }
+
   .kana-chat-dock.is-sole .kana-composer textarea::placeholder {
     color: var(--muted);
   }
@@ -2158,7 +2290,28 @@ video.kana-media-preview {
     color: var(--faint);
   }
 
-  .kana-chat-dock.is-sole .kana-composer ul li {
+  /* The model chooser is a dialog, not a composer control: the focus bar's
+     button rules must not repaint its disabled "In use" action or leave its
+     accent button without the accent's own ink. */
+  .kana-chat-dock.is-sole .kana-composer .kana-model-dialog button,
+  .kana-chat-dock.is-sole .kana-composer .kana-model-dialog button:disabled {
+    color: var(--ink);
+  }
+
+  .kana-chat-dock.is-sole .kana-composer .kana-model-dialog .kana-pill-accent,
+  .kana-chat-dock.is-sole .kana-composer .kana-model-dialog .kana-pill-accent:disabled {
+    color: var(--on-accent);
+  }
+
+  /* The slash menu is a popover too; its selected row keeps the accent's own
+     ink instead of the bar's. */
+  .kana-chat-dock.is-sole .kana-composer .kana-panel button[aria-selected="true"] {
+    color: var(--on-accent);
+  }
+
+  /* Only the composer's own attachment chips get the tint. The model list
+     inside the chooser keeps its plain rows and blue selected row. */
+  .kana-chat-dock.is-sole .kana-composer > ul li {
     background: color-mix(in srgb, var(--ink) 8%, transparent);
   }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   AttachmentUploadError,
   MAX_ATTACHMENT_BYTES,
@@ -48,6 +48,10 @@ export function ChatComposer() {
   const { actions } = workspace;
   const setWorkspace = workspace.stores.workspace.setState;
   const locale = useKanaStore("preferences", (state) => state.preferences.uiLocale);
+  const collapseDelaySeconds = useKanaStore(
+    "preferences",
+    (state) => state.preferences.composerCollapseDelaySeconds,
+  );
   const activeConversationId = useKanaStore("conversations", (state) => state.activeConversationId ?? undefined);
   const conversation = useKanaStore("conversations", (state) => findConversation(state, state.activeConversationId));
   const busy = useKanaStore("agentSession", (state) => state.busy);
@@ -97,14 +101,36 @@ export function ChatComposer() {
   // Shift+Enter adds a line: grow the bar upward, capped by max-h-28. Collapse
   // to auto first, or scrollHeight keeps the old height and a shortened draft
   // never gives the space back.
+  const multiline = message.includes("\n");
   useEffect(() => {
     const input = inputRef.current;
     if (!input) return;
+    // An empty draft has no text to measure. The placeholder can wrap in the
+    // narrow resting bar and inflate scrollHeight, so a refresh must leave the
+    // height to rows=1 instead of growing the bar until the first keystroke.
+    if (message === "") {
+      input.style.height = "";
+      return;
+    }
     const scrollTop = input.scrollTop;
+    // A single-line draft must not inherit the card's minimum height:
+    // scrollHeight never reports less than the box, so measuring while that
+    // minimum still applies would keep the bar tall after the last line break
+    // is deleted.
+    const minHeight = input.style.minHeight;
+    const transition = input.style.transition;
+    if (!multiline) {
+      input.style.transition = "none";
+      input.style.minHeight = "0px";
+    }
     input.style.height = "auto";
     input.style.height = `${Math.min(input.scrollHeight, COMPOSER_MAX_HEIGHT)}px`;
+    if (!multiline) {
+      input.style.transition = transition;
+      input.style.minHeight = minHeight;
+    }
     input.scrollTop = scrollTop;
-  }, [message]);
+  }, [message, multiline]);
 
   // Slash completion follows the draft, debounced so typing stays responsive.
   useEffect(() => {
@@ -201,7 +227,10 @@ export function ChatComposer() {
           onSelect={selectCommand}
           locale={locale}
         />
-        <div className="kana-composer flex flex-col">
+        <div
+          className={`kana-composer flex flex-col${multiline ? " is-multiline" : ""}${dictating ? " is-dictating" : ""}`}
+          style={{ "--kana-composer-collapse-delay": `${collapseDelaySeconds}s` } as CSSProperties}
+        >
           {files.length ? <ul aria-label={copy.composer.attachments} className="flex max-h-24 flex-wrap gap-1.5 overflow-y-auto py-1">
             {files.map((file, index) => <li key={`${file.name}-${index}`} className="flex max-w-full items-center gap-1 rounded-full bg-white/16 pl-3 text-[11px] font-bold">
               <span className="truncate" title={file.name}>{file.name}</span>
@@ -304,7 +333,10 @@ export function ChatComposer() {
                 if (activeConversationId) workspace.stores.workspace.getState().appendDraft(activeConversationId, spoken);
               }}
               onActive={(active) => setWorkspace({ dictating: active })}
-              onNotice={setNotice} />
+              onNotice={setNotice}
+              onError={(dictationError) =>
+                workspace.stores.errors.getState().report("voice", dictationError, "voice")
+              } />
             <ComposerModelChoice key={`model-${activeConversationId}`} locale={locale} sessionKey={activeConversationId}
               connected={connected} disabled={busy || submitting} catalog={modelCatalog}
               onList={actions.listAgentModels} onSelect={actions.selectAgentModel} />

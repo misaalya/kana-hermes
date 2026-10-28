@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { readUpdateStatus, requestStop, type UpdateStatus } from "@/lib/runtime/update-client";
 import type { UiLocale } from "@/lib/ui/copy";
 import { getCopy } from "@/lib/ui/copy";
+import { useModalPresence } from "@/lib/ui/use-modal-presence";
 import { UpdateDialog } from "./update-dialog";
 
 /**
@@ -29,6 +30,7 @@ export function UpdateNotice({ locale }: { locale: UiLocale }) {
   const mounted = useRef(true);
   const stopTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const commandRef = useRef<HTMLElement | null>(null);
+  const dialogPresence = useModalPresence(dialogOpen);
 
   // Every async step below checks this before it sets state, so a StrictMode
   // double mount or a mid-request unmount never writes to a dead component.
@@ -169,13 +171,14 @@ export function UpdateNotice({ locale }: { locale: UiLocale }) {
       </div>
       {/* Outside the notice box: the dialog's own actions must never be the
           notice's action. `role="status"` stays on its text nodes. */}
-      {dialogOpen ? (
+      {dialogPresence.mounted ? (
         <UpdateDialog
           update={update}
           busy={busy}
           stopping={stopping}
           stopFailed={stopFailed}
           locale={locale}
+          closing={dialogPresence.closing}
           onCancel={() => setDialogOpen(false)}
           onShutdown={() => void shutdown()}
         />

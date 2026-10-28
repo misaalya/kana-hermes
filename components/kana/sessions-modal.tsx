@@ -1,6 +1,7 @@
 "use client";
 
 import { getCopy } from "@/lib/ui/copy";
+import { useModalPresence } from "@/lib/ui/use-modal-presence";
 import { ConversationSidebar } from "./conversation-sidebar";
 import { useKanaStore, useKanaWorkspace } from "./kana-workspace-context";
 
@@ -13,19 +14,21 @@ export function SessionsModal() {
   const hermesSessions = useKanaStore("conversations", (state) => state.hermesSessions);
   const busy = useKanaStore("agentSession", (state) => state.busy);
   const locale = useKanaStore("preferences", (state) => state.preferences.uiLocale);
-  if (!open) return null;
+  const presence = useModalPresence(open);
+  if (!presence.mounted) return null;
 
   const close = () => workspace.stores.workspace.setState({ sessionsOpen: false });
   return (
     <div
-      className="fixed inset-0 z-30 flex justify-end bg-[var(--backdrop)] p-3 backdrop-blur-sm max-sm:p-0"
+      className={`kana-modal-backdrop fixed inset-0 z-30 flex justify-end bg-[var(--backdrop)] p-3 backdrop-blur-sm max-sm:p-0 ${presence.closing ? "is-closing" : ""}`}
       role="dialog"
       aria-modal="true"
       aria-label={getCopy(locale).workspace.conversationHistory}
+      inert={presence.closing || undefined}
       onClick={close}
     >
       <section
-        className="kana-settings-shell flex h-full w-[min(390px,100%)] flex-col overflow-hidden bg-raised animate-kana-in max-sm:w-full"
+        className={`kana-settings-shell flex h-full w-[min(390px,100%)] flex-col overflow-hidden bg-raised kana-modal-panel max-sm:w-full ${presence.closing ? "is-closing" : ""}`}
         onClick={(event) => event.stopPropagation()}
       >
         <ConversationSidebar

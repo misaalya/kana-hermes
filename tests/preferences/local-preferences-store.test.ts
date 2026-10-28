@@ -123,6 +123,30 @@ describe("LocalPreferencesStore", () => {
     );
   });
 
+  it("keeps the chatbar collapse delay within 0-600 seconds", () => {
+    const persistent = new MemoryStorage();
+    // A record from a build without the setting starts at 30 seconds.
+    persistent.setItem("kana.preferences.v5", JSON.stringify({ uiLocale: "en" }));
+    assert.equal(
+      new LocalPreferencesStore(persistent).load().composerCollapseDelaySeconds,
+      30,
+    );
+    persistent.setItem(
+      "kana.preferences.v5",
+      JSON.stringify({ uiLocale: "en", composerCollapseDelaySeconds: -5 }),
+    );
+    assert.equal(
+      new LocalPreferencesStore(persistent).load().composerCollapseDelaySeconds,
+      0,
+    );
+
+    const store = new LocalPreferencesStore(persistent);
+    store.save({ ...DEFAULT_PREFERENCES, composerCollapseDelaySeconds: 240.6 });
+    assert.equal(store.load().composerCollapseDelaySeconds, 241);
+    store.save({ ...DEFAULT_PREFERENCES, composerCollapseDelaySeconds: 9_999 });
+    assert.equal(store.load().composerCollapseDelaySeconds, 600);
+  });
+
   it("falls back safely when a stored stage background is unknown", () => {
     const persistent = new MemoryStorage();
     persistent.setItem(

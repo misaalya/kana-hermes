@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { KanaPreferences } from "@/lib/preferences/types";
 import { getCopy } from "@/lib/ui/copy";
+import { useModalPresence } from "@/lib/ui/use-modal-presence";
 import { AgentInputDialog } from "./agent-input-dialog";
 import { useKanaStore, useKanaWorkspace } from "./kana-workspace-context";
 import { OnboardingWizard } from "./onboarding-dialog";
@@ -16,9 +17,11 @@ function SettingsHost() {
   const preferences = useKanaStore("preferences", (state) => state.preferences);
   const modelCatalog = useKanaStore("models", (state) => state.entry?.catalog ?? null);
   const avatarPortraits = useKanaStore("avatar", (state) => state.portraits);
-  if (!open) return null;
+  const presence = useModalPresence(open);
+  if (!presence.mounted) return null;
   return (
     <SettingsDialog
+      closing={presence.closing}
       preferences={preferences}
       onSave={actions.savePreferences}
       onImportAvatar={actions.importAvatarFiles}
@@ -53,11 +56,20 @@ function InputRequestHost() {
   const request = useKanaStore("agentSession", (state) => state.pendingInput);
   const submitting = useKanaStore("agentSession", (state) => state.respondingToInput);
   const locale = useKanaStore("preferences", (state) => state.preferences.uiLocale);
-  if (!request) return null;
+  // The request clears the moment it is answered; keep the last one on screen
+  // while its exit plays.
+  const [lastRequest, setLastRequest] = useState(request);
+  useEffect(() => {
+    if (request) queueMicrotask(() => setLastRequest(request));
+  }, [request]);
+  const presence = useModalPresence(Boolean(request));
+  const shown = request ?? lastRequest;
+  if (!presence.mounted || !shown) return null;
   return (
     <AgentInputDialog
-      key={request.kind === "approval" ? `approval-${request.command}` : `${request.kind}-${request.requestId}`}
-      request={request}
+      key={shown.kind === "approval" ? `approval-${shown.command}` : `${shown.kind}-${shown.requestId}`}
+      request={shown}
+      closing={presence.closing}
       submitting={submitting}
       onRespond={actions.respondToInput}
       locale={locale}
@@ -74,6 +86,12 @@ function SetupHost() {
     (greeting: boolean) => workspace.stores.workspace.setState({ greeting }),
     [workspace],
   );
+  const [lastMode, setLastMode] = useState(wizardMode);
+  useEffect(() => {
+    if (wizardMode) queueMicrotask(() => setLastMode(wizardMode));
+  }, [wizardMode]);
+  const presence = useModalPresence(Boolean(wizardMode));
+  const shownMode = wizardMode ?? lastMode;
   // Kana smiles and starts talking as her greeting begins.
   const greet = useCallback(() => {
     const current = workspace.preferences.current();
@@ -83,13 +101,14 @@ function SetupHost() {
       .catch(() => undefined);
   }, [workspace]);
 
-  if (!wizardMode) return null;
+  if (!presence.mounted || !shownMode) return null;
   return (
     <OnboardingWizard
       locale={preferences.uiLocale}
       preferences={preferences}
       deps={deps}
-      mode={wizardMode}
+      mode={shownMode}
+      closing={presence.closing}
       onComplete={workspace.actions.completeOnboarding}
       onDismiss={() => setWizardMode(null)}
       onGreetingChange={setGreeting}

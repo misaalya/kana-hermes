@@ -14,6 +14,8 @@ import { getCopy, type UiLocale } from "@/lib/ui/copy";
 type AgentInputDialogProps = {
   request: AgentInputRequest;
   submitting: boolean;
+  /** The host is keeping this mounted for its exit animation. */
+  closing?: boolean;
   onRespond(response: AgentInputResponse): Promise<void>;
   locale: UiLocale;
 };
@@ -288,8 +290,10 @@ function ClarificationForm({
   );
 }
 
-export function AgentInputDialog({  request,
+export function AgentInputDialog({
+  request,
   submitting,
+  closing = false,
   onRespond,
   locale,
 }: AgentInputDialogProps) {
@@ -448,14 +452,15 @@ export function AgentInputDialog({  request,
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-bg/85 p-3"
+      className={`kana-modal-backdrop fixed inset-0 z-50 grid place-items-center bg-bg/85 p-3 ${closing ? "is-closing" : ""}`}
+      inert={closing || undefined}
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) void cancel();
       }}
     >
       <section
-        className={`${shellClass} outline-none`}
+        className={`${shellClass} kana-modal-panel outline-none ${closing ? "is-closing" : ""}`}
         ref={dialogRef}
         tabIndex={-1}
         role="dialog"

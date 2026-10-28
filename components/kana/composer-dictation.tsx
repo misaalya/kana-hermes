@@ -21,20 +21,22 @@ type SpeechWindow = Window & {
   webkitSpeechRecognition?: new () => Recognition;
 };
 
-export function ComposerDictation({ locale, disabled, onText, onActive, onNotice }: {
+export function ComposerDictation({ locale, disabled, onText, onActive, onNotice, onError }: {
   locale: UiLocale;
   disabled: boolean;
   onText(text: string): void;
   onActive(active: boolean): void;
   onNotice(text: string): void;
+  /** A warning that stays in the composer's red alert, not the faint status line. */
+  onError(text: string): void;
 }) {
   const copy = getCopy(locale);
   const text = copy.composer;
   const [active, setActive] = useState(false);
   const recognition = useRef<Recognition | null>(null);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const callbacks = useRef({ onText, onActive, onNotice });
-  useEffect(() => { callbacks.current = { onText, onActive, onNotice }; });
+  const callbacks = useRef({ onText, onActive, onNotice, onError });
+  useEffect(() => { callbacks.current = { onText, onActive, onNotice, onError }; });
 
   const dispose = () => {
     const current = recognition.current;
@@ -73,7 +75,7 @@ export function ComposerDictation({ locale, disabled, onText, onActive, onNotice
       return;
     }
     if (await isBraveBrowser()) {
-      onNotice(text.dictationBrave);
+      onError(text.dictationBrave);
       return;
     }
     if (recognition.current) return;

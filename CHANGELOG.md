@@ -14,17 +14,43 @@
   plain chat workspace: replies are unboxed Markdown on the panel surface and
   the reader's own messages keep a quiet grey bubble. The composer is one filled
   pill row with attach, the model, dictation, and an accent Send; it rests at
-  380 px with its placeholder hidden and animates open to 760 px when it is
-  focused, holds a draft, or carries attachments. With the avatar visible the
-  panel keeps its original blue tray, and phones keep the blue chat band and
-  bubble styling.
+  380 px with its placeholder hidden and animates open to the transcript's
+  measure (up to 900 px) when the text area is open for writing, a draft or an
+  attachment exists, or dictation is live; focusing the model chooser or the
+  microphone no longer opens it. Once those are gone the bar keeps its wide
+  state for a configurable delay before narrowing (Settings → Experience, a
+  preset of Off, 15, 30, 60, or 120 seconds; 30 by default). A draft with a line
+  break turns the bar into a rounded card: the
+  words own the top of the box and the controls move to a row underneath. With
+  the avatar visible the panel keeps its original blue tray, and phones keep the
+  blue chat band and bubble styling.
 - The composer grows upward as the draft gains lines and gives the space back
-  when lines are removed, instead of keeping its tallest height until reload.
+  when lines are removed, instead of keeping its tallest height until reload. An
+  empty composer opens at one row after a reload, without waiting for a
+  keystroke to remeasure it.
+- Switching between the avatar workspace and focus mode cross-fades the whole
+  workspace, so the rail, the chat panel's new geometry, and the avatar change
+  under one fade instead of snapping. Browsers without View Transitions switch
+  immediately, and reduced-motion keeps the change instant.
+- Every modal enters with the shared fade-and-lift (`kana-modal-panel`) while
+  its dim layer eases in and its text follows as one delayed block
+  (`kana-modal-content-in`). On close the text leaves first, then the panel and
+  dim layer fade out; this covers Settings, History, the update and Hermes
+  input dialogs, the setup wizard, and the composer's model chooser.
+- Kana draws no scrollbar anywhere: the transcript, settings, dialogs, and code
+  blocks hide the scroll line but still scroll with the wheel, trackpad, touch,
+  and keyboard.
 - On phones Enter only adds a newline; only the Send button submits a message.
   Desktops keep Enter to send and Shift+Enter for a new line.
 
 ### Fixed
 
+- The composer's model chooser keeps its own palette in focus mode: the accent
+  "In use" action and the blue selected model row no longer inherit the focus
+  bar's ink colour and attachment-chip tint, and the slash menu keeps the
+  selected row's accent ink.
+- The Brave dictation warning now appears as the composer's red, dismissible
+  alert instead of the faint status line used for live dictation.
 - The repository no longer tracks Qoder's local project settings.
   `.qoder/settings.local.json` held a maintainer's local checkout path and was
   committed by accident. It is removed from the tree, ignored at the repository

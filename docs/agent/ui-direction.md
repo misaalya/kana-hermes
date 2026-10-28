@@ -24,6 +24,14 @@ shades of blue; style through the tokens.
 No shadows of any kind: no drop shadows, no flat "ledge" shadows, no glow.
 Pieces are flat colour shapes separated by fill, radius, and spacing.
 
+## Scrolling
+
+Kana draws no scroll line anywhere. The global `scrollbar-width: none` and
+`::-webkit-scrollbar { display: none; }` in `app/globals.css` hide every
+scrollbar, including the transcript, settings, dialogs, and code blocks. Those
+surfaces still scroll with the wheel, trackpad, touch, and keyboard, so a hidden
+scrollbar never removes a way to reach the content.
+
 ## Typeface
 
 One typeface, M PLUS Rounded 1c (`next/font/google`, variable
@@ -250,9 +258,20 @@ Markdown and the reader's own message keeps a quiet `--chat-bubble-user` bubble
 on the right. Its composer is one pill row on a `--surface-strong` fill: attach
 at the left, the draft, the model as a quiet text control, dictation, and Send
 as an accent disc while there is something to send. The bar rests at 380 px
-with its placeholder hidden and opens to 760 px with a width transition
-whenever it is focused, holds a draft, or carries attachments. Phones keep the
-blue band and bubble in both states.
+with its placeholder hidden. Writing in the text area, a draft, an attachment,
+or a live dictation opens it to the transcript's measure (up to 900 px) with a
+width transition; focusing the model chooser or the microphone is not enough.
+Once all of those are gone the bar keeps its wide state for the configured
+delay before it narrows, and its hint stays with it until then. The delay is a
+segmented preset in Settings → Experience: Off, 15 s, 30 s, 1 min, or 2 min
+(30 s by default; `composerCollapseDelaySeconds` still stores the number of
+seconds, so an older custom value keeps its own segment). A draft with a line
+break turns the bar into a rounded card, with the
+words on top and the controls on a row underneath. Phones keep the blue band and
+bubble in both states. The model chooser is a dialog and the slash menu a
+popover, not bar controls: the focus ink and attachment-chip rules stop at the
+bar's own buttons, so the chooser keeps its accent button and blue selected row
+and the slash menu keeps the selected row's accent ink.
 While Hermes works, or while the reply's voice is still being generated, the
 transcript shows a chat-app typing indicator (`kana-typing`, three hopping dots)
 with the status beside it, and Stop is a small icon-and-label pill next to that
@@ -308,6 +327,24 @@ uses.
 
 Motion is springy (`--spring`): lift on hover, small press on click, a pop for
 check badges. Global reduced-motion rules must keep working.
+
+Switching between the avatar workspace and focus mode is a cross-fade, not a
+snap: `fadeAvatarModeChange` (`components/kana/avatar-mode-transition.ts`) runs
+the preference write inside a View Transition, so the browser blends a snapshot
+of both layouts and the rail, the dock's geometry, and the avatar change under
+one fade. Browsers without View Transitions change immediately, and the
+reduced-motion rule collapses the cross-fade to nothing.
+
+Modals enter with `kana-modal-panel` (fade, 8 px lift, 0.985 scale) while their
+dim layer eases in (`kana-modal-backdrop`; the native model chooser animates
+its own `::backdrop`). The panel's content follows as one delayed block
+(`kana-modal-content-in`). On close the content leaves first, then the panel
+and dim layer (`is-closing`); `useModalPresence` keeps a conditionally rendered
+modal mounted for `MODAL_EXIT_MS` (320 ms) so that exit can finish, and the
+exiting modal is inert and click-through. The panel keeps no transform after
+the entrance, because one would become the containing block for the
+fixed-position dropdowns inside Settings and the model chooser. Reduced-motion
+releases the modal at once.
 
 ## Stage patterns
 

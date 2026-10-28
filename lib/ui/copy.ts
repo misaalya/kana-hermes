@@ -364,6 +364,11 @@ export type Copy = {
     savingChanges: string;
     close: string;
     interfaceTitle: string;
+    composerDelayTitle: string;
+    composerDelayDescription: string;
+    composerDelayOff: string;
+    composerDelaySecondsShort: string;
+    composerDelayMinutesShort: string;
     voiceTitle: string;
     voiceToggle: string;
     avatarVisible: string;
@@ -888,6 +893,12 @@ const id: Copy = {
     savingChanges: "Menyimpan…",
     close: "Tutup pengaturan",
     interfaceTitle: "Bahasa antarmuka",
+    composerDelayTitle: "Jeda chatbar",
+    composerDelayDescription:
+      "Berapa lama chatbar tetap lebar setelah draft dan lampiran hilang.",
+    composerDelayOff: "Mati",
+    composerDelaySecondsShort: "dtk",
+    composerDelayMinutesShort: "mnt",
     voiceTitle: "Suara Kana",
     voiceToggle: "Suara Jepang",
     avatarVisible: "Tampilkan avatar",
@@ -1462,6 +1473,12 @@ const en: Copy = {
     savingChanges: "Saving…",
     close: "Close settings",
     interfaceTitle: "Interface language",
+    composerDelayTitle: "Chatbar delay",
+    composerDelayDescription:
+      "How long the chatbar stays wide after the draft and attachments are gone.",
+    composerDelayOff: "Off",
+    composerDelaySecondsShort: "s",
+    composerDelayMinutesShort: "min",
     voiceTitle: "Kana's voice",
     voiceToggle: "Japanese voice",
     avatarVisible: "Show avatar",

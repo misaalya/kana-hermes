@@ -28,6 +28,12 @@ A draft and its selected files belong to one conversation and live only in the
 browser tab's memory, so a reload clears them; each conversation keeps its own
 draft for as long as the tab is open.
 
+In focus mode (a desktop with the avatar hidden) the bar rests narrow and opens
+when the text area is in use, a draft or attachment exists, or dictation is
+live; focusing the model button or the microphone does not open it. Once those
+are gone the bar waits for the delay set in Settings → Experience (Off, 15, 30,
+60, or 120 seconds; 30 by default) before it narrows.
+
 When the owner has configured the prompt guardrail (`configure.md`), a message
 may be refused before it reaches Hermes. Kana keeps your message in the
 conversation and answers it with one fixed line instead of a reply, because no
@@ -74,11 +80,12 @@ disabled while a turn runs, while a message is sending, and while the voice is
 speaking. Dictation uses the browser's Web Speech API and is independent of
 Japanese speech output. It needs microphone permission, a secure context, and a
 browser with speech recognition, such as Google Chrome or Edge; Firefox has no
-recognition and Kana reports Brave as unsupported. The service may be the
-browser vendor's online one, so dictation is not guaranteed offline; unsupported
-browsers, denied permission, network failures, and silence each show a visible
-status. Dictation uses the visitor's microphone, never the server's, and adds no
-speech-output provider or credential.
+recognition and Kana reports Brave as unsupported. The Brave warning appears as
+the composer's red, dismissible alert rather than a status line. The service may
+be the browser vendor's online one, so dictation is not guaranteed offline;
+unsupported browsers, denied permission, network failures, and silence each
+show a visible status. Dictation uses the visitor's microphone, never the
+server's, and adds no speech-output provider or credential.
 
 ## Model picker
 

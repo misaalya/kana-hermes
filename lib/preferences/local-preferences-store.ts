@@ -18,6 +18,20 @@ export type BrowserStorage = Pick<
   "getItem" | "setItem" | "removeItem"
 >;
 
+/** Upper bound shared by the Settings field and the stored value. */
+export const MAX_COMPOSER_COLLAPSE_DELAY_SECONDS = 600;
+export const DEFAULT_COMPOSER_COLLAPSE_DELAY_SECONDS = 30;
+
+function normalizeComposerCollapseDelay(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return DEFAULT_COMPOSER_COLLAPSE_DELAY_SECONDS;
+  }
+  return Math.min(
+    MAX_COMPOSER_COLLAPSE_DELAY_SECONDS,
+    Math.max(0, Math.round(value)),
+  );
+}
+
 // Preferences hold presentation choices only. The Hermes endpoint and session
 // token are deliberately absent: the browser reaches Hermes through the Kana
 // server relay and never stores connection credentials.
@@ -52,6 +66,7 @@ export const DEFAULT_PREFERENCES: KanaPreferences = {
   voiceMode: "configured",
   avatarMode: "live2d",
   avatarVisible: true,
+  composerCollapseDelaySeconds: DEFAULT_COMPOSER_COLLAPSE_DELAY_SECONDS,
   stageBackground: "plain",
   hermes: {
     cwd: "",
@@ -100,6 +115,9 @@ export function normalizeKanaPreferences(
     // Anything but an explicit false keeps the stage: stored records from
     // builds without the setting, and restored values, stay chat-and-avatar.
     avatarVisible: preferences.avatarVisible !== false,
+    composerCollapseDelaySeconds: normalizeComposerCollapseDelay(
+      preferences.composerCollapseDelaySeconds,
+    ),
     stageBackground,
     customBackgroundId,
     uiLocale: isUiLocale(preferences.uiLocale) ? preferences.uiLocale : "id",

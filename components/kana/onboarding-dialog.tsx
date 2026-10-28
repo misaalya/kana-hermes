@@ -17,6 +17,8 @@ type OnboardingDialogProps = {
   preferences: KanaPreferences;
   deps: DependencyFindings;
   mode: "full" | "repair";
+  /** The host is keeping this mounted for its exit animation. */
+  closing?: boolean;
   onComplete(preferences: KanaPreferences): Promise<void>;
   onDismiss(): void;
   onOpenSettings(): void;
@@ -47,11 +49,12 @@ function prefersReducedMotion() {
  * First-run hello: no modal and no blur. Kana stays in view and speaks
  * through a game-style dialogue box; clicking the box finishes her line.
  */
-function Greeting({ name, line, start, instant, dialogRef, startRef, onKeyDown, onStart }: {
+function Greeting({ name, line, start, instant, closing, dialogRef, startRef, onKeyDown, onStart }: {
   name: string;
   line: string;
   start: string;
   instant: boolean;
+  closing: boolean;
   dialogRef: React.RefObject<HTMLElement | null>;
   startRef: React.RefObject<HTMLButtonElement | null>;
   onKeyDown(event: React.KeyboardEvent<HTMLElement>): void;
@@ -87,7 +90,7 @@ function Greeting({ name, line, start, instant, dialogRef, startRef, onKeyDown, 
         aria-describedby="kana-greeting-line"
         onKeyDown={onKeyDown}
         onClick={() => setShown(line.length)}
-        className="kana-greeting relative w-full max-w-[640px]"
+        className={`kana-greeting relative w-full max-w-[640px] ${closing ? "is-closing" : ""}`}
         lang="en"
       >
         <p id="kana-greeting-name" className="kana-greeting-name">{name}</p>
@@ -142,6 +145,7 @@ export function OnboardingWizard({
   preferences,
   deps,
   mode,
+  closing = false,
   onComplete,
   onDismiss,
   onOpenSettings,
@@ -229,6 +233,7 @@ export function OnboardingWizard({
         line={KANA_GREETING.text}
         start={KANA_GREETING.start}
         instant={greeted}
+        closing={closing}
         dialogRef={dialogRef}
         startRef={startRef}
         onKeyDown={onDialogKeyDown}
@@ -238,9 +243,9 @@ export function OnboardingWizard({
   }
 
   return (
-    <div className="fixed inset-0 z-40 grid place-items-center overflow-y-auto bg-[var(--backdrop)] p-6 backdrop-blur-md max-sm:p-0">
+    <div className={`kana-modal-backdrop fixed inset-0 z-40 grid place-items-center overflow-y-auto bg-[var(--backdrop)] p-6 backdrop-blur-md max-sm:p-0 ${closing ? "is-closing" : ""}`} inert={closing || undefined}>
       <section
-        className="kana-settings-shell relative flex h-[min(580px,92dvh)] w-[min(560px,100%)] flex-col overflow-hidden bg-raised max-sm:h-dvh"
+        className={`kana-settings-shell relative flex h-[min(580px,92dvh)] w-[min(560px,100%)] flex-col overflow-hidden bg-raised kana-modal-panel max-sm:h-dvh ${closing ? "is-closing" : ""}`}
         ref={dialogRef}
         role="dialog"
         aria-modal="true"

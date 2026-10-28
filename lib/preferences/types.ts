@@ -39,6 +39,11 @@ export type KanaPreferences = {
   avatarMode: AvatarMode;
   /** Off means a plain chat workspace: the stage, its pattern, and its canvas stay unmounted. */
   avatarVisible: boolean;
+  /**
+   * How long the focus-mode composer holds its wide state after the draft,
+   * focus, attachments, and dictation are gone, in seconds (0..600).
+   */
+  composerCollapseDelaySeconds: number;
   stageBackground: StageBackground;
   customBackgroundId?: string;
   hermes: {

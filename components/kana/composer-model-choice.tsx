@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentModelCatalog, AgentModelSwitchResult } from "@/lib/agent/types";
 import { getCopy, type UiLocale } from "@/lib/ui/copy";
+import { MODAL_EXIT_MS, prefersReducedMotion } from "@/lib/ui/use-modal-presence";
 import { BotIcon, ChevronDownIcon } from "./icons";
 import { ModelControlPanel } from "./model-control-panel";
 
@@ -18,7 +19,9 @@ export function ComposerModelChoice({ locale, sessionKey, connected, disabled, c
 }) {
   const model = catalog?.model ?? "";
   const [open, setOpen] = useState(false);
+  const [closing, setClosing] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
+  const closeTimer = useRef<number | null>(null);
   // Load the catalog once connected; later conversations reuse the cache.
   useEffect(() => {
     if (connected) void onList(false).catch(() => undefined);
@@ -27,6 +30,22 @@ export function ComposerModelChoice({ locale, sessionKey, connected, disabled, c
     if (open) dialog.current?.showModal();
     else dialog.current?.close();
   }, [open]);
+  useEffect(() => () => {
+    if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
+  }, []);
+  const close = useCallback(() => {
+    if (closing) return;
+    if (prefersReducedMotion()) {
+      setOpen(false);
+      return;
+    }
+    setClosing(true);
+    closeTimer.current = window.setTimeout(() => {
+      closeTimer.current = null;
+      setOpen(false);
+      setClosing(false);
+    }, MODAL_EXIT_MS);
+  }, [closing]);
   const text = getCopy(locale).composer;
   const label = text.chooseModel;
   return <>
@@ -38,12 +57,13 @@ export function ComposerModelChoice({ locale, sessionKey, connected, disabled, c
       <span className="truncate">{connected && model ? model.split("/").pop() : label}</span>
       <ChevronDownIcon className="size-3.5 shrink-0" />
     </button>
-    <dialog ref={dialog} aria-label={label} onCancel={() => setOpen(false)} onClose={() => setOpen(false)}
-      onClick={(event) => { if (event.target === event.currentTarget) setOpen(false); }}
-      className="kana-model-dialog fixed inset-0 m-auto max-h-[80dvh] w-[min(440px,calc(100vw-24px))] overflow-y-auto border-0 bg-surface p-6 text-ink backdrop:bg-[var(--backdrop)]">
+    <dialog ref={dialog} aria-label={label} inert={closing || undefined}
+      onCancel={(event) => { event.preventDefault(); close(); }} onClose={() => setOpen(false)}
+      onClick={(event) => { if (event.target === event.currentTarget) close(); }}
+      className={`kana-model-dialog fixed inset-0 m-auto max-h-[80dvh] w-[min(440px,calc(100vw-24px))] overflow-y-auto border-0 bg-surface p-6 text-ink backdrop:bg-[var(--backdrop)] kana-modal-panel ${closing ? "is-closing" : ""}`}>
       {open ? <>
         <div className="mb-4 flex items-center justify-between"><h2 className="text-lg font-extrabold">{label}</h2>
-          <button type="button" className="kana-focus grid size-9 place-items-center rounded-full bg-surface-strong text-lg leading-none" onClick={() => setOpen(false)} aria-label={text.closeModelChooser}>×</button>
+          <button type="button" className="kana-focus grid size-9 place-items-center rounded-full bg-surface-strong text-lg leading-none" onClick={close} aria-label={text.closeModelChooser}>×</button>
         </div>
         <ModelControlPanel locale={locale} catalog={catalog} onList={onList} onSelect={onSelect} />
       </> : null}

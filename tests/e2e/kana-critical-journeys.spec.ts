@@ -705,6 +705,8 @@ test("copies a bubble's text, and a reply's words rather than its hidden file li
 test("keeps the avatar chat tray blue and gives focus mode a plain reading column", async ({
   page,
 }) => {
+  // A long journey: several layouts plus a reload to seed the short delay.
+  test.slow();
   const composer = page.getByRole("textbox", { name: "Message Kana" });
   await composer.fill("Style check");
   await submitDraft(page, composer);
@@ -748,6 +750,12 @@ test("keeps the avatar chat tray blue and gives focus mode a plain reading colum
 
   const desktop = (page.viewportSize()?.width ?? 0) >= 1024;
   const withAvatar = await readStyles();
+  // No part of Kana draws a scroll line.
+  expect(
+    await page.evaluate(
+      () => getComputedStyle(document.documentElement).scrollbarWidth,
+    ),
+  ).toBe("none");
   if (desktop) {
     // The avatar keeps the original tray: blue replies, blue composer band,
     // the depth fill, and the narrow dock.
@@ -767,6 +775,24 @@ test("keeps the avatar chat tray blue and gives focus mode a plain reading colum
 
   await page.getByRole("button", { name: "Open settings" }).click();
   const dialog = page.getByRole("dialog");
+  const storedComposerDelay = () =>
+    page.evaluate(() => {
+      const raw = localStorage.getItem("kana.preferences.v5");
+      return raw ? JSON.parse(raw).composerCollapseDelaySeconds : null;
+    });
+  // The idle assertions below expect the bar to narrow at once; its delayed
+  // collapse has its own check further down. The delay is a preset choice,
+  // never a free number.
+  const delayGroup = dialog.getByRole("radiogroup", { name: "Chatbar delay" });
+  await expect(delayGroup.getByRole("radio")).toHaveText([
+    "Off",
+    "15 s",
+    "30 s",
+    "1 min",
+    "2 min",
+  ]);
+  await delayGroup.getByRole("radio", { name: "Off", exact: true }).click();
+  await expect.poll(storedComposerDelay).toBe(0);
   await dialog.getByRole("button", { name: /^Avatar(?: Avatar and stage)?$/ }).click();
   await dialog.getByRole("switch", { name: "Show avatar" }).click();
   await dialog.getByRole("button", { name: "Close settings" }).click();
@@ -803,13 +829,22 @@ test("keeps the avatar chat tray blue and gives focus mode a plain reading colum
     expect(scroll!.width).toBeGreaterThanOrEqual(880);
     expect(scroll!.width).toBeLessThan(dock!.width);
 
-    // With a draft in it the bar is at its wide state.
+    // With a draft in it the bar is at its wide state, matching the
+    // conversation's text measure between the scroll's gutters.
+    const wide = scroll!.width - 48;
     await expect
-      .poll(async () => (await bar.boundingBox())?.width ?? 0)
-      .toBeGreaterThanOrEqual(750);
+      .poll(async () => {
+        const width = (await bar.boundingBox())?.width ?? 0;
+        return Math.abs(width - wide);
+      })
+      .toBeLessThan(2);
     const barBox = await bar.boundingBox();
     expect(barBox).toBeTruthy();
-    expect(barBox!.width).toBeLessThanOrEqual(760);
+    expect(Math.abs(barBox!.width - wide)).toBeLessThan(2);
+    expect(Math.abs(barBox!.x - (scroll!.x + 24))).toBeLessThan(2);
+    expect(
+      Math.abs(barBox!.x + barBox!.width - (scroll!.x + scroll!.width - 24)),
+    ).toBeLessThan(2);
     for (const narrow of [scroll!, barBox!]) {
       const leftGap = narrow.x - dock!.x;
       const rightGap = dock!.x + dock!.width - (narrow.x + narrow.width);
@@ -851,7 +886,7 @@ test("keeps the avatar chat tray blue and gives focus mode a plain reading colum
       (document.activeElement as HTMLElement | null)?.blur(),
     );
     await expect
-      .poll(async () => (await bar.boundingBox())?.width ?? 760)
+      .poll(async () => (await bar.boundingBox())?.width ?? 0)
       .toBeLessThanOrEqual(400);
     // Narrow enough that the placeholder is gone.
     await expect
@@ -864,6 +899,15 @@ test("keeps the avatar chat tray blue and gives focus mode a plain reading colum
     await page.screenshot({
       path: `test-results/focus-idle-${test.info().project.name}.png`,
     });
+    // The model chooser takes focus without opening the bar: only writing, a
+    // draft, a file, or dictation does.
+    await page.locator(".kana-model-pill").click();
+    const modelDialog = page.getByRole("dialog", { name: "Choose model" });
+    await expect(modelDialog).toBeVisible();
+    await page.waitForTimeout(400);
+    expect((await bar.boundingBox())?.width ?? 0).toBeLessThanOrEqual(400);
+    await page.keyboard.press("Escape");
+    await expect(modelDialog).toHaveCount(0);
     // Focusing the empty bar opens it again for writing.
     await composer.focus();
     await expect
@@ -876,6 +920,39 @@ test("keeps the avatar chat tray blue and gives focus mode a plain reading colum
           .evaluate((node) => getComputedStyle(node, "::placeholder").color),
       )
       .not.toMatch(/rgba\(0, 0, 0, 0\)|transparent/);
+
+    // Once the trigger ends, the bar keeps its wide state for the configured
+    // delay before narrowing; opening stays immediate. Seed a short delay so
+    // the check does not sit through the shortest preset.
+    await page.evaluate(() => {
+      const raw = localStorage.getItem("kana.preferences.v5");
+      if (!raw) throw new Error("Expected migrated Kana preferences.");
+      const preferences = JSON.parse(raw);
+      preferences.composerCollapseDelaySeconds = 2;
+      localStorage.setItem("kana.preferences.v5", JSON.stringify(preferences));
+    });
+    await page.reload();
+    await expect(composer).toBeEditable({ timeout: 15000 });
+    await composer.focus();
+    await expect
+      .poll(async () => (await bar.boundingBox())?.width ?? 0)
+      .toBeGreaterThanOrEqual(750);
+    await page.evaluate(() =>
+      (document.activeElement as HTMLElement | null)?.blur(),
+    );
+    await page.waitForTimeout(900);
+    expect((await bar.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(750);
+    // The waiting bar still shows its hint.
+    expect(
+      await page
+        .locator(".kana-composer textarea")
+        .evaluate((node) => getComputedStyle(node, "::placeholder").color),
+    ).not.toMatch(/rgba\(0, 0, 0, 0\)|transparent/);
+    await expect
+      .poll(async () => (await bar.boundingBox())?.width ?? Infinity, {
+        timeout: 6000,
+      })
+      .toBeLessThanOrEqual(400);
     // An unsent draft keeps the bar open even without focus.
     await composer.fill("kept draft");
     await page.evaluate(() =>
@@ -884,6 +961,22 @@ test("keeps the avatar chat tray blue and gives focus mode a plain reading colum
     await expect
       .poll(async () => (await bar.boundingBox())?.width ?? 0)
       .toBeGreaterThanOrEqual(750);
+
+    // A line break opens the card; deleting it must give the height back
+    // instead of leaving a tall one-line bar.
+    await composer.fill("first line");
+    await composer.press("Shift+Enter");
+    await composer.type("second line");
+    await expect(bar).toHaveClass(/is-multiline/);
+    await expect
+      .poll(async () => (await bar.boundingBox())?.height ?? 0)
+      .toBeGreaterThan(130);
+    const cardHeight = (await bar.boundingBox())?.height ?? 0;
+    await composer.fill("first line");
+    await expect(bar).not.toHaveClass(/is-multiline/);
+    await expect
+      .poll(async () => (await bar.boundingBox())?.height ?? Infinity)
+      .toBeLessThan(cardHeight - 40);
 
     // The reader's own words keep a bubble on the right.
     const feed = await page.locator(".kana-chat-feed").boundingBox();
@@ -895,6 +988,14 @@ test("keeps the avatar chat tray blue and gives focus mode a plain reading colum
     expect((sent?.x ?? 0) + (sent?.width ?? 0)).toBeGreaterThan(
       (feed?.x ?? 0) + (feed?.width ?? 0) * 0.75,
     );
+
+    // A refresh restores an empty draft: the bar must open at one row instead
+    // of measuring its wrapped placeholder into a taller box.
+    await page.reload();
+    await expect(page.locator(".kana-chat-dock")).toHaveClass(/is-sole/);
+    await expect
+      .poll(async () => (await bar.boundingBox())?.height ?? Infinity)
+      .toBeLessThanOrEqual(56);
   } else {
     // Phones keep today's blue band and bubble with the avatar off, too.
     expect(focus.shell?.background).toBe(focus.frame);
@@ -1746,6 +1847,108 @@ test("composer selects the Hermes model and returns keyboard focus", async ({ pa
   await page.screenshot({ path: `test-results/composer-${test.info().project.name}.png` });
 });
 
+test("keeps the model chooser's own colours in focus mode", async ({ page }) => {
+  test.skip(
+    (page.viewportSize()?.width ?? 0) < 1024,
+    "The focus composer is a desktop layout.",
+  );
+  await page.getByRole("button", { name: "Open settings" }).click();
+  const settings = page.getByRole("dialog");
+  await settings.getByRole("button", { name: /^Avatar(?: Avatar and stage)?$/ }).click();
+  await settings.getByRole("switch", { name: "Show avatar" }).click();
+  await settings.getByRole("button", { name: "Close settings" }).click();
+  await expect(page.locator(".kana-chat-dock")).toHaveClass(/is-sole/);
+
+  await page.getByRole("button", { name: "Choose model", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Choose model", exact: true });
+  await expect(dialog.getByRole("combobox", { name: "Provider", exact: true })).toBeVisible();
+  await dialog.getByRole("combobox", { name: "Model", exact: true }).click();
+
+  // The chooser is a dialog, not a composer control: its accent button and
+  // selected list row keep the accent pairing instead of the bar's ink rules.
+  const colors = await dialog.evaluate((node) => {
+    const resolve = (token: string) => {
+      const probe = document.createElement("span");
+      probe.style.color = `var(${token})`;
+      document.body.append(probe);
+      const value = getComputedStyle(probe).color;
+      probe.remove();
+      return value;
+    };
+    const selected = node.querySelector('li[aria-selected="true"]');
+    const primary = node.querySelector<HTMLButtonElement>(".kana-pill-accent");
+    return {
+      accent: resolve("--accent"),
+      onAccent: resolve("--on-accent"),
+      selectedBackground: selected ? getComputedStyle(selected).backgroundColor : "",
+      selectedColor: selected ? getComputedStyle(selected).color : "",
+      primaryDisabled: primary?.disabled ?? false,
+      primaryColor: primary ? getComputedStyle(primary).color : "",
+    };
+  });
+  expect(colors.primaryDisabled).toBe(true);
+  expect(colors.primaryColor).toBe(colors.onAccent);
+  expect(colors.selectedBackground).toBe(colors.accent);
+  expect(colors.selectedColor).toBe(colors.onAccent);
+});
+
+test("animates every modal in and out", async ({ page }) => {
+  const animation = (locator: Locator) =>
+    locator.evaluate((node) => {
+      const style = getComputedStyle(node);
+      return { name: style.animationName, duration: style.animationDuration };
+    });
+  const backdropAnimation = (locator: Locator) =>
+    locator.evaluate((node) => {
+      const style = getComputedStyle(node, "::backdrop");
+      return { name: style.animationName, duration: style.animationDuration };
+    });
+  const expectEntrance = (value: { name: string; duration: string }, name: string) => {
+    expect(value.name).toContain(name);
+    expect(value.duration).not.toBe("0s");
+  };
+
+  await page.getByRole("button", { name: "Open settings" }).click();
+  const settings = page.getByRole("dialog");
+  const settingsPanel = settings.locator(".kana-settings-shell");
+  expectEntrance(await animation(settings), "kana-modal-backdrop-in");
+  expectEntrance(await animation(settingsPanel), "kana-modal-in");
+  // The text follows the panel as one delayed block.
+  const content = await settingsPanel.locator(":scope > *").first().evaluate((node) => {
+    const style = getComputedStyle(node);
+    return { name: style.animationName, delay: style.animationDelay };
+  });
+  expect(content.name).toContain("kana-modal-content-in");
+  expect(content.delay).not.toBe("0s");
+  // Nothing may keep a transform: fixed dropdowns measure from the viewport.
+  await expect
+    .poll(() => settingsPanel.evaluate((node) => getComputedStyle(node).transform))
+    .toBe("none");
+
+  // The content leaves first, then the panel and the dim layer.
+  await settings.getByRole("button", { name: "Close settings" }).click();
+  await expect(settings).toHaveClass(/is-closing/);
+  expect(await animation(settings)).toMatchObject({ name: "kana-modal-backdrop-out" });
+  expect(await animation(settingsPanel)).toMatchObject({ name: "kana-modal-out" });
+  await expect(settings).toHaveCount(0, { timeout: 2000 });
+
+  // The composer's chooser is a native dialog: its panel and its own
+  // ::backdrop animate separately, in and out.
+  await page.getByRole("button", { name: "Choose model", exact: true }).click();
+  const chooser = page.getByRole("dialog", { name: "Choose model", exact: true });
+  await expect(chooser).toBeVisible();
+  expectEntrance(await animation(chooser), "kana-modal-in");
+  expectEntrance(await backdropAnimation(chooser), "kana-dialog-backdrop-in");
+  await expect
+    .poll(() => chooser.evaluate((node) => getComputedStyle(node).transform))
+    .toBe("none");
+  await page.keyboard.press("Escape");
+  await expect(chooser).toHaveClass(/is-closing/);
+  expect(await animation(chooser)).toMatchObject({ name: "kana-modal-out" });
+  expect(await backdropAnimation(chooser)).toMatchObject({ name: "kana-dialog-backdrop-out" });
+  await expect(chooser).toBeHidden({ timeout: 2000 });
+});
+
 test("composer dictation appends only final speech to the editable draft", async ({ page }) => {
   await page.evaluate(() => {
     class FakeSpeech {
@@ -1769,6 +1972,78 @@ test("composer dictation appends only final speech to the editable draft", async
   await expect(composer).toHaveValue("My draft spoken words");
   await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
   await expect(page.getByRole("status").filter({ hasText: "Dictation complete" })).toBeVisible();
+});
+
+test("shows the Brave dictation warning in the composer alert", async ({
+  page,
+}) => {
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, "brave", {
+      configurable: true,
+      value: { isBrave: async () => true },
+    });
+  });
+  await page.getByRole("button", { name: "Voice input", exact: true }).click();
+  const shell = page.locator(".kana-composer-shell");
+  // The warning is a dismissible red alert in the chatbar, not the faint
+  // status line that a successful dictation uses.
+  await expect(shell.getByRole("alert")).toContainText(
+    "Brave does not support voice input",
+  );
+  await expect(
+    shell.getByRole("status").filter({ hasText: "Brave does not support" }),
+  ).toHaveCount(0);
+});
+
+test("voice input opens the focus composer only while dictation is active", async ({
+  page,
+}) => {
+  test.skip(
+    (page.viewportSize()?.width ?? 0) < 1024,
+    "The focus composer is a desktop layout.",
+  );
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
+  await composer.fill("Voice check");
+  await submitDraft(page, composer);
+  await expect(page.getByText("Hello! I am here.", { exact: true }).first()).toBeVisible();
+
+  await page.getByRole("button", { name: "Open settings" }).click();
+  const dialog = page.getByRole("dialog");
+  // Immediate collapse keeps this check about the trigger, not the delay.
+  await dialog
+    .getByRole("radiogroup", { name: "Chatbar delay" })
+    .getByRole("radio", { name: "Off", exact: true })
+    .click();
+  await dialog.getByRole("button", { name: /^Avatar(?: Avatar and stage)?$/ }).click();
+  await dialog.getByRole("switch", { name: "Show avatar" }).click();
+  await dialog.getByRole("button", { name: "Close settings" }).click();
+  const bar = page.locator(".kana-composer");
+  await expect(bar).not.toHaveClass(/is-dictating/);
+
+  // A recognizer that keeps listening until it is stopped.
+  await page.evaluate(() => {
+    class FakeSpeech {
+      onresult?: (event: unknown) => void;
+      onend?: () => void;
+      start() {}
+      stop() { this.onend?.(); }
+      abort() {}
+    }
+    Object.assign(window, { SpeechRecognition: FakeSpeech });
+  });
+
+  await page.getByRole("button", { name: "Voice input", exact: true }).click();
+  // The mic's own focus does not open the bar; the live dictation does.
+  await expect(bar).toHaveClass(/is-dictating/);
+  await expect
+    .poll(async () => (await bar.boundingBox())?.width ?? 0)
+    .toBeGreaterThanOrEqual(750);
+
+  await page.getByRole("button", { name: "Stop dictation", exact: true }).click();
+  await expect(bar).not.toHaveClass(/is-dictating/);
+  await expect
+    .poll(async () => (await bar.boundingBox())?.width ?? Infinity)
+    .toBeLessThanOrEqual(400);
 });
 
 test("the composer names the session's model even when the list loads slower than the session opens", async ({
@@ -2583,6 +2858,48 @@ test("turns the workspace into a chat-only view for a focused conversation", asy
   await expect(scale).toBeVisible();
   await expect(rail).toHaveCount(0);
   await page.screenshot({ path: `test-results/chat-only-restored-${test.info().project.name}.png` });
+});
+
+test("cross-fades between the avatar and focus mode", async ({ page }) => {
+  const avatarLayer = page.locator(".kana-avatar-viewport");
+  const rail = page.locator(".kana-focus-rail");
+  await expect(avatarLayer).toBeVisible();
+
+  // One browser transition per mode change, none for ordinary preference
+  // saves: the fade must come from the visibility change itself.
+  await page.evaluate(() => {
+    type FadeWindow = Window & { __kanaModeFades?: number };
+    const target = window as FadeWindow;
+    target.__kanaModeFades = 0;
+    const start = document.startViewTransition.bind(document);
+    document.startViewTransition = (callback) => {
+      target.__kanaModeFades = (target.__kanaModeFades ?? 0) + 1;
+      return start(callback);
+    };
+  });
+  const fades = () =>
+    page.evaluate(
+      () => (window as Window & { __kanaModeFades?: number }).__kanaModeFades ?? 0,
+    );
+
+  await page.getByRole("button", { name: "Open settings" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: /^Avatar(?: Avatar and stage)?$/ }).click();
+  await dialog.getByRole("switch", { name: "Show avatar" }).click();
+  await dialog.getByRole("button", { name: "Close settings" }).click();
+  await expect(avatarLayer).toBeHidden();
+  await expect.poll(fades).toBe(1);
+
+  if ((page.viewportSize()?.width ?? 0) >= 1024) {
+    await rail.getByRole("button", { name: "Show avatar" }).click();
+  } else {
+    await page.getByRole("button", { name: "Open settings" }).click();
+    await dialog.getByRole("button", { name: /^Avatar(?: Avatar and stage)?$/ }).click();
+    await dialog.getByRole("switch", { name: "Show avatar" }).click();
+    await dialog.getByRole("button", { name: "Close settings" }).click();
+  }
+  await expect(avatarLayer).toBeVisible();
+  await expect.poll(fades).toBe(2);
 });
 
 test("falls back to the placeholder avatar when Live2D cannot load", async ({

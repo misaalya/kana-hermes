@@ -27,6 +27,7 @@ import { HermesControlPanel } from "./hermes-control-panel";
 import { VoiceEnginePanel } from "./voice-engine-panel";
 import { VoicePanel } from "./voice-panel";
 import { AvatarExpressionPanel } from "./avatar-expression-panel";
+import { fadeAvatarModeChange } from "./avatar-mode-transition";
 import { ModelControlPanel } from "./model-control-panel";
 import { AdvancedConfigCard, SecuritySection } from "./settings-access-section";
 import { AddCard, AvatarCard, WardrobeGrid } from "./settings-avatar-cards";
@@ -53,6 +54,10 @@ import {
   SettingsSegmented,
 } from "./settings-layout";
 
+/** The offered collapse delays, in seconds. A stored value outside this list
+    keeps its own segment so the panel never misreports it. */
+const COMPOSER_DELAY_PRESETS: readonly number[] = [0, 15, 30, 60, 120];
+
 type SettingsDialogProps = {
   preferences: KanaPreferences;
   onSave(preferences: KanaPreferences): Promise<void>;
@@ -77,6 +82,8 @@ type SettingsDialogProps = {
   onPreviewAvatarTalking(preferences: KanaPreferences): Promise<void>;
   /** Stage portraits for the avatar cards, by imported model id or model URL. */
   avatarPortraits?: AvatarPortraits;
+  /** The host is keeping this mounted for its exit animation. */
+  closing?: boolean;
   onClose(): void;
 };
 
@@ -121,6 +128,7 @@ export function SettingsDialog({
   onPreviewAvatarEmotion,
   onPreviewAvatarTalking,
   avatarPortraits = {},
+  closing = false,
 }: SettingsDialogProps) {
   const { dialogRef, onDialogKeyDown } = useDialogFocus(onClose);
   const [draft, setDraft] = useState(() => structuredClone(preferences));
@@ -131,6 +139,21 @@ export function SettingsDialog({
     id,
     ...settingsCopy.sections[id],
   }));
+  const composerDelayOptions = (() => {
+    const current = draft.composerCollapseDelaySeconds;
+    const seconds = COMPOSER_DELAY_PRESETS.includes(current)
+      ? COMPOSER_DELAY_PRESETS
+      : [...COMPOSER_DELAY_PRESETS, current].sort((a, b) => a - b);
+    return seconds.map((value) => ({
+      value: String(value),
+      label:
+        value === 0
+          ? settingsCopy.composerDelayOff
+          : value % 60 === 0
+            ? `${value / 60} ${settingsCopy.composerDelayMinutesShort}`
+            : `${value} ${settingsCopy.composerDelaySecondsShort}`,
+    }));
+  })();
   const [section, setSection] = useState<SettingsSection>("experience");
   const [saveState, setSaveState] = useState<"saved" | "saving" | "error">("saved");
   const [avatarModels, setAvatarModels] = useState<AvatarModelSummary[]>([]);
@@ -450,9 +473,9 @@ export function SettingsDialog({
   );
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-[var(--backdrop)] p-5 backdrop-blur-sm max-md:p-0" role="dialog" aria-modal="true" aria-label={settingsCopy.title}>
+    <div className={`kana-modal-backdrop fixed inset-0 z-40 flex items-center justify-center bg-[var(--backdrop)] p-5 backdrop-blur-sm max-md:p-0 ${closing ? "is-closing" : ""}`} role="dialog" aria-modal="true" aria-label={settingsCopy.title} inert={closing || undefined}>
       <div
-        className="relative grid h-[min(760px,calc(100dvh-2.5rem))] w-full max-w-[980px] grid-cols-[228px_minmax(0,1fr)] overflow-hidden bg-raised kana-settings-shell max-md:h-dvh max-md:max-w-none max-md:grid-cols-1 max-md:grid-rows-[auto_minmax(0,1fr)]"
+        className={`kana-settings-shell relative grid h-[min(760px,calc(100dvh-2.5rem))] w-full max-w-[980px] grid-cols-[228px_minmax(0,1fr)] overflow-hidden bg-raised kana-modal-panel max-md:h-dvh max-md:max-w-none max-md:grid-cols-1 max-md:grid-rows-[auto_minmax(0,1fr)] ${closing ? "is-closing" : ""}`}
         ref={dialogRef as React.Ref<HTMLDivElement>}
         onKeyDown={onDialogKeyDown}
       >
@@ -507,6 +530,22 @@ export function SettingsDialog({
                       onChange={(uiLocale) => setDraft((current) => ({ ...current, uiLocale }))}
                     />
                   </SettingsRow>
+                  <SettingsRow
+                    label={settingsCopy.composerDelayTitle}
+                    description={settingsCopy.composerDelayDescription}
+                  >
+                    <SettingsSegmented
+                      label={settingsCopy.composerDelayTitle}
+                      value={String(draft.composerCollapseDelaySeconds)}
+                      options={composerDelayOptions}
+                      onChange={(value) =>
+                        setDraft((current) => ({
+                          ...current,
+                          composerCollapseDelaySeconds: Number(value),
+                        }))
+                      }
+                    />
+                  </SettingsRow>
                 </SettingsRows>
               </SettingsGroup>
             ) : null}
@@ -542,7 +581,17 @@ export function SettingsDialog({
                       <Toggle
                         checked={draft.avatarVisible}
                         label={settingsCopy.avatarVisible}
-                        onChange={() => setDraft((current) => ({ ...current, avatarVisible: !current.avatarVisible }))}
+                        onChange={() => {
+                          const next = { ...draft, avatarVisible: !draft.avatarVisible };
+                          fadeAvatarModeChange(() => {
+                            setDraft(next);
+                            // The draft's effect saves after paint; saving here
+                            // keeps the mode change inside the layout the fade
+                            // captures. A failure is still reported by the
+                            // queued save that follows.
+                            void onSaveRef.current(next).catch(() => undefined);
+                          });
+                        }}
                       />
                     </SettingsRow>
                   </SettingsRows>
