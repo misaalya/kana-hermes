@@ -46,7 +46,7 @@ function normalizeDefaultAgentModel(value: unknown): AgentModelChoice | null {
 /** Upper bound on remembered runtimes; stale remote identities are dropped. */
 const MAX_AGENT_MODEL_DEFAULTS = 32;
 
-function normalizeAgentModelDefaults(value: unknown): AgentModelDefaults {
+export function normalizeAgentModelDefaults(value: unknown): AgentModelDefaults {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const defaults: AgentModelDefaults = {};
   let kept = 0;
@@ -385,7 +385,13 @@ export class LocalPreferencesStore implements PreferencesStore {
         }
       },
     );
-    const persistent: KanaPreferences = {
+    // The default model map belongs to the installation (appstate.db), not
+    // this browser; a stored copy from an older build is read once for
+    // migration and then dropped from localStorage.
+    const {
+      agentModelDefaults: _serverOwnedDefaults,
+      ...persistent
+    } = {
       ...preferences,
       hermes: {
         cwd: preferences.hermes.cwd,
@@ -397,6 +403,7 @@ export class LocalPreferencesStore implements PreferencesStore {
         hostedModels,
       },
     };
+    void _serverOwnedDefaults;
     storage.setItem(STORAGE_KEY, JSON.stringify(persistent));
     this.removeLegacy(storage);
   }

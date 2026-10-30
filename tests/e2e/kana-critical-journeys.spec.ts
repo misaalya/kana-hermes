@@ -43,6 +43,8 @@ type FakeHermes = {
 };
 
 let hermes: FakeHermes;
+/** The installation's default-model map, one test at a time. */
+let storedModelDefaults: Record<string, { provider: string; model: string }> = {};
 
 /** `/model` arguments read like Hermes: split on whitespace, never unquoted. */
 function modelSwitch(args: string): { model: string; provider: string } {
@@ -543,6 +545,21 @@ test.beforeEach(async ({ page }) => {
   // wizard from racing those interactions; the dedicated onboarding journey
   // overrides the GET response below.
   await page.request.put("/api/kana/setup");
+  storedModelDefaults = {};
+  await page.route("**/api/kana/model-defaults**", async (route) => {
+    const request = route.request();
+    if (request.method() === "GET") {
+      return route.fulfill({ json: { defaults: storedModelDefaults } });
+    }
+    if (request.method() !== "PUT") return route.fulfill({ status: 405 });
+    const body = request.postDataJSON() as {
+      defaults?: Record<string, { provider: string; model: string }>;
+    };
+    storedModelDefaults = body.defaults && typeof body.defaults === "object"
+      ? body.defaults
+      : {};
+    return route.fulfill({ json: { defaults: storedModelDefaults } });
+  });
   await page.addInitScript(() => {
     if (localStorage.getItem("kana.e2e.skip-seed") === "1") return;
     localStorage.setItem(
@@ -2399,6 +2416,22 @@ test("composer selects the Hermes model and returns keyboard focus", async ({ pa
   await page.screenshot({ path: `test-results/composer-${test.info().project.name}.png` });
 });
 
+test("loads the installation's default model in a browser with no local copy", async ({ page }) => {
+  storedModelDefaults = {
+    local: { provider: "openrouter", model: "deepseek/deepseek-v4" },
+  };
+  // Simulate a second device: the installation remembers the model, this
+  // browser has no legacy preference record to migrate.
+  await page.evaluate(() => localStorage.removeItem("kana.preferences.v6"));
+  await page.reload();
+  await page.getByRole("button", { name: "Choose model", exact: true }).click();
+  const chooser = page.getByRole("dialog", { name: "Choose model", exact: true });
+  await chooser.getByRole("textbox", { name: "Search models…" }).fill("deepseek v4");
+  await expect(chooser.getByRole("option", { name: /deepseek\/deepseek-v4/ })).toContainText(
+    "Default",
+  );
+});
+
 test("keeps a Kana default model for new conversations", async ({ page }) => {
   const desktop = (page.viewportSize()?.width ?? 0) >= 1024;
   const composer = page.getByRole("textbox", { name: "Message Kana" });
@@ -2414,15 +2447,19 @@ test("keeps a Kana default model for new conversations", async ({ page }) => {
     await session.getByRole("button", { name: "Model actions" }).click();
     await session.getByRole("menuitem", { name: "Set as default" }).click();
   }
-  const storedDefault = () =>
-    page.evaluate(() => {
-      const raw = localStorage.getItem("kana.preferences.v6");
-      return raw ? JSON.parse(raw).agentModelDefaults?.local ?? null : null;
-    });
-  await expect.poll(storedDefault).toEqual({
+  await expect.poll(() => storedModelDefaults.local).toEqual({
     provider: "openrouter",
     model: "deepseek/deepseek-v4",
   });
+  // The browser no longer keeps its own copy.
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const raw = localStorage.getItem("kana.preferences.v6") ?? "";
+        return raw.includes("agentModelDefaults");
+      }),
+    )
+    .toBe(false);
   // The same action now reads as the default; no extra description.
   if (desktop) {
     await expect(session.getByRole("button", { name: "Default", exact: true })).toBeDisabled();

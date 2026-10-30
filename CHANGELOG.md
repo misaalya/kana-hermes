@@ -78,6 +78,11 @@
 
 ### Added
 
+- Kana's default model per Hermes runtime now lives in the installation's
+  `appstate.db` (`GET`/`PUT /api/kana/model-defaults`) instead of each
+  browser's localStorage. A phone and a laptop talking to the same Kana server
+  open new conversations on the same model; a browser that still carries the
+  old localStorage map seeds the server once on start and then drops its copy.
 - A `hermes.remote` block in `config.json` can point Kana at a gated Hermes
   dashboard on another machine. Kana logs in with the dashboard username and
   password from the owner-only file or a named environment variable, keeps the

@@ -231,7 +231,7 @@ By default Kana uses a Hermes on its own machine. Add a `remote` block to connec
 
 The remote machine must expose `/auth/password-login`, `/api/auth/ws-ticket`, `/api/auth/ws`, and `/api/health` behind TLS. Kana logs in with the dashboard `basic` provider, keeps the cookie on the server, and requests a new single-use WebSocket ticket for each connection. The URL, username, and password stay in `config.json` or the server environment and never reach the browser. Remote token auth is not supported. `/restart` cannot restart a remote gateway; restart it where it runs.
 
-Kana keeps its own default model for new conversations separately for the local runtime and each configured remote dashboard. Before applying it, Kana checks that Hermes's live model catalog still lists that provider and model; otherwise it uses Hermes's default for that conversation.
+Kana keeps its own default model for new conversations separately for the local runtime and each configured remote dashboard, in the installation's `appstate.db` so the same choice follows you from one browser or device to another. Before applying it, Kana checks that Hermes's live model catalog still lists that provider and model; otherwise it uses Hermes's default for that conversation.
 
 A remote reply can still mention `MEDIA:/path`. That path belongs to the remote machine, so Kana shows only the file name and cannot offer a download. Kana still needs a long-lived server with a writable data folder; a remote Hermes does not make it run on a serverless platform such as Vercel.
 

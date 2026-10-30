@@ -231,7 +231,7 @@ Secara bawaan Kana memakai Hermes di mesinnya sendiri. Tambahkan blok `remote` u
 
 Mesin remote harus menyediakan `/auth/password-login`, `/api/auth/ws-ticket`, `/api/auth/ws`, dan `/api/health` di belakang TLS. Kana login dengan provider `basic` dashboard, menyimpan cookie di server, dan meminta ticket WebSocket sekali pakai baru untuk setiap koneksi. URL, username, dan password tetap di `config.json` atau lingkungan server dan tidak pernah mencapai browser. Auth token remote tidak didukung. `/restart` tidak dapat memulai ulang gateway remote; mulai ulang di mesin tempat ia berjalan.
 
-Kana menyimpan model default-nya sendiri untuk percakapan baru secara terpisah untuk runtime lokal dan setiap dashboard remote yang dikonfigurasi. Sebelum menerapkannya, Kana memeriksa bahwa katalog model langsung di Hermes tersebut masih memuat provider dan model itu; jika tidak, Kana memakai default Hermes untuk percakapan tersebut.
+Kana menyimpan model default-nya sendiri untuk percakapan baru secara terpisah untuk runtime lokal dan setiap dashboard remote yang dikonfigurasi, di `appstate.db` instalasi sehingga pilihan yang sama mengikuti Anda dari satu browser atau perangkat ke perangkat lain. Sebelum menerapkannya, Kana memeriksa bahwa katalog model langsung di Hermes tersebut masih memuat provider dan model itu; jika tidak, Kana memakai default Hermes untuk percakapan tersebut.
 
 Balasan remote dapat menyebut `MEDIA:/path`. Path itu milik mesin remote, sehingga Kana hanya menampilkan nama berkasnya dan tidak dapat menyediakan unduhan. Kana tetap memerlukan server berjalan lama dengan folder data yang dapat ditulis; Hermes remote tidak membuatnya berjalan di platform serverless seperti Vercel.
 

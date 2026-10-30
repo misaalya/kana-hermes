@@ -1,6 +1,6 @@
 import { live2DModelBindings, live2DModelLayout } from "@/lib/avatar/model-bindings";
 import { normalizeKanaPreferences } from "@/lib/preferences/local-preferences-store";
-import type { KanaPreferences } from "@/lib/preferences/types";
+import type { AgentModelDefaults, KanaPreferences } from "@/lib/preferences/types";
 import type { AgentSessionStore } from "@/lib/store/agent-session-store";
 import { statusCopy } from "./agent-event-handlers";
 import type { PreferencesAccess } from "./preferences-service";
@@ -13,6 +13,7 @@ export type SavePreferencesDependencies = {
     configure(next: KanaPreferences, files?: File[], force?: boolean): Promise<boolean>;
     controller: { setLayout(layout: ReturnType<typeof live2DModelLayout>): void };
   };
+  modelDefaults: { save(defaults: AgentModelDefaults): Promise<void> };
 };
 
 /** Save preferences and apply what changed to speech and the avatar. */
@@ -20,6 +21,14 @@ export async function savePreferences(deps: SavePreferencesDependencies, input: 
   const next = normalizeKanaPreferences(input);
   const previous = deps.preferences.current();
   deps.preferences.persist(next);
+  if (
+    JSON.stringify(previous.agentModelDefaults)
+    !== JSON.stringify(next.agentModelDefaults)
+  ) {
+    // The installation owns this map; a failed write keeps the settings save
+    // visibly failed so the user can retry.
+    await deps.modelDefaults.save(next.agentModelDefaults);
+  }
   if (previous.uiLocale !== next.uiLocale && !deps.agentSession.getState().busy) {
     deps.agentSession.setState({ status: statusCopy(next.uiLocale).ready });
   }

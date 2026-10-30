@@ -77,6 +77,7 @@ mock agent mode.
 | `POST /api/hermes/attachments` | One base64 chat attachment, validated then forwarded as Hermes `file.attach`; this method is not on the RPC allow-list. |
 | `GET /api/kana/sessions` | `session.list` filtered server-side to `source: "kana"`, i.e. Kana's cross-browser conversation directory. |
 | `GET`/`PUT /api/kana/activities` | The per-turn activity snapshots read from and written to `activities.db`. |
+| `GET`/`PUT /api/kana/model-defaults` | The installation's default model per Hermes runtime, stored in `appstate.db`; every browser of this user hydrates the same map before its first session. |
 | `GET`/`PUT /api/kana/setup` | Install-level onboarding completion in `appstate.db`, shared by every browser of this user. |
 | `GET /api/kana/config` | The `config.json` path, whether it exists, the deployment mode, and the prompt guardrail's state and rule count; never the file's contents, the key, or a rule's text. |
 | `GET /api/kana/host` | A read-only snapshot for the host surfaces. Local mode samples this machine (CPU counters and load, memory, root disk, uptime, Kana's own uptime and RSS). Remote mode reads the configured dashboard's `/api/system/stats` with the existing login cookie, maps the remote host's metrics and Hermes process RSS, and caches the sample for 2.5 seconds so many tabs do not poll the remote host repeatedly. The server clock and IANA zone remain Kana's. No input and nothing persisted; the browser polls only while a host surface (the Settings Host card or the desktop header widgets) is mounted. |
@@ -130,9 +131,9 @@ Agent contract:
   wire shapes.
 - `AgentClient.runtimeId` names the connected Hermes with an opaque identity:
   `local`, or a server-computed `remote-…` hash of the configured endpoint and
-  username. Kana keys per-Hermes browser state, such as its default model, by
-  it; the relay reports the same value in the gateway event and in the runtime
-  status, so the URL and credentials never reach the browser.
+  username. Kana keys per-Hermes state, such as the installation's default
+  model, by it; the relay reports the same value in the gateway event and in
+  the runtime status, so the URL and credentials never reach the browser.
 - `lib/agent/hermes/` is the only place that knows Hermes JSON-RPC:
   `hermes-agent-client.ts` (EventSource on `/api/hermes/events`, fetch to
   `/api/hermes/rpc`, event translation), `gateway-types.ts` (wire types), and

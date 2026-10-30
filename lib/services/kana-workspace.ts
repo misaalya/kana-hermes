@@ -18,6 +18,7 @@ import { CommandService } from "./command-service";
 import { ConversationService } from "./conversation-service";
 import { HermesSessionManager } from "./hermes-session-manager";
 import { ModelCatalogService } from "./model-catalog-service";
+import { ModelDefaultsService } from "./model-defaults-service";
 import { PreferencesAccess } from "./preferences-service";
 import { savePreferences } from "./save-preferences";
 import { sendMessage } from "./send-message";
@@ -33,6 +34,7 @@ function createActions(parts: {
   sessions: HermesSessionManager;
   commands: CommandService;
   models: ModelCatalogService;
+  modelDefaults: ModelDefaultsService;
   voice: VoiceService;
   avatar: AvatarService;
   setup: WorkspaceSetup;
@@ -46,6 +48,7 @@ function createActions(parts: {
     sessions,
     commands,
     models,
+    modelDefaults,
     voice,
     avatar,
     setup,
@@ -53,7 +56,10 @@ function createActions(parts: {
     stageBackgrounds,
   } = parts;
   const save = (next: KanaPreferences) =>
-    savePreferences({ preferences, agentSession: stores.agentSession, voice, avatar }, next);
+    savePreferences(
+      { preferences, agentSession: stores.agentSession, voice, avatar, modelDefaults },
+      next,
+    );
   return {
     send: (text: string, attachments?: AgentAttachment[]) =>
       sendMessage({ stores, conversations, sessions, preferences, models, hermes: hermesControl }, text, attachments),
@@ -155,6 +161,10 @@ export function createKanaWorkspace(): KanaWorkspace {
     portraits: new AvatarPortraitArchive(),
   });
   const conversations = new ConversationService({ stores, fetch: (...args) => fetch(...args) });
+  const modelDefaults = new ModelDefaultsService({
+    preferences,
+    fetch: (...args) => fetch(...args),
+  });
   const sessions = new HermesSessionManager({
     stores,
     conversations,
@@ -195,6 +205,7 @@ export function createKanaWorkspace(): KanaWorkspace {
     sessions,
     commands,
     models,
+    modelDefaults,
     voice,
     avatar,
     setup,
@@ -203,27 +214,45 @@ export function createKanaWorkspace(): KanaWorkspace {
   };
 
   let started = false;
+  let active = true;
 
   return {
     ...parts,
     actions: createActions(parts),
     start() {
+      // React's development Strict Mode mounts, cleans up, and mounts again on
+      // the same workspace: the cleanup must not strand the in-flight
+      // hydration before it can mark the workspace ready.
+      active = true;
       avatar.start();
-      if (!started) {
-        started = true;
-        preferences.adopt(preferences.load());
-        conversations.initialize();
-        const warning = preferences.consumeWarning();
-        if (warning) {
-          const record = classifyKanaError(warning, "application", "storage");
-          stores.errors.setState({ lastError: record, error: record.message });
-        }
-        stores.conversations.setState({ ready: true });
+      if (started) {
+        conversations.start();
+        models.start();
+        return;
       }
-      conversations.start();
-      models.start();
+      started = true;
+      preferences.adopt(preferences.load());
+      conversations.initialize();
+      const warning = preferences.consumeWarning();
+      // Hydrate the installation's default model before the workspace turns
+      // ready, so the automatic connection's first session already opens on
+      // the user's saved model instead of Hermes's fallback.
+      void modelDefaults
+        .hydrate()
+        .catch(() => undefined)
+        .finally(() => {
+          if (!active) return;
+          if (warning) {
+            const record = classifyKanaError(warning, "application", "storage");
+            stores.errors.setState({ lastError: record, error: record.message });
+          }
+          stores.conversations.setState({ ready: true });
+          conversations.start();
+          models.start();
+        });
     },
     dispose() {
+      active = false;
       setup.stop();
       commands.clear();
       models.dispose();

@@ -10,7 +10,8 @@ or a route that reads or writes one.
 **Truth in code:** `lib/services/kana-workspace.ts`, `lib/store/kana-stores.ts`,
 `lib/preferences/local-preferences-store.ts`, `lib/runtime/runtime-identity.ts`,
 `lib/server/data-dir.ts`, `lib/server/app-state-store.ts`,
-`lib/server/activity-store.ts`, `lib/limits.ts`
+`lib/server/model-defaults.ts`, `lib/server/activity-store.ts`,
+`lib/limits.ts`
 
 ## Shared workspace state
 
@@ -35,7 +36,7 @@ never stores a Hermes endpoint, session token, or credential in any form.
 
 | Location | Holds |
 | --- | --- |
-| `localStorage` `kana.preferences.v6` | Presentation preferences. `load()` reads the legacy keys `kana.preferences.v5..v1` when v6 is absent, normalizes, and rewrites v6. `agentModelDefaults` keeps Kana's default model per Hermes runtime identity (`local` or an opaque `remote-…`), so a provider learned from one Hermes is never sent to another; a v5 record's single `defaultAgentModel` migrates to the local runtime. Credentials are dropped on persist. |
+| `localStorage` `kana.preferences.v6` | Presentation preferences. `load()` reads the legacy keys `kana.preferences.v5..v1` when v6 is absent, normalizes, and rewrites v6. A stored `agentModelDefaults` map from an older build is returned once so the workspace can migrate it to the server, then dropped on the next write; the browser never persists it again. A v5 record's single `defaultAgentModel` migrates to the local runtime. Credentials are dropped on persist. |
 | `localStorage` `kana.active-conversation.v1` | The selected conversation pointer (id, title, createdAt, optional durable Hermes session id), so a refresh returns to the same Hermes session. |
 | `localStorage` `kana.avatar.portraits.v1` | The 16 newest stage portraits (192 px WebP) cut from the canvas; never uploaded or shipped. |
 | `localStorage` `kana.pending-input.v1` | Request metadata for an approval/clarification/sudo/secret dialog that Hermes does not replay. Answers, passwords, and secret values never pass through here. |
@@ -77,7 +78,7 @@ password survives whatever the whole-root migration decides.
 
 | Path under the data root | Holds |
 | --- | --- |
-| `appstate.db` | `app_state` rows (`auth.password` hash + session version, `onboarding` completion), the `voice_clones` voice library, and the `revoked_sessions` logout list. Owner-only, WAL. |
+| `appstate.db` | `app_state` rows (`auth.password` hash + session version, `onboarding` completion, and the installation's `model-defaults` map), the `voice_clones` voice library, and the `revoked_sessions` logout list. Owner-only, WAL. |
 | `activities.db` | The per-turn tool activity log, schema v2. |
 | `jwt-secret` | The installation secret that signs session and login-device JWTs and derives other keys. `KANA_JWT_SECRET` overrides it (minimum 32 characters). |
 | `config.json` | The server-owned advanced config (deployment mode, local Hermes executable/port/working folder, optional remote Hermes URL/username/password/wake, TTS provider and credentials, and the optional `guardrails` block). Created from `config/default-config.json`; never returned to the browser, and the remote credentials are read only by the server auth bridge and wake path. |
@@ -99,6 +100,14 @@ them in the prompt note, so no copy of them is cached between turns.
 `appstate.db` is created and read through `lib/server/app-state-store.ts` so
 the `kana` launcher and the server share one schema and handle. Do not open it
 directly from a new module; do not introduce a second database file.
+
+`model-defaults` in `app_state` is the installation's default model per
+Hermes runtime identity (`local` or an opaque `remote-…`). It is written and
+read only through `GET/PUT /api/kana/model-defaults` (`lib/server/model-defaults.ts`),
+so a phone and a laptop talking to the same Kana server open new conversations
+on the same model; a runtime's entry is still never sent to another Hermes. A
+browser that still carries the old localStorage map seeds the server once on
+start and then drops its copy.
 
 `activities.db` (`lib/server/activity-store.ts`, schema v2) is keyed by the
 Hermes durable session key plus a zero-based assistant-reply ordinal

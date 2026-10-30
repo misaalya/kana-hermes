@@ -123,37 +123,50 @@ describe("LocalPreferencesStore", () => {
     );
   });
 
-  it("keeps a default model per Hermes runtime and drops malformed values", () => {
+  it("reads a legacy browser default for migration but never stores it", () => {
     const persistent = new MemoryStorage();
     const store = new LocalPreferencesStore(persistent);
     assert.deepEqual(store.load().agentModelDefaults, {});
 
-    store.save({
-      ...DEFAULT_PREFERENCES,
-      agentModelDefaults: {
-        local: { provider: "openrouter", model: "deepseek/deepseek-v4" },
-        "remote-0123456789abcdef": { provider: "custom:9router", model: "gpt-5" },
-      },
-    });
-    assert.deepEqual(store.load().agentModelDefaults, {
-      local: { provider: "openrouter", model: "deepseek/deepseek-v4" },
-      "remote-0123456789abcdef": { provider: "custom:9router", model: "gpt-5" },
-    });
-
+    // A record written by an older build still hands the map to the
+    // workspace, which migrates it to the server once...
     persistent.setItem(
       "kana.preferences.v6",
       JSON.stringify({
         agentModelDefaults: {
-          local: { provider: "openrouter" },
+          local: { provider: "openrouter", model: "deepseek/deepseek-v4" },
+          "remote-0123456789abcdef": { provider: "custom:9router", model: "gpt-5" },
           "not-a-runtime": { provider: "openrouter", model: "deepseek/deepseek-v4" },
-          "remote-0123456789abcdef": { provider: "  ", model: "gpt-5" },
         },
       }),
+    );
+    assert.deepEqual(store.load().agentModelDefaults, {
+      local: { provider: "openrouter", model: "deepseek/deepseek-v4" },
+      "remote-0123456789abcdef": { provider: "custom:9router", model: "gpt-5" },
+    });
+    // ...and the browser copy is gone after the load rewrites the record.
+    const rewritten = JSON.parse(persistent.getItem("kana.preferences.v6") ?? "{}") as {
+      agentModelDefaults?: unknown;
+    };
+    assert.equal(rewritten.agentModelDefaults, undefined);
+    assert.deepEqual(store.load().agentModelDefaults, {});
+
+    // Saving a preferences object never writes the map to localStorage; the
+    // in-memory copy is what the UI and session manager use.
+    store.save({
+      ...DEFAULT_PREFERENCES,
+      agentModelDefaults: {
+        local: { provider: "openrouter", model: "deepseek/deepseek-v4" },
+      },
+    });
+    assert.equal(
+      persistent.getItem("kana.preferences.v6")?.includes("agentModelDefaults"),
+      false,
     );
     assert.deepEqual(store.load().agentModelDefaults, {});
   });
 
-  it("migrates the one global default model to the local runtime", () => {
+  it("migrates the one global default model to the local runtime in memory", () => {
     const persistent = new MemoryStorage();
     persistent.setItem(
       "kana.preferences.v5",
@@ -165,6 +178,7 @@ describe("LocalPreferencesStore", () => {
     });
     const persisted = persistent.getItem("kana.preferences.v6") ?? "";
     assert.equal(persisted.includes("defaultAgentModel"), false);
+    assert.equal(persisted.includes("agentModelDefaults"), false);
     assert.equal(persistent.getItem("kana.preferences.v5"), null);
   });
 

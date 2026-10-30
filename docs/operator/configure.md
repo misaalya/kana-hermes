@@ -398,9 +398,11 @@ that Kana started:
 | Skills | After `/reload-skills`. |
 | Anything else Hermes reads only at startup | After `/restart`, which restarts the `hermes serve` Kana started and resumes the open conversation. |
 
-Kana's own default model for new conversations is a browser preference kept
-separately for each Hermes runtime (`local`, or an opaque identity for the
-configured remote dashboard). Before Kana sends it to `session.create`, it
+Kana's own default model for new conversations is an installation preference
+in `appstate.db`, kept separately for each Hermes runtime (`local`, or an
+opaque identity for the configured remote dashboard). Every browser that talks
+to this Kana server sees the same map, so a phone and a laptop open new
+conversations on the same model. Before Kana sends it to `session.create`, it
 checks the connected Hermes's live model catalog; a provider or model that this
 Hermes no longer offers is dropped for that session, Kana says so, and Hermes's
 own default is used instead. Switching to another Hermes therefore never sends

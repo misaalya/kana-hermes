@@ -32,6 +32,11 @@ export class PreferencesAccess {
     this.store.setState({ preferences });
   }
 
+  /** Replace fields in memory without writing local storage. */
+  update(patch: Partial<KanaPreferences>): void {
+    this.store.setState({ preferences: { ...this.current(), ...patch } });
+  }
+
   persist(preferences: KanaPreferences): void {
     this.store.setState({ preferences });
     this.persistence.save(preferences);
