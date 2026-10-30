@@ -12,7 +12,7 @@ import {
 import type { KanaMessage } from "@/lib/conversation/types";
 import { selectActiveConversation } from "@/lib/store/conversation-store";
 import { getCopy } from "@/lib/ui/copy";
-import { fadeAvatarModeChange } from "./avatar-mode-transition";
+import { morphAvatarModeChange } from "./avatar-mode-transition";
 import { ChatComposer } from "./chat-composer";
 import { FocusRail } from "./focus-rail";
 import { ChevronLeftIcon, ChevronRightIcon } from "./icons";
@@ -22,18 +22,34 @@ import { useChatVisible } from "./workspace-stage";
 
 const NO_MESSAGES: KanaMessage[] = [];
 const CHAT_MIN_WIDTH = 390;
-/** The settled maximum is 70% of the screen; a drag may overshoot to 90%. */
+/** The settled maximum is 70% of the screen. */
 const CHAT_MAX_SHARE = 0.7;
-const CHAT_DRAG_MAX_SHARE = 0.9;
+const FOCUS_RAIL_MIN = 264;
+const FOCUS_RAIL_MAX = 288;
+/** 2rem left + 1rem right, matching the focus dock's insets. */
+const FOCUS_INSET = 48;
 /** Past this width the transcript keeps a focus-mode reading measure. */
 const CHAT_WIDE_WIDTH = 900;
-/** Holding the frame at 90% for this long enters focus mode. */
+/** Holding the frame at the drag stop for this long enters focus mode. */
 const CHAT_AUTO_FOCUS_HOLD_MS = 500;
 
+/** The width the panel has in focus mode; the drag may not exceed it. */
+function focusPanelWidth(): number {
+  const rail = Math.min(Math.max(FOCUS_RAIL_MIN, window.innerWidth * 0.2), FOCUS_RAIL_MAX);
+  return window.innerWidth - FOCUS_INSET - rail;
+}
+
 /** The same viewport bounds the CSS clamp uses for the dock. */
-function resizeBounds(): { min: number; max: number } {
+function resizeBounds(): { min: number; max: number; dragMax: number } {
   const min = Math.min(Math.max(CHAT_MIN_WIDTH, window.innerWidth * 0.34), 480);
-  return { min, max: Math.max(min, window.innerWidth * CHAT_MAX_SHARE) };
+  const dragMax = Math.max(min, focusPanelWidth());
+  return {
+    min,
+    // On the narrowest desktops the focus panel is a few pixels narrower than
+    // 70vw; the settled maximum never exceeds the drag stop.
+    max: Math.max(min, Math.min(window.innerWidth * CHAT_MAX_SHARE, dragMax)),
+    dragMax,
+  };
 }
 
 function ChatFeed() {
@@ -102,19 +118,23 @@ export function ChatDock() {
   const enterAutoFocus = useCallback(() => {
     if (!drag.current) return;
     drag.current = null;
-    setResizing(false);
     if (frame.current !== null) {
       cancelAnimationFrame(frame.current);
       frame.current = null;
     }
     animation.current?.cancel();
     animation.current = null;
-    fadeAvatarModeChange(() => {
+    // Keep the panel at the width the pointer is holding for the transition's
+    // old snapshot: the morph starts from the panel's current geometry. The
+    // direction CSS shows the destination focus surface from the first frame,
+    // so the avatar-mode blue composer never stretches across the morph.
+    morphAvatarModeChange(() => {
+      setResizing(false);
       void workspace.actions.savePreferences({
         ...workspace.stores.preferences.getState().preferences,
         avatarVisible: false,
       });
-    });
+    }, "to-focus");
   }, [workspace]);
 
   const paintWidth = useCallback((value: number) => {
@@ -193,12 +213,11 @@ export function ChatDock() {
   const moveResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     const state = drag.current;
     if (!state) return;
-    const { min, max } = resizeBounds();
+    const { min, max, dragMax } = resizeBounds();
     const raw = state.startWidth + (state.startX - event.clientX);
     // Past the settled maximum the panel keeps following the pointer, up to
-    // 90% of the screen; releasing springs it back to 70%. Below the minimum
-    // it stops.
-    const dragMax = window.innerWidth * CHAT_DRAG_MAX_SHARE;
+    // the width it has in focus mode; releasing springs it back. Below the
+    // minimum it stops.
     const next = raw > max ? Math.min(raw, dragMax) : Math.max(min, raw);
     widthRef.current = next;
     // Holding the frame at the hard stop becomes a way into focus mode.

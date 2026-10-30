@@ -138,15 +138,22 @@ own disk, and offers no download for it.
 #### Instabox wake
 
 When the gateway is an Instabox VM that pauses while idle, set
-`hermes.remote.instabox`. The connection screen then offers **Wake Hermes**. Kana
-runs exactly `instabox resume <machineId>` and, if that fails because the
+`hermes.remote.instabox`. The connection screen then offers **Wake Instabox**.
+Kana runs exactly `instabox resume <machineId>` and, if that fails because the
 sandbox is stopped, `instabox start <machineId>` with no shell, then polls the
 gateway's `/api/health` until it answers or the timeout expires. It runs from
 the service account's home with a small environment allowlist; add names such
 as `INSTABOX_TOKEN` to `instabox.env` if the CLI needs them. The route is
 authenticated, accepts no input from the browser, runs one wake at a time, and
 refuses another for 15 seconds after one finishes. Kana never wakes a VM
-automatically and never returns the command's output.
+automatically.
+
+While the gate waits, it reads the machine through the same route with the
+read-only `instabox get <machineId> --json`, using the same fixed arguments and
+environment. That read exposes only the machine's `state` and whether its
+runtime is `ready`; when the machine is already awake the action shows
+**Instabox is awake** and stays disabled. The wake command's output is
+discarded.
 
 Waking or starting the VM restores its processes; it does not start
 `hermes serve`. Run `hermes serve` as a service on the VM (for example a systemd
@@ -155,10 +162,12 @@ running VM whose Hermes is stopped cannot be fixed by the wake command, and
 Kana reports the timeout instead of claiming success.
 
 The gate treats a paused VM as an ordinary state rather than a failure: it says
-**Remote Hermes is unreachable**, makes **Wake Hermes** the primary action,
+**Remote Hermes is unreachable**, makes **Wake Instabox** the primary action,
 shows **Waking Instabox** while the request runs, and, if the wake succeeds but
 Kana still cannot connect, points at the remote dashboard credentials instead
-of repeating the same failure.
+of repeating the same failure. Once the VM is awake the action is disabled and
+reads **Instabox is awake**; **Connect again** keeps owning the connection
+attempt.
 
 The CLI must be installed and logged in on the machine that runs Kana, not on
 the Instabox VM. A different host, such as a serverless platform, cannot run

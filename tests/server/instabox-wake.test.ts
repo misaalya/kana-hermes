@@ -4,7 +4,7 @@ import { createServer } from "node:http";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
-import { wakeRemoteHermes } from "@/lib/server/instabox-wake";
+import { wakeRemoteHermes, instaboxMachineStatus } from "@/lib/server/instabox-wake";
 import { kanaUserConfigPath } from "@/lib/server/user-config";
 
 const root = mkdtempSync(path.join(tmpdir(), "kana-instabox-wake-"));
@@ -33,7 +33,13 @@ before(async () => {
       "  allowed: process.env.WAKE_TEST_TOKEN ?? null,",
       "  secret: process.env.WAKE_TEST_SECRET ?? null,",
       '}) + "\\n");',
-      'if (process.argv[2] === "resume") fs.writeFileSync(process.env.WAKE_TEST_READY, "1");',
+      'if (process.argv[2] === "get") {',
+      '  const state = process.env.WAKE_TEST_STATE ?? "paused";',
+      '  process.stdout.write(JSON.stringify({ state, runtime: { ready: state === "running" } }));',
+      '  process.exitCode = 0;',
+      '} else if (process.argv[2] === "resume") {',
+      '  fs.writeFileSync(process.env.WAKE_TEST_READY, "1");',
+      '}',
       "",
     ].join("\n"),
   );
@@ -67,7 +73,7 @@ before(async () => {
             machineId: "m_test",
             executable,
             timeoutSeconds: 10,
-            env: ["WAKE_TEST_LOG", "WAKE_TEST_READY", "WAKE_TEST_TOKEN"],
+            env: ["WAKE_TEST_LOG", "WAKE_TEST_READY", "WAKE_TEST_TOKEN", "WAKE_TEST_STATE"],
           },
         },
       },
@@ -83,6 +89,7 @@ after(async () => {
   delete process.env.WAKE_TEST_READY;
   delete process.env.WAKE_TEST_TOKEN;
   delete process.env.WAKE_TEST_SECRET;
+  delete process.env.WAKE_TEST_STATE;
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -108,5 +115,35 @@ describe("Instabox wake", () => {
     const again = await wakeRemoteHermes();
     assert.equal(again.alreadyUp, true);
     assert.equal(readFileSync(logPath, "utf8").trim().split("\n").length, 1);
+  });
+
+  it("reads the machine state without waking it", async () => {
+    process.env.WAKE_TEST_STATE = "paused";
+    assert.deepEqual(await instaboxMachineStatus(), {
+      awake: false,
+      state: "paused",
+      ready: false,
+    });
+    process.env.WAKE_TEST_STATE = "running";
+    assert.deepEqual(await instaboxMachineStatus(), {
+      awake: true,
+      state: "running",
+      ready: true,
+    });
+
+    const entries = readFileSync(logPath, "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as {
+        args: string[];
+        cwd: string;
+        allowed: string | null;
+        secret: string | null;
+      });
+    const read = entries.at(-1)!;
+    assert.deepEqual(read.args, ["get", "m_test", "--json"]);
+    assert.equal(read.cwd, homedir());
+    assert.equal(read.allowed, "allowed-token");
+    assert.equal(read.secret, null);
   });
 });

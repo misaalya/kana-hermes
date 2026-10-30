@@ -111,6 +111,11 @@ describe("remote Hermes transport values", () => {
     assert.equal(status.state, "stopped");
     assert.equal(status.authAvailable, true);
     assert.equal(status.wakeAvailable, true);
+    assert.equal(
+      remoteRuntimeStatus(remote, false).wakeAvailable,
+      false,
+      "a remote without an instabox block has nothing Kana could wake",
+    );
     assert.match(status.runtimeId, /^remote-[a-f0-9]{16}$/);
     assert.equal(
       remoteRuntimeStatus(remote, true, "remote-ffffffffffffffff").runtimeId,

@@ -192,9 +192,11 @@ export type Copy = {
     remoteAuthMissing: string;
     remoteOfflineTitle: string;
     remoteOfflineBody: string;
+    remoteAwakeBody: string;
     configInvalid: string;
-    wakeHermes: string;
-    wakingHermes: string;
+    wakeInstabox: string;
+    wakingInstabox: string;
+    instaboxAwake: string;
     wakingTitle: string;
     wakingBody: string;
     wakeFailed: string;
@@ -765,9 +767,11 @@ const id: Copy = {
     remoteAuthMissing: "Username atau password dashboard remote belum tersedia di server. Periksa hermes.remote.auth.",
     remoteOfflineTitle: "Hermes remote tidak terjangkau",
     remoteOfflineBody: "Instabox mungkin sedang pause. Bangunkan mesinnya, lalu Kana menghubungkan ulang sendiri.",
+    remoteAwakeBody: "Instabox sudah bangun, tetapi Hermes belum menjawab. Pastikan `hermes serve` berjalan di mesin remote dan kredensial dashboard di config.json sudah benar.",
     configInvalid: "config.json tidak dapat dibaca. Perbaiki berkas itu lalu hubungkan lagi.",
-    wakeHermes: "Bangunkan Hermes",
-    wakingHermes: "Membangunkan Hermes…",
+    wakeInstabox: "Bangunkan Instabox",
+    wakingInstabox: "Membangunkan Instabox…",
+    instaboxAwake: "Instabox sudah bangun",
     wakingTitle: "Membangunkan Instabox",
     wakingBody: "Menyalakan mesin dan menunggu Hermes menjawab. Ini bisa memakan waktu satu menit.",
     wakeFailed: "CLI Instabox tidak dapat menjalankan wake. Periksa instalasi dan login Instabox di mesin ini.",
@@ -1389,9 +1393,11 @@ const en: Copy = {
     remoteAuthMissing: "The remote dashboard username or password is not available on the server. Check hermes.remote.auth.",
     remoteOfflineTitle: "Remote Hermes is unreachable",
     remoteOfflineBody: "Instabox may be paused. Wake the machine and Kana reconnects on its own.",
+    remoteAwakeBody: "Instabox is already awake, but Hermes is not answering. Make sure `hermes serve` runs on the remote machine and the dashboard credentials in config.json are correct.",
     configInvalid: "config.json could not be read. Fix it and reconnect.",
-    wakeHermes: "Wake Hermes",
-    wakingHermes: "Waking Hermes…",
+    wakeInstabox: "Wake Instabox",
+    wakingInstabox: "Waking Instabox…",
+    instaboxAwake: "Instabox is awake",
     wakingTitle: "Waking Instabox",
     wakingBody: "Starting the machine and waiting for Hermes to answer. This can take a minute.",
     wakeFailed: "The Instabox CLI could not run the wake. Check the Instabox install and login on this machine.",

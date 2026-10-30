@@ -1,7 +1,7 @@
 "use client";
 
 import { getCopy } from "@/lib/ui/copy";
-import { fadeAvatarModeChange } from "./avatar-mode-transition";
+import { morphAvatarModeChange } from "./avatar-mode-transition";
 import { ConversationSidebar } from "./conversation-sidebar";
 import { useKanaStore, useKanaWorkspace } from "./kana-workspace-context";
 
@@ -50,12 +50,12 @@ export function FocusRail() {
             type="button"
             className="kana-focus kana-pill kana-pill-soft min-h-10 w-full text-[12.5px]"
             onClick={() =>
-              fadeAvatarModeChange(() => {
+              morphAvatarModeChange(() => {
                 void actions.savePreferences({
                   ...preferences,
                   avatarVisible: true,
                 });
-              })
+              }, "to-avatar")
             }
           >
             {copy.settings.avatarVisible}

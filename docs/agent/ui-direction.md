@@ -333,9 +333,10 @@ responsive dock whose standard width is also its minimum (390–480px),
 composer band with white text, white model pill, and white Send disc. The left
 frame is a drag handle: dragging (or ArrowLeft/ArrowRight, Home/End) widens the
 dock up to 70% of the screen. While the handle is held the panel may follow the
-pointer past that ceiling to 90%; releasing springs it back to 70% with the
-dock's width transition, while holding at that 90% hard stop for 500ms enters
-focus mode and stores `avatarVisible: false`. The drag paints `--kana-chat-width` from the DOM once
+pointer past that ceiling up to the width the panel has in focus mode (the
+viewport minus the rail and insets); releasing springs it back to 70% with the
+dock's width transition, while holding at that hard stop for 500ms enters focus
+mode and stores `avatarVisible: false`. The drag paints `--kana-chat-width` from the DOM once
 per animation frame instead of re-rendering React, so it stays smooth. The
 chosen settled width is stored in the local preferences so the next visit opens
 at the same size. Past 900px the transcript keeps a centred focus-mode reading
@@ -463,12 +464,17 @@ uses.
 Motion is springy (`--spring`): lift on hover, small press on click, a pop for
 check badges. Global reduced-motion rules must keep working.
 
-Switching between the avatar workspace and focus mode is a cross-fade, not a
-snap: `fadeAvatarModeChange` (`components/kana/avatar-mode-transition.ts`) runs
-the preference write inside a View Transition, so the browser blends a snapshot
-of both layouts and the rail, the dock's geometry, and the avatar change under
-one fade. Browsers without View Transitions change immediately, and the
-reduced-motion rule collapses the cross-fade to nothing.
+Switching between the avatar workspace and focus mode is a morph, not a page
+fade: `morphAvatarModeChange` (`components/kana/avatar-mode-transition.ts`) runs
+the preference write inside a View Transition. The chat panel carries
+`view-transition-name: kana-chat-panel`, so its group animates from the dock's
+geometry to the focus workspace while the rail and avatar cross-fade around it.
+Entering focus pulls the destination surface down over the avatar panel: the old
+blue composer band stays visible until the descending sheet covers it, and the
+thinner focus border arrives with that sheet instead of popping. Leaving focus
+keeps the cross-fade zoom-out. Browsers
+without View Transitions change immediately, and the reduced-motion rule
+collapses both animations to nothing.
 
 Modals enter with `kana-modal-panel` (fade, 8 px lift, 0.985 scale) while their
 dim layer eases in (`kana-modal-backdrop`; the native model chooser animates

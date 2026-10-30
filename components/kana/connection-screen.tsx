@@ -16,6 +16,8 @@ export function useConnectionGate(): boolean {
 
 /** Matches the screen's opacity transition in app/globals.css. */
 const GATE_LEAVE_MS = 320;
+/** How often the gate rereads the configured Instabox machine's state. */
+const INSTABOX_STATUS_POLL_MS = 20_000;
 
 export type ConnectionScreenController = {
   /** Hermes is unreachable: the workspace stands down. */
@@ -355,10 +357,17 @@ export function ConnectionScreen({ screen }: { screen: ConnectionScreenControlle
   const hermesRuntimeNotice = useKanaStore("workspace", (state) => state.hermesRuntimeNotice);
   const [waking, setWaking] = useState(false);
   const [wakeNotice, setWakeNotice] = useState<string | null>(null);
+  const [instaboxAwake, setInstaboxAwake] = useState<boolean | null>(null);
   const connectionInTransition = connectionState === "connecting";
   const plugged = connectionState === "connected";
   const connectingPhase = connectPhase === "connecting" || connectPhase === "auto_starting";
   const busy = connectionInTransition || connectingPhase;
+  // The wake belongs to the remote transport's Instabox block: without one,
+  // there is nothing Kana could wake.
+  const remote = hermesRuntime?.mode === "remote";
+  const remoteWake = Boolean(
+    remote && hermesRuntime?.wakeAvailable && hermesRuntime.authAvailable,
+  );
 
   // The screen reports whether the server-side runtime is listening; Kana can
   // start one itself and the relay then connects.
@@ -366,21 +375,46 @@ export function ConnectionScreen({ screen }: { screen: ConnectionScreenControlle
     if (screen.blocked) void workspace.setup.inspectForGate();
   }, [screen.blocked, workspace]);
 
+  const refreshInstaboxStatus = useCallback(async (): Promise<boolean | null> => {
+    try {
+      const response = await fetch("/api/hermes/wake", { cache: "no-store" });
+      if (!response.ok) return null;
+      const body = (await response.json().catch(() => null)) as { awake?: unknown } | null;
+      return typeof body?.awake === "boolean" ? body.awake : null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // A wake is only meaningful while the machine sleeps. Poll the configured
+  // machine so the action grays out the moment it comes up, including when it
+  // was woken from outside Kana.
+  useEffect(() => {
+    if (!screen.visible || !remoteWake || waking || plugged) return;
+    let cancelled = false;
+    const check = async () => {
+      const awake = await refreshInstaboxStatus();
+      if (!cancelled && awake !== null) setInstaboxAwake(awake);
+    };
+    void check();
+    const timer = window.setInterval(() => void check(), INSTABOX_STATUS_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [plugged, refreshInstaboxStatus, remoteWake, screen.visible, waking]);
+
   if (!screen.visible) return null;
 
   const copy = getCopy(locale);
   const text = copy.workspace;
   const gateCopy = copy.gate;
-  // A gateway Kana can see but not authenticate: Hermes was started without a
-  // session token in its environment, so only that process knows the token.
-  const remote = hermesRuntime?.mode === "remote";
-  const remoteWake = Boolean(
-    remote && hermesRuntime?.wakeAvailable && hermesRuntime.authAvailable,
-  );
   // A paused Instabox is an ordinary state, not a local Hermes failure: the
   // heading says what is unreachable and the wake action is the way out.
   const remoteOffline = remoteWake && connectionState === "error";
   const configError = Boolean(hermesRuntime?.configError);
+  // A gateway Kana can see but not authenticate: Hermes was started without a
+  // session token in its environment, so only that process knows the token.
   const adoptionBlocked =
     hermesRuntime &&
     hermesRuntime.state === "running" &&
@@ -441,6 +475,9 @@ export function ConnectionScreen({ screen }: { screen: ConnectionScreenControlle
         );
         return;
       }
+      // The CLI reported the machine up; keep the action grayed from here on
+      // even before the next status poll confirms it.
+      setInstaboxAwake(true);
       await workspace.actions.connectHermes();
       // A retry already in flight owns the gate; only a settled, non-connected
       // state is a failed post-wake connection worth naming.
@@ -504,7 +541,7 @@ export function ConnectionScreen({ screen }: { screen: ConnectionScreenControlle
 
         {remoteOffline && !busy && !waking ? (
           <p className="mt-4 w-full max-w-lg text-center text-[11.5px] leading-relaxed text-muted">
-            {gateCopy.remoteOfflineBody}
+            {instaboxAwake === true ? gateCopy.remoteAwakeBody : gateCopy.remoteOfflineBody}
           </p>
         ) : null}
 
@@ -527,11 +564,15 @@ export function ConnectionScreen({ screen }: { screen: ConnectionScreenControlle
           <div className="mt-7 flex w-full max-w-sm flex-row items-center justify-center gap-3">
             <button
               type="button"
-              className={`${btnPrimary} min-w-0 flex-1 whitespace-nowrap text-sm`}
+              className={`${instaboxAwake === true ? btnSecondary : btnPrimary} min-w-0 flex-1 whitespace-nowrap text-sm`}
               onClick={() => void wake()}
-              disabled={busy || waking || plugged}
+              disabled={busy || waking || plugged || instaboxAwake === true}
             >
-              {waking ? gateCopy.wakingHermes : gateCopy.wakeHermes}
+              {waking
+                ? gateCopy.wakingInstabox
+                : instaboxAwake === true
+                  ? gateCopy.instaboxAwake
+                  : gateCopy.wakeInstabox}
             </button>
             <button
               type="button"

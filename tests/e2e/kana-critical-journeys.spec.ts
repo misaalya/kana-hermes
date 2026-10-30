@@ -1475,16 +1475,32 @@ test("holding the drag at the hard stop enters focus mode", async ({ page }) => 
   const dock = page.locator(".kana-chat-dock");
   const handle = page.locator(".kana-chat-resize");
   await expect(handle).toBeVisible();
-  const grip = await handle.boundingBox();
-  const y = (grip?.y ?? 0) + (grip?.height ?? 0) / 2;
-  const startX = (grip?.x ?? 0) + 5;
-  await page.mouse.move(startX, y);
-  await page.mouse.down();
-  await page.mouse.move(10, y, { steps: 8 });
+  // A first drag can land before React attaches the pointer handler on a
+  // freshly hydrated page; start again if the panel did not stretch.
+  let started = false;
+  for (let attempt = 0; attempt < 3 && !started; attempt += 1) {
+    const grip = await handle.boundingBox();
+    const y = (grip?.y ?? 0) + (grip?.height ?? 0) / 2;
+    const startX = (grip?.x ?? 0) + 5;
+    await page.mouse.move(startX, y);
+    await page.mouse.down();
+    await page.mouse.move(10, y, { steps: 8 });
+    await page.waitForTimeout(80);
+    started = ((await dock.boundingBox())?.width ?? 0) > 900;
+    if (!started) {
+      await page.mouse.up();
+      await page.waitForTimeout(100);
+    }
+  }
+  expect(started).toBe(true);
   await page.waitForTimeout(700);
+  await page.screenshot({ path: `test-results/chat-auto-focus-morph-${test.info().project.name}.png` });
 
   await expect(dock).toHaveClass(/is-sole/);
   await expect(page.locator(".kana-chat-resize")).toHaveCount(0);
+  expect(
+    await page.locator("#kana-chat-panel").evaluate((node) => getComputedStyle(node).viewTransitionName),
+  ).toBe("kana-chat-panel");
   const avatarVisible = await page.evaluate(() => {
     const raw = localStorage.getItem("kana.preferences.v6");
     return raw ? (JSON.parse(raw) as { avatarVisible?: boolean }).avatarVisible : undefined;
@@ -3346,9 +3362,22 @@ test("offers an Instabox wake for a remote Hermes without exposing a command", a
     runtime: "remote",
     connectOnFirstAttempt: false,
   });
-  const wakes: { method: string; body: string | null }[] = [];
+  const wakePosts: { method: string; body: string | null }[] = [];
+  let instaboxAwake = false;
   await context.route("**/api/hermes/wake", async (route) => {
-    wakes.push({ method: route.request().method(), body: route.request().postData() });
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        json: {
+          ok: true,
+          awake: instaboxAwake,
+          state: instaboxAwake ? "running" : "paused",
+          ready: instaboxAwake,
+        },
+      });
+      return;
+    }
+    wakePosts.push({ method: route.request().method(), body: route.request().postData() });
+    instaboxAwake = true;
     await route.fulfill({ json: { ok: true, alreadyUp: false, woke: true, elapsedMs: 20 } });
   });
   await gatePage.goto("/");
@@ -3361,7 +3390,7 @@ test("offers an Instabox wake for a remote Hermes without exposing a command", a
   ).toBeVisible();
   await expect(screen.getByText("Instabox may be paused. Wake the machine and Kana reconnects on its own.")).toBeVisible();
   await expect(screen.getByText("Remote Hermes is configured in config.json.")).toBeVisible();
-  const wake = screen.getByRole("button", { name: "Wake Hermes" });
+  const wake = screen.getByRole("button", { name: "Wake Instabox" });
   await expect(wake).toBeEnabled();
   await expect(screen.getByRole("button", { name: "Connect again" })).toBeEnabled();
   await expect(screen.getByText(/port 9119|Managed by Kana/)).toHaveCount(0);
@@ -3370,15 +3399,89 @@ test("offers an Instabox wake for a remote Hermes without exposing a command", a
   });
 
   await wake.click();
-  await expect.poll(() => wakes.length).toBe(1);
-  expect(wakes[0]).toEqual({ method: "POST", body: null });
+  await expect.poll(() => wakePosts.length).toBe(1);
+  expect(wakePosts[0]).toEqual({ method: "POST", body: null });
   // The wake only readies the gateway; the same gate still owns the connection
   // attempt and remains usable if Hermes is not up yet. A wake that succeeds
   // while the relay still cannot connect must say so instead of looping.
   await expect(
     screen.getByText("Instabox is awake, but Kana still could not connect. Check the remote dashboard credentials in config.json."),
   ).toBeVisible();
-  await expect(wake).toBeVisible();
+  // The machine is up now, so the wake reports that state and cannot run
+  // again; connecting again stays available for the gateway itself.
+  const awake = screen.getByRole("button", { name: "Instabox is awake" });
+  await expect(awake).toBeVisible();
+  await expect(awake).toBeDisabled();
+  await expect(
+    screen.getByText("Instabox is already awake, but Hermes is not answering. Make sure `hermes serve` runs on the remote machine and the dashboard credentials in config.json are correct."),
+  ).toBeVisible();
+  await expect(screen.getByRole("button", { name: "Connect again" })).toBeEnabled();
+  await context.close();
+});
+
+test("greys out the Instabox wake when the machine is already awake", async ({
+  page,
+  browser,
+}) => {
+  test.setTimeout(90_000);
+  const { context, gatePage } = await openGatePage(browser, page, {
+    runtime: "remote",
+    connectOnFirstAttempt: false,
+  });
+  await context.route("**/api/hermes/wake", (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({ json: { ok: true, awake: true, state: "running", ready: true } })
+      : route.fulfill({ status: 405, json: { error: "The machine is already awake." } }),
+  );
+  await gatePage.goto("/");
+  const screen = gatePage.getByRole("region", { name: "Hermes connection" });
+  await expect(screen).toBeVisible();
+  const awake = screen.getByRole("button", { name: "Instabox is awake" });
+  await expect(awake).toBeVisible();
+  await expect(awake).toBeDisabled();
+  await expect(screen.getByRole("button", { name: "Connect again" })).toBeEnabled();
+  await expect(
+    screen.getByText("Instabox is already awake, but Hermes is not answering. Make sure `hermes serve` runs on the remote machine and the dashboard credentials in config.json are correct."),
+  ).toBeVisible();
+  await context.close();
+});
+
+test("hides the Instabox wake for a remote gateway without Instabox", async ({
+  page,
+  browser,
+}) => {
+  const { context, gatePage } = await openGatePage(browser, page, {
+    runtime: "remote",
+    connectOnFirstAttempt: false,
+  });
+  const wakeCalls: string[] = [];
+  await context.route("**/api/hermes/wake", (route) => {
+    wakeCalls.push(route.request().method());
+    return route.fulfill({ status: 400, json: { error: "No Instabox machine is configured." } });
+  });
+  await context.route("**/api/local-runtime/hermes*", (route) =>
+    route.fulfill({
+      json: {
+        mode: "remote",
+        controlAvailable: false,
+        state: "stopped",
+        managed: false,
+        port: 0,
+        websocketUrl: "",
+        tokenAvailable: false,
+        authAvailable: true,
+        wakeAvailable: false,
+        message: "Kana connects to the remote Hermes dashboard configured in config.json.",
+      },
+    }),
+  );
+  await gatePage.goto("/");
+  const screen = gatePage.getByRole("region", { name: "Hermes connection" });
+  await expect(screen).toBeVisible();
+  await expect(screen.getByRole("button", { name: "Connect Hermes" })).toBeVisible();
+  await expect(screen.getByRole("button", { name: /Instabox/ })).toHaveCount(0);
+  // Without an Instabox block the gate must not even read the machine status.
+  expect(wakeCalls).toEqual([]);
   await context.close();
 });
 
@@ -3951,13 +4054,16 @@ test("turns the workspace into a chat-only view for a focused conversation", asy
   await page.screenshot({ path: `test-results/chat-only-restored-${test.info().project.name}.png` });
 });
 
-test("cross-fades between the avatar and focus mode", async ({ page }) => {
+test("morphs between the avatar and focus mode", async ({ page }) => {
   const avatarLayer = page.locator(".kana-avatar-viewport");
   const rail = page.locator(".kana-focus-rail");
   await expect(avatarLayer).toBeVisible();
+  expect(
+    await page.locator("#kana-chat-panel").evaluate((node) => getComputedStyle(node).viewTransitionName),
+  ).toBe("kana-chat-panel");
 
   // One browser transition per mode change, none for ordinary preference
-  // saves: the fade must come from the visibility change itself.
+  // saves: the transition must come from the mode change itself.
   await page.evaluate(() => {
     type FadeWindow = Window & { __kanaModeFades?: number };
     const target = window as FadeWindow;

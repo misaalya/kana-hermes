@@ -31,7 +31,7 @@ Hermes gates most RPCs to one active session per connection. Kana is a single-us
 | `GET/PUT /api/kana/activities` | Per-turn tool activity SQLite store |
 | `GET/HEAD /api/media/[token]/[name]` | Streams a file Hermes delivered |
 | `GET/POST /api/local-runtime/hermes` | Inspect/start/restart/stop the managed local `hermes serve`; in remote mode it reports the remote transport and refuses process actions |
-| `POST /api/hermes/wake` | Kana's own Instabox wake; no Hermes RPC, no browser input |
+| `GET`/`POST /api/hermes/wake` | Kana's own Instabox status and wake; no Hermes RPC, no browser input |
 
 Every route requires the Kana session cookie (`withSession`); none exposes the Hermes token.
 

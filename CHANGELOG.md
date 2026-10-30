@@ -4,15 +4,31 @@
 
 ### Changed
 
+- Switching between avatar mode and focus mode now morphs the chat panel's
+  geometry into its new workspace instead of fading the whole page. The panel
+  carries a view-transition name; the focus rail and avatar still cross-fade
+  around it. Entering focus pulls the destination surface down over the avatar
+  panel, so the blue composer band stays visible until the descending sheet
+  covers it; the thinner focus border arrives with that sheet instead of
+  popping. Leaving focus keeps the cross-fade zoom-out.
 - The Instabox block in `config.json` is now `hermes.remote.instabox` (was
   `hermes.remote.wake`). The old `wake` key is rejected with a rename error
   instead of being silently ignored.
+- The connection gate reads the configured Instabox machine through the same
+  authenticated route (read-only `instabox get <machineId> --json`) and polls
+  it while remote Hermes is unreachable. The action is now **Wake Instabox**,
+  shows **Waking Instabox** while it runs, and becomes a disabled **Instabox is
+  awake** once the machine is running; a remote without an `instabox` block
+  shows no wake action at all. When the machine is up but Hermes still does not
+  answer, the gate points at `hermes serve` and the remote dashboard
+  credentials instead of repeating the paused-machine hint.
 - In avatar mode, the chat dock can be widened by dragging its left frame, or
   with ArrowLeft/ArrowRight and Home/End when the divider has focus. The
   standard responsive width is the minimum, and the settled maximum is 70% of
-  the screen. Dragging past it stretches the panel up to 90%; releasing springs
-  it back to 70% over a 280ms width transition. Holding the drag at the 90%
-  hard stop for 500ms enters focus mode and stores `avatarVisible: false`. The
+  the screen. Dragging past it stretches the panel up to the width it has in
+  focus mode; releasing springs it back to 70% over a 280ms width transition.
+  Holding the drag at that hard stop for 500ms enters focus mode and stores
+  `avatarVisible: false`. The
   drag edge stays invisible on hover; only keyboard focus shows the ring. The drag paints its width once
   per animation frame from the DOM instead of re-rendering React, so dragging
   no longer stutters. The settled width is remembered as a local preference.

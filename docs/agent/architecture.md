@@ -85,7 +85,7 @@ mock agent mode.
 | `POST /api/kana/voices/preview` | The sample for one voice: the bundled or user-uploaded reference WAV itself, or a prepared generation for the model voice. It never starts the engine. |
 | `GET`/`HEAD /api/media/<token>/<name>` | One delivered file, streamed with byte ranges and ETag revalidation; the token is the only input that picks the file. |
 | `GET`/`POST /api/local-runtime/hermes` | Inspect, `start`, `restart`, or `stop` the `hermes serve` Kana manages. A browser chooses only the action and optional port. With `hermes.remote`, GET reports the remote transport and POST refuses process control. |
-| `POST /api/hermes/wake` | Kana's own Instabox wake for a configured remote gateway. The body is empty, the machine id comes from `config.json`, and the CLI runs without a shell. |
+| `GET`/`POST /api/hermes/wake` | Kana's own Instabox status and wake for a configured remote gateway. GET runs the read-only `instabox get <machineId> --json` and reports only whether the machine is awake; POST runs `resume` then `start`. The body is empty, the machine id comes from `config.json`, and the CLI runs without a shell. |
 | `GET /api/voice/tts/provider` | Safe provider metadata and health; credentials and upstream URLs stay server-side. |
 | `POST /api/voice/tts/speech` | Synthesis: JSON in, raw audio bytes out, cancellable while bytes are still being delivered. |
 | `POST /api/voice/tts/requests/[requestId]/cancel` | Cancels the active synthesis and releases the local engine process. |

@@ -20,6 +20,16 @@ export type InstaboxWakeResult = {
   elapsedMs: number;
 };
 
+export type InstaboxMachineStatus = {
+  /** The machine is running or starting: a wake would be a no-op. */
+  awake: boolean;
+  state: string;
+  ready: boolean;
+};
+
+const STATUS_TIMEOUT_MS = 10_000;
+const STATUS_OUTPUT_LIMIT = 64 * 1024;
+
 export type InstaboxWakeErrorCode = "unavailable" | "busy" | "timeout" | "failed";
 
 export class InstaboxWakeError extends Error {
@@ -126,6 +136,71 @@ function runCommand(
   });
 }
 
+type ReadCommandResult = {
+  status: "ok" | "failed" | "unavailable";
+  stdout: string;
+};
+
+/** Runs one fixed CLI read and captures bounded stdout; never starts a shell. */
+function readCommand(
+  executable: string,
+  args: string[],
+  timeoutMs: number,
+  extraEnv: string[],
+): Promise<ReadCommandResult> {
+  return new Promise((resolve) => {
+    let settled = false;
+    let stdout = "";
+    let timedOut = false;
+    const finish = (status: ReadCommandResult["status"]) => {
+      if (settled) return;
+      settled = true;
+      resolve({ status, stdout });
+    };
+    let child: ChildProcess;
+    try {
+      child = spawn(executable, args, {
+        shell: false,
+        cwd: homedir(),
+        env: wakeEnvironment(process.env, extraEnv) as NodeJS.ProcessEnv,
+        stdio: ["ignore", "pipe", "ignore"],
+        windowsHide: true,
+      });
+    } catch {
+      finish("unavailable");
+      return;
+    }
+    child.stdout?.on("data", (chunk: Buffer) => {
+      if (settled) return;
+      stdout += chunk.toString("utf8");
+      if (stdout.length > STATUS_OUTPUT_LIMIT) {
+        stdout = stdout.slice(0, STATUS_OUTPUT_LIMIT);
+        try { child.kill("SIGKILL"); } catch {}
+        finish("failed");
+      }
+    });
+    let forceTimer: ReturnType<typeof setTimeout> | null = null;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      try { child.kill("SIGTERM"); } catch {}
+      forceTimer = setTimeout(() => {
+        try { child.kill("SIGKILL"); } catch {}
+        finish("failed");
+      }, 2_000);
+    }, Math.max(1, timeoutMs));
+    child.once("error", () => {
+      clearTimeout(timer);
+      if (forceTimer) clearTimeout(forceTimer);
+      finish("unavailable");
+    });
+    child.once("exit", (code) => {
+      clearTimeout(timer);
+      if (forceTimer) clearTimeout(forceTimer);
+      finish(code === 0 && !timedOut ? "ok" : "failed");
+    });
+  });
+}
+
 async function healthy(url: string): Promise<boolean> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
@@ -167,6 +242,73 @@ function wakeConfig(remote: KanaRemoteHermesConfig): KanaInstaboxConfig {
     );
   }
   return remote.instabox;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+/**
+ * Reads the configured machine without touching it. The gate uses this to
+ * gray out a wake that would be a no-op, so only a paused or stopped machine
+ * offers the action.
+ */
+export async function instaboxMachineStatus(): Promise<InstaboxMachineStatus> {
+  const connection = remoteHermesConnection();
+  if (!connection) {
+    throw new InstaboxWakeError(
+      "Kana is not configured for a remote Hermes gateway.",
+      "unavailable",
+      400,
+    );
+  }
+  const instabox = wakeConfig(connection.config);
+  const executable = instabox.executable ?? "instabox";
+  const result = await readCommand(
+    executable,
+    ["get", instabox.machineId, "--json"],
+    STATUS_TIMEOUT_MS,
+    instabox.env ?? [],
+  );
+  if (result.status === "unavailable") {
+    throw new InstaboxWakeError(
+      "The Instabox CLI could not be started on the machine running Kana.",
+      "failed",
+      502,
+    );
+  }
+  if (result.status !== "ok") {
+    throw new InstaboxWakeError(
+      "The Instabox CLI could not report the machine status.",
+      "failed",
+      502,
+    );
+  }
+  let body: unknown = null;
+  try {
+    body = JSON.parse(result.stdout);
+  } catch {
+    body = null;
+  }
+  const record = asRecord(body);
+  const state = typeof record?.state === "string" ? record.state : "";
+  if (!state) {
+    throw new InstaboxWakeError(
+      "The Instabox CLI returned an unreadable machine status.",
+      "failed",
+      502,
+    );
+  }
+  const runtime = asRecord(record?.runtime);
+  return {
+    // A booting machine is already on its way up; only paused or stopped
+    // machines have a wake left to run.
+    awake: state === "running" || state === "starting" || state === "resuming",
+    state,
+    ready: runtime?.ready === true,
+  };
 }
 
 async function runWake(
