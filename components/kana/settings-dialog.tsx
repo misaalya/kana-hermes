@@ -28,7 +28,7 @@ import { HermesControlPanel } from "./hermes-control-panel";
 import { VoiceEnginePanel } from "./voice-engine-panel";
 import { VoicePanel } from "./voice-panel";
 import { AvatarExpressionPanel } from "./avatar-expression-panel";
-import { morphAvatarModeChange } from "./avatar-mode-transition";
+import { wipeAvatarModeChange } from "./avatar-mode-transition";
 import { ComposerDelaySlider } from "./composer-delay-slider";
 import { HostPanel } from "./host-panel";
 import { ModelControlPanel } from "./model-control-panel";
@@ -589,14 +589,14 @@ export function SettingsDialog({
                         label={settingsCopy.avatarVisible}
                         onChange={() => {
                           const next = { ...draft, avatarVisible: !draft.avatarVisible };
-                          morphAvatarModeChange(() => {
+                          wipeAvatarModeChange(() => {
                             setDraft(next);
                             // The draft's effect saves after paint; saving here
-                            // keeps the mode change inside the layout the morph
-                            // captures. A failure is still reported by the
-                            // queued save that follows.
+                            // lands the mode change while the wave covers the
+                            // screen. A failure is still reported by the queued
+                            // save that follows.
                             void onSaveRef.current(next).catch(() => undefined);
-                          }, next.avatarVisible ? "to-avatar" : "to-focus");
+                          });
                         }}
                       />
                     </SettingsRow>

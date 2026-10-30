@@ -4,13 +4,11 @@
 
 ### Changed
 
-- Switching between avatar mode and focus mode now morphs the chat panel's
-  geometry into its new workspace instead of fading the whole page. The panel
-  carries a view-transition name; the focus rail and avatar still cross-fade
-  around it. Entering focus pulls the destination surface down over the avatar
-  panel, so the blue composer band stays visible until the descending sheet
-  covers it; the thinner focus border arrives with that sheet instead of
-  popping. Leaving focus keeps the cross-fade zoom-out.
+- Switching between avatar mode and focus mode is now a candy wave wipe: a
+  deep navy sheet with glossy blue wavy rims and a plus pattern sweeps down
+  from above, the new layout is written while the screen is fully covered, and
+  the sheet leaves through the bottom. It replaces the previous View
+  Transition morph; reduced motion still switches immediately.
 - The Instabox block in `config.json` is now `hermes.remote.instabox` (was
   `hermes.remote.wake`). The old `wake` key is rejected with a rename error
   instead of being silently ignored.

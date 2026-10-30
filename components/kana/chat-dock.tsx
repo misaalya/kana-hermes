@@ -12,7 +12,7 @@ import {
 import type { KanaMessage } from "@/lib/conversation/types";
 import { selectActiveConversation } from "@/lib/store/conversation-store";
 import { getCopy } from "@/lib/ui/copy";
-import { morphAvatarModeChange } from "./avatar-mode-transition";
+import { wipeAvatarModeChange } from "./avatar-mode-transition";
 import { ChatComposer } from "./chat-composer";
 import { FocusRail } from "./focus-rail";
 import { ChevronLeftIcon, ChevronRightIcon } from "./icons";
@@ -124,17 +124,15 @@ export function ChatDock() {
     }
     animation.current?.cancel();
     animation.current = null;
-    // Keep the panel at the width the pointer is holding for the transition's
-    // old snapshot: the morph starts from the panel's current geometry. The
-    // direction CSS shows the destination focus surface from the first frame,
-    // so the avatar-mode blue composer never stretches across the morph.
-    morphAvatarModeChange(() => {
+    // Keep the panel at the width the pointer is holding while the wave
+    // covers the screen; the mode is written at full cover.
+    wipeAvatarModeChange(() => {
       setResizing(false);
       void workspace.actions.savePreferences({
         ...workspace.stores.preferences.getState().preferences,
         avatarVisible: false,
       });
-    }, "to-focus");
+    });
   }, [workspace]);
 
   const paintWidth = useCallback((value: number) => {

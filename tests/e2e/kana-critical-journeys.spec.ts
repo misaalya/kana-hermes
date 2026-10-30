@@ -1494,13 +1494,10 @@ test("holding the drag at the hard stop enters focus mode", async ({ page }) => 
   }
   expect(started).toBe(true);
   await page.waitForTimeout(700);
-  await page.screenshot({ path: `test-results/chat-auto-focus-morph-${test.info().project.name}.png` });
+  await page.screenshot({ path: `test-results/chat-auto-focus-wave-${test.info().project.name}.png` });
 
   await expect(dock).toHaveClass(/is-sole/);
   await expect(page.locator(".kana-chat-resize")).toHaveCount(0);
-  expect(
-    await page.locator("#kana-chat-panel").evaluate((node) => getComputedStyle(node).viewTransitionName),
-  ).toBe("kana-chat-panel");
   const avatarVisible = await page.evaluate(() => {
     const raw = localStorage.getItem("kana.preferences.v6");
     return raw ? (JSON.parse(raw) as { avatarVisible?: boolean }).avatarVisible : undefined;
@@ -4054,38 +4051,55 @@ test("turns the workspace into a chat-only view for a focused conversation", asy
   await page.screenshot({ path: `test-results/chat-only-restored-${test.info().project.name}.png` });
 });
 
-test("morphs between the avatar and focus mode", async ({ page }) => {
+test("wipes between the avatar and focus mode with a candy wave", async ({ page }) => {
   const avatarLayer = page.locator(".kana-avatar-viewport");
   const rail = page.locator(".kana-focus-rail");
+  const wave = page.locator(".kana-wave-wipe");
   await expect(avatarLayer).toBeVisible();
-  expect(
-    await page.locator("#kana-chat-panel").evaluate((node) => getComputedStyle(node).viewTransitionName),
-  ).toBe("kana-chat-panel");
 
-  // One browser transition per mode change, none for ordinary preference
-  // saves: the transition must come from the mode change itself.
+  // The sheet is removed after the reveal, so count insertions instead of
+  // trusting a locator that may match zero or one at any moment.
   await page.evaluate(() => {
-    type FadeWindow = Window & { __kanaModeFades?: number };
-    const target = window as FadeWindow;
-    target.__kanaModeFades = 0;
-    const start = document.startViewTransition.bind(document);
-    document.startViewTransition = (callback) => {
-      target.__kanaModeFades = (target.__kanaModeFades ?? 0) + 1;
-      return start(callback);
-    };
+    type WipeWindow = Window & { __kanaWipes?: number };
+    const target = window as WipeWindow;
+    target.__kanaWipes = 0;
+    new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (node instanceof HTMLElement && node.classList.contains("kana-wave-wipe")) {
+            target.__kanaWipes = (target.__kanaWipes ?? 0) + 1;
+          }
+        }
+      }
+    }).observe(document.body, { childList: true });
   });
-  const fades = () =>
-    page.evaluate(
-      () => (window as Window & { __kanaModeFades?: number }).__kanaModeFades ?? 0,
-    );
+  const wipes = () =>
+    page.evaluate(() => (window as Window & { __kanaWipes?: number }).__kanaWipes ?? 0);
 
   await page.getByRole("button", { name: "Open settings" }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: /^Avatar(?: Avatar and stage)?$/ }).click();
   await dialog.getByRole("switch", { name: "Show avatar" }).click();
+  await expect(wave).toHaveCount(1);
+  await expect(wave).toHaveAttribute("aria-hidden", "true");
+  const layer = await wave.evaluate((node) => {
+    const computed = getComputedStyle(node);
+    return {
+      position: computed.position,
+      pointerEvents: computed.pointerEvents,
+      mask: computed.maskImage,
+      background: computed.backgroundImage,
+    };
+  });
+  expect(layer.position).toBe("fixed");
+  expect(layer.pointerEvents).toBe("none");
+  expect(layer.mask).toContain("data:image/svg+xml");
+  expect(layer.background).toContain("data:image/svg+xml");
+
   await dialog.getByRole("button", { name: "Close settings" }).click();
   await expect(avatarLayer).toBeHidden();
-  await expect.poll(fades).toBe(1);
+  await expect.poll(wipes).toBe(1);
+  await expect(wave).toHaveCount(0);
 
   if ((page.viewportSize()?.width ?? 0) >= 1024) {
     await rail.getByRole("button", { name: "Show avatar" }).click();
@@ -4096,7 +4110,8 @@ test("morphs between the avatar and focus mode", async ({ page }) => {
     await dialog.getByRole("button", { name: "Close settings" }).click();
   }
   await expect(avatarLayer).toBeVisible();
-  await expect.poll(fades).toBe(2);
+  await expect.poll(wipes).toBe(2);
+  await expect(wave).toHaveCount(0);
 });
 
 test("falls back to the placeholder avatar when Live2D cannot load", async ({

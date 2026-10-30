@@ -464,17 +464,16 @@ uses.
 Motion is springy (`--spring`): lift on hover, small press on click, a pop for
 check badges. Global reduced-motion rules must keep working.
 
-Switching between the avatar workspace and focus mode is a morph, not a page
-fade: `morphAvatarModeChange` (`components/kana/avatar-mode-transition.ts`) runs
-the preference write inside a View Transition. The chat panel carries
-`view-transition-name: kana-chat-panel`, so its group animates from the dock's
-geometry to the focus workspace while the rail and avatar cross-fade around it.
-Entering focus pulls the destination surface down over the avatar panel: the old
-blue composer band stays visible until the descending sheet covers it, and the
-thinner focus border arrives with that sheet instead of popping. Leaving focus
-keeps the cross-fade zoom-out. Browsers
-without View Transitions change immediately, and the reduced-motion rule
-collapses both animations to nothing.
+Switching between the avatar workspace and focus mode is a candy wave wipe,
+not a page fade: `wipeAvatarModeChange` (`components/kana/avatar-mode-transition.ts`)
+appends a fixed `.kana-wave-wipe` sheet, sweeps it down over the viewport,
+writes the preference while the screen is covered, then lets the sheet leave
+through the bottom. The sheet is a deep navy surface with glossy accent rims
+and a plus pattern, masked into a wavy top and bottom, so both the leading and
+trailing edges carry the rim; `app/globals.css` owns the art and the two WAAPI
+phases own the timing. Reduced motion changes immediately. A second toggle
+during a wipe applies at once, and the running wipe reveals the latest layout
+instead of replaying its own older update.
 
 Modals enter with `kana-modal-panel` (fade, 8 px lift, 0.985 scale) while their
 dim layer eases in (`kana-modal-backdrop`; the native model chooser animates
