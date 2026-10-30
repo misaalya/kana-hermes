@@ -4055,6 +4055,7 @@ test("wipes between the avatar and focus mode with a candy wave", async ({ page 
   const avatarLayer = page.locator(".kana-avatar-viewport");
   const rail = page.locator(".kana-focus-rail");
   const wave = page.locator(".kana-wave-wipe");
+  const desktop = (page.viewportSize()?.width ?? 0) >= 1024;
   await expect(avatarLayer).toBeVisible();
 
   // The sheet is removed after the reveal, so count insertions instead of
@@ -4086,24 +4087,38 @@ test("wipes between the avatar and focus mode with a candy wave", async ({ page 
     const computed = getComputedStyle(node);
     const sheet = node.querySelector(".kana-wave-wipe__sheet");
     const backs = Array.from(node.querySelectorAll(".kana-wave-wipe__layer"));
+    const sparkle = node.querySelector(".kana-wave-wipe__sparkle");
     return {
       position: computed.position,
       pointerEvents: computed.pointerEvents,
       sheetMask: sheet ? getComputedStyle(sheet).maskImage : "",
+      sheetMaskRepeat: sheet ? getComputedStyle(sheet).maskRepeat : "",
       sheetBackground: sheet ? getComputedStyle(sheet).backgroundImage : "",
       backMasks: backs.map((back) => getComputedStyle(back).maskImage),
       backColors: backs.map((back) => getComputedStyle(back).backgroundColor),
+      sparkles: node.querySelectorAll(".kana-wave-wipe__sparkle").length,
+      inkSparkles: node.querySelectorAll(".kana-wave-wipe__sparkle--ink").length,
+      whiteSparkles: node.querySelectorAll(".kana-wave-wipe__sparkle--white").length,
+      sparkleClip: sparkle ? getComputedStyle(sparkle).clipPath : "",
     };
   });
   expect(layers.position).toBe("fixed");
   expect(layers.pointerEvents).toBe("none");
   expect(layers.sheetMask).toContain("data:image/svg+xml");
+  // Desktop repeats a phone-width wave tile so the crests stay as tightly
+  // packed as on mobile; phones keep the full-width stretch.
+  expect(layers.sheetMaskRepeat).toBe(desktop ? "repeat-x" : "no-repeat");
   // The sheet is plain Kana blue; the depth comes from the two wave layers,
   // not from a pattern.
   expect(layers.sheetBackground).not.toContain("data:image/svg+xml");
   expect(layers.backMasks).toHaveLength(2);
   expect(layers.backMasks.every((mask) => mask.includes("data:image/svg+xml"))).toBe(true);
   expect(layers.backColors).toEqual(["rgb(201, 237, 251)", "rgb(255, 255, 255)"]);
+  // Kana's sparkles replace the reference's bubbles; both tones ride the bands.
+  expect(layers.sparkles).toBeGreaterThanOrEqual(10);
+  expect(layers.inkSparkles).toBeGreaterThan(0);
+  expect(layers.whiteSparkles).toBeGreaterThan(0);
+  expect(layers.sparkleClip).toContain("polygon");
 
   await dialog.getByRole("button", { name: "Close settings" }).click();
   await expect(avatarLayer).toBeHidden();

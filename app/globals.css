@@ -324,8 +324,9 @@ button,
    inner white layer and a farther light-blue layer) enters from above, the new
    layout is written while it covers the viewport, and the whole stack leaves
    through the bottom. Each layer is masked with its own wave rhythm, so the
-   leading and trailing edges read as several sheets instead of one flat band.
-   `avatar-mode-transition.ts` runs the two WAAPI phases. */
+   leading and trailing edges read as several sheets instead of one flat band;
+   small four-point sparkles ride the exposed bands. `avatar-mode-transition.ts`
+   runs the two WAAPI phases. */
 .kana-wave-wipe {
   position: fixed;
   top: 0;
@@ -380,6 +381,45 @@ button,
 @keyframes kana-wave-drift-right {
   from { transform: translateX(0); }
   to { transform: translateX(2vw); }
+}
+
+.kana-wave-wipe__sparkle {
+  position: absolute;
+  width: var(--kana-sparkle-size, 10px);
+  height: var(--kana-sparkle-size, 10px);
+  margin-left: calc(var(--kana-sparkle-size, 10px) / -2);
+  margin-top: calc(var(--kana-sparkle-size, 10px) / -2);
+  background: currentColor;
+  clip-path: polygon(50% 0%, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0% 50%, 39% 39%);
+  animation: kana-wave-sparkle 800ms ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+.kana-wave-wipe__sparkle--ink {
+  color: #2c6f96;
+  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.65));
+}
+
+.kana-wave-wipe__sparkle--white {
+  color: #ffffff;
+  filter: drop-shadow(0 0 5px rgba(89, 157, 198, 0.7));
+}
+
+@keyframes kana-wave-sparkle {
+  0%, 100% { opacity: 0.5; transform: scale(0.7) rotate(0deg); }
+  50% { opacity: 1; transform: scale(1.2) rotate(45deg); }
+}
+
+/* A phone-width wave tile keeps wide viewports as tightly packed as the
+   mobile sweep instead of stretching four crests across the whole monitor.
+   Small screens still stretch the mask to the sheet, so the phone shape stays
+   as it is. */
+@media (min-width: 768px) {
+  .kana-wave-wipe__sheet,
+  .kana-wave-wipe__layer {
+    mask-size: 390px 100%;
+    mask-repeat: repeat-x;
+  }
 }
 
 [data-theme="light"] .kana-stage-pattern[data-background="room"] .kana-stage-backdrop {

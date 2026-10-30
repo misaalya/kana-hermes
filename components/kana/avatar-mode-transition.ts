@@ -11,6 +11,39 @@ const COVER_EASING = "cubic-bezier(0.45, 0, 0.55, 1)";
 const REVEAL_EASING = "cubic-bezier(0.22, 0.8, 0.28, 1)";
 const WAVE_CLASS = "kana-wave-wipe";
 
+/**
+ * Kana's four-point sparkles ride the wave bands instead of the reference's
+ * bubbles: deeper Kana blue on the white sheet, white on the pale-blue one.
+ * Positions are outside the main sheet (above its top, below its bottom), so
+ * each star sits on the layered edge that is visible during that phase.
+ */
+const SPARKLES: ReadonlyArray<{
+  left: string;
+  top: string;
+  size: number;
+  delay: number;
+  tone: "ink" | "white";
+}> = [
+  { left: "6%", top: "calc(100% + 4.5vh)", size: 12, delay: 0, tone: "ink" },
+  { left: "16%", top: "calc(100% + 15vh)", size: 18, delay: 180, tone: "white" },
+  { left: "28%", top: "calc(100% + 6vh)", size: 10, delay: 340, tone: "ink" },
+  { left: "40%", top: "calc(100% + 17vh)", size: 15, delay: 60, tone: "white" },
+  { left: "52%", top: "calc(100% + 4vh)", size: 20, delay: 260, tone: "ink" },
+  { left: "64%", top: "calc(100% + 14.5vh)", size: 12, delay: 420, tone: "white" },
+  { left: "76%", top: "calc(100% + 6.5vh)", size: 14, delay: 120, tone: "ink" },
+  { left: "88%", top: "calc(100% + 16vh)", size: 16, delay: 300, tone: "white" },
+  { left: "95%", top: "calc(100% + 5vh)", size: 12, delay: 480, tone: "ink" },
+  { left: "11%", top: "calc(-5vh)", size: 15, delay: 150, tone: "ink" },
+  { left: "34%", top: "calc(-16vh)", size: 12, delay: 330, tone: "white" },
+  { left: "58%", top: "calc(-5.5vh)", size: 10, delay: 90, tone: "ink" },
+  { left: "82%", top: "calc(-15vh)", size: 18, delay: 240, tone: "white" },
+  { left: "22%", top: "calc(100% - 4vh)", size: 12, delay: 240, tone: "white" },
+  { left: "49%", top: "calc(100% - 6vh)", size: 8, delay: 60, tone: "white" },
+  { left: "79%", top: "calc(100% - 3.5vh)", size: 14, delay: 380, tone: "white" },
+  { left: "31%", top: "4vh", size: 9, delay: 180, tone: "white" },
+  { left: "68%", top: "3vh", size: 12, delay: 320, tone: "white" },
+];
+
 /** Distinguishes a running wipe from one whose mode change was superseded. */
 let generation = 0;
 
@@ -38,6 +71,15 @@ function runWave(update: () => void, token: number): void {
   const sheet = document.createElement("div");
   sheet.className = `${WAVE_CLASS}__sheet`;
   wave.append(far, near, sheet);
+  for (const sparkle of SPARKLES) {
+    const node = document.createElement("span");
+    node.className = `${WAVE_CLASS}__sparkle ${WAVE_CLASS}__sparkle--${sparkle.tone}`;
+    node.style.left = sparkle.left;
+    node.style.top = sparkle.top;
+    node.style.setProperty("--kana-sparkle-size", `${sparkle.size}px`);
+    node.style.animationDelay = `${sparkle.delay}ms`;
+    wave.append(node);
+  }
   document.body.append(wave);
 
   const applyIfCurrent = () => {

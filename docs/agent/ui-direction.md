@@ -470,9 +470,10 @@ appends a fixed `.kana-wave-wipe` sheet, sweeps it down over the viewport,
 writes the preference while the screen is covered, then lets the sheet leave
 through the bottom. The sheet is Kana blue with two wave layers behind it, one
 white and one light blue, each masked into its own wavy top and bottom, so
-both the leading and trailing edges read as several stacked waves;
-`app/globals.css` owns the art and the two WAAPI phases own the timing.
-Reduced motion changes immediately. A second toggle
+both the leading and trailing edges read as several stacked waves; small
+four-point sparkles in Kana blue and white ride the exposed bands instead of
+the reference's bubbles. `app/globals.css` owns the art and the two WAAPI
+phases own the timing. Reduced motion changes immediately. A second toggle
 during a wipe applies at once, and the running wipe reveals the latest layout
 instead of replaying its own older update.
 
