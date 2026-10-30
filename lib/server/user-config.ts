@@ -35,8 +35,8 @@ export type KanaRemoteHermesConfig = {
   url: string;
   /** Dashboard login for a gated remote gateway. */
   auth: KanaRemoteHermesAuthConfig;
-  /** Optional Instabox VM wake; Kana runs the fixed instabox CLI itself. */
-  wake?: KanaInstaboxWakeConfig;
+  /** Optional Instabox machine; Kana runs the fixed instabox CLI itself. */
+  instabox?: KanaInstaboxConfig;
 };
 
 export type KanaRemoteHermesAuthConfig = {
@@ -48,7 +48,7 @@ export type KanaRemoteHermesAuthConfig = {
   passwordEnv?: string;
 };
 
-export type KanaInstaboxWakeConfig = {
+export type KanaInstaboxConfig = {
   /** The Instabox machine id, used only as an argument to instabox resume/start. */
   machineId: string;
   /** Absolute path to the instabox CLI; defaults to `instabox` on PATH. */
@@ -440,40 +440,43 @@ function parseRemoteHermes(record: Record<string, unknown>): KanaRemoteHermesCon
     );
   }
 
-  let wake: KanaInstaboxWakeConfig | undefined;
   if (record.wake !== undefined) {
-    if (!isRecord(record.wake)) throw new Error(`${section}.wake must be a JSON object.`);
-    const machineId = optionalStringWithLimit(record.wake, "machineId", `${section}.wake`, 128);
-    if (!machineId) throw new Error(`${section}.wake.machineId is required.`);
+    throw new Error(`${section}.wake is now ${section}.instabox; rename it in config.json.`);
+  }
+  let instabox: KanaInstaboxConfig | undefined;
+  if (record.instabox !== undefined) {
+    if (!isRecord(record.instabox)) throw new Error(`${section}.instabox must be a JSON object.`);
+    const machineId = optionalStringWithLimit(record.instabox, "machineId", `${section}.instabox`, 128);
+    if (!machineId) throw new Error(`${section}.instabox.machineId is required.`);
     if (!INSTABOX_MACHINE_ID.test(machineId)) {
-      throw new Error(`${section}.wake.machineId may contain only letters, digits, dots, dashes, and underscores.`);
+      throw new Error(`${section}.instabox.machineId may contain only letters, digits, dots, dashes, and underscores.`);
     }
-    const executable = optionalAbsolutePath(record.wake, "executable", `${section}.wake`);
+    const executable = optionalAbsolutePath(record.instabox, "executable", `${section}.instabox`);
     if (executable !== undefined && path.basename(executable) !== "instabox") {
-      throw new Error(`${section}.wake.executable must name the instabox CLI.`);
+      throw new Error(`${section}.instabox.executable must name the instabox CLI.`);
     }
-    const timeoutSeconds = optionalPositiveInteger(record.wake, "timeoutSeconds", `${section}.wake`, 600);
+    const timeoutSeconds = optionalPositiveInteger(record.instabox, "timeoutSeconds", `${section}.instabox`, 600);
     if (timeoutSeconds !== undefined && timeoutSeconds < 10) {
-      throw new Error(`${section}.wake.timeoutSeconds must be between 10 and 600.`);
+      throw new Error(`${section}.instabox.timeoutSeconds must be between 10 and 600.`);
     }
     let env: string[] | undefined;
-    if (record.wake.env !== undefined) {
-      if (!Array.isArray(record.wake.env) || record.wake.env.length > 32) {
-        throw new Error(`${section}.wake.env must be an array of at most 32 variable names.`);
+    if (record.instabox.env !== undefined) {
+      if (!Array.isArray(record.instabox.env) || record.instabox.env.length > 32) {
+        throw new Error(`${section}.instabox.env must be an array of at most 32 variable names.`);
       }
-      env = [...new Set(record.wake.env.map((item) => {
+      env = [...new Set(record.instabox.env.map((item) => {
         if (typeof item !== "string" || !REMOTE_ENV_NAME.test(item)) {
-          throw new Error(`${section}.wake.env must contain valid environment variable names.`);
+          throw new Error(`${section}.instabox.env must contain valid environment variable names.`);
         }
         if (item.startsWith("KANA_") || item === "HERMES_DASHBOARD_SESSION_TOKEN") {
           throw new Error(
-            `${section}.wake.env must not expose Kana or Hermes credentials to the Instabox CLI.`,
+            `${section}.instabox.env must not expose Kana or Hermes credentials to the Instabox CLI.`,
           );
         }
         return item;
       }))];
     }
-    wake = {
+    instabox = {
       machineId,
       ...(executable === undefined ? {} : { executable }),
       ...(timeoutSeconds === undefined ? {} : { timeoutSeconds }),
@@ -489,7 +492,7 @@ function parseRemoteHermes(record: Record<string, unknown>): KanaRemoteHermesCon
       ...(password === undefined ? {} : { password }),
       ...(passwordEnv === undefined ? {} : { passwordEnv }),
     },
-    ...(wake === undefined ? {} : { wake }),
+    ...(instabox === undefined ? {} : { instabox }),
   };
 }
 

@@ -85,9 +85,29 @@ export function ChatComposer() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   /** Arrow-key recall of this conversation's sent prompts (desktop only). */
   const [recall, setRecall] = useState<PromptRecall>(NO_PROMPT_RECALL);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const sentPrompts = useMemo(() => promptHistory(conversation?.messages ?? []), [conversation?.messages]);
   const copy = getCopy(locale);
   const text = copy.workspace;
+
+  const imagePreviews = useMemo(
+    () => files.map((file) => (
+      file.type.startsWith("image/") || /\.(png|jpe?g|gif|webp|avif|bmp|svg)$/i.test(file.name)
+        ? { file, url: URL.createObjectURL(file) }
+        : null
+    )),
+    [files],
+  );
+  useEffect(() => () => {
+    for (const preview of imagePreviews) {
+      if (preview) URL.revokeObjectURL(preview.url);
+    }
+  }, [imagePreviews]);
+
+  const removeFile = (index: number) => {
+    setFiles(files.filter((_, selected) => selected !== index));
+    setAttachmentError(null);
+  };
 
   const setMessage = (value: string) => {
     if (activeConversationId) workspace.stores.workspace.getState().setDraft(activeConversationId, value);
@@ -226,6 +246,15 @@ export function ChatComposer() {
           </button>
         </div>
       ) : null}
+      {attachmentError ? (
+        <div role="alert" className="mb-2 flex items-start gap-2 rounded-[20px] border-2 border-[#ca2a30] bg-[#ca2a30] px-3.5 py-2 text-xs font-semibold text-white">
+          <p className="min-w-0 flex-1 break-words">{attachmentError}</p>
+          <button type="button" onClick={() => setAttachmentError(null)} className="kana-focus min-h-8 shrink-0 rounded-full px-2"
+            aria-label={copy.composer.dismissError}>
+            ×
+          </button>
+        </div>
+      ) : null}
       <div className="kana-composer-body relative">
         <SlashCommandMenu
           suggestions={suggestions}
@@ -239,13 +268,26 @@ export function ChatComposer() {
           className={`kana-composer flex flex-col${multiline ? " is-multiline" : ""}${dictating ? " is-dictating" : ""}`}
           style={{ "--kana-composer-collapse-delay": `${collapseDelaySeconds}s` } as CSSProperties}
         >
-          {files.length ? <ul aria-label={copy.composer.attachments} className="flex max-h-24 flex-wrap gap-1.5 overflow-y-auto py-1">
-            {files.map((file, index) => <li key={`${file.name}-${index}`} className="flex max-w-full items-center gap-1 rounded-full bg-white/16 pl-3 text-[11px] font-bold">
-              <span className="truncate" title={file.name}>{file.name}</span>
-              <span className="shrink-0 opacity-70">{Math.ceil(file.size / 1024)} KB</span>
-              <button type="button" className="kana-focus size-8 shrink-0 rounded-full hover:bg-white/16" disabled={submitting}
-                aria-label={copy.composer.remove(file.name)} onClick={() => setFiles(files.filter((_, selected) => selected !== index))}>×</button>
-            </li>)}
+          {files.length ? <ul aria-label={copy.composer.attachments} className="flex max-h-28 flex-wrap items-end gap-1.5 overflow-y-auto py-1">
+            {files.map((file, index) => {
+              const preview = imagePreviews[index];
+              if (preview) {
+                return (
+                  <li key={`${file.name}-${index}`} className="kana-composer-image">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- a local object URL, not a Next image asset */}
+                    <img src={preview.url} alt={file.name} title={file.name} draggable={false} />
+                    <button type="button" className="kana-focus" disabled={submitting}
+                      aria-label={copy.composer.remove(file.name)} onClick={() => removeFile(index)}>×</button>
+                  </li>
+                );
+              }
+              return <li key={`${file.name}-${index}`} className="flex max-w-full items-center gap-1 rounded-full bg-white/16 pl-3 text-[11px] font-bold">
+                <span className="truncate" title={file.name}>{file.name}</span>
+                <span className="shrink-0 opacity-70">{Math.ceil(file.size / 1024)} KB</span>
+                <button type="button" className="kana-focus size-8 shrink-0 rounded-full hover:bg-white/16" disabled={submitting}
+                  aria-label={copy.composer.remove(file.name)} onClick={() => removeFile(index)}>×</button>
+              </li>;
+            })}
           </ul> : null}
           <textarea
             id="kana-message"
@@ -324,9 +366,11 @@ export function ChatComposer() {
                 const selected = [...files, ...Array.from(event.target.files ?? [])];
                 event.target.value = "";
                 if (selected.length > MAX_ATTACHMENTS || selected.some((file) => !file.size || file.size > MAX_ATTACHMENT_BYTES) || selected.reduce((sum, file) => sum + file.size, 0) > MAX_ATTACHMENT_TOTAL_BYTES) {
-                  setNotice(copy.composer.attachmentLimits(MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES / MIB, MAX_ATTACHMENT_TOTAL_BYTES / MIB));
+                  setNotice("");
+                  setAttachmentError(copy.composer.attachmentLimits(MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES / MIB, MAX_ATTACHMENT_TOTAL_BYTES / MIB));
                   return;
                 }
+                setAttachmentError(null);
                 setFiles(selected);
                 setNotice("");
                 inputRef.current?.focus();

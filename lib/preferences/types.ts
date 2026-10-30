@@ -69,6 +69,11 @@ export type KanaPreferences = {
    * focus, attachments, and dictation are gone, in seconds (0..600).
    */
   composerCollapseDelaySeconds: number;
+  /**
+   * Desktop avatar-mode chat panel width in pixels; 0 follows the standard
+   * width. The panel clamps it to the current viewport.
+   */
+  chatPanelWidth: number;
   /** Zone and order of the desktop header widgets. */
   hostWidgetLayout: HostWidgetLayout;
   stageBackground: StageBackground;

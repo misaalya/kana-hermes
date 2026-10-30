@@ -208,10 +208,10 @@ Secara bawaan Kana memakai Hermes di mesinnya sendiri. Tambahkan blok `remote` u
 | `remote.auth.username` | wajib | Username untuk provider `basic` dashboard Hermes. |
 | `remote.auth.password` | kosong | Password yang tersimpan di berkas khusus pemilik. Tepat satu dari `password` dan `passwordEnv` wajib diisi. |
 | `remote.auth.passwordEnv` | kosong | Nama variabel lingkungan khusus yang menyimpan password. `KANA_*` dan token dashboard Hermes ditolak. |
-| `remote.wake.machineId` | kosong | ID mesin Instabox untuk tombol bangunkan opsional. |
-| `remote.wake.executable` | `instabox` di `PATH` | Path absolut CLI Instabox; nama berkasnya harus `instabox`. |
-| `remote.wake.timeoutSeconds` | `120` | Total tunggu untuk mesin dan kesehatan Hermes, 10–600 detik. |
-| `remote.wake.env` | kosong | Nama variabel lingkungan tambahan untuk CLI Instabox, maksimal 32; kredensial Kana dan Hermes ditolak. |
+| `remote.instabox.machineId` | kosong | ID mesin Instabox untuk tombol bangunkan opsional. |
+| `remote.instabox.executable` | `instabox` di `PATH` | Path absolut CLI Instabox; nama berkasnya harus `instabox`. |
+| `remote.instabox.timeoutSeconds` | `120` | Total tunggu untuk mesin dan kesehatan Hermes, 10–600 detik. |
+| `remote.instabox.env` | kosong | Nama variabel lingkungan tambahan untuk CLI Instabox, maksimal 32; kredensial Kana dan Hermes ditolak. |
 
 ```json
 {
@@ -223,7 +223,7 @@ Secara bawaan Kana memakai Hermes di mesinnya sendiri. Tambahkan blok `remote` u
         "username": "misa",
         "passwordEnv": "HERMES_REMOTE_PASSWORD"
       },
-      "wake": { "machineId": "m_xxxxxxxx", "timeoutSeconds": 120 }
+      "instabox": { "machineId": "m_xxxxxxxx", "timeoutSeconds": 120 }
     }
   }
 }
@@ -237,7 +237,7 @@ Balasan remote dapat menyebut `MEDIA:/path`. Path itu milik mesin remote, sehing
 
 #### Bangunkan Instabox
 
-Apabila gateway remote adalah mesin Instabox yang berhenti saat menganggur, atur `remote.wake`. Layar koneksi kemudian menampilkan **Bangunkan Hermes**: Kana menjalankan `instabox resume <machineId>`, lalu `instabox start <machineId>` bila sandbox berhenti, dan memeriksa kesehatan sampai menjawab. CLI harus terpasang dan sudah login di mesin yang menjalankan Kana. CLI berjalan dari home akun layanan dengan allowlist environment kecil; tambahkan variabel token yang dibutuhkan CLI ke `remote.wake.env`. Kana tidak membangunkan mesin secara otomatis, menjalankan satu wake dalam satu waktu, dan menunggu 15 detik sebelum wake berikutnya. Membangunkan mesin tidak menjalankan `hermes serve`; jalankan sebagai service di mesin remote agar health menjawab setelah resume. Saat mesin tidak terjangkau, layar menampilkan **Hermes remote tidak terjangkau** dan menjadikan **Bangunkan Hermes** tindakan utama; selama permintaan berjalan tampil **Membangunkan Instabox**, dan bila wake berhasil tetapi Kana tetap tidak bisa terhubung, layar menunjuk kredensial dashboard remote.
+Build lama menamai blok ini `wake`; ganti namanya menjadi `instabox`, karena blok ini mengatur mesin Instabox. Apabila gateway remote adalah mesin Instabox yang berhenti saat menganggur, atur `remote.instabox`. Layar koneksi kemudian menampilkan **Bangunkan Hermes**: Kana menjalankan `instabox resume <machineId>`, lalu `instabox start <machineId>` bila sandbox berhenti, dan memeriksa kesehatan sampai menjawab. CLI harus terpasang dan sudah login di mesin yang menjalankan Kana. CLI berjalan dari home akun layanan dengan allowlist environment kecil; tambahkan variabel token yang dibutuhkan CLI ke `remote.instabox.env`. Kana tidak membangunkan mesin secara otomatis, menjalankan satu wake dalam satu waktu, dan menunggu 15 detik sebelum wake berikutnya. Membangunkan mesin tidak menjalankan `hermes serve`; jalankan sebagai service di mesin remote agar health menjawab setelah resume. Saat mesin tidak terjangkau, layar menampilkan **Hermes remote tidak terjangkau** dan menjadikan **Bangunkan Hermes** tindakan utama; selama permintaan berjalan tampil **Membangunkan Instabox**, dan bila wake berhasil tetapi Kana tetap tidak bisa terhubung, layar menunjuk kredensial dashboard remote.
 
 ## Guardrail prompt {#guardrail}
 

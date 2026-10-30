@@ -4,6 +4,27 @@
 
 ### Changed
 
+- The Instabox block in `config.json` is now `hermes.remote.instabox` (was
+  `hermes.remote.wake`). The old `wake` key is rejected with a rename error
+  instead of being silently ignored.
+- In avatar mode, the chat dock can be widened by dragging its left frame, or
+  with ArrowLeft/ArrowRight and Home/End when the divider has focus. The
+  standard responsive width is the minimum, and the settled maximum is 70% of
+  the screen. Dragging past it stretches the panel up to 90%; releasing springs
+  it back to 70% over a 280ms width transition. Holding the drag at the 90%
+  hard stop for 500ms enters focus mode and stores `avatarVisible: false`. The
+  drag edge stays invisible on hover; only keyboard focus shows the ring. The drag paints its width once
+  per animation frame from the DOM instead of re-rendering React, so dragging
+  no longer stutters. The settled width is remembered as a local preference.
+  The avatar recentres between the screen's left edge and the panel as the dock
+  grows. Past 900px the transcript keeps a centred focus-mode reading measure;
+  the composer stays full width.
+- Image attachments in the composer render as thumbnail cards with a remove
+  button that appears on hover (and stays visible on touch); other files keep
+  their chips. A rejected file selection puts the
+  file limits in the red error banner above the composer instead of the small
+  status line, and selected text in the blue avatar-mode composer uses a dark
+  translucent wash so Ctrl+A and drag selection stay visible.
 - The transcript scrolls with the wheel anywhere inside the chat panel. In
   focus mode the reading measure is centred, so the side gutters and the
   composer area used to fall outside the scrolling element; those wheel events

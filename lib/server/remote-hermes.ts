@@ -170,7 +170,7 @@ export function remoteRuntimeStatus(
     websocketUrl: "",
     tokenAvailable: false,
     authAvailable,
-    wakeAvailable: Boolean(remote.wake),
+    wakeAvailable: Boolean(remote.instabox),
     message: authAvailable
       ? "Kana connects to the remote Hermes dashboard configured in config.json."
       : "The remote Hermes username or password is not available to the Kana server.",

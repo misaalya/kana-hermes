@@ -307,11 +307,16 @@ button,
 }
 
 .kana-avatar-content {
+  --kana-chat-default-width: clamp(390px, 34vw, 480px);
   transition: transform 300ms ease-out;
 }
 
+/* Keep the avatar's centre halfway between the screen's left edge and the
+   chat panel's left edge, whatever width the panel has been dragged to. The
+   dock measures itself into --kana-chat-panel-width; the 1rem is its right
+   inset. */
 .kana-avatar-viewport[data-chat-open="true"] .kana-avatar-content {
-  transform: translateX(max(-17.5vw, -255px));
+  transform: translateX(calc((var(--kana-chat-panel-width, var(--kana-chat-default-width)) + 1rem) / -2));
 }
 
 /* Switching between the avatar workspace and focus mode cross-fades instead of
@@ -846,11 +851,61 @@ details[open] > .kana-plus-summary::before {
 }
 
 .kana-chat-dock {
+  /* The standard width is also the floor; a stored drag can grow the dock up
+     to a viewport-safe ceiling. */
+  --kana-chat-min: clamp(390px, 34vw, 480px);
+  /* The settled ceiling; a drag may overshoot it and spring back. */
+  --kana-chat-max: 70vw;
   transition: transform 300ms ease-out, opacity 250ms ease;
+}
+
+@media (min-width: 1024px) {
+  .kana-chat-dock:not(.is-sole) {
+    width: clamp(var(--kana-chat-min), var(--kana-chat-width, var(--kana-chat-min)), var(--kana-chat-max));
+  }
+
+  /* While the handle is held, the panel may follow the pointer past the
+     settled maximum, up to 90% of the screen. */
+  .kana-chat-dock.is-resizing:not(.is-sole) {
+    width: clamp(var(--kana-chat-min), var(--kana-chat-width, var(--kana-chat-min)), 90vw);
+  }
+
+  /* A very wide avatar dock keeps the reply column readable with the same
+     measure focus mode uses. The composer stays full width. */
+  .kana-chat-dock[data-wide="true"]:not(.is-sole) {
+    --kana-chat-measure: clamp(760px, 66vw, 900px);
+  }
+
+  .kana-chat-dock[data-wide="true"]:not(.is-sole) .kana-chat-scroll {
+    width: 100%;
+    max-width: calc(var(--kana-chat-measure) + 3rem);
+    margin-inline: auto;
+    gap: 1.25rem;
+    padding: 1.5rem;
+  }
 }
 
 .kana-chat-dock.is-closed {
   transform: translateX(calc(100% - 2px));
+}
+
+/* The drag handle straddles the dock's left frame. It sits inside the dock so
+   it travels with the panel; its accent line appears only on hover, focus, or
+   while dragging. */
+.kana-chat-resize {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 30;
+  width: 10px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.kana-chat-dock.is-resizing {
+  cursor: ew-resize;
+  user-select: none;
 }
 
 /* With the avatar switched off desktop becomes a two-surface workspace: a
@@ -985,6 +1040,72 @@ details[open] > .kana-plus-summary::before {
   font-family: var(--kana-font);
   font-weight: 700;
   color: #ffffff;
+}
+
+/* The avatar-mode composer is a blue band, where the page's blue selection
+   wash disappears. A deep translucent selection keeps the white text read. */
+.kana-chat-dock:not(.is-sole) .kana-composer textarea::selection {
+  background: color-mix(in srgb, #06131d 55%, transparent);
+  color: #ffffff;
+}
+
+/* Image attachments are thumbnails, not file pills. */
+.kana-composer-image {
+  position: relative;
+  width: 9rem;
+  height: 5rem;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border-radius: 14px;
+  background: var(--chat-depth);
+}
+
+.kana-composer-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.kana-composer-image button {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  display: grid;
+  width: 1.5rem;
+  height: 1.5rem;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #ffffff;
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 150ms ease, background 150ms ease;
+}
+
+@media (hover: hover) {
+  .kana-composer-image:hover button,
+  .kana-composer-image button:focus-visible {
+    opacity: 1;
+  }
+}
+
+/* A touch screen has no hover: keep the remove action available. */
+@media (hover: none) {
+  .kana-composer-image button {
+    opacity: 1;
+  }
+}
+
+.kana-composer-image button:hover {
+  background: rgba(0, 0, 0, 0.82);
+}
+
+.kana-composer-image button:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: -3px;
 }
 
 /* An empty composer's hint is one line even in a narrow bar: wrapping it

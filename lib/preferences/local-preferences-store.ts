@@ -110,6 +110,13 @@ function normalizeComposerCollapseDelay(value: unknown): number {
   );
 }
 
+/** 0 follows the standard viewport width; a stored drag is a positive px. */
+function normalizeChatPanelWidth(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return 0;
+  // Generous storage bound; the dock clamps to 80vw for the current screen.
+  return Math.min(4096, Math.round(value));
+}
+
 // Preferences hold presentation choices only. The Hermes endpoint and session
 // token are deliberately absent: the browser reaches Hermes through the Kana
 // server relay and never stores connection credentials.
@@ -149,6 +156,7 @@ export const DEFAULT_PREFERENCES: KanaPreferences = {
   avatarVisible: true,
   agentModelDefaults: {},
   composerCollapseDelaySeconds: DEFAULT_COMPOSER_COLLAPSE_DELAY_SECONDS,
+  chatPanelWidth: 0,
   hostWidgetLayout: defaultHostWidgetLayout(),
   stageBackground: "plain",
   hermes: {
@@ -206,6 +214,7 @@ export function normalizeKanaPreferences(
     composerCollapseDelaySeconds: normalizeComposerCollapseDelay(
       preferences.composerCollapseDelaySeconds,
     ),
+    chatPanelWidth: normalizeChatPanelWidth(preferences.chatPanelWidth),
     hostWidgetLayout: normalizeHostWidgetLayout(preferences.hostWidgetLayout),
     stageBackground,
     customBackgroundId,

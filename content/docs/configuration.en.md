@@ -208,10 +208,10 @@ By default Kana uses a Hermes on its own machine. Add a `remote` block to connec
 | `remote.auth.username` | required | Username for Hermes's dashboard `basic` provider. |
 | `remote.auth.password` | none | Password stored in the owner-only file. Exactly one of `password` and `passwordEnv` is required. |
 | `remote.auth.passwordEnv` | none | Name of a dedicated environment variable holding the password. `KANA_*` and the Hermes dashboard token are refused. |
-| `remote.wake.machineId` | none | Instabox machine id for the optional wake button. |
-| `remote.wake.executable` | `instabox` on `PATH` | Absolute path to the Instabox CLI; the file name must be `instabox`. |
-| `remote.wake.timeoutSeconds` | `120` | Total wait for the VM and Hermes health, 10–600 seconds. |
-| `remote.wake.env` | none | Extra environment variable names for the Instabox CLI, at most 32; Kana and Hermes credentials are refused. |
+| `remote.instabox.machineId` | none | Instabox machine id for the optional wake button. |
+| `remote.instabox.executable` | `instabox` on `PATH` | Absolute path to the Instabox CLI; the file name must be `instabox`. |
+| `remote.instabox.timeoutSeconds` | `120` | Total wait for the VM and Hermes health, 10–600 seconds. |
+| `remote.instabox.env` | none | Extra environment variable names for the Instabox CLI, at most 32; Kana and Hermes credentials are refused. |
 
 ```json
 {
@@ -223,7 +223,7 @@ By default Kana uses a Hermes on its own machine. Add a `remote` block to connec
         "username": "misa",
         "passwordEnv": "HERMES_REMOTE_PASSWORD"
       },
-      "wake": { "machineId": "m_xxxxxxxx", "timeoutSeconds": 120 }
+      "instabox": { "machineId": "m_xxxxxxxx", "timeoutSeconds": 120 }
     }
   }
 }
@@ -237,7 +237,7 @@ A remote reply can still mention `MEDIA:/path`. That path belongs to the remote 
 
 #### Instabox wake
 
-When the remote gateway is an Instabox VM that pauses while idle, set `remote.wake`. The connection screen then offers **Wake Hermes**: Kana runs `instabox resume <machineId>`, then `instabox start <machineId>` if the sandbox is stopped, and polls health until it answers. The CLI must be installed and logged in on the machine that runs Kana. It runs from the service account's home with a small environment allowlist; add any token variable the CLI needs to `remote.wake.env`. Kana does not wake the VM automatically, runs one wake at a time, and waits 15 seconds before another. Waking the VM does not start `hermes serve`; run that as a service on the VM so health can answer after a resume. While the VM is unreachable, the screen says **Remote Hermes is unreachable** and makes **Wake Hermes** the main action; it shows **Waking Instabox** while the request runs, and if the wake succeeds but Kana still cannot connect it points at the remote dashboard credentials.
+Earlier builds named this block `wake`; rename it to `instabox`, because the block configures an Instabox machine. When the remote gateway is an Instabox VM that pauses while idle, set `remote.instabox`. The connection screen then offers **Wake Hermes**: Kana runs `instabox resume <machineId>`, then `instabox start <machineId>` if the sandbox is stopped, and polls health until it answers. The CLI must be installed and logged in on the machine that runs Kana. It runs from the service account's home with a small environment allowlist; add any token variable the CLI needs to `remote.instabox.env`. Kana does not wake the VM automatically, runs one wake at a time, and waits 15 seconds before another. Waking the VM does not start `hermes serve`; run that as a service on the VM so health can answer after a resume. While the VM is unreachable, the screen says **Remote Hermes is unreachable** and makes **Wake Hermes** the main action; it shows **Waking Instabox** while the request runs, and if the wake succeeds but Kana still cannot connect it points at the remote dashboard credentials.
 
 ## Prompt guardrail {#guardrail}
 

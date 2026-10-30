@@ -63,7 +63,7 @@ before(async () => {
         remote: {
           url: `ws://127.0.0.1:${port}`,
           auth: { mode: "password", username: "test", password: "test" },
-          wake: {
+          instabox: {
             machineId: "m_test",
             executable,
             timeoutSeconds: 10,

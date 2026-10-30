@@ -598,7 +598,8 @@ test.beforeEach(async ({ page }) => {
   });
   hermes = await installFakeHermes(page);
   await page.goto("/");
-  await expect(page.getByRole("textbox", { name: "Message Kana" })).toBeVisible();
+  // The first load after an edit waits for the dev server to compile.
+  await expect(page.getByRole("textbox", { name: "Message Kana" })).toBeVisible({ timeout: 30_000 });
 });
 
 test("shows a Hermes clarification request and answers it", async ({ page }) => {
@@ -850,6 +851,34 @@ test("copies a bubble's text, and a reply's words rather than its hidden file li
 
   await sentCopy.click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("Keep this prompt");
+});
+
+test("previews image attachments and puts the file limit in the red composer error", async ({ page }) => {
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
+  const fileInput = page.locator('input[type="file"]');
+  const png = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lYQ5WQAAAABJRU5ErkJggg==",
+    "base64",
+  );
+  await fileInput.setInputFiles({ name: "screen.png", mimeType: "image/png", buffer: png });
+  const preview = page.locator(".kana-composer-image img");
+  await expect(preview).toBeVisible();
+  await expect(preview).toHaveAttribute("src", /^blob:/);
+
+  await composer.fill("Select this text");
+  await composer.press("Control+A");
+  await page.screenshot({ path: `test-results/composer-image-${test.info().project.name}.png` });
+
+  const sixFiles = Array.from({ length: 6 }, (_, index) => ({
+    name: `file-${index}.txt`,
+    mimeType: "text/plain",
+    buffer: Buffer.from("x"),
+  }));
+  await fileInput.setInputFiles(sixFiles);
+  await expect(
+    page.getByRole("alert").filter({ hasText: "Up to 5 non-empty files" }),
+  ).toBeVisible();
+  await page.screenshot({ path: `test-results/composer-attachment-error-${test.info().project.name}.png` });
 });
 
 test("keeps the avatar chat tray blue and gives focus mode a plain reading column", async ({
@@ -1348,6 +1377,122 @@ test("renders a fenced reply as a copyable code card", async ({ page, context })
   await expect(card.getByRole("button", { name: "Code copied" })).toBeVisible();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("<p>hello</p>");
   await page.screenshot({ path: `test-results/code-card-${test.info().project.name}.png` });
+});
+
+test("resizes the avatar-mode chat panel and remembers the width", async ({ page }) => {
+  test.setTimeout(60_000);
+  // Wide enough to exercise the centred reading measure at the 70% ceiling.
+  await page.setViewportSize({ width: 1600, height: 900 });
+  const dock = page.locator(".kana-chat-dock");
+  const handle = page.locator(".kana-chat-resize");
+  await expect(handle).toBeVisible();
+  const initial = (await dock.boundingBox())?.width ?? 0;
+  expect(initial).toBeGreaterThan(390);
+
+  // Drag the left frame wider. A first attempt can land before React
+  // attaches the pointer handler on a freshly hydrated page, so retry.
+  let widened = initial;
+  for (let attempt = 0; attempt < 3 && widened <= initial + 100; attempt += 1) {
+    const grip = await handle.boundingBox();
+    const y = (grip?.y ?? 0) + (grip?.height ?? 0) / 2;
+    const startX = (grip?.x ?? 0) + 5;
+    await page.mouse.move(startX, y);
+    await page.mouse.down();
+    await page.mouse.move(startX - 140, y, { steps: 6 });
+    await page.mouse.up();
+    await page.waitForTimeout(120);
+    widened = (await dock.boundingBox())?.width ?? 0;
+  }
+  expect(widened).toBeGreaterThan(initial + 100);
+  expect(widened).toBeLessThanOrEqual(1121);
+  await page.screenshot({ path: `test-results/chat-resize-${test.info().project.name}.png` });
+  await expect.poll(() => page.evaluate(() => {
+    const raw = localStorage.getItem("kana.preferences.v6");
+    return raw ? (JSON.parse(raw) as { chatPanelWidth?: number }).chatPanelWidth ?? 0 : 0;
+  })).toBeGreaterThan(0);
+
+  // The stored width survives a reload.
+  await page.reload();
+  await expect(page.locator(".kana-chat-resize")).toBeVisible();
+  await expect.poll(async () => (await dock.boundingBox())?.width ?? 0).toBeGreaterThan(initial + 100);
+
+  // End and Home are the viewport-safe maximum and the standard minimum.
+  await page.locator(".kana-chat-resize").focus();
+  await page.keyboard.press("End");
+  // The width transition must settle before the maximum is measured.
+  await expect.poll(async () => (await dock.boundingBox())?.width ?? 0).toBeGreaterThan(1100);
+  const maximum = (await dock.boundingBox())?.width ?? 0;
+  expect(maximum).toBeLessThanOrEqual(1121);
+
+  // Holding past the ceiling stretches the panel; releasing springs it back
+  // to 70% instead of keeping the oversized width.
+  const overGrip = await page.locator(".kana-chat-resize").boundingBox();
+  const overY = (overGrip?.y ?? 0) + (overGrip?.height ?? 0) / 2;
+  const overX = (overGrip?.x ?? 0) + 5;
+  await page.mouse.move(overX, overY);
+  await page.mouse.down();
+  await page.mouse.move(overX - 180, overY, { steps: 6 });
+  await page.waitForTimeout(80);
+  expect((await dock.boundingBox())?.width ?? 0).toBeGreaterThan(maximum + 30);
+  await page.mouse.up();
+  await expect.poll(async () => (await dock.boundingBox())?.width ?? 0).toBeLessThanOrEqual(maximum + 1);
+  expect((await dock.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(maximum - 1);
+
+  // The avatar sits halfway between the screen's left edge and the dock.
+  await expect.poll(async () => {
+    const panel = await dock.boundingBox();
+    const center = await page.locator(".kana-avatar-content").evaluate((node) => {
+      const rect = node.getBoundingClientRect();
+      return rect.left + rect.width / 2;
+    });
+    return Math.abs(center - (panel?.x ?? 0) / 2);
+  }).toBeLessThan(2);
+  // The wide dock centres a focus-mode reading measure; the composer keeps
+  // the panel's full width.
+  const scroll = page.locator(".kana-chat-scroll");
+  await expect.poll(async () => {
+    const scrollBox = await scroll.boundingBox();
+    const dockBox = await dock.boundingBox();
+    return (dockBox?.width ?? 0) - (scrollBox?.width ?? 0);
+  }).toBeGreaterThan(100);
+  const wideScroll = await scroll.boundingBox();
+  const wideDock = await dock.boundingBox();
+  const wideComposer = await page.locator(".kana-composer-shell").boundingBox();
+  expect(wideScroll && wideDock && wideComposer).toBeTruthy();
+  const scrollCenter = (wideScroll?.x ?? 0) + (wideScroll?.width ?? 0) / 2;
+  const dockCenter = (wideDock?.x ?? 0) + (wideDock?.width ?? 0) / 2;
+  expect(Math.abs(scrollCenter - dockCenter)).toBeLessThan(2);
+  expect(wideComposer?.width ?? 0).toBeGreaterThan((wideDock?.width ?? 0) * 0.9);
+  await page.screenshot({ path: `test-results/chat-wide-${test.info().project.name}.png` });
+  await page.keyboard.press("Home");
+  await expect.poll(async () => (await dock.boundingBox())?.width ?? 0).toBeLessThanOrEqual(initial + 1);
+  expect((await dock.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(initial - 1);
+});
+
+test("holding the drag at the hard stop enters focus mode", async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const dock = page.locator(".kana-chat-dock");
+  const handle = page.locator(".kana-chat-resize");
+  await expect(handle).toBeVisible();
+  const grip = await handle.boundingBox();
+  const y = (grip?.y ?? 0) + (grip?.height ?? 0) / 2;
+  const startX = (grip?.x ?? 0) + 5;
+  await page.mouse.move(startX, y);
+  await page.mouse.down();
+  await page.mouse.move(10, y, { steps: 8 });
+  await page.waitForTimeout(700);
+
+  await expect(dock).toHaveClass(/is-sole/);
+  await expect(page.locator(".kana-chat-resize")).toHaveCount(0);
+  const avatarVisible = await page.evaluate(() => {
+    const raw = localStorage.getItem("kana.preferences.v6");
+    return raw ? (JSON.parse(raw) as { avatarVisible?: boolean }).avatarVisible : undefined;
+  });
+  expect(avatarVisible).toBe(false);
+  await page.mouse.up();
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: `test-results/chat-auto-focus-${test.info().project.name}.png` });
 });
 
 test("scrolls the focus transcript from the panel's side gutter", async ({ page }) => {

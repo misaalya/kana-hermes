@@ -136,7 +136,7 @@ host must be able to reach it. Conversation transcripts stay on that Hermes;
 Kana's data root still holds authentication, SQLite state, preferences, and the
 activity log.
 
-An Instabox VM can pause while idle. When `hermes.remote.wake` is configured,
+An Instabox VM can pause while idle. When `hermes.remote.instabox` is configured,
 Kana's connection screen can run the installed `instabox` CLI on the Kana host,
 then poll health. The CLI must be installed and logged in there; Kana does not
 run a shell and accepts no wake input from the browser. `configure.md` has the

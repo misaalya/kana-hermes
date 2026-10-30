@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { homedir } from "node:os";
 import { remoteHealthUrl, remoteHermesConnection } from "./remote-hermes";
-import type { KanaInstaboxWakeConfig, KanaRemoteHermesConfig } from "./user-config";
+import type { KanaInstaboxConfig, KanaRemoteHermesConfig } from "./user-config";
 
 // Instabox pauses an idle VM, and the only supported way to wake it is the
 // operator-installed `instabox` CLI. Kana runs exactly two fixed subcommands
@@ -158,42 +158,42 @@ async function waitUntilHealthy(url: string, deadline: number): Promise<boolean>
   return false;
 }
 
-function wakeConfig(remote: KanaRemoteHermesConfig): KanaInstaboxWakeConfig {
-  if (!remote.wake) {
+function wakeConfig(remote: KanaRemoteHermesConfig): KanaInstaboxConfig {
+  if (!remote.instabox) {
     throw new InstaboxWakeError(
-      "No Instabox wake is configured for the remote Hermes gateway.",
+      "No Instabox machine is configured for the remote Hermes gateway.",
       "unavailable",
       400,
     );
   }
-  return remote.wake;
+  return remote.instabox;
 }
 
 async function runWake(
   remote: KanaRemoteHermesConfig,
-  wake: KanaInstaboxWakeConfig,
+  instabox: KanaInstaboxConfig,
   startedAt: number,
   deadline: number,
 ): Promise<InstaboxWakeResult> {
   const healthUrl = remoteHealthUrl(remote);
-  const executable = wake.executable ?? "instabox";
+  const executable = instabox.executable ?? "instabox";
   const resumeBudget = Math.min(COMMAND_TIMEOUT_MS, Math.max(1, deadline - Date.now()));
   // An idle Instabox is paused; `resume` restores it with its processes. A
   // stopped sandbox needs `start`. The CLI has no `wake` subcommand.
   const resumeResult = await runCommand(
     executable,
-    ["resume", wake.machineId],
+    ["resume", instabox.machineId],
     resumeBudget,
-    wake.env ?? [],
+    instabox.env ?? [],
   );
   let reachable = resumeResult !== "unavailable";
   if (resumeResult !== "ok" && Date.now() < deadline) {
     const startBudget = Math.min(COMMAND_TIMEOUT_MS, Math.max(1, deadline - Date.now()));
     const startResult = await runCommand(
       executable,
-      ["start", wake.machineId],
+      ["start", instabox.machineId],
       startBudget,
-      wake.env ?? [],
+      instabox.env ?? [],
     );
     reachable ||= startResult !== "unavailable";
   }
@@ -217,7 +217,7 @@ export async function wakeRemoteHermes(): Promise<InstaboxWakeResult> {
       400,
     );
   }
-  const wake = wakeConfig(connection.config);
+  const instabox = wakeConfig(connection.config);
   const healthUrl = remoteHealthUrl(connection.config);
   if (await healthy(healthUrl)) {
     return { alreadyUp: true, woke: true, elapsedMs: 0 };
@@ -234,8 +234,8 @@ export async function wakeRemoteHermes(): Promise<InstaboxWakeResult> {
   }
 
   const startedAt = Date.now();
-  const deadline = startedAt + (wake.timeoutSeconds ?? 120) * 1_000;
-  const running = runWake(connection.config, wake, startedAt, deadline).then(
+  const deadline = startedAt + (instabox.timeoutSeconds ?? 120) * 1_000;
+  const running = runWake(connection.config, instabox, startedAt, deadline).then(
     (result) => {
       if (!result.woke) {
         throw new InstaboxWakeError(

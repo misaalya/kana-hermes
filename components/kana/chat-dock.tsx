@@ -1,9 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import type { KanaMessage } from "@/lib/conversation/types";
 import { selectActiveConversation } from "@/lib/store/conversation-store";
 import { getCopy } from "@/lib/ui/copy";
+import { fadeAvatarModeChange } from "./avatar-mode-transition";
 import { ChatComposer } from "./chat-composer";
 import { FocusRail } from "./focus-rail";
 import { ChevronLeftIcon, ChevronRightIcon } from "./icons";
@@ -12,6 +21,20 @@ import { LiveChatFeed } from "./live-chat-feed";
 import { useChatVisible } from "./workspace-stage";
 
 const NO_MESSAGES: KanaMessage[] = [];
+const CHAT_MIN_WIDTH = 390;
+/** The settled maximum is 70% of the screen; a drag may overshoot to 90%. */
+const CHAT_MAX_SHARE = 0.7;
+const CHAT_DRAG_MAX_SHARE = 0.9;
+/** Past this width the transcript keeps a focus-mode reading measure. */
+const CHAT_WIDE_WIDTH = 900;
+/** Holding the frame at 90% for this long enters focus mode. */
+const CHAT_AUTO_FOCUS_HOLD_MS = 500;
+
+/** The same viewport bounds the CSS clamp uses for the dock. */
+function resizeBounds(): { min: number; max: number } {
+  const min = Math.min(Math.max(CHAT_MIN_WIDTH, window.innerWidth * 0.34), 480);
+  return { min, max: Math.max(min, window.innerWidth * CHAT_MAX_SHARE) };
+}
 
 function ChatFeed() {
   const workspace = useKanaWorkspace();
@@ -42,16 +65,233 @@ function ChatFeed() {
 
 export function ChatDock() {
   const workspace = useKanaWorkspace();
-  const locale = useKanaStore("preferences", (state) => state.preferences.uiLocale);
+  const preferences = useKanaStore("preferences", (state) => state.preferences);
+  const locale = preferences.uiLocale;
   const chatVisible = useChatVisible();
   const greeting = useKanaStore("workspace", (state) => state.greeting);
   // Without the avatar there is nothing left to hide; desktop adds the focus
   // rail beside the conversation.
-  const avatarVisible = useKanaStore("preferences", (state) => state.preferences.avatarVisible);
+  const avatarVisible = preferences.avatarVisible;
   const usesMobileChat = useKanaStore("workspace", (state) => state.usesMobileChat);
   const text = getCopy(locale).workspace;
   const showRail = !avatarVisible && !usesMobileChat;
   const panelRef = useRef<HTMLElement>(null);
+
+  // Avatar mode's dock can be dragged wider, up to a viewport-safe maximum.
+  const resizable = avatarVisible && !usesMobileChat;
+  // A drag is local until it settles, then the stored preference takes over.
+  const [draggedWidth, setDraggedWidth] = useState<number | null>(null);
+  const width = draggedWidth ?? (preferences.chatPanelWidth > 0 ? preferences.chatPanelWidth : null);
+  const widthRef = useRef<number | null>(preferences.chatPanelWidth > 0 ? preferences.chatPanelWidth : null);
+  const [resizing, setResizing] = useState(false);
+  const [wide, setWide] = useState(false);
+  const drag = useRef<{ startX: number; startWidth: number } | null>(null);
+  const dockRef = useRef<HTMLDivElement>(null);
+  const frame = useRef<number | null>(null);
+  const animation = useRef<Animation | null>(null);
+  const holdTimer = useRef<number | null>(null);
+  const saveSequence = useRef(0);
+
+  const clearHold = useCallback(() => {
+    if (holdTimer.current !== null) {
+      window.clearTimeout(holdTimer.current);
+      holdTimer.current = null;
+    }
+  }, []);
+
+  const enterAutoFocus = useCallback(() => {
+    if (!drag.current) return;
+    drag.current = null;
+    setResizing(false);
+    if (frame.current !== null) {
+      cancelAnimationFrame(frame.current);
+      frame.current = null;
+    }
+    animation.current?.cancel();
+    animation.current = null;
+    fadeAvatarModeChange(() => {
+      void workspace.actions.savePreferences({
+        ...workspace.stores.preferences.getState().preferences,
+        avatarVisible: false,
+      });
+    });
+  }, [workspace]);
+
+  const paintWidth = useCallback((value: number) => {
+    dockRef.current?.style.setProperty("--kana-chat-width", `${value}px`);
+  }, []);
+
+  /** Paint the settled width and ease the panel back from an oversized drag. */
+  const settleWidth = useCallback((value: number) => {
+    const dock = dockRef.current;
+    if (!dock) return;
+    const from = dock.getBoundingClientRect().width;
+    animation.current?.cancel();
+    animation.current = null;
+    paintWidth(value);
+    if (
+      Math.abs(from - value) < 0.5
+      || window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return;
+    }
+    animation.current = dock.animate(
+      [{ width: `${from}px` }, { width: `${value}px` }],
+      { duration: 280, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
+    );
+    animation.current.addEventListener("finish", () => { animation.current = null; }, { once: true });
+  }, [paintWidth]);
+
+  // The stored width is painted before the browser's first frame; the drag
+  // and the snap-back then drive the same DOM variable without React renders.
+  useLayoutEffect(() => {
+    const dock = dockRef.current;
+    if (!dock) return;
+    const stored = preferences.chatPanelWidth > 0 ? preferences.chatPanelWidth : null;
+    if (stored === null) dock.style.removeProperty("--kana-chat-width");
+    else dock.style.setProperty("--kana-chat-width", `${stored}px`);
+  }, [preferences.chatPanelWidth, preferences.avatarVisible]);
+
+  const commitWidth = useCallback(
+    (value: number) => {
+      const sequence = ++saveSequence.current;
+      widthRef.current = value;
+      setDraggedWidth(value);
+      void workspace.actions
+        .savePreferences({
+          ...workspace.stores.preferences.getState().preferences,
+          chatPanelWidth: Math.round(value),
+        })
+        .then(() => {
+          // The store now holds the same width; stop overriding it. A new
+          // drag started meanwhile keeps its own value.
+          if (saveSequence.current === sequence) setDraggedWidth(null);
+        })
+        .catch(() => undefined);
+    },
+    [workspace],
+  );
+
+  const startResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const dock = dockRef.current;
+    if (!resizable || event.button !== 0 || !dock) return;
+    clearHold();
+    if (frame.current !== null) {
+      cancelAnimationFrame(frame.current);
+      frame.current = null;
+    }
+    animation.current?.cancel();
+    animation.current = null;
+    const startWidth = dock.getBoundingClientRect().width;
+    drag.current = { startX: event.clientX, startWidth };
+    widthRef.current = startWidth;
+    setResizing(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  }, [clearHold, resizable]);
+
+  const moveResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const state = drag.current;
+    if (!state) return;
+    const { min, max } = resizeBounds();
+    const raw = state.startWidth + (state.startX - event.clientX);
+    // Past the settled maximum the panel keeps following the pointer, up to
+    // 90% of the screen; releasing springs it back to 70%. Below the minimum
+    // it stops.
+    const dragMax = window.innerWidth * CHAT_DRAG_MAX_SHARE;
+    const next = raw > max ? Math.min(raw, dragMax) : Math.max(min, raw);
+    widthRef.current = next;
+    // Holding the frame at the hard stop becomes a way into focus mode.
+    if (raw >= dragMax - 0.5) {
+      if (holdTimer.current === null) {
+        holdTimer.current = window.setTimeout(() => {
+          holdTimer.current = null;
+          enterAutoFocus();
+        }, CHAT_AUTO_FOCUS_HOLD_MS);
+      }
+    } else {
+      clearHold();
+    }
+    // Paint the drag from the DOM: one rAF per frame, no React render.
+    if (frame.current === null) {
+      frame.current = requestAnimationFrame(() => {
+        frame.current = null;
+        if (widthRef.current !== null) paintWidth(widthRef.current);
+      });
+    }
+  }, [clearHold, enterAutoFocus, paintWidth]);
+
+  const endResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    clearHold();
+    if (!drag.current) return;
+    drag.current = null;
+    if (frame.current !== null) {
+      cancelAnimationFrame(frame.current);
+      frame.current = null;
+    }
+    setResizing(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    if (widthRef.current !== null) {
+      const { min, max } = resizeBounds();
+      const settled = Math.min(max, Math.max(min, widthRef.current));
+      settleWidth(settled);
+      commitWidth(settled);
+    }
+  }, [clearHold, commitWidth, settleWidth]);
+
+  const resizeWithKeyboard = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      const { min, max } = resizeBounds();
+      const current = dockRef.current?.getBoundingClientRect().width ?? widthRef.current ?? min;
+      const step = event.shiftKey ? 48 : 16;
+      const next =
+        event.key === "ArrowLeft"
+          ? current + step
+          : event.key === "ArrowRight"
+            ? current - step
+            : event.key === "Home"
+              ? min
+              : event.key === "End"
+                ? max
+                : null;
+      if (next === null) return;
+      event.preventDefault();
+      const clamped = Math.min(max, Math.max(min, next));
+      settleWidth(clamped);
+      commitWidth(clamped);
+    },
+    [commitWidth, settleWidth],
+  );
+
+  // The avatar centres itself between the screen's left edge and the panel's
+  // left edge, so it needs the panel's measured width, not its own guess.
+  useEffect(() => {
+    const dock = dockRef.current;
+    const host = dock?.parentElement;
+    if (!dock || !host) return;
+    const update = () => {
+      const measured = dock.getBoundingClientRect().width;
+      const nextWide = measured >= CHAT_WIDE_WIDTH;
+      host.style.setProperty("--kana-chat-panel-width", `${measured}px`);
+      setWide((current) => (current === nextWide ? current : nextWide));
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(dock);
+    return () => {
+      observer.disconnect();
+      host.style.removeProperty("--kana-chat-panel-width");
+      if (frame.current !== null) {
+        cancelAnimationFrame(frame.current);
+        frame.current = null;
+      }
+      animation.current?.cancel();
+      animation.current = null;
+      clearHold();
+    };
+  }, [clearHold]);
 
   // In focus mode the transcript is a centred reading measure inside a wide
   // panel. A wheel outside that measure (the side gutters, the composer) must
@@ -88,7 +328,29 @@ export function ChatDock() {
   return (
     <>
       {showRail ? <FocusRail /> : null}
-      <div className={`kana-chat-dock absolute bottom-4 right-4 top-[var(--kana-header-clear)] z-10 w-[min(34vw,480px)] min-w-[390px] transition-transform duration-300 ease-out max-lg:inset-x-0 max-lg:bottom-0 max-lg:top-[var(--kana-compact-band)] max-lg:w-full max-lg:min-w-0 ${chatVisible ? "" : "is-closed"} ${avatarVisible ? "" : "is-sole"} ${greeting ? "is-away" : ""}`}>
+      <div
+        ref={dockRef}
+        data-wide={wide ? "true" : "false"}
+        className={`kana-chat-dock absolute bottom-4 right-4 top-[var(--kana-header-clear)] z-10 w-[min(34vw,480px)] min-w-[390px] transition-transform duration-300 ease-out max-lg:inset-x-0 max-lg:bottom-0 max-lg:top-[var(--kana-compact-band)] max-lg:w-full max-lg:min-w-0 ${chatVisible ? "" : "is-closed"} ${avatarVisible ? "" : "is-sole"} ${greeting ? "is-away" : ""} ${resizing ? "is-resizing" : ""}`}
+      >
+      {resizable ? (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-controls="kana-chat-panel"
+          aria-label={text.resizeChat}
+          aria-valuemin={CHAT_MIN_WIDTH}
+          aria-valuemax={Math.round((typeof window === "undefined" ? 1920 : window.innerWidth) * CHAT_MAX_SHARE)}
+          aria-valuenow={Math.round(width ?? CHAT_MIN_WIDTH)}
+          tabIndex={0}
+          className="kana-chat-resize kana-focus max-lg:hidden"
+          onPointerDown={startResize}
+          onPointerMove={moveResize}
+          onPointerUp={endResize}
+          onPointerCancel={endResize}
+          onKeyDown={resizeWithKeyboard}
+        />
+      ) : null}
       <button
         type="button"
         className="kana-chat-toggle absolute -left-12 top-1/2 z-20 h-28 w-12 -translate-y-1/2 text-accent hover:text-accent-hover max-lg:hidden"

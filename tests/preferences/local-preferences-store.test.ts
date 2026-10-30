@@ -206,6 +206,20 @@ describe("LocalPreferencesStore", () => {
     assert.equal(store.load().composerCollapseDelaySeconds, 600);
   });
 
+  it("keeps a dragged chat panel width within bounds", () => {
+    const persistent = new MemoryStorage();
+    persistent.setItem("kana.preferences.v6", JSON.stringify({ uiLocale: "en" }));
+    assert.equal(new LocalPreferencesStore(persistent).load().chatPanelWidth, 0);
+
+    const store = new LocalPreferencesStore(persistent);
+    store.save({ ...DEFAULT_PREFERENCES, chatPanelWidth: 512 });
+    assert.equal(store.load().chatPanelWidth, 512);
+    store.save({ ...DEFAULT_PREFERENCES, chatPanelWidth: 9_999 });
+    assert.equal(store.load().chatPanelWidth, 4_096);
+    store.save({ ...DEFAULT_PREFERENCES, chatPanelWidth: -1 });
+    assert.equal(store.load().chatPanelWidth, 0);
+  });
+
   it("keeps a complete header host layout or falls back to the default", () => {
     const persistent = new MemoryStorage();
     persistent.setItem("kana.preferences.v6", JSON.stringify({ uiLocale: "en" }));

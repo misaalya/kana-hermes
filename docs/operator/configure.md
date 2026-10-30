@@ -85,7 +85,7 @@ ignored. Removing the block returns Kana to local discovery.
         "username": "misa",
         "passwordEnv": "HERMES_REMOTE_PASSWORD"
       },
-      "wake": {
+      "instabox": {
         "machineId": "m_xxxxxxxx",
         "executable": "/home/you/.local/bin/instabox",
         "timeoutSeconds": 120
@@ -102,11 +102,14 @@ ignored. Removing the block returns Kana to local discovery.
 | `hermes.remote.auth.username` | required | Username for Hermes's dashboard `basic` provider. |
 | `hermes.remote.auth.password` | none | Password stored in this owner-only file. Exactly one of `password` and `passwordEnv` is required. |
 | `hermes.remote.auth.passwordEnv` | none | Name of a dedicated environment variable holding the password; read by the server at connect time. Names starting with `KANA_` or `HERMES_DASHBOARD_SESSION_TOKEN` are refused. |
-| `hermes.remote.wake` | none | Optional Instabox wake, described below. |
-| `hermes.remote.wake.machineId` | required with `wake` | Instabox machine id; letters, digits, dots, dashes, and underscores only. |
-| `hermes.remote.wake.executable` | `instabox` on `PATH` | Absolute path to the Instabox CLI. Its file name must be `instabox`. |
-| `hermes.remote.wake.timeoutSeconds` | `120` | How long to wait for the VM and Hermes health, 10–600 seconds. |
-| `hermes.remote.wake.env` | none | Extra environment variable names passed to the Instabox CLI, at most 32. Kana's own variables and the Hermes dashboard token are refused. |
+| `hermes.remote.instabox` | none | Optional Instabox wake, described below. |
+| `hermes.remote.instabox.machineId` | required with `instabox` | Instabox machine id; letters, digits, dots, dashes, and underscores only. |
+| `hermes.remote.instabox.executable` | `instabox` on `PATH` | Absolute path to the Instabox CLI. Its file name must be `instabox`. |
+| `hermes.remote.instabox.timeoutSeconds` | `120` | How long to wait for the VM and Hermes health, 10–600 seconds. |
+| `hermes.remote.instabox.env` | none | Extra environment variable names passed to the Instabox CLI, at most 32. Kana's own variables and the Hermes dashboard token are refused. |
+
+The block was named `hermes.remote.wake` in earlier builds; Kana now rejects
+that key with a rename error instead of guessing.
 
 A non-loopback Hermes dashboard requires a login provider; configure its
 `basic` provider with `HERMES_DASHBOARD_BASIC_AUTH_USERNAME` and a password or
@@ -135,12 +138,12 @@ own disk, and offers no download for it.
 #### Instabox wake
 
 When the gateway is an Instabox VM that pauses while idle, set
-`hermes.remote.wake`. The connection screen then offers **Wake Hermes**. Kana
+`hermes.remote.instabox`. The connection screen then offers **Wake Hermes**. Kana
 runs exactly `instabox resume <machineId>` and, if that fails because the
 sandbox is stopped, `instabox start <machineId>` with no shell, then polls the
 gateway's `/api/health` until it answers or the timeout expires. It runs from
 the service account's home with a small environment allowlist; add names such
-as `INSTABOX_TOKEN` to `wake.env` if the CLI needs them. The route is
+as `INSTABOX_TOKEN` to `instabox.env` if the CLI needs them. The route is
 authenticated, accepts no input from the browser, runs one wake at a time, and
 refuses another for 15 seconds after one finishes. Kana never wakes a VM
 automatically and never returns the command's output.

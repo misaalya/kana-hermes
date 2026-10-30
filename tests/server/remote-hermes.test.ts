@@ -102,7 +102,7 @@ describe("remote Hermes transport values", () => {
       {
         ...remote,
         auth: { mode: "password", username: "private-user", password: "very-secret" },
-        wake: { machineId: "m_private_machine" },
+        instabox: { machineId: "m_private_machine" },
       },
       false,
     );

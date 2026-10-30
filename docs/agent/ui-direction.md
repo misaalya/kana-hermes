@@ -328,9 +328,19 @@ copy shows that snapshot in a selectable block instead of failing silently.
 
 The chat panel is the plain, square-cornered tray inside the blue `--chat-frame`
 border: no texture. With the avatar visible it keeps its original styling: a
-dock no wider than 480px, `--chat-depth` behind the transcript, `--chat-bubble`
-replies, and the blue composer band with white text, white model pill, and white
-Send disc. On a desktop, focus mode draws a 2 px frame instead of 4 px, so the
+responsive dock whose standard width is also its minimum (390–480px),
+`--chat-depth` behind the transcript, `--chat-bubble` replies, and the blue
+composer band with white text, white model pill, and white Send disc. The left
+frame is a drag handle: dragging (or ArrowLeft/ArrowRight, Home/End) widens the
+dock up to 70% of the screen. While the handle is held the panel may follow the
+pointer past that ceiling to 90%; releasing springs it back to 70% with the
+dock's width transition, while holding at that 90% hard stop for 500ms enters
+focus mode and stores `avatarVisible: false`. The drag paints `--kana-chat-width` from the DOM once
+per animation frame instead of re-rendering React, so it stays smooth. The
+chosen settled width is stored in the local preferences so the next visit opens
+at the same size. Past 900px the transcript keeps a centred focus-mode reading
+measure while the composer keeps the panel's full width. As the dock grows, the
+avatar recentres between the screen's left edge and the panel's left edge. On a desktop, focus mode draws a 2 px frame instead of 4 px, so the
 panel reads as one workspace rather than a phone edge; phones keep no frame.
 An empty conversation shows one large `--accent` kaomoji, `(๑ > ᴗ < ๑)`, whose
 eyes close to `•` for a blink now and then; the eye slots keep one width so the
@@ -352,11 +362,16 @@ width transition; focusing the model chooser or the microphone is not enough.
 Once all of those are gone the bar keeps its wide state for the configured
 delay before it narrows, and its hint stays with it until then. The delay is a
 tick-ruler slider in Settings → Experience: one tick per step, a Kana-blue fill,
-and a raised thumb, from Off to 2 minutes in 5-second steps (30 s by default;
+and a flat grip thumb, from Off to 2 minutes in 5-second steps (30 s by default;
 `composerCollapseDelaySeconds` still stores the number of seconds, so an older
 custom value keeps its own ruler up to the stored bound). A draft with a line
 break turns the bar into a rounded card, with the
-words on top and the controls on a row underneath. Phones keep the blue band and
+words on top and the controls on a row underneath. Image attachments appear as
+thumbnail cards above the words, with a borderless image and a remove button
+that appears on hover (always visible on touch); other files keep their chips. A rejected file selection reports the file limits in the red error
+banner above the composer, not in the small status line. In the blue
+avatar-mode composer selected text takes a dark translucent wash, because the
+page's blue selection disappears on that band. Phones keep the blue band and
 bubble in both states. The model chooser is a compact square popover above the
 pill on desktop and a bottom sheet on phones, with one searchable flat list:
 each row is the model over its provider, the model in use carries a check, and

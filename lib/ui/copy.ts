@@ -218,6 +218,7 @@ export type Copy = {
     scale: string;
     hideChat: string;
     showChat: string;
+    resizeChat: string;
     messagePlaceholder: string;
     messageAria: string;
     stop: string;
@@ -790,6 +791,7 @@ const id: Copy = {
     scale: "Scale",
     hideChat: "Sembunyikan chat",
     showChat: "Tampilkan chat",
+    resizeChat: "Ubah ukuran panel chat",
     messagePlaceholder: "Katakan sesuatu kepada Kana…",
     messageAria: "Pesan untuk Kana",
     stop: "Hentikan",
@@ -1413,6 +1415,7 @@ const en: Copy = {
     scale: "Scale",
     hideChat: "Hide chat",
     showChat: "Show chat",
+    resizeChat: "Resize chat panel",
     messagePlaceholder: "Say something to Kana…",
     messageAria: "Message Kana",
     stop: "Stop",
