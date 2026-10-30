@@ -1135,6 +1135,39 @@ details[open] > .kana-plus-summary::before {
   30% { transform: translateY(-5px); opacity: 0.85; }
 }
 
+/* While Hermes writes, the tip of the provisional reply fades from the text
+   color into the accent. The gradient spans the span's own width, so it sits
+   on the newest characters wherever they are; there is no cursor. */
+@supports ((background-clip: text) or (-webkit-background-clip: text)) {
+  .kana-streaming-tail {
+    background-image: linear-gradient(90deg, currentColor 0%, var(--accent) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+}
+
+/* The characters that arrived in the newest chunk hop into place; the rest
+   of the fading tail stays still. A relative offset (not a transform) keeps
+   an inline span wrapping exactly like the text around it. */
+.kana-streaming-new {
+  position: relative;
+  color: var(--accent);
+  -webkit-text-fill-color: var(--accent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .kana-streaming-new {
+    animation: kana-streaming-jump 220ms cubic-bezier(0.2, 0.9, 0.3, 1.15) both;
+  }
+}
+
+@keyframes kana-streaming-jump {
+  0% { top: 0.2em; opacity: 0.25; }
+  55% { top: -0.07em; opacity: 1; }
+  100% { top: 0; opacity: 1; }
+}
+
 .kana-message-user {
   border-color: transparent;
   background: var(--chat-bubble-user);
@@ -1232,6 +1265,50 @@ details[open] > .kana-plus-summary::before {
 .kana-markdown pre code {
   background: none;
   padding: 0;
+}
+
+/* A reply that carries a code card takes the whole transcript measure, so a
+   short sentence above the code never shrinks the card to the widest line. */
+.kana-chat-scroll > article[data-role="assistant"]:has(.kana-chat-code) {
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Chat code cards reuse the guide's dark code surface, tightened for a
+   bubble: a compact monospace label, a Copy action, and a hairline frame.
+   These rules undo the plain Markdown code card on the same element. */
+.kana-markdown .kana-chat-code {
+  border: 2px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  border-radius: 14px;
+}
+
+.kana-markdown .kana-chat-code figcaption {
+  border-bottom: 2px solid color-mix(in srgb, var(--ink) 10%, transparent);
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+}
+
+.kana-markdown .kana-chat-code figcaption > span:first-child {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.kana-markdown .kana-chat-code pre {
+  max-height: 22rem;
+  overflow: auto;
+  border-radius: 0;
+  background: none;
+  padding: 0.75rem 1rem;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.kana-markdown .kana-chat-code pre code {
+  border-radius: 0;
+  background: none;
+  padding: 0;
+  font-size: inherit;
 }
 
 .kana-markdown blockquote {
@@ -1674,12 +1751,18 @@ video.kana-media-preview {
   --surface-strong: #2b2b2b;
   --ink: #f4f4f4;
   --muted: #969696;
-  /* JSON colours (tokens from lib/presentation/json-highlight): keys in
-     Kana's blue. */
+  /* Code colours (tokens from lib/presentation/code-highlight): keys and
+     properties in Kana's blue, plus the usual string/number/literal set. */
   --code-key: #83c1e5;
   --code-string: #a9d18e;
   --code-number: #f0b27a;
   --code-literal: #d7a0e0;
+  --code-keyword: #c792ea;
+  --code-tag: #f07178;
+  --code-attribute: #ffcb6b;
+  --code-comment: #7f8c8d;
+  --code-variable: #89ddff;
+  --code-punctuation: #969696;
 }
 
 /* A character that draws nothing, or that reorders what is around it, shown
@@ -1715,6 +1798,48 @@ video.kana-media-preview {
 
 .kana-json-punctuation {
   color: var(--muted);
+}
+
+.kana-code-comment {
+  color: var(--code-comment);
+  font-style: italic;
+}
+
+.kana-code-keyword {
+  color: var(--code-keyword);
+  font-weight: 600;
+}
+
+.kana-code-tag {
+  color: var(--code-tag);
+}
+
+.kana-code-attribute {
+  color: var(--code-attribute);
+}
+
+.kana-code-property {
+  color: var(--code-key);
+}
+
+.kana-code-string {
+  color: var(--code-string);
+}
+
+.kana-code-number {
+  color: var(--code-number);
+}
+
+.kana-code-literal {
+  color: var(--code-literal);
+}
+
+.kana-code-variable {
+  color: var(--code-variable);
+}
+
+.kana-code-punctuation {
+  color: var(--code-punctuation);
 }
 
 /* Markdown tables in the guide read as a plain reference list: rows split by
@@ -2575,7 +2700,6 @@ video.kana-media-preview {
   border: 2px solid var(--accent);
   border-radius: 11px;
   background: var(--raised);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
   pointer-events: none;
 }
 

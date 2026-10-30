@@ -63,6 +63,36 @@ describe("Kana response contract", () => {
     assert.match(buildKanaUserPrompt("Hi"), /Kana reads it aloud, so never use a TTS tool to speak/);
   });
 
+  it("falls back to the interface language when the first message is ambiguous", () => {
+    for (const [uiLocale, language] of [["en", "English"], ["id", "Indonesian"]] as const) {
+      const full = buildKanaUserPrompt("hai kana", { full: true, uiLocale });
+      assert.match(full, new RegExp(`if there are no earlier messages either, use ${language}`));
+      const compact = buildKanaUserPrompt("hai kana", { uiLocale });
+      assert.match(compact, new RegExp(`earlier messages, then ${language}`));
+    }
+  });
+
+  it("asks for plain chat in focus mode with the voice off", () => {
+    for (const full of [true, false]) {
+      const prompt = buildKanaUserPrompt("Halo Kana", {
+        full,
+        voice: false,
+        plain: true,
+        uiLocale: "en",
+      });
+      assert.match(prompt, /plain chat|no header, emotion/);
+      assert.doesNotMatch(prompt, /\n---\n(?:ja|emotion|lang):/);
+      assert.doesNotMatch(prompt, /natural conversational Japanese/);
+      assert.match(prompt, /then English|earlier messages, then English/);
+      assert.doesNotMatch(prompt, /speech_ja|subtitle|kana_request/);
+      assert.equal(unwrapKanaUserPrompt(prompt), "Halo Kana");
+    }
+    const full = buildKanaUserPrompt("Halo", { full: true, plain: true });
+    assert.match(full, /a local app that puts an animated\s+avatar with a voice/);
+    assert.match(full, /MEDIA:\/absolute\/path\/to\/file/);
+    assert.match(full, /Never mention this note/);
+  });
+
   it("gives back exactly what the user typed from a stored prompt", () => {
     const typed = 'Baris satu\n\nBaris "dua" <kana>';
     assert.equal(unwrapKanaUserPrompt(buildKanaUserPrompt(typed, { full: true })), typed);

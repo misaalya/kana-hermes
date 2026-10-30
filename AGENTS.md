@@ -161,6 +161,13 @@ While Kana's voice is off (the `voiceEnabled` preference) the header has no `ja`
 line: nothing would read it, so the model does not spend tokens on it, and the
 parser reads such a reply as `speech_ja: ""`.
 
+In focus mode (`avatarVisible` off) with the voice off, nothing consumes the
+header either, so the note asks for plain chat: normal Markdown with no header,
+emotion, `lang`, or speech line. A plain reply is stored with an `und` subtitle
+language and neutral emotion, and restoring it shows exactly the stored text.
+The next prompt after focus or voice changes carries the full contract for the
+new mode.
+
 - The contract rides in the user turn, after the user's words, inside a
   `<kana>...</kana>` note. The first prompt after a session opens, new or
   resumed, carries the full contract; later prompts carry a short skeleton. Do
@@ -175,8 +182,10 @@ parser reads such a reply as `speech_ja: ""`.
   emoji, URLs, or code.
 - The answer is in the language of the user's latest message; when that message
   has no clear language (a command, a name, code), the language of the user's
-  earlier messages. `lang` is the language actually used. Kana sends no
-  subtitle language and has no such setting, and writing in another language
+  earlier messages; when there are none, the interface language is the fallback
+  (`id` → Indonesian, `en` → English). A Japanese-sounding app name or greeting
+  is no evidence of language. `lang` is the language actually used. Kana sends
+  no subtitle language and has no such setting, and writing in another language
   affects future replies only.
 - The voice only ever reads Japanese. A `ja` value without Japanese script, or a
   plain reply that is not mostly Japanese, becomes `speech_ja: ""` and the reply

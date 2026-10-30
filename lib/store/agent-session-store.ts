@@ -14,6 +14,13 @@ export type AgentSessionState = {
   respondingToInput: boolean;
   /** Runtime id of the Hermes session open on the client; Hermes scopes the active model to it. */
   openSessionId: string | null;
+  /**
+   * Provisional answer body while focus mode with the voice off streams it.
+   * The final assistant message replaces it.
+   */
+  streamingReply: string | null;
+  /** Raw delta buffer used to strip the response envelope. */
+  streamingRaw: string | null;
 };
 
 export type AgentSessionStore = StoreApi<AgentSessionState>;
@@ -26,5 +33,7 @@ export function createAgentSessionStore(): AgentSessionStore {
     pendingInput: null,
     respondingToInput: false,
     openSessionId: null,
+    streamingReply: null,
+    streamingRaw: null,
   }));
 }

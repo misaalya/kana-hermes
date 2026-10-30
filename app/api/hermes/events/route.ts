@@ -9,7 +9,7 @@ import {
 } from "@/lib/server/hermes-bridge";
 import { withSession } from "@/lib/server/api-response";
 import { isSessionValid } from "@/lib/server/auth/session";
-import { rewriteMediaInEvent } from "@/lib/server/media-links";
+import { createMediaEventRewriter } from "@/lib/server/media-links";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,13 +20,16 @@ export const dynamic = "force-dynamic";
 // through POST /api/hermes/rpc, so the downstream channel is one-way.
 
 export const GET = withSession(async (request) => {
+  // One rewriter per stream: a reply's chunks can split a MEDIA path, so the
+  // held tail belongs to this reader only.
+  const rewriteEvent = createMediaEventRewriter();
   const stream = createHermesEventStream(request.signal, {
     connect: ensureHermesConnection,
     runtimeId: hermesGatewayRuntimeId,
     serverRequests: listHermesServerRequests,
     subscribeServerRequests: subscribeHermesServerRequests,
     // Files Hermes delivers leave as signed links, never as local paths.
-    subscribe: (listener) => subscribeHermesEvents((params) => listener(rewriteMediaInEvent(params))),
+    subscribe: (listener) => subscribeHermesEvents((params) => listener(rewriteEvent(params))),
     onConnectionLost: onHermesConnectionLost,
     authorized: () => isSessionValid(request),
   });

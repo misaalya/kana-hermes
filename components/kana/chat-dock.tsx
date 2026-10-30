@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import type { KanaMessage } from "@/lib/conversation/types";
 import { selectActiveConversation } from "@/lib/store/conversation-store";
 import { getCopy } from "@/lib/ui/copy";
@@ -20,6 +20,7 @@ function ChatFeed() {
   const serverActivityTurns = useKanaStore("activity", (state) => state.serverActivityTurns);
   const busy = useKanaStore("agentSession", (state) => state.busy);
   const status = useKanaStore("agentSession", (state) => state.status);
+  const streamingReply = useKanaStore("agentSession", (state) => state.streamingReply);
   // Speech is synthesized before the reply text is revealed, which can take a
   // while on slower machines: keep the typing bubble up until it plays.
   const synthesizing = useKanaStore("voice", (state) => state.runtimeState === "synthesizing");
@@ -32,6 +33,7 @@ function ChatFeed() {
       serverActivityTurns={serverActivityTurns}
       typing={busy || synthesizing}
       status={status}
+      streamingReply={streamingReply}
       locale={locale}
       onStop={stop}
     />
@@ -49,6 +51,39 @@ export function ChatDock() {
   const usesMobileChat = useKanaStore("workspace", (state) => state.usesMobileChat);
   const text = getCopy(locale).workspace;
   const showRail = !avatarVisible && !usesMobileChat;
+  const panelRef = useRef<HTMLElement>(null);
+
+  // In focus mode the transcript is a centred reading measure inside a wide
+  // panel. A wheel outside that measure (the side gutters, the composer) must
+  // still move the transcript, not fall through to the page.
+  useEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return;
+    const onWheel = (event: WheelEvent) => {
+      if (event.ctrlKey || event.defaultPrevented || event.deltaY === 0) return;
+      const feed = panel.querySelector<HTMLElement>(".kana-chat-scroll");
+      if (!feed || feed.scrollHeight <= feed.clientHeight) return;
+      const target = event.target instanceof Node ? event.target : null;
+      if (target && feed.contains(target)) return;
+      // A dropdown, attachment list, or long draft keeps its own wheel.
+      for (let node = target instanceof Element ? target : target?.parentElement ?? null; node && node !== panel; node = node.parentElement) {
+        if (node === feed) return;
+        if (!(node instanceof HTMLElement)) continue;
+        const overflowY = window.getComputedStyle(node).overflowY;
+        if ((overflowY === "auto" || overflowY === "scroll") && node.scrollHeight > node.clientHeight) return;
+      }
+      const scale =
+        event.deltaMode === WheelEvent.DOM_DELTA_LINE
+          ? 16
+          : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+            ? feed.clientHeight
+            : 1;
+      event.preventDefault();
+      feed.scrollBy({ top: event.deltaY * scale, behavior: "auto" });
+    };
+    panel.addEventListener("wheel", onWheel, { passive: false });
+    return () => panel.removeEventListener("wheel", onWheel);
+  }, []);
 
   return (
     <>
@@ -79,6 +114,7 @@ export function ChatDock() {
       </button>
 
       <section
+        ref={panelRef}
         id="kana-chat-panel"
         inert={chatVisible ? undefined : true}
         aria-hidden={!chatVisible}

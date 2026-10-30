@@ -245,6 +245,9 @@ export type Copy = {
     hermesNote: string;
     copyMessage: string;
     copiedMessage: string;
+    codeLabel: string;
+    copyCode: string;
+    copiedCode: string;
     latestAria: string;
     latest: string;
     download: string;
@@ -812,6 +815,9 @@ const id: Copy = {
     hermesNote: "Catatan Hermes",
     copyMessage: "Salin pesan",
     copiedMessage: "Tersalin",
+    codeLabel: "Kode",
+    copyCode: "Salin kode",
+    copiedCode: "Kode disalin",
     latestAria: "Lompat ke pesan terbaru",
     latest: "Terbaru",
     download: "Unduh",
@@ -1432,6 +1438,9 @@ const en: Copy = {
     hermesNote: "Hermes note",
     copyMessage: "Copy message",
     copiedMessage: "Copied",
+    codeLabel: "Code",
+    copyCode: "Copy code",
+    copiedCode: "Code copied",
     latestAria: "Jump to latest message",
     latest: "Latest",
     download: "Download",

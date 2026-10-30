@@ -4,6 +4,27 @@
 
 ### Changed
 
+- The transcript scrolls with the wheel anywhere inside the chat panel. In
+  focus mode the reading measure is centred, so the side gutters and the
+  composer area used to fall outside the scrolling element; those wheel events
+  now move the transcript. A nested scroller keeps its own wheel: the code
+  card, a model list, an attachment list, or a long draft.
+- Fenced replies in chat are now copyable code cards: a dark surface with a
+  monospace language label and a Copy action, syntax-coloured for HTML/XML,
+  CSS, JavaScript/TypeScript, JSON, Python, shell, SQL, and YAML. Unknown
+  languages get the generic tokenizer; blocks with no language or a text
+  language stay plain. Copy takes the raw code, with the existing
+  select-on-failure fallback, and the provisional streaming card has no Copy
+  action. A reply that carries a code card takes the full transcript measure,
+  so a short sentence above the code never shrinks the card.
+- In focus mode with the voice off, the note now asks Hermes for plain chat:
+  no header, emotion, `lang`, or speech line, because nothing consumes them
+  there. The answer body also streams into a provisional bubble as Hermes
+  writes it; the final parsed message replaces the preview. Every other mode
+  keeps the structured header and waits for the complete response.
+- An ambiguous first message ("hai kana", a greeting, a name) now falls back
+  to the interface language instead of letting the model infer Japanese from
+  the app's name: Indonesian for `id`, English for `en`.
 - History rows keep square corners. The open conversation is a dimmed neutral
   row with ordinary ink; it takes no accent fill, accent stroke, or corner
   check badge.
@@ -23,7 +44,7 @@
   blue only while a card is lifted for a drag. In light mode their fill matches
   the chat panel's white surface.
 - Settings → Experience draws the chatbar delay as a tick-ruler slider: a
-  Kana-blue fill, white passed ticks, and a raised grip thumb, from Off to 2
+  Kana-blue fill, white passed ticks, and a flat grip thumb, from Off to 2
   minutes in five-second steps. Pointer and keyboard both move it, the value is
   read out above the ruler, and an older stored delay above 2 minutes keeps its
   own ruler instead of being silently clamped.
@@ -36,6 +57,13 @@
 
 ### Fixed
 
+- The focus-mode streaming preview actually receives the reply text now. The
+  SSE relay had blanked every `message.delta` to keep a `MEDIA:` path that a
+  chunk split from reaching the browser; it now holds such a tag and its line
+  back across chunks and drops them, so the preview streams while a local path
+  still never leaves the server. The finished reply keeps its signed links.
+  The newest characters fade from the message ink into the accent color and
+  hop into place as each chunk arrives; the typing cursor is gone.
 - Hermes 0.22+ no longer loses protected prompts: clarify, approval, sudo, and
   secret are server-to-client JSON-RPC requests there. Kana advertises
   `client.capabilities`, relays each request over SSE, answers through
@@ -63,8 +91,12 @@
   refresh, and a tool whose finish arrives without its start now reaches the
   turn log instead of being dropped. A restore now replaces the session's
   stored activity log in one transaction, so duplicate blocks already saved
-  by the older ordinal mismatch disappear on the next refresh. The host
-  widget also centres its "Host metrics are unavailable." and "Reading host
+  by the older ordinal mismatch disappear on the next refresh. A bare Hermes
+  warning can no longer swallow the turn's real terminal: an identical
+  terminal replay is ignored by signature while a genuine late reply still
+  lands, and reconnect recovery now reads the restored transcript instead of
+  guessing that the last raw assistant row is the answer. The host widget
+  also centres its "Host metrics are unavailable." and "Reading host
   metrics…" states.
 - Switching from local Hermes to a remote Hermes no longer sends the local
   Kana default model (for example `custom:9router`) to a runtime that does not

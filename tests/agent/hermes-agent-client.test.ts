@@ -180,11 +180,16 @@ async function tick(): Promise<void> {
 
 let activeClients: HermesAgentClient[] = [];
 
-async function connectedClient(handler: RpcHandler, voiceEnabled?: () => boolean): Promise<HermesAgentClient> {
+async function connectedClient(
+  handler: RpcHandler,
+  voiceEnabled?: () => boolean,
+  mode: { plainChat?: () => boolean; uiLocale?: () => "id" | "en" } = {},
+): Promise<HermesAgentClient> {
   FakeRelay.handler = handler;
   const client = new HermesAgentClient({
     requestTimeoutMs: 500,
     voiceEnabled,
+    ...mode,
   });
   activeClients.push(client);
   await client.connect();
@@ -421,6 +426,48 @@ describe("HermesAgentClient (relay transport)", () => {
     assert.ok(sent[0].startsWith("Halo\n\n<kana>\n") && /response protocol 3/.test(sent[0]));
     assert.ok(sent[1].startsWith("Lagi\n\n<kana>\n") && !/response protocol 3/.test(sent[1]));
     assert.match(sent[3], /response protocol 3/, "a resumed session and a failed submit both get the full contract");
+  });
+
+  it("asks for plain chat in focus mode with the voice off and resends on a mode change", async () => {
+    let plain = true;
+    const client = await connectedClient(
+      (request) => {
+        if (request.method === "session.create") {
+          return { session_id: "runtime-1", stored_session_id: "stored-1" };
+        }
+        if (request.method === "prompt.submit") return { accepted: true };
+        return {};
+      },
+      () => false,
+      { plainChat: () => plain, uiLocale: () => "en" },
+    );
+    await openSession(client);
+    const complete = async () => {
+      latestStream().emitEvent("message.complete", { status: "complete", text: responseText() });
+      await tick();
+    };
+    const prompts = () =>
+      FakeRelay.requests
+        .filter((request) => request.method === "prompt.submit")
+        .map((request) => String(request.params.text));
+
+    await client.sendMessage({ text: "hai kana" });
+    await complete();
+    const first = prompts()[0];
+    assert.match(first, /plain chat/);
+    assert.match(first, /then English/);
+    assert.doesNotMatch(first, /\n---\nemotion:/);
+
+    await client.sendMessage({ text: "lagi" });
+    await complete();
+    assert.doesNotMatch(prompts()[1], /Start every final reply with this header/);
+
+    // Leaving focus mode needs the full header again.
+    plain = false;
+    await client.sendMessage({ text: "lagi" });
+    await complete();
+    assert.match(prompts()[2], /Start every final reply with this header/);
+    assert.match(prompts()[2], /\n---\nemotion:/);
   });
 
   it("hands a mid-turn message to Hermes's busy policy without starting a local turn", async () => {
@@ -715,6 +762,45 @@ describe("HermesAgentClient (relay transport)", () => {
         event.type === "agent.aborted",
     );
     assert.equal(aborted?.replyShown, false);
+  });
+
+  it("accepts the real terminal after a bare warning and ignores its replay", async () => {
+    const client = await connectedClient((request) => {
+      if (request.method === "session.create") {
+        return { session_id: "runtime-1", stored_session_id: "stored-1" };
+      }
+      if (request.method === "prompt.submit") return { accepted: true };
+      return {};
+    });
+    const events: AgentEvent[] = [];
+    await openSession(client);
+    client.subscribe((event) => events.push(event));
+    await client.sendMessage({ text: "Halo" });
+
+    // A compression warning stops the visible turn but is not the terminal.
+    latestStream().emitEvent("error", { message: "compression failed" });
+    await tick();
+    latestStream().emitEvent("message.complete", {
+      status: "complete",
+      text: responseText(),
+    });
+    await tick();
+    // A reconnect replay of the same terminal produces no second bubble.
+    latestStream().emitEvent("message.complete", {
+      status: "complete",
+      text: responseText(),
+    });
+    await tick();
+
+    assert.equal(
+      events.filter((event) => event.type === "assistant.message").length,
+      1,
+      "the late terminal lands once",
+    );
+    assert.equal(
+      events.filter((event) => event.type === "agent.finished").length,
+      1,
+    );
   });
 
   it("uses dedicated approval, title, branch, secure input, and interrupt RPCs", async () => {
@@ -1338,7 +1424,19 @@ describe("HermesAgentClient (relay transport)", () => {
       persistentSessionId: "stored-1",
     });
 
-    assert.ok(events.some((event) => event.type === "assistant.message"));
+    const restored = events.find((event) => event.type === "history.restored");
+    assert.ok(restored && restored.type === "history.restored");
+    assert.deepEqual(
+      restored.messages.map((message) => message.role),
+      ["assistant"],
+      "the transcript restore owns the recovered reply",
+    );
+    // Recovery must not also emit the last raw assistant row; it may be
+    // tool-call narration or a retry notice.
+    assert.equal(
+      events.filter((event) => event.type === "assistant.message").length,
+      0,
+    );
     assert.ok(events.some((event) => event.type === "agent.finished"));
     assert.ok(
       events.some(

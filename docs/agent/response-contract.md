@@ -3,7 +3,7 @@
 Every normal Hermes assistant turn returns one structured user-facing response that Kana parses into Japanese speech, a subtitle, a language, and an avatar emotion. This document is that contract and what Kana does with a reply that follows or ignores it.
 
 **Read when:** you are changing the persona prompt, the response parser, voice delivery, avatar emotion handling, or how a restored transcript is shown.
-**Truth in code:** `lib/presentation/persona.ts`, `app/api/hermes/rpc/route.ts`, `lib/presentation/response-parser.ts`, `lib/presentation/markdown.ts`, `lib/presentation/spoken-reply-queue.ts`, `lib/services/send-message.ts`, `lib/services/agent-event-handlers.ts`, `lib/avatar/avatar-controller.ts`, `lib/voice/tts-relay-provider.ts`
+**Truth in code:** `lib/presentation/persona.ts`, `app/api/hermes/rpc/route.ts`, `lib/presentation/response-parser.ts`, `lib/presentation/markdown.ts`, `lib/presentation/stream-preview.ts`, `lib/presentation/spoken-reply-queue.ts`, `lib/services/send-message.ts`, `lib/services/agent-event-handlers.ts`, `lib/avatar/avatar-controller.ts`, `lib/voice/tts-relay-provider.ts`
 
 ## The reply (response protocol 3)
 
@@ -19,6 +19,8 @@ lang: <BCP 47 code of the answer below>
 ```
 
 While Kana's voice is off the header has no `ja` line, because nothing would read it (`replySkeleton`). The header costs fewer tokens than the old JSON envelope: the answer is not quoted or escaped. `lib/presentation/markdown.ts` renders the answer through a small reader as React elements, never HTML; links survive only for http(s) and mailto.
+
+In focus mode (the avatar hidden) with the voice off, nothing consumes the header at all, so the note asks for **plain chat**: normal Markdown with no header, emotion, `lang`, or speech line (`plain` in `buildKanaUserPrompt`). A plain reply is kept as an assistant message with a `und` subtitle language and neutral emotion; restoring it reads exactly the text Hermes stored. Every other mode keeps the header. Toggling focus or voice marks the next prompt for the full contract again, so the model is never left with the other mode's instructions.
 
 `parseKanaResponse` returns:
 
@@ -47,7 +49,7 @@ The full contract tells Hermes what Kana is: a local app that puts an animated a
 ## Language rules
 
 - `ja` is always natural conversational Japanese, whatever language the user writes in, and always plain speech: no Markdown, emoji, URLs, or code.
-- The answer uses the language of the user's latest message. When that message has no clear language (a command, a name, code, a single ambiguous word), the language of the user's earlier messages carries over. Kana has no subtitle-language setting and sends none.
+- The answer uses the language of the user's latest message. When that message has no clear language (a command, a name, code, a single ambiguous word), the language of the user's earlier messages carries over; when there are no earlier messages either, the interface language is the fallback (`id` → Indonesian, `en` → English). A Japanese-sounding app name or greeting such as "hai kana" is not evidence that the user wants Japanese. Kana has no subtitle-language setting and sends none.
 - `lang` records the language actually used in the answer.
 - Writing in another language affects future replies only. Stored history is never retranslated on load.
 
@@ -60,6 +62,8 @@ Kana never speaks the answer text as a fallback and never makes a second transla
 ## What happens to a parsed reply
 
 The parsed response becomes an `assistant.message` agent event carrying the response and its raw text (`handleMessageComplete`). Kana stores it as an assistant message with the turn's tool activity, drives the avatar emotion, and — when there is Japanese speech and the voice is on — reads `speech_ja` through the configured TTS provider before revealing the text (`onAssistantMessage` in `lib/services/agent-event-handlers.ts`, `lib/voice/tts-relay-provider.ts`).
+
+While Hermes streams `message.delta`, the text is otherwise only a status line. In focus mode with the voice off, where nothing consumes `ja`, emotion, or the subtitle language, Kana also renders the answer body as a provisional bubble: `streamReplyPreview` strips the response header from the accumulated raw stream, and the final assistant message from `message.complete` replaces it. The SSE relay forwards the chunks with any `MEDIA:` tag and its line held back across chunk boundaries, so the provisional bubble never shows a local path; the finished reply keeps its signed links (`createMediaEventRewriter` in `lib/server/media-links.ts`). The provisional bubble is `aria-hidden` and never enters the transcript; every other mode still waits for the complete payload before showing text.
 
 A reply may also deliver files: the contract asks Hermes to put `MEDIA:/absolute/path` on its own line, which Kana strips from the text and renders as a player or download card (`extractMediaAttachments` in `lib/presentation/media.ts`; the server rewrites the path to a signed link first, see `hermes-contract.md`).
 

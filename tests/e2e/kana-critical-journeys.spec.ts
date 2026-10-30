@@ -32,6 +32,8 @@ type FakeHermes = {
   advanceHeldTurn(): Promise<void>;
   /** The held research turn replies. */
   finishHeldTurn(): Promise<void>;
+  /** The held research turn streams assistant deltas without finishing. */
+  streamHeldReply(chunks: string[]): Promise<void>;
   /** The held research turn ends as interrupted but carries Hermes's stored reply. */
   interruptHeldTurn(text: string): Promise<void>;
   /** The runtime session id Kana currently talks to. */
@@ -430,11 +432,14 @@ async function installFakeHermes(page: Page): Promise<FakeHermes> {
         // the user wrote in. Kana sends no subtitle setting.
         if (/subtitle_language|kana_request/.test(submitted)) throw new Error("Kana sent the old JSON wrapper.");
         const noteStart = submitted.lastIndexOf("\n\n<kana>\n");
-        if (noteStart === -1 || !/\n---\n(?:ja|emotion): /.test(submitted.slice(noteStart))) {
+        const note = noteStart === -1 ? "" : submitted.slice(noteStart);
+        // Focus mode with the voice off gets plain chat, with no header at all.
+        const plain = /plain chat|no header, emotion/i.test(note);
+        if (noteStart === -1 || (!plain && !/\n---\n(?:ja|emotion): /.test(note))) {
           throw new Error("Kana sent no response contract.");
         }
         // With Kana's voice off the note asks for no Japanese speech.
-        const speaks = /\n---\nja: /.test(submitted.slice(noteStart));
+        const speaks = !plain && /\n---\nja: /.test(note);
         const userMessage = submitted.slice(0, noteStart);
         const language = /\b(halo|aku|kamu|apa)\b/i.test(userMessage) ? "id" : "en";
         // Hermes's default busy_input_mode redirects the live turn instead of
@@ -462,13 +467,16 @@ async function installFakeHermes(page: Page): Promise<FakeHermes> {
         const delivered = /\bfiles\b/i.test(userMessage)
           ? ["", "MEDIA:/api/media/e2e-audio/tts_e2e.wav", "MEDIA:/api/media/e2e-report/Laporan%20akhir.pdf"]
           : [];
+        const replyBody = /\bcode card\b/i.test(userMessage)
+          ? "Here is the snippet:\n\n```html\n<p>hello</p>\n```"
+          : subtitles[language] ?? subtitles.en;
         completedResponse = [
           "---",
           ...(speaks ? ["ja: こんにちは、ここにいます。"] : []),
           "emotion: neutral",
           `lang: ${language}`,
           "---",
-          subtitles[language] ?? subtitles.en,
+          replyBody,
           ...delivered,
         ].join("\n");
         session?.history.push(
@@ -520,6 +528,12 @@ async function installFakeHermes(page: Page): Promise<FakeHermes> {
       session.running = false;
       heldTurn = null;
       await emitHermesEvent("message.complete", { status: "complete", text }, runtimeId);
+    },
+    async streamHeldReply(chunks) {
+      if (!heldTurn) throw new Error("No research turn is running.");
+      for (const text of chunks) {
+        await emitHermesEvent("message.delta", { text }, heldTurn.runtimeId);
+      }
     },
     async interruptHeldTurn(reply) {
       if (!heldTurn) throw new Error("No research turn is running.");
@@ -1264,6 +1278,112 @@ test("keeps a running turn's Hermes activity through a refresh and renders its M
   await expect(source).toHaveAttribute("target", "_blank");
   // The long URL wraps inside its bubble instead of widening the chat.
   expect(await chat.evaluate((node) => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(0);
+});
+
+test("streams the answer body in focus mode with the voice off", async ({ page }) => {
+  // Focus mode (avatar hidden) with the voice off: the response header has
+  // nothing to drive, so the answer can appear while Hermes writes it.
+  await page.evaluate(() => {
+    const raw = localStorage.getItem("kana.preferences.v6")
+      ?? localStorage.getItem("kana.preferences.v3");
+    const value = raw ? JSON.parse(raw) as Record<string, unknown> : {};
+    localStorage.setItem(
+      "kana.preferences.v6",
+      JSON.stringify({ ...value, avatarVisible: false, voiceEnabled: false }),
+    );
+    localStorage.removeItem("kana.preferences.v3");
+  });
+  await page.reload();
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
+  const chat = page.getByRole("log", { name: "Live chat" });
+  await composer.fill("Research the Kupang weather");
+  await submitDraft(page, composer);
+  await expect(chat.getByRole("group").filter({ hasText: "Hermes activity" })).toBeVisible();
+
+  await hermes.streamHeldReply(["Kupang is ", "windy."]);
+  const preview = chat.locator("[data-streaming='true']");
+  await expect(preview).toContainText("Kupang is windy.");
+  const tail = preview.locator(".kana-streaming-tail");
+  await expect(tail).toHaveText("ng is windy.");
+  expect(await tail.evaluate((node) => getComputedStyle(node).backgroundImage)).toContain("linear-gradient");
+  const newest = tail.locator(".kana-streaming-new");
+  await expect(newest).toContainText("windy.");
+  expect(await newest.evaluate((node) => getComputedStyle(node).animationName)).toBe("kana-streaming-jump");
+  // The newest characters carry the gradient; there is no typing cursor.
+  expect(
+    await preview.locator(".kana-markdown > :last-child").evaluate((node) => getComputedStyle(node, "::after").content),
+  ).toBe("none");
+  await expect(chat.getByText(/emotion:/)).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeVisible();
+  await page.screenshot({
+    path: `test-results/stream-focus-${test.info().project.name}.png`,
+  });
+
+  // The complete payload still owns the final message and its tools.
+  await hermes.finishHeldTurn();
+  await expect(chat.getByText(/BMKG warning/)).toBeVisible();
+  await expect(preview).toHaveCount(0);
+});
+
+test("renders a fenced reply as a copyable code card", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
+  const chat = page.getByRole("log", { name: "Live chat" });
+  await composer.fill("Show me a code card");
+  await submitDraft(page, composer);
+
+  const card = chat.locator(".kana-chat-code");
+  await expect(card).toBeVisible();
+  await expect(card).toContainText("html");
+  await expect(card).toContainText("<p>hello</p>");
+  // The short sentence above the code does not shrink the card: the reply
+  // takes the full transcript measure.
+  const cardBox = await card.boundingBox();
+  const scrollBox = await chat.boundingBox();
+  expect(cardBox && scrollBox).toBeTruthy();
+  expect(cardBox?.width ?? 0).toBeGreaterThan((scrollBox?.width ?? 0) * 0.7);
+
+  const copy = card.getByRole("button", { name: "Copy code" });
+  await copy.click();
+  await expect(card.getByRole("button", { name: "Code copied" })).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("<p>hello</p>");
+  await page.screenshot({ path: `test-results/code-card-${test.info().project.name}.png` });
+});
+
+test("scrolls the focus transcript from the panel's side gutter", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 520 });
+  await page.evaluate(() => {
+    const raw = localStorage.getItem("kana.preferences.v6")
+      ?? localStorage.getItem("kana.preferences.v3");
+    const value = raw ? JSON.parse(raw) as Record<string, unknown> : {};
+    localStorage.setItem(
+      "kana.preferences.v6",
+      JSON.stringify({ ...value, avatarVisible: false, voiceEnabled: false }),
+    );
+    localStorage.removeItem("kana.preferences.v3");
+  });
+  await page.reload();
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
+  const chat = page.getByRole("log", { name: "Live chat" });
+  for (let index = 0; index < 5; index += 1) {
+    await composer.fill(`Message ${index + 1}`);
+    await submitDraft(page, composer);
+    await expect(chat.locator("article[data-role='assistant']")).toHaveCount(index + 1);
+  }
+
+  const feed = page.locator(".kana-chat-scroll");
+  const before = await feed.evaluate((node) => {
+    node.scrollTop = node.scrollHeight;
+    return node.scrollTop;
+  });
+  expect(before).toBeGreaterThan(0);
+  const panel = await page.locator("#kana-chat-panel").boundingBox();
+  const scroll = await feed.boundingBox();
+  expect(panel && scroll).toBeTruthy();
+  // Left of the centred reading measure, but still inside the chat panel.
+  await page.mouse.move((panel?.x ?? 0) + 12, (scroll?.y ?? 0) + 40);
+  await page.mouse.wheel(0, -240);
+  await expect.poll(() => feed.evaluate((node) => node.scrollTop)).toBeLessThan(before);
 });
 
 test("keeps an interrupted turn's stored answer and tools when the next prompt starts", async ({

@@ -2,6 +2,7 @@ import type { AgentEvent, AgentHistoryRow, AgentToolKind } from "@/lib/agent/typ
 import type { AvatarController } from "@/lib/avatar/avatar-controller";
 import { createId, type KanaMessage } from "@/lib/conversation/types";
 import { classifyKanaError } from "@/lib/diagnostics/safe-diagnostics";
+import { streamReplyPreview } from "@/lib/presentation/stream-preview";
 import type { KanaPreferences } from "@/lib/preferences/types";
 import type { KanaStores } from "@/lib/store/kana-stores";
 import { getCopy } from "@/lib/ui/copy";
@@ -86,6 +87,23 @@ function locale(context: AgentEventContext) {
 
 function clearInput(context: AgentEventContext) {
   context.stores.agentSession.setState({ pendingInput: null, respondingToInput: false });
+}
+
+/**
+ * The provisional streaming bubble is only for focus mode with the voice off:
+ * there the response header (speech, emotion, subtitle language) has nothing
+ * to drive, so the answer body can show while Hermes writes it.
+ */
+function streamPreviewAllowed(context: AgentEventContext): boolean {
+  const preferences = context.preferences.current();
+  return !preferences.voiceEnabled && !preferences.avatarVisible;
+}
+
+function clearStreaming(context: AgentEventContext): void {
+  const session = context.stores.agentSession;
+  if (session.getState().streamingRaw !== null) {
+    session.setState({ streamingRaw: null, streamingReply: null });
+  }
 }
 
 function onSessionOpened(context: AgentEventContext, event: Extract<AgentEvent, { type: "session.opened" }>) {
@@ -198,6 +216,7 @@ function onAssistantMessage(context: AgentEventContext, event: Extract<AgentEven
 function onConnectionChanged(context: AgentEventContext, event: Extract<AgentEvent, { type: "connection.changed" }>) {
   const { stores, tracking } = context;
   const errors = stores.errors.getState();
+  if (event.state !== "connected") clearStreaming(context);
   stores.agentSession.setState({ connectionState: event.state });
   if (event.state === "connecting" || event.state === "reconnecting") {
     tracking.connectionStartedAt ??= monotonicNow();
@@ -259,10 +278,17 @@ function onConnectionChanged(context: AgentEventContext, event: Extract<AgentEve
 
 function onAgentError(context: AgentEventContext, event: Extract<AgentEvent, { type: "agent.error" }>) {
   const { stores, tracking } = context;
+  const sessionMissing = /no longer exists|session not found/i.test(event.message);
+  if (event.terminal === false && !sessionMissing) {
+    // A warning frame (compression, a model switch, an API retry) from a turn
+    // that is still running: show it without ending the turn or losing the
+    // conversation that owns the terminal that follows.
+    stores.errors.getState().report("agent", event.message);
+    return;
+  }
   tracking.turnStartedAt = null;
   clearInput(context);
   stores.agentSession.setState({ busy: false });
-  const sessionMissing = /no longer exists|session not found/i.test(event.message);
   const conversation = context.conversations.get(eventConversationId(context));
   if (sessionMissing && conversation?.agent?.durable === false) {
     // Hermes restarted before this session's first prompt, so it was never
@@ -306,6 +332,7 @@ export function handleAgentEvent(context: AgentEventContext, event: AgentEvent):
       onSessionUpdated(context, event);
       return;
     case "history.restored": {
+      clearStreaming(context);
       // Emitted by openSession after session.opened: the session for this
       // conversation is really open here, not merely connected.
       const conversation = context.conversations.get(
@@ -322,16 +349,27 @@ export function handleAgentEvent(context: AgentEventContext, event: AgentEvent):
       return;
     }
     case "agent.started":
+      clearStreaming(context);
       tracking.turnStartedAt = monotonicNow();
       if (!event.resumed) stores.activity.getState().startTurn();
       session.setState({ busy: true, status: statusCopy(locale(context)).thinking });
       stores.errors.getState().dismiss();
       context.avatar.presentEmotion("thinking");
       return;
-    case "assistant.delta":
+    case "assistant.delta": {
       session.setState({ status: statusCopy(locale(context)).answering });
+      // Keep the raw stream even while the preview is off, so turning focus
+      // mode on mid-answer catches up instead of starting mid-sentence.
+      const previous = session.getState().streamingRaw ?? "";
+      const raw = `${previous}${event.text}`;
+      session.setState({
+        streamingRaw: raw,
+        streamingReply: streamPreviewAllowed(context) ? streamReplyPreview(raw) : null,
+      });
       return;
+    }
     case "assistant.message":
+      clearStreaming(context);
       onAssistantMessage(context, event);
       return;
     case "tool.started":
@@ -402,6 +440,7 @@ export function handleAgentEvent(context: AgentEventContext, event: AgentEvent):
       return;
     }
     case "agent.finished":
+      clearStreaming(context);
       if (tracking.turnStartedAt !== null) {
         const duration = Math.round(monotonicNow() - tracking.turnStartedAt);
         tracking.turnStartedAt = null;
@@ -417,6 +456,7 @@ export function handleAgentEvent(context: AgentEventContext, event: AgentEvent):
       tracking.turnId = null;
       return;
     case "agent.aborted":
+      clearStreaming(context);
       tracking.turnStartedAt = null;
       session.setState({ pendingInput: null, respondingToInput: false, busy: false });
       context.voice.flushHeld();
@@ -426,7 +466,12 @@ export function handleAgentEvent(context: AgentEventContext, event: AgentEvent):
       tracking.turnId = null;
       return;
     case "agent.error":
-      archiveReplylessTurn(context);
+      // A bare warning can arrive mid-turn (a compression or model-switch
+      // error); only a terminal error means the tools will never get a reply.
+      if (event.terminal !== false) {
+        clearStreaming(context);
+        archiveReplylessTurn(context);
+      }
       onAgentError(context, event);
       return;
   }

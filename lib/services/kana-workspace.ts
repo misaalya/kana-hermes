@@ -171,7 +171,11 @@ export function createKanaWorkspace(): KanaWorkspace {
     voice,
     avatar: avatarController,
     preferences,
-    createAgent: () => new HermesAgentClient({ voiceEnabled: () => preferences.current().voiceEnabled }),
+    createAgent: () => new HermesAgentClient({
+      voiceEnabled: () => preferences.current().voiceEnabled,
+      plainChat: () => !preferences.current().avatarVisible,
+      uiLocale: () => preferences.current().uiLocale,
+    }),
   });
   const models = new ModelCatalogService({
     store: stores.models,

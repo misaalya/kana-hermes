@@ -21,17 +21,19 @@ type LiveChatFeedProps = {
   /** Hermes is working or the reply's voice is still being generated. */
   typing: boolean;
   status: string;
+  /** Provisional answer body while focus mode with the voice off streams it. */
+  streamingReply?: string | null;
   locale: UiLocale;
   /** Stop the running turn, or release a reply whose voice is still coming. */
   onStop?: () => void;
 };
 
 /** Hermes's reply: its Markdown, then any files it delivered. */
-const AssistantReply = memo(function AssistantReply({ text, copy }: { text: string; copy: Copy["chat"] }) {
+const AssistantReply = memo(function AssistantReply({ text, copy, locale }: { text: string; copy: Copy["chat"]; locale: UiLocale }) {
   const { text: markdown, attachments } = useMemo(() => extractMediaAttachments(text), [text]);
   return (
     <>
-      {markdown ? <ChatMarkdown text={markdown} /> : null}
+      {markdown ? <ChatMarkdown text={markdown} locale={locale} /> : null}
       <MediaAttachments attachments={attachments} copy={copy} />
     </>
   );
@@ -133,6 +135,7 @@ export const LiveChatFeed = memo(function LiveChatFeed({
   serverActivityTurns = [],
   typing,
   status,
+  streamingReply = null,
   locale,
   onStop,
 }: LiveChatFeedProps) {
@@ -156,7 +159,7 @@ export const LiveChatFeed = memo(function LiveChatFeed({
   // New tools grow the open activity block without adding an entry.
   useEffect(() => {
     if (pinnedToBottom) scrollToBottom();
-  }, [entries.length, activities.length, typing, pinnedToBottom, scrollToBottom]);
+  }, [entries.length, activities.length, typing, streamingReply, pinnedToBottom, scrollToBottom]);
 
   // A delivered picture or video takes its height only once it loads, after
   // the reply already scrolled into view: follow it while pinned.
@@ -241,7 +244,7 @@ export const LiveChatFeed = memo(function LiveChatFeed({
               >
                 <div className="kana-message-text text-[13px] font-medium leading-relaxed max-sm:text-[13px] max-sm:leading-[1.5]" data-copy-text="">
                   {isAssistant ? (
-                    <AssistantReply text={messageCopy} copy={copy.chat} />
+                    <AssistantReply text={messageCopy} copy={copy.chat} locale={locale} />
                   ) : (
                     <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{messageCopy}</p>
                   )}
@@ -287,6 +290,22 @@ export const LiveChatFeed = memo(function LiveChatFeed({
             </article>
           );
         })}
+
+        {/* Provisional text: done once, the final message is announced. */}
+        {typing && streamingReply?.trim() ? (
+          <article
+            data-role="assistant"
+            data-streaming="true"
+            aria-hidden="true"
+            className="flex min-w-0 max-w-[88%] flex-col gap-1.5 self-start max-sm:max-w-[90%]"
+          >
+            <div className="rounded-[24px] border-2 px-4 py-3 kana-message-assistant max-sm:rounded-[20px] max-sm:px-3 max-sm:py-2">
+              <div className="kana-message-text kana-streaming-body text-[13px] font-medium leading-relaxed max-sm:text-[13px] max-sm:leading-[1.5]">
+                <ChatMarkdown text={streamingReply} streaming locale={locale} />
+              </div>
+            </div>
+          </article>
+        ) : null}
 
         {typing ? (
           <div className="flex flex-col items-start gap-1 self-start">

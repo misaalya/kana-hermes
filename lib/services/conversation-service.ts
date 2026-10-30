@@ -1,3 +1,4 @@
+import { isInterruptionNotice } from "@/lib/agent/interruption-notice";
 import type { ActivityItem, AgentHistoryRow } from "@/lib/agent/types";
 import {
   clearActiveConversationPointer,
@@ -36,6 +37,16 @@ export type ConversationServiceDependencies = {
 // equivalent — clicking "new" while on one must reuse it, not mint another.
 export function isFreshConversation(conversation: Conversation | null | undefined): boolean {
   return Boolean(conversation && conversation.messages.length === 0);
+}
+
+/** The shared turn identity: assistant rows that are replies, not notices. */
+function replyOrdinal(messages: KanaMessage[]): number {
+  return messages.filter(
+    (message) =>
+      message.role === "assistant"
+      && Boolean(message.subtitle?.text.trim())
+      && !isInterruptionNotice(message.subtitle?.text ?? ""),
+  ).length;
 }
 
 /**
@@ -196,7 +207,7 @@ export class ConversationService {
       this.putActivities({
         session: hermesSessionKey,
         turnAnchorMs: Math.min(lastToolTimestamp + 1, message.timestamp),
-        turnIndex: conversation.messages.filter((item) => item.role === "assistant").length,
+        turnIndex: replyOrdinal(conversation.messages),
         activities,
       });
     }

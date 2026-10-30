@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
 import {
+  createMediaEventRewriter,
   deliverablePath,
   mediaToken,
   mediaUrl,
@@ -184,5 +185,59 @@ describe("rewriting MEDIA tags", () => {
     assert.equal(complete.payload.text, `MEDIA:${mediaUrl(audio)}`);
     const delta = rewriteMediaInEvent({ type: "message.delta", session_id: "s", payload: { text: `MEDIA:${path.dirname(audio)}` } });
     assert.deepEqual(delta, { type: "message.delta", session_id: "s", payload: { text: "" } });
+  });
+});
+
+describe("streamed reply chunks", () => {
+  const delta = (text: string, session = "s") => ({ type: "message.delta", session_id: session, payload: { text } });
+  const complete = (text: string, session = "s") => ({ type: "message.complete", session_id: session, payload: { text } });
+
+  it("passes ordinary reply text through chunk by chunk", () => {
+    const rewrite = createMediaEventRewriter();
+    assert.equal(rewrite(delta("The sky is ")).payload.text, "The sky is ");
+    assert.equal(rewrite(delta("blue.")).payload.text, "blue.");
+  });
+
+  it("holds a MEDIA path split across chunks and drops its line", () => {
+    const rewrite = createMediaEventRewriter();
+    const split = 25;
+    const first = rewrite(delta(`Here you go:\nMEDIA:${audio.slice(0, split)}`));
+    assert.equal(first.payload.text, "Here you go:\n");
+    const second = rewrite(delta(`${audio.slice(split)}\nDone.`));
+    assert.equal(second.payload.text, "Done.");
+  });
+
+  it("never leaks a path when the tag itself is split", () => {
+    const rewrite = createMediaEventRewriter();
+    assert.equal(rewrite(delta("Look: MED")).payload.text, "Look: ");
+    assert.equal(rewrite(delta(`IA:${audio}`)).payload.text, "");
+    assert.equal(rewrite(delta("\nDone.")).payload.text, "Done.");
+  });
+
+  it("holds a trailing path until its line ends, then starts clean", () => {
+    const rewrite = createMediaEventRewriter();
+    assert.equal(rewrite(delta(`MEDIA:${path.dirname(audio)}`)).payload.text, "");
+    assert.equal(rewrite(delta(`\nNext line.`)).payload.text, "Next line.");
+    assert.equal(rewrite(delta(" More.")).payload.text, " More.");
+  });
+
+  it("rewrites the finished reply whole and forgets the held tail", () => {
+    const rewrite = createMediaEventRewriter();
+    rewrite(delta(`MEDIA:${path.dirname(audio)}`));
+    const finished = rewrite(complete(`MEDIA:${audio}`));
+    assert.equal(finished.payload.text, `MEDIA:${mediaUrl(audio)}`);
+  });
+
+  it("starts a new reply with no held text", () => {
+    const rewrite = createMediaEventRewriter();
+    rewrite(delta("MED"));
+    rewrite({ type: "message.start", session_id: "s", payload: {} });
+    assert.equal(rewrite(delta("Hello")).payload.text, "Hello");
+  });
+
+  it("keeps each session's held tail separate", () => {
+    const rewrite = createMediaEventRewriter();
+    assert.equal(rewrite(delta("MED", "a")).payload.text, "");
+    assert.equal(rewrite(delta("Hello", "b")).payload.text, "Hello");
   });
 });

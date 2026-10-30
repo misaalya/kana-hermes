@@ -71,6 +71,14 @@ type HermesRelayOptions = {
    * on.
    */
   voiceEnabled?: () => boolean;
+  /**
+   * Focus mode (the avatar is hidden). Read with the voice state: focus plus a
+   * silent Kana consumes no speech, emotion, or language header, so the note
+   * asks for plain chat instead.
+   */
+  plainChat?: () => boolean;
+  /** Interface language used when the user's first message is ambiguous. */
+  uiLocale?: () => "id" | "en";
 };
 
 const DEFAULT_RECONNECT_DELAYS_MS = [500, 1_000, 2_000, 5_000, 10_000] as const;
@@ -298,6 +306,7 @@ export class HermesAgentClient implements AgentClient {
   // The voice state the last full contract described; turning the voice on
   // or off sends the full contract again.
   private contractVoice: boolean | null = null;
+  private contractPlain: boolean | null = null;
   private intentionallyClosing = false;
   private running = false;
   private attachmentUpload: AbortController | null = null;
@@ -310,6 +319,9 @@ export class HermesAgentClient implements AgentClient {
   // Hermes 0.22+ asks the client questions as server→client requests; this is
   // the one still waiting for the dialog, answered with a JSON-RPC response.
   private pendingServerRequest: { id: string; method: string } | null = null;
+  // The last terminal frame of the current turn. A reconnect replay is
+  // ignored, while a genuine terminal after a bare warning still lands.
+  private terminalSignature: string | null = null;
   private readonly queuedPrompts: Array<{ message: string }> = [];
 
   constructor(private readonly options: HermesRelayOptions = {}) {}
@@ -475,6 +487,7 @@ export class HermesAgentClient implements AgentClient {
     this.reconnectAttempt = 0;
     this.runtimeIdValue = null;
     this.pendingServerRequest = null;
+    this.terminalSignature = null;
     this.queuedPrompts.length = 0;
     this.closeEventStream();
     this.rejectPending(new Error("Kana disconnected from Hermes."));
@@ -1521,6 +1534,7 @@ export class HermesAgentClient implements AgentClient {
       throw new Error("Open a Hermes session before sending a message.");
     }
     this.running = true;
+    this.terminalSignature = null;
     this.emit({ type: "agent.started" });
     try {
       await this.postPrompt(message, attachmentRefs);
@@ -1554,8 +1568,16 @@ export class HermesAgentClient implements AgentClient {
       throw new Error("Open a Hermes session before sending a message.");
     }
     const voice = this.options.voiceEnabled?.() ?? true;
-    const full = this.needsFullContract || this.contractVoice !== voice;
-    const text = buildKanaUserPrompt(message, { full, voice });
+    const plain = !voice && (this.options.plainChat?.() ?? false);
+    const full = this.needsFullContract
+      || this.contractVoice !== voice
+      || this.contractPlain !== plain;
+    const text = buildKanaUserPrompt(message, {
+      full,
+      voice,
+      plain,
+      uiLocale: this.options.uiLocale?.() ?? "id",
+    });
     const response = await this.request<{ status?: string }>("prompt.submit", {
       session_id: this.session.sessionId,
       // References go after the Kana note: Hermes's context-reference
@@ -1567,7 +1589,10 @@ export class HermesAgentClient implements AgentClient {
     // with the full contract.
     this.needsFullContract = false;
     this.sessionStored = true;
-    if (full) this.contractVoice = voice;
+    if (full) {
+      this.contractVoice = voice;
+      this.contractPlain = plain;
+    }
     return response.status;
   }
 
@@ -1664,6 +1689,7 @@ export class HermesAgentClient implements AgentClient {
       // would be discarded as terminal.
       if (!this.running) {
         this.running = true;
+        this.terminalSignature = null;
         this.emit({ type: "agent.started" });
       }
       return;
@@ -1741,26 +1767,34 @@ export class HermesAgentClient implements AgentClient {
     }
 
     if (event.type === "error") {
+      // A bare error is a warning frame, not always the end of the turn: an
+      // API retry or compression failure continues and ends with a terminal
+      // `message.complete`. Stop the visible turn but let that terminal land;
+      // the queue drains when it does, never beside a still-running Hermes.
       this.running = false;
       this.pendingServerRequest = null;
       this.forgetPending();
-      this.emit({
-        type: "agent.error",
-        message:
-          typeof payload.message === "string" ? payload.message : "Hermes reported an error.",
-      });
-      this.drainQueuedPrompt();
+      const message =
+        typeof payload.message === "string" ? payload.message : "Hermes reported an error.";
+      // These two are emitted beside a turn that continues to a terminal;
+      // every other bare error is its only termination.
+      const midTurnWarning = /compression failed|could not switch to configured model/i.test(
+        message,
+      );
+      this.emit({ type: "agent.error", message, terminal: !midTurnWarning });
     }
   }
 
   private handleMessageComplete(payload: Record<string, unknown>): void {
-    // Hermes may replay a terminal event around reconnect boundaries. A turn
-    // that is already terminal must not produce a second displayed response.
-    if (!this.running) return;
-    // A terminal turn means any request it was blocked on is no longer open.
     this.pendingServerRequest = null;
     const status = String(payload.status || "complete");
     const rawResponse = typeof payload.text === "string" ? payload.text : "";
+    // Hermes may replay a terminal around reconnect boundaries. Identical
+    // repeats are ignored; a different terminal still lands even when a bare
+    // error already stopped the visible turn.
+    const signature = `${status}\u0000${rawResponse}`;
+    if (signature === this.terminalSignature) return;
+    this.terminalSignature = signature;
 
     const notice = isInterruptionNotice(rawResponse);
     if (status === "interrupted" || (status !== "error" && (notice || !rawResponse.trim()))) {
@@ -1792,6 +1826,7 @@ export class HermesAgentClient implements AgentClient {
         type: "agent.error",
         message:
           typeof payload.error === "string" ? payload.error : rawResponse || "Hermes turn failed.",
+        terminal: true,
       });
       this.drainQueuedPrompt();
       return;
@@ -1813,6 +1848,7 @@ export class HermesAgentClient implements AgentClient {
           error instanceof Error ? error.message : "Kana response validation failed.",
         rawResponse:
           error instanceof KanaProtocolError ? error.rawResponse : rawResponse,
+        terminal: true,
       });
       this.drainQueuedPrompt();
     }
@@ -1838,6 +1874,7 @@ export class HermesAgentClient implements AgentClient {
     this.running = response.running === true;
 
     if (this.running) {
+      this.terminalSignature = null;
       this.emit({ type: "agent.started", resumed: true });
       this.emit({
         type: "status.updated",
@@ -1850,35 +1887,13 @@ export class HermesAgentClient implements AgentClient {
     if (wasRecovering) {
       const inflightError = response.inflight?.error;
       if (inflightError) {
-        this.emit({ type: "agent.error", message: inflightError });
+        this.emit({ type: "agent.error", message: inflightError, terminal: true });
       } else {
-        const assistant = [...(response.messages ?? [])]
-          .reverse()
-          .find(
-            (message) =>
-              message.role === "assistant" && typeof message.text === "string",
-          );
-        const rawResponse = assistant?.text?.trim() || "";
-        if (rawResponse) {
-          try {
-            const parsed = parseKanaResponse(rawResponse);
-            this.emit({ type: "assistant.message", response: parsed, rawResponse });
-            this.emit({ type: "agent.finished" });
-          } catch {
-            this.emit({
-              type: "agent.error",
-              message:
-                "Kana reconnected, but the completed Hermes response could not be restored through the Kana response protocol.",
-              rawResponse,
-            });
-          }
-        } else {
-          this.emit({
-            type: "agent.error",
-            message:
-              "Kana reconnected after an interrupted connection, but Hermes did not expose a completed response to restore.",
-          });
-        }
+        // openSession already delivered `history.restored`; the restored
+        // transcript is authoritative, including the final reply and its
+        // tools. Picking the last raw assistant row here would show a
+        // tool-call narration or a retry notice as the answer.
+        this.emit({ type: "agent.finished" });
       }
     }
 

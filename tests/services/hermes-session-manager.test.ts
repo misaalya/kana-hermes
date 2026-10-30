@@ -289,6 +289,82 @@ describe("HermesSessionManager", () => {
     );
   });
 
+  it("streams the answer only in focus mode with the voice off", async () => {
+    const harness = createHarness({
+      preferences: { uiLocale: "en", avatarVisible: false, voiceEnabled: false },
+    });
+    harness.conversations.initialize();
+    await harness.sessions.ensure(harness.active());
+    harness.agent.emit({ type: "agent.started" });
+    harness.agent.emit({
+      type: "assistant.delta",
+      text: "---\nemotion: neutral\nlang: en\n---\nHel",
+    });
+    harness.agent.emit({ type: "assistant.delta", text: "lo." });
+    assert.equal(harness.stores.agentSession.getState().streamingReply, "Hello.");
+
+    harness.agent.emit({
+      type: "assistant.message",
+      response: envelope("Hello."),
+      rawResponse: "---\nemotion: neutral\nlang: en\n---\nHello.",
+    });
+    assert.equal(harness.stores.agentSession.getState().streamingReply, null);
+    assert.equal(harness.stores.agentSession.getState().streamingRaw, null);
+  });
+
+  it("keeps the stream preview off while the avatar or voice needs the header", async () => {
+    for (const preferences of [
+      { uiLocale: "en" as const, avatarVisible: true, voiceEnabled: false },
+      { uiLocale: "en" as const, avatarVisible: false, voiceEnabled: true },
+    ]) {
+      const harness = createHarness({ preferences });
+      harness.conversations.initialize();
+      await harness.sessions.ensure(harness.active());
+      harness.agent.emit({ type: "agent.started" });
+      harness.agent.emit({
+        type: "assistant.delta",
+        text: "---\nemotion: neutral\nlang: en\n---\nHello.",
+      });
+      assert.equal(
+        harness.stores.agentSession.getState().streamingReply,
+        null,
+        JSON.stringify(preferences),
+      );
+    }
+  });
+
+  it("keeps live tools across a bare warning and archives only a terminal error", async () => {
+    const harness = createHarness();
+    harness.conversations.initialize();
+    await harness.sessions.ensure(harness.active());
+    harness.agent.emit({ type: "agent.started" });
+    harness.agent.emit({ type: "tool.started", id: "t1", tool: "terminal", kind: "tool" });
+    harness.agent.emit({ type: "tool.finished", id: "t1", tool: "terminal", kind: "tool" });
+    harness.agent.emit({
+      type: "agent.error",
+      message: "compression failed",
+      terminal: false,
+    });
+    await tick();
+    assert.equal(harness.stores.activity.getState().serverActivityTurns.length, 0);
+    assert.deepEqual(
+      harness.stores.activity.getState().turnLog.map((activity) => activity.id),
+      ["t1"],
+      "a mid-turn warning leaves the tools live for its reply",
+    );
+    assert.equal(
+      harness.stores.agentSession.getState().busy,
+      true,
+      "the turn remains open until its terminal",
+    );
+
+    harness.agent.emit({ type: "agent.error", message: "turn failed", terminal: true });
+    await tick();
+    assert.equal(harness.stores.activity.getState().serverActivityTurns.length, 1);
+    assert.deepEqual(harness.stores.activity.getState().turnLog, []);
+    assert.equal(harness.stores.agentSession.getState().busy, false);
+  });
+
   it("holds a spoken reply until audio starts and keeps the voice status after the turn ends", async () => {
     const harness = createHarness({ preferences: { voiceEnabled: true } });
     harness.conversations.initialize();

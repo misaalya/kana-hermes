@@ -284,9 +284,10 @@ export function rewriteMediaInResult<T>(result: T): T {
 }
 
 /**
- * A Hermes event for the browser. Streamed reply chunks lose their text:
- * a chunk can end halfway through a path, and Kana shows only the finished
- * reply (message.complete), which is rewritten whole.
+ * A Hermes event for the browser. Without streaming state a reply chunk loses
+ * its text: a chunk can end halfway through a path, and the finished reply
+ * (message.complete) is rewritten whole. The SSE route keeps that state with
+ * `createMediaEventRewriter`, so the focus-mode preview can show the chunks.
  */
 export function rewriteMediaInEvent<T>(params: T): T {
   if (params && typeof params === "object") {
@@ -296,4 +297,73 @@ export function rewriteMediaInEvent<T>(params: T): T {
     }
   }
   return rewriteValue(params, () => false) as T;
+}
+
+type StreamState = { held: string; inMedia: boolean };
+
+const STREAM_TAG = "MEDIA:";
+
+/**
+ * Text a delta may carry in front of the held tail. A `MEDIA:` tag and the
+ * rest of its line stay back until the line ends, then leave without their
+ * path; a possible prefix of the tag itself stays back too, so a split
+ * `MEDIA:` is never mistaken for text.
+ */
+function streamText(state: StreamState, chunk: string): string {
+  let data = state.held + chunk;
+  let output = "";
+  for (;;) {
+    if (state.inMedia) {
+      const end = data.indexOf("\n");
+      if (end === -1) {
+        state.held = data;
+        return output;
+      }
+      data = data.slice(end + 1);
+      state.inMedia = false;
+      continue;
+    }
+    const tag = data.indexOf(STREAM_TAG);
+    if (tag === -1) {
+      let held = 0;
+      for (let length = Math.min(STREAM_TAG.length - 1, data.length); length > 0; length -= 1) {
+        if (STREAM_TAG.startsWith(data.slice(-length))) {
+          held = length;
+          break;
+        }
+      }
+      state.held = data.slice(data.length - held);
+      return output + data.slice(0, data.length - held);
+    }
+    output += data.slice(0, tag);
+    data = data.slice(tag);
+    state.inMedia = true;
+  }
+}
+
+/**
+ * A per-SSE-stream event rewriter. Reply chunks reach the browser for the
+ * focus-mode preview, with paths still protected: a `MEDIA:` tag and its line
+ * are held back across chunks and dropped, while the finished reply keeps its
+ * signed links. Each stream starts and ends a reply with no held text.
+ */
+export function createMediaEventRewriter(): <T>(params: T) => T {
+  const streams = new Map<string, StreamState>();
+  return <T>(params: T): T => {
+    if (!params || typeof params !== "object") return params;
+    const event = params as Record<string, unknown>;
+    const key = typeof event.session_id === "string" ? event.session_id : "";
+    if (event.type === "message.delta" && event.payload && typeof event.payload === "object") {
+      const payload = event.payload as Record<string, unknown>;
+      if (typeof payload.text === "string") {
+        const state = streams.get(key) ?? { held: "", inMedia: false };
+        streams.set(key, state);
+        return { ...event, payload: { ...payload, text: streamText(state, payload.text) } } as T;
+      }
+    }
+    if (event.type === "message.start" || event.type === "message.complete" || event.type === "error") {
+      streams.delete(key);
+    }
+    return rewriteMediaInEvent(params);
+  };
 }

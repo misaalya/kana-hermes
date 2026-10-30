@@ -192,7 +192,13 @@ export type AgentEvent =
       /** The terminal carried a real reply that was committed before the stop. */
       replyShown?: boolean;
     }
-  | { type: "agent.error"; message: string; rawResponse?: string };
+  | {
+      type: "agent.error";
+      message: string;
+      rawResponse?: string;
+      /** A terminal `message.complete`; a bare warning event is not. */
+      terminal?: boolean;
+    };
 
 export type AgentSessionOptions = {
   title?: string;

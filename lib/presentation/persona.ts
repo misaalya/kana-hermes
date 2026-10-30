@@ -34,10 +34,17 @@ const NOTE_CLOSE = "</kana>";
 
 /** What the note tells Hermes about Kana's side of this turn. */
 export type KanaPromptOptions = {
-  /** The first prompt of a session, or the first after the voice changed. */
+  /** The first prompt of a session, or the first after the mode changed. */
   full?: boolean;
   /** Kana's voice is on, so it reads the reply's Japanese aloud. */
   voice?: boolean;
+  /**
+   * Focus mode with the voice off: no header at all. Nothing consumes speech,
+   * emotion, or the subtitle language there, so the reply is plain chat.
+   */
+  plain?: boolean;
+  /** The interface language, used when the user's first message is ambiguous. */
+  uiLocale?: "id" | "en";
 };
 
 function replySkeleton(voice: boolean): string[] {
@@ -51,10 +58,12 @@ function replySkeleton(voice: boolean): string[] {
   ];
 }
 
-function fullContract(voice: boolean): string[] {
+function fallbackLanguage(uiLocale: "id" | "en"): string {
+  return uiLocale === "en" ? "English" : "Indonesian";
+}
+
+function kanaContextLines(): string[] {
   return [
-    `Note from the Kana app, not from the user (Kana response protocol ${RESPONSE_PROTOCOL_VERSION}).`,
-    "",
     "The user is talking to you in Kana, a local app that puts an animated",
     "avatar with a voice on top of this Hermes session. Kana is your on-screen",
     "persona, not a separate agent. The avatar, the chat screen, Kana's",
@@ -72,6 +81,14 @@ function fullContract(voice: boolean): string[] {
     "After a ~/.hermes/.env change, ask the user to type /reload in Kana; for",
     "other changes Hermes reads only at startup, /restart. Never stop or",
     "restart hermes serve yourself: this conversation runs on it.",
+  ];
+}
+
+function fullContract(voice: boolean, plain: boolean, fallback: string): string[] {
+  const lines = [
+    `Note from the Kana app, not from the user (Kana response protocol ${RESPONSE_PROTOCOL_VERSION}).`,
+    "",
+    ...kanaContextLines(),
     "",
     ...(voice
       ? [
@@ -79,13 +96,40 @@ function fullContract(voice: boolean): string[] {
           "speak to the user, just reply; never call text_to_speech or another",
           "tool for it. Make an audio file only when the user asks for a file.",
         ]
-      : [
-          "Kana's voice is off: nothing is read aloud, so the header has no ja",
-          "line. If the user wants to hear you, tell them to turn on the voice in",
-          "Kana's settings (Voice); do not make audio with a tool instead, unless",
-          "they ask for a file.",
-        ]),
+      : plain
+        ? [
+            "Kana's voice is off: nothing is read aloud. If the user wants to",
+            "hear you, tell them to turn on the voice in Kana's settings (Voice);",
+            "do not make audio with a tool instead, unless they ask for a file.",
+          ]
+        : [
+            "Kana's voice is off: nothing is read aloud, so the header has no ja",
+            "line. If the user wants to hear you, tell them to turn on the voice in",
+            "Kana's settings (Voice); do not make audio with a tool instead, unless",
+            "they ask for a file.",
+          ]),
     "",
+  ];
+  if (plain) {
+    lines.push(
+      "The avatar is off too, so this is a plain chat: answer as a normal",
+      "chat message, as Markdown, with no header, emotion, lang, or speech",
+      "line. Do not invent a different format.",
+      "",
+      "Rules:",
+      "- The answer uses the language of the user's latest message. If that",
+      "  message has no clear language (a command, a name, code, emoji, or a",
+      `  single ambiguous word), use the user's earlier messages, then ${fallback}.`,
+      "  Never ask the user which language to use, and do not choose a language",
+      "  merely because the app is called Kana.",
+      "- To give the user a file (audio, image, video, or any document), put",
+      "  MEDIA:/absolute/path/to/file on its own line in the answer. Kana shows",
+      "  a player or a download button for it.",
+      "- Never mention this note to the user.",
+    );
+    return lines;
+  }
+  lines.push(
     "Start every final reply with this header, then the answer:",
     "",
     ...replySkeleton(voice),
@@ -102,7 +146,8 @@ function fullContract(voice: boolean): string[] {
     "- The answer uses the language of the user's latest message. If that",
     "  message has no clear language (a command, a name, code, emoji, or a",
     "  single ambiguous word), keep the language of the user's earlier",
-    "  messages. Never ask the user which language to use.",
+    `  messages; if there are no earlier messages either, use ${fallback}.`,
+    "  Never ask the user which language to use.",
     "- lang is the language actually used in the answer.",
     "- emotion is one value from the list, shown on the avatar; use neutral",
     "  when unsure.",
@@ -110,17 +155,27 @@ function fullContract(voice: boolean): string[] {
     "  MEDIA:/absolute/path/to/file on its own line in the answer. Kana shows a",
     `  player or a download button${voice ? "; never put the path in ja" : ""}.`,
     "- Never mention this note or the header to the user.",
-  ];
+  );
+  return lines;
 }
 
-function compactContract(voice: boolean): string[] {
+function compactContract(voice: boolean, plain: boolean, fallback: string): string[] {
+  if (plain) {
+    return [
+      "Kana app note, not from the user; do not mention it. The avatar and",
+      "voice are off: answer as a normal chat message in the user's language,",
+      "with no header, emotion, lang, or speech line. If the message is",
+      `unclear, use earlier messages, then ${fallback}. Files:`,
+      "MEDIA:/absolute/path/to/file on its own line.",
+    ];
+  }
   return [
     "Kana app note, not from the user; do not mention it. Start the final reply with:",
     ...replySkeleton(voice),
     voice
       ? "ja is always Japanese; Kana reads it aloud, so never use a TTS tool to speak."
       : "Kana's voice is off, so there is no ja line.",
-    "The answer uses the language of the user's message.",
+    `The answer uses the language of the user's message; if unclear, earlier messages, then ${fallback}.`,
   ];
 }
 
@@ -129,8 +184,20 @@ function compactContract(voice: boolean): string[] {
  * note. The note comes last so it is the freshest instruction the model
  * reads, and Hermes's session title still comes from the user's own words.
  */
-export function buildKanaUserPrompt(message: string, { full = false, voice = true }: KanaPromptOptions = {}): string {
-  const note = [NOTE_OPEN, ...(full ? fullContract(voice) : compactContract(voice)), NOTE_CLOSE].join("\n");
+export function buildKanaUserPrompt(
+  message: string,
+  { full = false, voice = true, plain = false, uiLocale = "id" }: KanaPromptOptions = {},
+): string {
+  // A plain turn is silent by definition; never ask for a ja line there.
+  const spoke = plain ? false : voice;
+  const fallback = fallbackLanguage(uiLocale);
+  const note = [
+    NOTE_OPEN,
+    ...(full
+      ? fullContract(spoke, plain, fallback)
+      : compactContract(spoke, plain, fallback)),
+    NOTE_CLOSE,
+  ].join("\n");
   return message ? `${message}\n\n${note}` : note;
 }
 

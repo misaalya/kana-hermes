@@ -273,7 +273,8 @@ Presentation:
   in Kana's blue, strings, numbers, literals; `--code-*` tokens on
   `.kana-code-surface` in `app/globals.css`), a small tokenizer rather than a
   highlighting library. It only splits the text, so Copy still copies the raw
-  example; other languages stay plain.
+  example; other languages in the guide stay plain. The chat code card uses the
+  wider tokenizer in `lib/presentation/code-highlight.ts` instead.
 - Its icons are real icons, Material Symbols Rounded from the subset font in
   `app/fonts` (`MaterialSymbol`), never the drawn two-tone `DuoIcon` glyphs. Add
   a name as `app/fonts/README.md` explains.
@@ -392,7 +393,24 @@ in `lib/presentation/markdown.ts` as React elements, never as HTML; links surviv
 only for http(s) and mailto and open in a new tab, and images become links (Kana
 does not load remote pictures into chat). Long words and URLs wrap inside the
 message; code blocks and tables scroll inside it. The feed keeps `min-w-0` so one
-unbroken string cannot widen it past the panel.
+unbroken string cannot widen it past the panel. In focus mode the transcript is
+a centred reading measure, so the panel owns a wheel listener: a wheel over the
+side gutters or the composer moves the transcript, while the feed itself and
+any nested scroller (a code card, a model list, a long draft) keep their own
+wheel.
+
+A fenced code block renders as a dark code card (`.kana-chat-code` on the
+guide's `.kana-code-surface`) with a monospace language label and a Copy action;
+the card scrolls vertically after 22rem and horizontally inside the bubble. A
+reply that carries a code card spans the full transcript measure, so a short
+sentence above the code never shrinks the card to the width of the text. The
+copy control takes the raw code and uses the same select-on-failure fallback as
+the message button; the provisional streaming card omits it. Common languages
+are coloured by `lib/presentation/code-highlight.ts`, a tokenizer that returns
+the source character-for-character and paints it as React spans, never HTML;
+HTML/XML, CSS, JavaScript/TypeScript, JSON, Python, shell, SQL, and YAML have
+profiles, other named languages use a generic profile, and blocks with no
+language or a text language stay plain.
 
 ## Activity blocks
 
