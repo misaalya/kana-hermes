@@ -7,7 +7,11 @@ import {
   writeActiveConversationPointer,
   type HermesConversationDirectoryEntry,
 } from "@/lib/conversation/active-conversation";
-import { mergeRestoredMessages, parseHermesTranscript } from "@/lib/conversation/hermes-transcript";
+import {
+  mergeRestoredMessages,
+  parseHermesTranscript,
+  type RestoredTurn,
+} from "@/lib/conversation/hermes-transcript";
 import {
   createConversation,
   type Conversation,
@@ -199,6 +203,21 @@ export class ConversationService {
   }
 
   /**
+   * Mirror a reply-less turn's tools to the stored activity log. The turn has
+   * no assistant message to carry them, so this is their only durable copy.
+   */
+  archiveTurnActivities(
+    conversationId: string,
+    anchorMs: number,
+    activities: ActivityItem[],
+  ): void {
+    if (!activities.length) return;
+    const sessionKey = this.get(conversationId)?.agent?.persistentSessionId;
+    if (!sessionKey) return;
+    this.putActivities({ session: sessionKey, turnAnchorMs: anchorMs, activities });
+  }
+
+  /**
    * Apply a restored Hermes transcript to one conversation.
    *
    * Primary source: the messages returned by session.resume (delivered through
@@ -244,12 +263,30 @@ export class ConversationService {
       }
 
       this.persist({ ...target, messages: mergeRestoredMessages(messages, target.messages) }, false);
-      for (const turn of turns) {
-        this.putActivities({
-          session: hermesSessionKey,
-          turnAnchorMs: turn.anchorMs,
-          turnIndex: turn.turnIndex,
-          activities: turn.activities,
+      // While the last turn is still running its tools live in the activity
+      // store (seeded above), not in a finished turn row yet.
+      const liveIds = new Set(unfinished.map((activity) => activity.id));
+      const finishedTurns = running && liveIds.size
+        ? turns.filter(
+            (turn) =>
+              turn.turnIndex !== null
+              || !turn.activities.every((activity) => liveIds.has(activity.id)),
+          )
+        : turns;
+      this.replaceActivities(hermesSessionKey, finishedTurns);
+      // Apply the same authoritative set locally so a row already loaded by
+      // an earlier GET (including the duplicates this write removes) cannot
+      // survive beside the reconstructed turns. Bumping the request counter
+      // discards a GET that was already in flight.
+      if (this.active()?.id === conversationId) {
+        this.activityRequest += 1;
+        this.deps.stores.activity.setState({
+          sessionKey: hermesSessionKey,
+          serverActivityTurns: finishedTurns.map((turn) => ({
+            turnAnchorMs: turn.anchorMs,
+            turnIndex: turn.turnIndex,
+            activities: turn.activities,
+          })),
         });
       }
     } finally {
@@ -334,7 +371,7 @@ export class ConversationService {
   private putActivities(body: {
     session: string;
     turnAnchorMs: number;
-    turnIndex: number;
+    turnIndex?: number;
     activities: ActivityItem[];
   }): void {
     void this.deps
@@ -343,6 +380,30 @@ export class ConversationService {
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
         body: JSON.stringify(body),
+      })
+      .catch(() => {});
+  }
+
+  /**
+   * Make the restored transcript's turns the whole stored log for the
+   * session. An old live ordinal or a duplicate write must not survive beside
+   * the reconstructed turns.
+   */
+  private replaceActivities(session: string, turns: RestoredTurn[]): void {
+    void this.deps
+      .fetch("/api/kana/activities", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          session,
+          replace: true,
+          turns: turns.map((turn) => ({
+            turnAnchorMs: turn.anchorMs,
+            turnIndex: turn.turnIndex,
+            activities: turn.activities,
+          })),
+        }),
       })
       .catch(() => {});
   }

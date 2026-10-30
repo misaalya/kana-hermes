@@ -679,8 +679,42 @@ describe("HermesAgentClient (relay transport)", () => {
     );
     assert.ok(message, "the persisted reply is shown despite the interrupt");
     assert.equal(message.response.subtitle.text, "Hello.");
-    assert.ok(events.some((event) => event.type === "agent.aborted"));
+    const aborted = events.find(
+      (event): event is Extract<AgentEvent, { type: "agent.aborted" }> =>
+        event.type === "agent.aborted",
+    );
+    assert.equal(aborted?.replyShown, true);
     assert.equal(events.some((event) => event.type === "agent.finished"), false);
+  });
+
+  it("keeps Hermes's retry control text out of the transcript", async () => {
+    const client = await connectedClient((request) => {
+      if (request.method === "session.create") {
+        return { session_id: "runtime-1", stored_session_id: "stored-1" };
+      }
+      if (request.method === "prompt.submit") return { accepted: true };
+      return {};
+    });
+    const events: AgentEvent[] = [];
+    await openSession(client);
+    client.subscribe((event) => events.push(event));
+    await client.sendMessage({ text: "Halo" });
+    latestStream().emitEvent("message.complete", {
+      status: "interrupted",
+      text: "Operation interrupted: retrying API call after error (retry 1/3).",
+    });
+    await tick();
+
+    assert.equal(
+      events.some((event) => event.type === "assistant.message"),
+      false,
+      "the control notice is not an assistant reply",
+    );
+    const aborted = events.find(
+      (event): event is Extract<AgentEvent, { type: "agent.aborted" }> =>
+        event.type === "agent.aborted",
+    );
+    assert.equal(aborted?.replyShown, false);
   });
 
   it("uses dedicated approval, title, branch, secure input, and interrupt RPCs", async () => {

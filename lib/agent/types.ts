@@ -36,6 +36,8 @@ export type AgentHistoryRow = {
   text?: string;
   name?: string;
   context?: string;
+  /** Display time in Unix seconds, when the projection carries it. */
+  timestamp?: number;
 };
 
 export type ClarificationQuestion = {
@@ -185,7 +187,11 @@ export type AgentEvent =
       requestId: string;
     }
   | { type: "agent.finished" }
-  | { type: "agent.aborted" }
+  | {
+      type: "agent.aborted";
+      /** The terminal carried a real reply that was committed before the stop. */
+      replyShown?: boolean;
+    }
   | { type: "agent.error"; message: string; rawResponse?: string };
 
 export type AgentSessionOptions = {

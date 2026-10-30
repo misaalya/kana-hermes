@@ -56,8 +56,16 @@
   stored. When Stop races the last API call, the interrupted payload still
   carries that answer: Kana shows it, keeps its tool activity attached to the
   assistant message, and only a truly empty interrupt ends as a bare stop.
-  The host widget also centres its "Host metrics are unavailable." and
-  "Reading host metrics…" states.
+  Hermes's `Operation interrupted…` retry notice is no longer shown as a chat
+  bubble, and a refresh no longer duplicates the activity block or reveals
+  tool-call narration the live feed hid. A turn stopped or failed without a
+  reply keeps its tools as an activity-only block across the next prompt and
+  refresh, and a tool whose finish arrives without its start now reaches the
+  turn log instead of being dropped. A restore now replaces the session's
+  stored activity log in one transaction, so duplicate blocks already saved
+  by the older ordinal mismatch disappear on the next refresh. The host
+  widget also centres its "Host metrics are unavailable." and "Reading host
+  metrics…" states.
 - Switching from local Hermes to a remote Hermes no longer sends the local
   Kana default model (for example `custom:9router`) to a runtime that does not
   know that provider. Kana now keys its default model per Hermes runtime

@@ -7,6 +7,7 @@ import path from "node:path";
 import { after, beforeEach, describe, it } from "node:test";
 import {
   listTurnActivities,
+  replaceTurnActivities,
   resetActivityStoreForTests,
   saveTurnActivities,
   type StoredTurnActivities,
@@ -67,6 +68,32 @@ describe("activity store schema v2", () => {
     assert.equal(second.turn_anchor_ms, 2000);
 
     assert.equal(userVersion(path.join(dir, "activities.db")), 2);
+  });
+
+  it("replaces one session's turns without touching another session", () => {
+    scopedDir("replace");
+    const other = "20260825_052417_abc123";
+    saveTurnActivities(KEY, 1000, [{ id: "stale-index" }], 0);
+    saveTurnActivities(KEY, 1500, [{ id: "duplicate" }], 1);
+    saveTurnActivities(other, 1000, [{ id: "other" }], 0);
+
+    replaceTurnActivities(KEY, [
+      { turnAnchorMs: 2000, turnIndex: 0, activities: [{ id: "reply" }] },
+      { turnAnchorMs: 2500, turnIndex: null, activities: [{ id: "tools-only" }] },
+    ]);
+
+    const turns = listTurnActivities(KEY);
+    assert.deepEqual(
+      turns.map((turn) => [turn.turn_index, turn.activities]),
+      [
+        [0, [{ id: "reply" }]],
+        [null, [{ id: "tools-only" }]],
+      ],
+    );
+    assert.deepEqual(
+      listTurnActivities(other).map((turn) => turn.activities),
+      [[{ id: "other" }]],
+    );
   });
 
   it("migrates a v1 database in place and keeps legacy rows anchor-addressed", () => {

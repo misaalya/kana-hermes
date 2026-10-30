@@ -53,6 +53,29 @@ function eventConversationId(context: AgentEventContext): string | null {
   return tracking.turnId ?? tracking.openingId ?? context.stores.conversations.getState().activeConversationId;
 }
 
+/**
+ * A reply-less turn has no assistant message to carry its tools. Archive the
+ * live log as an activity-only stored turn so the next prompt and a refresh
+ * do not erase work Hermes actually did.
+ */
+function archiveReplylessTurn(context: AgentEventContext): void {
+  const activity = context.stores.activity.getState();
+  const activities = activity.turnLog;
+  if (!activities.length) return;
+  const conversation = context.conversations.get(eventConversationId(context));
+  const last = conversation?.messages.at(-1);
+  if (last?.role === "assistant" && last.activities?.length) {
+    const shown = new Set(last.activities.map((item) => item.id));
+    if (activities.every((item) => shown.has(item.id))) return;
+  }
+  const anchor = Math.max(...activities.map((item) => item.timestamp)) + 1;
+  const conversationId = eventConversationId(context);
+  activity.archiveTurn(anchor);
+  if (conversationId) {
+    context.conversations.archiveTurnActivities(conversationId, anchor, activities);
+  }
+}
+
 function setStatus(context: AgentEventContext, status: string) {
   context.stores.agentSession.setState({ status });
 }
@@ -397,11 +420,13 @@ export function handleAgentEvent(context: AgentEventContext, event: AgentEvent):
       tracking.turnStartedAt = null;
       session.setState({ pendingInput: null, respondingToInput: false, busy: false });
       context.voice.flushHeld();
+      if (!event.replyShown) archiveReplylessTurn(context);
       session.setState({ status: statusCopy(locale(context)).stopped });
       context.avatar.presentEmotion("neutral");
       tracking.turnId = null;
       return;
     case "agent.error":
+      archiveReplylessTurn(context);
       onAgentError(context, event);
       return;
   }

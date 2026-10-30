@@ -175,6 +175,65 @@ async function installFakeHermes(page: Page): Promise<FakeHermes> {
     await emitHermesEvent("tool.complete", { tool_id: toolId, name, summary: context, duration_s: 0.4 }, runtimeId);
   };
 
+  // The stored activity log the real server keeps in SQLite, in memory for
+  // one test: live writes and a reload must converge on the same rows.
+  const activityTurns = new Map<
+    string,
+    Array<{ turnAnchorMs: number; turnIndex: number | null; activities: unknown[] }>
+  >();
+  await page.route("**/api/kana/activities**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() === "GET") {
+      const session = url.searchParams.get("session") ?? "";
+      const turns = [...(activityTurns.get(session) ?? [])].sort(
+        (left, right) => left.turnAnchorMs - right.turnAnchorMs,
+      );
+      return route.fulfill({ json: { turns } });
+    }
+    if (request.method() !== "PUT") return route.fulfill({ status: 405 });
+    const body = request.postDataJSON() as {
+      session?: string;
+      turnAnchorMs?: number;
+      turnIndex?: number;
+      activities?: unknown[];
+      replace?: boolean;
+      turns?: Array<{ turnAnchorMs?: number; turnIndex?: number | null; activities?: unknown[] }>;
+    };
+    if (!body.session) {
+      return route.fulfill({ status: 400, json: { error: "invalid activity session" } });
+    }
+    if (body.replace === true) {
+      if (!Array.isArray(body.turns)) {
+        return route.fulfill({ status: 400, json: { error: "invalid replaced turns" } });
+      }
+      const replaced = body.turns.map((turn) => ({
+        turnAnchorMs: Number(turn.turnAnchorMs),
+        turnIndex: typeof turn.turnIndex === "number" ? turn.turnIndex : null,
+        activities: Array.isArray(turn.activities) ? turn.activities : [],
+      }));
+      activityTurns.set(body.session, replaced);
+      return route.fulfill({ json: { ok: true } });
+    }
+    if (typeof body.turnAnchorMs !== "number" || !Array.isArray(body.activities)) {
+      return route.fulfill({ status: 400, json: { error: "invalid activity turn" } });
+    }
+    const rows = activityTurns.get(body.session) ?? [];
+    const existing = typeof body.turnIndex === "number"
+      ? rows.findIndex((row) => row.turnIndex === body.turnIndex)
+      : rows.findIndex((row) => row.turnAnchorMs === body.turnAnchorMs);
+    const row = {
+      // Like the server, an indexed write keeps the row's original anchor.
+      turnAnchorMs: existing >= 0 ? rows[existing].turnAnchorMs : body.turnAnchorMs,
+      turnIndex: body.turnIndex ?? null,
+      activities: body.activities,
+    };
+    if (existing >= 0) rows[existing] = row;
+    else rows.push(row);
+    activityTurns.set(body.session, rows);
+    return route.fulfill({ json: { ok: true } });
+  });
+
   await page.route("**/api/kana/sessions", (route) => {
     const directory = [...sessions.values()]
       .sort((a, b) => b.lastActive - a.lastActive)
@@ -1221,6 +1280,34 @@ test("keeps an interrupted turn's stored answer and tools when the next prompt s
   await expect(activity).toContainText("web_search");
   await expect(activity).toHaveCount(1);
   await expect(chat.getByText("Hello! I am here.", { exact: true })).toBeVisible();
+});
+
+test("keeps a stopped turn's tools without showing Hermes's retry notice", async ({ page }) => {
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
+  const chat = page.getByRole("log", { name: "Live chat" });
+  await composer.fill("Research the Kupang weather");
+  await submitDraft(page, composer);
+  const activity = chat.getByRole("group").filter({ hasText: "Hermes activity" });
+  await expect(activity).toContainText("web_search");
+
+  await hermes.interruptHeldTurn(
+    "Operation interrupted: retrying API call after error (retry 1/3).",
+  );
+  await expect(chat.getByText(/Operation interrupted/)).toHaveCount(0);
+  await expect(activity).toContainText("web_search");
+
+  // The next prompt clears only live rows; the stopped turn's tools moved to
+  // an activity-only stored turn and stay in the transcript.
+  await composer.fill("Hello Kana");
+  await submitDraft(page, composer);
+  await expect(activity).toContainText("web_search");
+  await expect(activity).toHaveCount(1);
+  await expect(chat.getByText("Hello! I am here.", { exact: true })).toBeVisible();
+
+  // A refresh keeps the same one block and still shows no control notice.
+  await page.reload();
+  await expect(activity).toContainText("web_search");
+  await expect(chat.getByText(/Operation interrupted/)).toHaveCount(0);
 });
 
 test("a message typed during a turn is redirected into it, not answered twice", async ({

@@ -57,7 +57,12 @@ describe("Hermes transcript projection", () => {
       { role: "tool", name: "web_extract", context: "bbc.com" },
     ]);
     assert.deepEqual(messages.map((message) => message.role), ["user", "assistant", "user"]);
-    assert.equal(turns.length, 1);
+    assert.deepEqual(turns.map((turn) => turn.turnIndex), [0, null]);
+    assert.deepEqual(
+      turns[1].activities.map((activity) => activity.tool),
+      ["web_search", "web_extract"],
+      "the running turn also has a reconstructed activity-only row",
+    );
     assert.deepEqual(unfinished.map((activity) => activity.tool), ["web_search", "web_extract"]);
     assert.ok(unfinished.every((activity) => activity.state === "complete"));
     assert.ok(unfinished[0].timestamp > messages[2].timestamp, "they sort after the pending user turn");
@@ -110,6 +115,68 @@ describe("Hermes transcript projection", () => {
     assert.equal(messages.length, 2);
     assert.equal(messages[0].subtitle?.text, "plain text reply");
     assert.deepEqual(messages.map((message) => message.subtitle?.language), ["und", "und"]);
+  });
+
+  it("hides tool-call narration and keeps one reply with its tools", () => {
+    const { messages, turns } = parseHermesTranscript([
+      { role: "user", text: "debug it" },
+      { role: "assistant", text: "I'll inspect the reference first." },
+      { role: "tool", name: "read_file", context: "troubleshooting.md" },
+      { role: "assistant", text: envelope("Here is the answer.") },
+    ]);
+    assert.deepEqual(messages.map((message) => message.role), ["user", "assistant"]);
+    assert.equal(messages[1].subtitle?.text, "Here is the answer.");
+    assert.deepEqual(messages[1].activities?.map((item) => item.tool), ["read_file"]);
+    assert.deepEqual(turns.map((turn) => turn.turnIndex), [0]);
+  });
+
+  it("does not turn Hermes's retry notice into a chat bubble", () => {
+    const { messages, turns } = parseHermesTranscript([
+      { role: "user", text: "debug it" },
+      { role: "assistant", text: "I'm ready to help." },
+      { role: "tool", name: "clarify", context: "questions" },
+      {
+        role: "assistant",
+        text: "Operation interrupted: retrying API call after error (retry 1/3).",
+      },
+    ]);
+    assert.deepEqual(messages.map((message) => message.role), ["user"]);
+    assert.deepEqual(turns.map((turn) => turn.turnIndex), [null]);
+    assert.deepEqual(turns[0].activities.map((item) => item.tool), ["clarify"]);
+  });
+
+  it("keeps Hermes's display timestamps when the rows carry them", () => {
+    const { messages } = parseHermesTranscript([
+      { role: "user", text: "hi", timestamp: 1_700_000_000.25 },
+      { role: "assistant", text: envelope("Hello."), timestamp: 1_700_000_001.5 },
+    ]);
+    assert.deepEqual(
+      messages.map((message) => Math.round(message.timestamp)),
+      [1_700_000_000_250, 1_700_000_001_500],
+    );
+  });
+
+  it("drops a local retry notice that the restored transcript no longer shows", () => {
+    const restored = parseHermesTranscript([
+      { role: "user", text: "hi" },
+      { role: "assistant", text: envelope("Hello.") },
+    ]).messages;
+    const local = [
+      ...restored.map((message, index) => ({ ...message, id: `local-${index}` })),
+      {
+        id: "notice",
+        role: "assistant" as const,
+        speech_ja: "",
+        subtitle: {
+          text: "Operation interrupted: retrying API call after error (retry 1/3).",
+          language: "und",
+        },
+        emotion: "neutral" as const,
+        timestamp: 1,
+      },
+    ];
+    const merged = mergeRestoredMessages(restored, local);
+    assert.equal(merged.some((message) => message.id === "notice"), false);
   });
 
   it("merges local-only rows after the authoritative restored rows", () => {

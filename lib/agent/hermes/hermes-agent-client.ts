@@ -1,4 +1,5 @@
 import { classifyHermesTool } from "@/lib/agent/tool-kind";
+import { isInterruptionNotice } from "@/lib/agent/interruption-notice";
 import { AttachmentUploadError, MAX_ATTACHMENTS, MAX_ATTACHMENT_TOTAL_BYTES, validateAttachment } from "@/lib/agent/attachments";
 import type {
   AgentBusyDelivery,
@@ -1761,22 +1762,25 @@ export class HermesAgentClient implements AgentClient {
     const status = String(payload.status || "complete");
     const rawResponse = typeof payload.text === "string" ? payload.text : "";
 
-    if (status === "interrupted") {
+    const notice = isInterruptionNotice(rawResponse);
+    if (status === "interrupted" || (status !== "error" && (notice || !rawResponse.trim()))) {
       this.running = false;
       this.forgetPending();
+      let replyShown = false;
       // Stop can race the last API call: Hermes persists the final response and
-      // still reports the turn as interrupted. Its own clients show that text,
-      // so Kana shows it too; the assistant message is what keeps the turn's
-      // tools in the transcript when the next prompt starts.
-      if (rawResponse.trim()) {
+      // still reports the turn as interrupted. Show that reply (and keep its
+      // tools attached), but never show Hermes's retry/cancellation control
+      // notice as a chat bubble.
+      if (!notice && rawResponse.trim()) {
         try {
           const response = parseKanaResponse(rawResponse);
           this.emit({ type: "assistant.message", response, rawResponse });
+          replyShown = true;
         } catch {
           // A partial that is not a Kana response stays out of the transcript.
         }
       }
-      this.emit({ type: "agent.aborted" });
+      this.emit({ type: "agent.aborted", replyShown });
       this.drainQueuedPrompt();
       return;
     }

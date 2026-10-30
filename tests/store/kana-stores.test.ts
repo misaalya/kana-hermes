@@ -67,7 +67,34 @@ describe("Kana stores", () => {
     const store = createActivityStore();
     store.getState().finish({ id: "late", tool: "read", kind: "file", title: "read finished" });
     assert.equal(store.getState().activities[0].state, "complete");
+    assert.deepEqual(store.getState().turnLog.map((item) => item.id), ["late"]);
+  });
+
+  it("archives a reply-less turn instead of dropping its tools", () => {
+    const store = createActivityStore();
+    store.getState().add(activity("tool-1"));
+    store.getState().finish({ id: "tool-1", tool: "terminal", kind: "tool", title: "done" });
+    store.getState().archiveTurn(12_345);
+
+    assert.deepEqual(store.getState().activities, []);
     assert.deepEqual(store.getState().turnLog, []);
+    assert.deepEqual(store.getState().serverActivityTurns, [
+      {
+        turnAnchorMs: 12_345,
+        turnIndex: null,
+        activities: [
+          {
+            id: "tool-1",
+            tool: "terminal",
+            kind: "tool",
+            title: "done",
+            state: "complete",
+            timestamp: 1,
+            durationMs: undefined,
+          },
+        ],
+      },
+    ]);
   });
 
   it("ignores avatar snapshots that only move the mouth", () => {

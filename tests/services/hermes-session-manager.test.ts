@@ -164,8 +164,16 @@ describe("HermesSessionManager", () => {
     });
     await tick();
     assert.deepEqual(harness.active().messages.map((message) => message.role), ["user", "assistant"]);
-    const put = harness.fetchCalls.find((call) => call.init?.method === "PUT");
-    assert.equal(JSON.parse(String(put?.init?.body)).turnIndex, 0);
+    const put = harness.fetchCalls.find(
+      (call) => call.url === "/api/kana/activities" && call.init?.method === "PUT",
+    );
+    const body = JSON.parse(String(put?.init?.body)) as {
+      replace?: boolean;
+      turns?: Array<{ turnIndex?: number | null; activities: Array<{ tool: string }> }>;
+    };
+    assert.equal(body.replace, true, "restore replaces the session's activity log");
+    assert.deepEqual(body.turns?.map((turn) => turn.turnIndex), [0]);
+    assert.deepEqual(body.turns?.[0].activities.map((item) => item.tool), ["terminal"]);
   });
 
   it("keeps a running turn's tools after a refresh and files them under its reply", async () => {
@@ -232,6 +240,53 @@ describe("HermesSessionManager", () => {
     assert.equal(messages[1].activities?.[0].state, "complete");
     assert.equal(harness.active().agent?.durable, true, "a completed reply means Hermes stored the session");
     assert.equal(harness.stores.agentSession.getState().busy, false);
+  });
+
+  it("keeps a stopped turn's tools when the next prompt starts", async () => {
+    const harness = createHarness();
+    harness.conversations.initialize();
+    await harness.sessions.ensure(harness.active());
+    harness.agent.emit({ type: "agent.started" });
+    harness.agent.emit({
+      type: "tool.started",
+      id: "t1",
+      tool: "clarify",
+      kind: "tool",
+      summary: "questions",
+    });
+    harness.agent.emit({
+      type: "tool.finished",
+      id: "t1",
+      tool: "clarify",
+      kind: "tool",
+      summary: "invalid",
+    });
+    harness.agent.emit({ type: "agent.aborted", replyShown: false });
+    await tick();
+
+    const activity = harness.stores.activity.getState();
+    assert.deepEqual(activity.activities, []);
+    assert.deepEqual(activity.turnLog, []);
+    assert.equal(activity.serverActivityTurns.length, 1);
+    assert.equal(activity.serverActivityTurns[0].turnIndex, null);
+    assert.deepEqual(
+      activity.serverActivityTurns[0].activities.map((item) => item.tool),
+      ["clarify"],
+    );
+    const put = harness.fetchCalls.find(
+      (call) => call.url === "/api/kana/activities" && call.init?.method === "PUT",
+    );
+    assert.ok(put, "the reply-less turn is mirrored to the server");
+    const body = JSON.parse(String(put.init?.body)) as Record<string, unknown>;
+    assert.equal(body.session, "hermes-session-1");
+    assert.equal(body.turnIndex, undefined);
+
+    harness.agent.emit({ type: "agent.started" });
+    assert.equal(
+      harness.stores.activity.getState().serverActivityTurns.length,
+      1,
+      "the block survives the next prompt",
+    );
   });
 
   it("holds a spoken reply until audio starts and keeps the voice status after the turn ends", async () => {

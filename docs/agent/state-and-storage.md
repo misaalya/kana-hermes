@@ -105,7 +105,14 @@ Hermes durable session key plus a zero-based assistant-reply ordinal
 (`turn_index`), with the anchor timestamp as the primary-key fallback for
 legacy v1 rows. One live write and one reconstructed write for the same turn
 converge on a single row, which is what lets the feed splice a turn's tools
-back in after a refresh or in another browser.
+back in after a refresh or in another browser. A turn that ends without an
+assistant reply is stored with a NULL `turn_index`, anchored just after its
+last tool, so the feed renders it between that user message and the next
+turn. Live writes upsert one turn at a time; a transcript restore replaces
+every row for that session in one transaction, so an older ordinal or a
+duplicate row never survives beside the reconstructed turns. Restored rows
+use Hermes's display timestamps when present, which keeps a live-written
+anchor and the restored transcript in the same order.
 
 Host metrics are not stored either: `/api/kana/host` reads the OS and `/proc`
 per request, and the browser keeps only the current snapshot while a host

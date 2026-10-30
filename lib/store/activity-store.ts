@@ -23,6 +23,11 @@ export type ActivityState = {
   finish(finished: Pick<ActivityItem, "id" | "tool" | "kind" | "durationMs"> & { title: string }): void;
   /** Begin a turn's log, seeded with tools it already finished (a resumed turn). */
   startTurn(finished?: ActivityItem[]): void;
+  /**
+   * Close a turn that produced no assistant reply: keep its tools as a stored
+   * activity-only turn instead of letting the next prompt clear them.
+   */
+  archiveTurn(anchorMs: number): void;
   reset(): void;
 };
 
@@ -58,9 +63,15 @@ export function createActivityStore(): ActivityStore {
       set((state) => {
         const complete = (activity: ActivityItem): ActivityItem =>
           activity.id === id ? { ...activity, state: "complete", title, durationMs } : activity;
-        // The turn log only completes rows it already has; it is what lands on
-        // the assistant message, so it must carry final states.
-        const turnLog = state.turnLog.map(complete);
+        const known = state.turnLog.some((activity) => activity.id === id);
+        // A tool whose start was missed still has to reach the turn log: that
+        // log is what lands on the assistant message and the stored turn.
+        const turnLog = known
+          ? state.turnLog.map(complete)
+          : [
+              ...state.turnLog,
+              { id, tool, kind, title, state: "complete" as const, timestamp: Date.now(), durationMs },
+            ];
         const activities = state.activities.some((activity) => activity.id === id)
           ? state.activities.map(complete)
           : [
@@ -74,6 +85,19 @@ export function createActivityStore(): ActivityStore {
       set({
         turnLog: [...finished],
         activities: [...finished].reverse().slice(0, LIVE_ACTIVITY_LIMIT),
+      });
+    },
+    archiveTurn(anchorMs) {
+      set((state) => {
+        if (!state.turnLog.length) return state;
+        return {
+          turnLog: [],
+          activities: [],
+          serverActivityTurns: [
+            ...state.serverActivityTurns.filter((turn) => turn.turnAnchorMs !== anchorMs),
+            { turnAnchorMs: anchorMs, turnIndex: null, activities: [...state.turnLog] },
+          ],
+        };
       });
     },
     reset() {

@@ -9,17 +9,16 @@ import { adoptLegacyKanaFile, resolveKanaDataDir } from "@/lib/server/data-dir";
  * The conversation transcript itself lives in the Hermes state DB (read back
  * through session.history); only the activity log — runtime tool events that
  * Hermes does not persist as transcript rows — is stored here, keyed by the
- * Hermes session it belongs to and anchored to the timestamp of the
- * assistant reply that closed the turn. That anchor lets LiveChatFeed splice
- * each log back into the chronological feed between its user message and
- * Kana's reply after a refresh, a browser switch, or any other loss of
- * browser-local state.
+ * Hermes session it belongs to and anchored just after the turn's last tool
+ * (or its reply). That anchor lets LiveChatFeed splice each log back into the
+ * chronological feed between its user message and the next turn after a
+ * refresh, a browser switch, or any other loss of browser-local state.
  */
 
 export type StoredTurnActivities = {
   /** Hermes durable session key ("20260824_052417_fe475b" style). */
   hermes_session_key: string;
-  /** Unix ms of the assistant message that closed the turn. */
+  /** Unix ms just after the turn's last tool or its closing reply. */
   turn_anchor_ms: number;
   /**
    * Zero-based assistant-reply ordinal within the session transcript.
@@ -151,6 +150,42 @@ export function saveTurnActivities(
       payload,
       Date.now(),
     );
+}
+
+export type TurnActivitiesSnapshot = {
+  turnAnchorMs: number;
+  turnIndex?: number | null;
+  activities: unknown[];
+};
+
+/**
+ * Replace every stored turn for one Hermes session. A restore is
+ * authoritative: rows written under an older reply ordinal, or duplicated by
+ * an earlier live write, must not survive beside the reconstructed turns.
+ */
+export function replaceTurnActivities(
+  hermesSessionKey: string,
+  turns: TurnActivitiesSnapshot[],
+): void {
+  const database = db();
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    database
+      .prepare("DELETE FROM turn_activities WHERE hermes_session_key = ?")
+      .run(hermesSessionKey);
+    for (const turn of turns) {
+      saveTurnActivities(
+        hermesSessionKey,
+        turn.turnAnchorMs,
+        turn.activities,
+        typeof turn.turnIndex === "number" ? turn.turnIndex : undefined,
+      );
+    }
+    database.exec("COMMIT");
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
+  }
 }
 
 /** All stored activity logs for one Hermes session, oldest anchor first. */

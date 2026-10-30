@@ -80,6 +80,20 @@ describe("live feed activity anchoring", () => {
     assert.ok(closed[0].kind === "activity" && !closed[0].live && closed[0].key === "turn-assistant-1");
   });
 
+  it("keeps a reply-less stored turn between its user message and the next turn", () => {
+    const messages: KanaMessage[] = [
+      { id: "user-1", role: "user", text: "debug", timestamp: 1_000 },
+      { id: "user-2", role: "user", text: "next", timestamp: 2_000 },
+    ];
+    const timeline = buildLiveFeedTimeline(messages, [], [
+      { turnAnchorMs: 1_500, turnIndex: null, activities: [activity] },
+    ]);
+    assert.deepEqual(
+      timeline.map((entry) => (entry.kind === "message" ? entry.message.id : "activity")),
+      ["user-1", "activity", "user-2"],
+    );
+  });
+
   it("uses server activity only when the local assistant has no embedded turn log", () => {
     const messages: KanaMessage[] = [
       { id: "user-1", role: "user", text: "Find env files", timestamp: 100 },
