@@ -8,6 +8,7 @@ import {
   manifest,
   passwordCommand,
   readConfigSafely,
+  remoteHermesSummary,
   voiceProviderName,
   runtimeRoot,
   serverEntry,
@@ -127,7 +128,13 @@ export async function runServer({ serving, host, port, open, dataRoot }) {
 
   const config = readConfigSafely(dataRoot);
   if (config.error) status.warning("config.json could not be read; defaults are used.", config.error);
-  const hermes = await locateHermes(config.value);
+  const remote = remoteHermesSummary(config.value);
+  const hermes = remote
+    ? {
+        executable: null,
+        warning: remote.url ? null : "remote config is invalid — check hermes.remote.url in config.json",
+      }
+    : await locateHermes(config.value);
   if (hermes.warning) status.warning(hermes.warning);
 
   const child = spawn(
@@ -182,7 +189,12 @@ export async function runServer({ serving, host, port, open, dataRoot }) {
     status.success(`Kana is ready at ${url}`);
     print(keyValues([
       ["Data", dataRoot],
-      ["Hermes", hermes.executable ?? "not found (set hermes.executable in config.json)"],
+      [
+        "Hermes",
+        remote
+          ? remote.url ? `remote ${remote.url}` : "remote config invalid"
+          : hermes.executable ?? "not found (set hermes.executable in config.json)",
+      ],
       ["Voice", voiceProvider],
     ]).join("\n"));
   } else {

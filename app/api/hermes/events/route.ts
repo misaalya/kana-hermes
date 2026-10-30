@@ -1,5 +1,12 @@
 import { createHermesEventStream } from "@/lib/server/hermes-event-stream";
-import { ensureHermesConnection, onHermesConnectionLost, subscribeHermesEvents } from "@/lib/server/hermes-bridge";
+import {
+  ensureHermesConnection,
+  hermesGatewayRuntimeId,
+  listHermesServerRequests,
+  onHermesConnectionLost,
+  subscribeHermesEvents,
+  subscribeHermesServerRequests,
+} from "@/lib/server/hermes-bridge";
 import { withSession } from "@/lib/server/api-response";
 import { isSessionValid } from "@/lib/server/auth/session";
 import { rewriteMediaInEvent } from "@/lib/server/media-links";
@@ -15,6 +22,9 @@ export const dynamic = "force-dynamic";
 export const GET = withSession(async (request) => {
   const stream = createHermesEventStream(request.signal, {
     connect: ensureHermesConnection,
+    runtimeId: hermesGatewayRuntimeId,
+    serverRequests: listHermesServerRequests,
+    subscribeServerRequests: subscribeHermesServerRequests,
     // Files Hermes delivers leave as signed links, never as local paths.
     subscribe: (listener) => subscribeHermesEvents((params) => listener(rewriteMediaInEvent(params))),
     onConnectionLost: onHermesConnectionLost,

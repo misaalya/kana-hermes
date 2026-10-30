@@ -7,12 +7,19 @@ import {
   normalizeLive2DModelUrl,
 } from "@/lib/avatar/defaults";
 import { normalizeLive2DLayoutProfiles } from "@/lib/avatar/model-layout";
+import { RUNTIME_ID_PATTERN } from "@/lib/runtime/runtime-identity";
 import type {
   AgentModelChoice,
+  AgentModelDefaults,
   KanaPreferences,
   PreferencesStore,
 } from "./types";
-import { isStageBackground } from "./types";
+import {
+  isStageBackground,
+  type HostWidgetId,
+  type HostWidgetLayout,
+  type HostWidgetZone,
+} from "./types";
 
 export type BrowserStorage = Pick<
   Storage,
@@ -36,6 +43,63 @@ function normalizeDefaultAgentModel(value: unknown): AgentModelChoice | null {
   };
 }
 
+/** Upper bound on remembered runtimes; stale remote identities are dropped. */
+const MAX_AGENT_MODEL_DEFAULTS = 32;
+
+function normalizeAgentModelDefaults(value: unknown): AgentModelDefaults {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const defaults: AgentModelDefaults = {};
+  let kept = 0;
+  for (const [runtimeId, choice] of Object.entries(value)) {
+    if (kept >= MAX_AGENT_MODEL_DEFAULTS) break;
+    if (!RUNTIME_ID_PATTERN.test(runtimeId)) continue;
+    const normalized = normalizeDefaultAgentModel(choice);
+    if (!normalized) continue;
+    defaults[runtimeId] = normalized;
+    kept += 1;
+  }
+  return defaults;
+}
+
+const HOST_WIDGET_IDS: HostWidgetId[] = ["monitor", "time", "date"];
+const DEFAULT_HOST_WIDGET_LAYOUT: HostWidgetLayout = {
+  left: ["monitor"],
+  center: ["time"],
+  right: ["date"],
+};
+
+function defaultHostWidgetLayout(): HostWidgetLayout {
+  return {
+    left: [...DEFAULT_HOST_WIDGET_LAYOUT.left],
+    center: [...DEFAULT_HOST_WIDGET_LAYOUT.center],
+    right: [...DEFAULT_HOST_WIDGET_LAYOUT.right],
+  };
+}
+
+function normalizeHostWidgetLayout(value: unknown): HostWidgetLayout {
+  if (!value || typeof value !== "object") return defaultHostWidgetLayout();
+  const candidate = value as Partial<Record<keyof HostWidgetLayout, unknown>>;
+  const zones: HostWidgetZone[] = ["left", "center", "right"];
+  const seen = new Set<HostWidgetId>();
+  const layout: HostWidgetLayout = { left: [], center: [], right: [] };
+  for (const zone of zones) {
+    const list = candidate[zone];
+    if (!Array.isArray(list)) return defaultHostWidgetLayout();
+    for (const item of list) {
+      if (
+        (item !== "monitor" && item !== "time" && item !== "date")
+        || seen.has(item)
+      ) {
+        return defaultHostWidgetLayout();
+      }
+      seen.add(item);
+      layout[zone].push(item);
+    }
+  }
+  if (seen.size !== HOST_WIDGET_IDS.length) return defaultHostWidgetLayout();
+  return layout;
+}
+
 function normalizeComposerCollapseDelay(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return DEFAULT_COMPOSER_COLLAPSE_DELAY_SECONDS;
@@ -50,8 +114,9 @@ function normalizeComposerCollapseDelay(value: unknown): number {
 // token are deliberately absent: the browser reaches Hermes through the Kana
 // server relay and never stores connection credentials.
 
-const STORAGE_KEY = "kana.preferences.v5";
+const STORAGE_KEY = "kana.preferences.v6";
 const LEGACY_STORAGE_KEYS = [
+  "kana.preferences.v5",
   "kana.preferences.v4",
   "kana.preferences.v3",
   "kana.preferences.v2",
@@ -67,6 +132,8 @@ type StoredPreferences = Partial<
     token?: string;
   };
   voice?: Partial<KanaPreferences["voice"]>;
+  /** Builds before v6 kept one global default model for every Hermes. */
+  defaultAgentModel?: unknown;
   /** Builds with the Qwen3-TTS service kept voice choices here. */
   qwen3Tts?: { deliveryMode?: unknown; voiceId?: unknown; baseUrl?: unknown; endpoint?: unknown };
 };
@@ -80,8 +147,9 @@ export const DEFAULT_PREFERENCES: KanaPreferences = {
   voiceMode: "configured",
   avatarMode: "live2d",
   avatarVisible: true,
-  defaultAgentModel: null,
+  agentModelDefaults: {},
   composerCollapseDelaySeconds: DEFAULT_COMPOSER_COLLAPSE_DELAY_SECONDS,
+  hostWidgetLayout: defaultHostWidgetLayout(),
   stageBackground: "plain",
   hermes: {
     cwd: "",
@@ -113,12 +181,16 @@ export function normalizeKanaPreferences(
     : "plain";
   // Subtitles follow the language the user writes in; drop the retired
   // per-browser subtitle language setting from older stored preferences.
-  const { subtitleLanguage: _retired, qwen3Tts: _retiredVoice, ...current } = preferences as KanaPreferences & {
-    subtitleLanguage?: unknown;
-    qwen3Tts?: unknown;
-  };
+  // A pre-v6 record kept one global default model; its runtime map replaces it.
+  const { subtitleLanguage: _retired, qwen3Tts: _retiredVoice, defaultAgentModel: _retiredDefault, ...current } =
+    preferences as KanaPreferences & {
+      subtitleLanguage?: unknown;
+      qwen3Tts?: unknown;
+      defaultAgentModel?: unknown;
+    };
   void _retired;
   void _retiredVoice;
+  void _retiredDefault;
   return {
     ...current,
     // Runtime guard: stored or restored values can never re-enable another
@@ -130,10 +202,11 @@ export function normalizeKanaPreferences(
     // Anything but an explicit false keeps the stage: stored records from
     // builds without the setting, and restored values, stay chat-and-avatar.
     avatarVisible: preferences.avatarVisible !== false,
-    defaultAgentModel: normalizeDefaultAgentModel(preferences.defaultAgentModel),
+    agentModelDefaults: normalizeAgentModelDefaults(preferences.agentModelDefaults),
     composerCollapseDelaySeconds: normalizeComposerCollapseDelay(
       preferences.composerCollapseDelaySeconds,
     ),
+    hostWidgetLayout: normalizeHostWidgetLayout(preferences.hostWidgetLayout),
     stageBackground,
     customBackgroundId,
     uiLocale: isUiLocale(preferences.uiLocale) ? preferences.uiLocale : "id",
@@ -222,9 +295,18 @@ export class LocalPreferencesStore implements PreferencesStore {
               }
             })
         : [];
+      const agentModelDefaults: AgentModelDefaults = value.agentModelDefaults === undefined
+        ? ((): AgentModelDefaults => {
+            // v5 and older knew one global default. Kana only had a local
+            // Hermes then, so that choice belongs to the local runtime.
+            const legacy = normalizeDefaultAgentModel(value.defaultAgentModel);
+            return legacy ? { local: legacy } : {};
+          })()
+        : value.agentModelDefaults;
       const preferences: KanaPreferences = {
         ...DEFAULT_PREFERENCES,
         ...value,
+        agentModelDefaults,
         onboardingCompleted:
           value.onboardingCompleted ?? migratedFromLegacy,
         hermes: {

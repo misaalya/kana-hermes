@@ -82,7 +82,7 @@ export function ChatDock() {
         id="kana-chat-panel"
         inert={chatVisible ? undefined : true}
         aria-hidden={!chatVisible}
-        className="kana-chat-panel flex h-full w-full flex-col overflow-hidden rounded-[36px] max-lg:rounded-none"
+        className="kana-chat-panel flex h-full w-full flex-col overflow-hidden rounded-none"
       >
         <div className="flex min-h-0 flex-1">
           <ChatFeed />

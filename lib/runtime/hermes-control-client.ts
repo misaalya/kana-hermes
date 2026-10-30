@@ -1,7 +1,18 @@
 export type HermesRuntimeStatus = {
+  mode?: "local" | "remote";
+  /**
+   * Opaque identity of the Hermes runtime Kana is configured for. Kana keys
+   * its per-Hermes model defaults by it; it carries no endpoint or credential.
+   */
+  runtimeId?: string;
+  configError?: boolean;
   controlAvailable: boolean;
   state: "disabled" | "stopped" | "starting" | "running" | "stopping" | "failed";
   managed: boolean;
+  /** A remote dashboard username/password is available to the server. */
+  authAvailable?: boolean;
+  /** An Instabox wake is configured and can be requested from this host. */
+  wakeAvailable?: boolean;
   executable?: string;
   pid?: number;
   port: number;

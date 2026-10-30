@@ -35,6 +35,19 @@ export type AgentModelChoice = {
   model: string;
 };
 
+/**
+ * Kana's own default for new conversations, per Hermes runtime identity
+ * (`local` or an opaque `remote-…`). A default learned from one Hermes is
+ * never sent to another, whose catalog may not contain that provider.
+ */
+export type AgentModelDefaults = Record<string, AgentModelChoice>;
+
+/** The independently arrangeable desktop header widgets. */
+export type HostWidgetId = "monitor" | "time" | "date";
+export type HostWidgetZone = "left" | "center" | "right";
+/** Widget ids per fixed header zone, in display order for that zone. */
+export type HostWidgetLayout = Record<HostWidgetZone, HostWidgetId[]>;
+
 export type KanaPreferences = {
   onboardingCompleted: boolean;
   /** Interface copy language; dictionary lives in lib/ui/copy.ts. */
@@ -47,14 +60,17 @@ export type KanaPreferences = {
   avatarVisible: boolean;
   /**
    * Kana's own default for new conversations, applied as a per-session Hermes
-   * override at session.create. Null follows Hermes's configured default.
+   * override at session.create. A runtime with no entry follows Hermes's
+   * configured default.
    */
-  defaultAgentModel: AgentModelChoice | null;
+  agentModelDefaults: AgentModelDefaults;
   /**
    * How long the focus-mode composer holds its wide state after the draft,
    * focus, attachments, and dictation are gone, in seconds (0..600).
    */
   composerCollapseDelaySeconds: number;
+  /** Zone and order of the desktop header widgets. */
+  hostWidgetLayout: HostWidgetLayout;
   stageBackground: StageBackground;
   customBackgroundId?: string;
   hermes: {

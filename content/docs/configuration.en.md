@@ -197,6 +197,48 @@ HERMES_DASHBOARD_SESSION_TOKEN=<token> hermes serve --host 127.0.0.1 --port 9119
 
 Kana reads the token from that process's environment, and it still stays on the server rather than in the browser.
 
+### A Hermes gateway on another machine
+
+By default Kana uses a Hermes on its own machine. Add a `remote` block to connect to a gateway elsewhere; Kana then does not discover, start, restart, or stop a local Hermes. Remove the block to return to local discovery.
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `remote.url` | required | `wss://` dashboard URL. A bare host gets `/api/ws` appended. Credentials, query strings, and fragments are refused. |
+| `remote.auth.mode` | `"password"` | The only supported remote auth mode. |
+| `remote.auth.username` | required | Username for Hermes's dashboard `basic` provider. |
+| `remote.auth.password` | none | Password stored in the owner-only file. Exactly one of `password` and `passwordEnv` is required. |
+| `remote.auth.passwordEnv` | none | Name of a dedicated environment variable holding the password. `KANA_*` and the Hermes dashboard token are refused. |
+| `remote.wake.machineId` | none | Instabox machine id for the optional wake button. |
+| `remote.wake.executable` | `instabox` on `PATH` | Absolute path to the Instabox CLI; the file name must be `instabox`. |
+| `remote.wake.timeoutSeconds` | `120` | Total wait for the VM and Hermes health, 10–600 seconds. |
+| `remote.wake.env` | none | Extra environment variable names for the Instabox CLI, at most 32; Kana and Hermes credentials are refused. |
+
+```json
+{
+  "hermes": {
+    "remote": {
+      "url": "wss://hermes.example.com",
+      "auth": {
+        "mode": "password",
+        "username": "misa",
+        "passwordEnv": "HERMES_REMOTE_PASSWORD"
+      },
+      "wake": { "machineId": "m_xxxxxxxx", "timeoutSeconds": 120 }
+    }
+  }
+}
+```
+
+The remote machine must expose `/auth/password-login`, `/api/auth/ws-ticket`, `/api/auth/ws`, and `/api/health` behind TLS. Kana logs in with the dashboard `basic` provider, keeps the cookie on the server, and requests a new single-use WebSocket ticket for each connection. The URL, username, and password stay in `config.json` or the server environment and never reach the browser. Remote token auth is not supported. `/restart` cannot restart a remote gateway; restart it where it runs.
+
+Kana keeps its own default model for new conversations separately for the local runtime and each configured remote dashboard. Before applying it, Kana checks that Hermes's live model catalog still lists that provider and model; otherwise it uses Hermes's default for that conversation.
+
+A remote reply can still mention `MEDIA:/path`. That path belongs to the remote machine, so Kana shows only the file name and cannot offer a download. Kana still needs a long-lived server with a writable data folder; a remote Hermes does not make it run on a serverless platform such as Vercel.
+
+#### Instabox wake
+
+When the remote gateway is an Instabox VM that pauses while idle, set `remote.wake`. The connection screen then offers **Wake Hermes**: Kana runs `instabox resume <machineId>`, then `instabox start <machineId>` if the sandbox is stopped, and polls health until it answers. The CLI must be installed and logged in on the machine that runs Kana. It runs from the service account's home with a small environment allowlist; add any token variable the CLI needs to `remote.wake.env`. Kana does not wake the VM automatically, runs one wake at a time, and waits 15 seconds before another. Waking the VM does not start `hermes serve`; run that as a service on the VM so health can answer after a resume. While the VM is unreachable, the screen says **Remote Hermes is unreachable** and makes **Wake Hermes** the main action; it shows **Waking Instabox** while the request runs, and if the wake succeeds but Kana still cannot connect it points at the remote dashboard credentials.
+
 ## Prompt guardrail {#guardrail}
 
 The `guardrails` section checks your message before Kana sends it to Hermes. You write your rules as plain statements of what Kana must not do; Kana turns them into the one yes/no question it asks Jev, TypeSafe's model. Jev returns a probability and no text, and Kana itself compares that probability against your threshold and then refuses the message.

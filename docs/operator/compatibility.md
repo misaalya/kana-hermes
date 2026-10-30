@@ -41,6 +41,10 @@ package and an optional browser backup, never rolling back or patching Hermes.
 Kana reads the live command catalog and public `hermes serve` RPCs instead of
 copying a version-specific command list, so commands Hermes adds appear in Kana
 without a Kana change. The minimum tested Hermes version is 0.20.1; older
-releases are not a compatibility promise. A gateway Kana cannot complete the
-handshake with leaves the workspace showing its connection state, and unknown
-methods are rejected by the relay allow-list instead of being forwarded.
+releases are not a compatibility promise. Hermes 0.22+ server-to-client prompts
+(clarify, approval, sudo, secret) are bridged through
+`POST /api/hermes/server-request`; the 0.22.5 wire shapes are checked against
+its generated gateway contract, while the tested baseline remains 0.20.1. A
+gateway Kana cannot complete the handshake with leaves the workspace showing
+its connection state, and unknown methods are rejected by the relay allow-list
+instead of being forwarded.

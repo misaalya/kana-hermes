@@ -156,15 +156,20 @@ export function HermesControlPanel({
 
   // The chip carries the one fact that matters; the full sentence rides in
   // its tooltip, so the row stays free of explanatory text.
-  const external = status && running && !status.managed;
-  const chipLabel = external ? copy.externalChip : stateLabel;
-  const chipTitle = status && running
-    ? status.managed ? copy.managedByKana : copy.externalHermes
-    : status && !status.executable
-      ? copy.missingExecutable
-      : status && !canControl
-        ? copy.controlUnavailable
-        : undefined;
+  const remote = status?.mode === "remote";
+  const external = status && running && !status.managed && !remote;
+  const chipLabel = remote ? copy.remoteChip : external ? copy.externalChip : stateLabel;
+  const chipTitle = status?.configError
+    ? copy.configInvalid
+    : remote
+      ? status?.authAvailable ? copy.remoteHermes : copy.remoteAuthMissing
+      : status && running
+        ? status.managed ? copy.managedByKana : copy.externalHermes
+        : status && !status.executable
+          ? copy.missingExecutable
+          : status && !canControl
+            ? copy.controlUnavailable
+            : undefined;
 
   // One identity row: the state chip, then only the action that makes sense
   // right now. The facts it is talking about (port, ownership) sit under it.
@@ -229,7 +234,7 @@ export function HermesControlPanel({
             {actions}
           </div>
         </SettingsRow>
-        {running ? (
+        {running && !remote ? (
           <SettingsRow label={copy.portLabel} inline>
             <span className="text-xs font-semibold text-ink-dim">{status?.port}</span>
           </SettingsRow>

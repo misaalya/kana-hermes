@@ -1,7 +1,13 @@
+import type { HermesServerRequest } from "./hermes-bridge";
 import { registerLiveStream } from "./live-streams";
 
 type EventStreamDependencies = {
   connect: () => Promise<unknown>;
+  /** The connected runtime's opaque identity, read after connect resolves. */
+  runtimeId?: () => string | null;
+  /** Server-to-client requests already waiting when this stream opens. */
+  serverRequests?: () => HermesServerRequest[];
+  subscribeServerRequests?: (listener: (request: HermesServerRequest) => void) => () => void;
   subscribe: (listener: (params: unknown) => void) => () => void;
   /** Called when the gateway connection drops; the stream then ends. */
   onConnectionLost?: (listener: () => void) => () => void;
@@ -23,6 +29,7 @@ export function createHermesEventStream(
     start(controller) {
       let closed = false;
       let unsubscribe: (() => void) | undefined;
+      let unsubscribeServerRequests: (() => void) | undefined;
       let stopWatching: (() => void) | undefined;
       let heartbeat: ReturnType<typeof setInterval> | undefined;
       cleanup = () => {
@@ -31,6 +38,7 @@ export function createHermesEventStream(
         signal.removeEventListener("abort", cleanup);
         unregister();
         unsubscribe?.();
+        unsubscribeServerRequests?.();
         stopWatching?.();
         if (heartbeat) clearInterval(heartbeat);
         try { controller.close(); } catch { /* Already cancelled by the reader. */ }
@@ -60,6 +68,13 @@ export function createHermesEventStream(
       };
       const send = (event: string, data: unknown) =>
         write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      const sendServerRequest = (request: HermesServerRequest) =>
+        send("server-request", {
+          jsonrpc: "2.0",
+          id: request.id,
+          method: request.method,
+          params: request.params,
+        });
 
       send("open", { ok: true });
       // Do not make start() await the shared connection: reader cancellation
@@ -71,7 +86,8 @@ export function createHermesEventStream(
         try {
           await dependencies.connect();
           if (closed) return;
-          send("gateway", { connected: true });
+          const runtimeId = dependencies.runtimeId?.() ?? null;
+          send("gateway", { connected: true, ...(runtimeId ? { runtimeId } : {}) });
         } catch (error) {
           if (closed) return;
           send("gateway", {
@@ -82,6 +98,8 @@ export function createHermesEventStream(
           return;
         }
         if (closed) return;
+        // A request that arrived before this tab opened still needs its dialog.
+        for (const request of dependencies.serverRequests?.() ?? []) sendServerRequest(request);
         stopWatching = dependencies.onConnectionLost?.(() => {
           send("gateway", { connected: false, message: "Hermes gateway disconnected." });
           cleanup();
@@ -89,6 +107,7 @@ export function createHermesEventStream(
         unsubscribe = dependencies.subscribe((params) =>
           send("hermes", { jsonrpc: "2.0", method: "event", params }),
         );
+        unsubscribeServerRequests = dependencies.subscribeServerRequests?.(sendServerRequest);
         heartbeat = setInterval(() => {
           void dependencies.authorized().then((authorized) => {
             if (!authorized) cleanup();

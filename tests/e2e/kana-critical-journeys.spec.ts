@@ -32,6 +32,12 @@ type FakeHermes = {
   advanceHeldTurn(): Promise<void>;
   /** The held research turn replies. */
   finishHeldTurn(): Promise<void>;
+  /** The held research turn ends as interrupted but carries Hermes's stored reply. */
+  interruptHeldTurn(text: string): Promise<void>;
+  /** The runtime session id Kana currently talks to. */
+  runtimeId(): string;
+  /** JSON-RPC responses Kana posted for server→client requests. */
+  serverResponses: Array<Record<string, unknown>>;
   /** Slash commands Hermes received, in order, as `slash.exec` saw them (no leading slash). */
   commands: string[];
 };
@@ -111,7 +117,7 @@ async function installFakeHermes(page: Page): Promise<FakeHermes> {
           this.dispatchEvent(new Event("open"));
           this.dispatchEvent(
             new MessageEvent("gateway", {
-              data: JSON.stringify({ connected: true }),
+              data: JSON.stringify({ connected: true, runtimeId: "local" }),
             }),
           );
         });
@@ -185,6 +191,11 @@ async function installFakeHermes(page: Page): Promise<FakeHermes> {
       body: JSON.stringify({ sessions: directory }),
     });
   });
+  const serverResponses: Array<Record<string, unknown>> = [];
+  await page.route("**/api/hermes/server-request", (route) => {
+    serverResponses.push(route.request().postDataJSON() as Record<string, unknown>);
+    return route.fulfill({ json: { ok: true } });
+  });
   await page.route("**/api/local-runtime/hermes**", (route) =>
     route.fulfill({
       contentType: "application/json",
@@ -192,6 +203,7 @@ async function installFakeHermes(page: Page): Promise<FakeHermes> {
         controlAvailable: true,
         state: "running",
         managed: false,
+        runtimeId: "local",
         executable: "/usr/bin/hermes",
         port: 9119,
         websocketUrl: "ws://127.0.0.1:9119/api/ws",
@@ -431,6 +443,8 @@ async function installFakeHermes(page: Page): Promise<FakeHermes> {
 
   return {
     commands: receivedCommands,
+    runtimeId: () => activeRuntimeId,
+    serverResponses,
     advanceHeldTurn: () => runTool("web_extract", "bmkg.go.id"),
     async finishHeldTurn() {
       if (!heldTurn) throw new Error("No research turn is running.");
@@ -445,6 +459,14 @@ async function installFakeHermes(page: Page): Promise<FakeHermes> {
       session.running = false;
       heldTurn = null;
       await emitHermesEvent("message.complete", { status: "complete", text }, runtimeId);
+    },
+    async interruptHeldTurn(reply) {
+      if (!heldTurn) throw new Error("No research turn is running.");
+      const { session, runtimeId } = heldTurn;
+      session.history.push({ role: "assistant", text: reply });
+      session.running = false;
+      heldTurn = null;
+      await emitHermesEvent("message.complete", { status: "interrupted", text: reply }, runtimeId);
     },
   };
 }
@@ -487,6 +509,44 @@ test.beforeEach(async ({ page }) => {
   hermes = await installFakeHermes(page);
   await page.goto("/");
   await expect(page.getByRole("textbox", { name: "Message Kana" })).toBeVisible();
+});
+
+test("shows a Hermes clarification request and answers it", async ({ page }) => {
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
+  await composer.fill("Ask me a question");
+  await submitDraft(page, composer);
+  await expect(
+    page.getByRole("log", { name: "Live chat" }).getByText("Hello! I am here.", { exact: true }),
+  ).toBeVisible();
+
+  const runtimeId = hermes.runtimeId();
+  await page.evaluate((runtimeId) => {
+    const target = window as Window & {
+      __kanaE2eEmit?: (event: string, data: unknown) => void;
+    };
+    target.__kanaE2eEmit?.("server-request", {
+      jsonrpc: "2.0",
+      id: "srq-000000000001",
+      method: "clarify",
+      params: {
+        session_id: runtimeId,
+        questions: [
+          { qid: "q0", question: "Which option?", choices: ["A", "B"], multi_select: false },
+        ],
+      },
+    });
+  }, runtimeId);
+
+  const dialog = page.getByRole("dialog", { name: "A question from Hermes", exact: true });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText("Which option?", { exact: true })).toBeVisible();
+  await dialog.getByRole("radio", { name: /^A/ }).click();
+  await dialog.getByRole("button", { name: "Send answer", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(hermes.serverResponses).toContainEqual({
+    id: "srq-000000000001",
+    result: { answers: { q0: "A" }, outcome: "submitted" },
+  });
 });
 
 /** Pick an option from one of Kana's custom dropdowns (no native select). */
@@ -777,21 +837,26 @@ test("keeps the avatar chat tray blue and gives focus mode a plain reading colum
   const dialog = page.getByRole("dialog");
   const storedComposerDelay = () =>
     page.evaluate(() => {
-      const raw = localStorage.getItem("kana.preferences.v5");
+      const raw = localStorage.getItem("kana.preferences.v6");
       return raw ? JSON.parse(raw).composerCollapseDelaySeconds : null;
     });
   // The idle assertions below expect the bar to narrow at once; its delayed
-  // collapse has its own check further down. The delay is a preset choice,
+  // collapse has its own check further down. The delay is a stepped choice,
   // never a free number.
-  const delayGroup = dialog.getByRole("radiogroup", { name: "Chatbar delay" });
-  await expect(delayGroup.getByRole("radio")).toHaveText([
-    "Off",
-    "15 s",
-    "30 s",
-    "1 min",
-    "2 min",
-  ]);
-  await delayGroup.getByRole("radio", { name: "Off", exact: true }).click();
+  const delaySlider = dialog.getByRole("slider", { name: "Chatbar delay", exact: true });
+  await expect(delaySlider).toHaveValue("30");
+  await expect(delaySlider).toHaveAttribute("aria-valuetext", "30 s");
+  // The ruler takes pointer input anywhere, not just on the raised thumb.
+  const delayTrack = await delaySlider.boundingBox();
+  if (!delayTrack) throw new Error("The chatbar delay slider is not visible.");
+  await page.mouse.click(
+    delayTrack.x + delayTrack.width / 2,
+    delayTrack.y + delayTrack.height / 2,
+  );
+  await expect(delaySlider).toHaveValue(/^(55|60|65)$/);
+  await delaySlider.focus();
+  await page.keyboard.press("Home");
+  await expect(delaySlider).toHaveAttribute("aria-valuetext", "Off");
   await expect.poll(storedComposerDelay).toBe(0);
   await dialog.getByRole("button", { name: /^Avatar(?: Avatar and stage)?$/ }).click();
   await dialog.getByRole("switch", { name: "Show avatar" }).click();
@@ -925,11 +990,11 @@ test("keeps the avatar chat tray blue and gives focus mode a plain reading colum
     // delay before narrowing; opening stays immediate. Seed a short delay so
     // the check does not sit through the shortest preset.
     await page.evaluate(() => {
-      const raw = localStorage.getItem("kana.preferences.v5");
+      const raw = localStorage.getItem("kana.preferences.v6");
       if (!raw) throw new Error("Expected migrated Kana preferences.");
       const preferences = JSON.parse(raw);
       preferences.composerCollapseDelaySeconds = 2;
-      localStorage.setItem("kana.preferences.v5", JSON.stringify(preferences));
+      localStorage.setItem("kana.preferences.v6", JSON.stringify(preferences));
     });
     await page.reload();
     await expect(composer).toBeEditable({ timeout: 15000 });
@@ -1123,6 +1188,39 @@ test("keeps a running turn's Hermes activity through a refresh and renders its M
   await expect(source).toHaveAttribute("target", "_blank");
   // The long URL wraps inside its bubble instead of widening the chat.
   expect(await chat.evaluate((node) => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(0);
+});
+
+test("keeps an interrupted turn's stored answer and tools when the next prompt starts", async ({
+  page,
+}) => {
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
+  const chat = page.getByRole("log", { name: "Live chat" });
+  await composer.fill("Research the Kupang weather");
+  await submitDraft(page, composer);
+  const activity = chat.getByRole("group").filter({ hasText: "Hermes activity" });
+  await expect(activity).toContainText("web_search");
+
+  // Stop can race the last API call: Hermes stored the answer, then reported
+  // the turn as interrupted carrying that text.
+  await hermes.interruptHeldTurn([
+    "---",
+    "emotion: thinking",
+    "lang: en",
+    "---",
+    "Here is the answer Hermes saved before the stop.",
+  ].join("\n"));
+  await expect(
+    chat.getByText("Here is the answer Hermes saved before the stop.", { exact: true }),
+  ).toBeVisible();
+  await expect(activity).toContainText("web_search");
+
+  // The next prompt clears only the live log; the interrupted turn's tools now
+  // belong to its assistant message and stay in the transcript.
+  await composer.fill("Hello Kana");
+  await submitDraft(page, composer);
+  await expect(activity).toContainText("web_search");
+  await expect(activity).toHaveCount(1);
+  await expect(chat.getByText("Hello! I am here.", { exact: true })).toBeVisible();
 });
 
 test("a message typed during a turn is redirected into it, not answered twice", async ({
@@ -1447,20 +1545,57 @@ test("shows host metrics in the Connection panel and the desktop header", async 
     if (new URL(request.url()).pathname === "/api/kana/host") requests.push(request.url());
   });
 
-  // The desktop header carries the same read-only reading as a quiet HUD.
+  // The desktop header carries the same reading plus local/server time and date.
+  const widgets = page.locator(".kana-header-widgets");
   const hud = page.locator(".kana-header-host");
   if (desktop) {
-    await expect(hud).toBeVisible();
+    await expect(widgets).toBeVisible();
     await expect(hud).toContainText("CPU");
     await expect(hud).toContainText("Memory");
     await expect(hud).toContainText("Disk");
     await expect(hud).toContainText("Uptime");
     await expect(hud).toContainText("Kana");
+    await expect(hud).toHaveCSS("border-radius", "12px");
+    await expect(hud).toHaveCSS("outline-width", "1px");
+    await expect(widgets.locator(".kana-header-clock")).toHaveCSS("outline-width", "1px");
+    await expect(widgets.locator(".kana-header-date")).toHaveCSS("outline-width", "1px");
+    const restingOutline = await hud.evaluate((node) => getComputedStyle(node).outlineColor);
+    await page.screenshot({
+      path: `test-results/host-header-resting-${test.info().project.name}.png`,
+      clip: (await widgets.boundingBox()) ?? undefined,
+    });
+    await hud.hover();
+    await expect
+      .poll(() => hud.evaluate((node) => getComputedStyle(node).outlineColor))
+      .toBe(restingOutline);
+    // Light mode gives the cards the chat panel's white reading surface.
+    await page.getByRole("button", { name: "Switch to light theme" }).click();
+    const lightSurface = await page.evaluate(() => {
+      const probe = document.createElement("span");
+      probe.style.background = "var(--surface)";
+      document.body.append(probe);
+      const color = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return color;
+    });
+    for (const card of [hud, widgets.locator(".kana-header-clock"), widgets.locator(".kana-header-date")]) {
+      await expect(card).toHaveCSS("background-color", lightSurface);
+    }
+    await page.screenshot({
+      path: `test-results/host-header-light-${test.info().project.name}.png`,
+      clip: (await widgets.boundingBox()) ?? undefined,
+    });
+    await page.getByRole("button", { name: "Switch to dark theme" }).click();
     await expect(hud.locator("[data-host-ticks]")).toHaveCount(3);
-    await expect(hud.locator("[data-host-ticks] > span")).toHaveCount(36);
-    const box = await hud.boundingBox();
-    expect(box?.width ?? 0).toBeGreaterThan(360);
+    await expect(hud.locator("[data-host-ticks] > span")).toHaveCount(60);
+    await expect(widgets.locator(".kana-header-clock")).toContainText("Local");
+    await expect(widgets.locator(".kana-header-clock")).toContainText("Server");
+    await expect(widgets.locator(".kana-header-clock")).not.toContainText("—");
+    await expect(widgets.locator(".kana-header-date")).toContainText("Date");
+    const box = await widgets.boundingBox();
+    expect(box?.width ?? 0).toBeGreaterThan(500);
   } else {
+    await expect(widgets).toHaveCount(0);
     await expect(hud).toHaveCount(0);
   }
 
@@ -1488,6 +1623,232 @@ test("shows host metrics in the Connection panel and the desktop header", async 
   } else {
     expect(requests.length).toBe(atClose);
   }
+});
+
+test("centers the host widget's unavailable state", async ({ page }) => {
+  test.skip(
+    (page.viewportSize()?.width ?? 0) < 1024,
+    "The header host widget is a desktop layout.",
+  );
+  await page.route("**/api/kana/host", (route) =>
+    route.fulfill({ status: 500, json: { error: "Host metrics unavailable." } }),
+  );
+  await page.reload();
+  const hud = page.locator(".kana-header-host");
+  const message = hud.getByText("Host metrics are unavailable.", { exact: true });
+  await expect(message).toBeVisible();
+  await expect(message).toHaveCSS("text-align", "center");
+  await page.screenshot({
+    path: `test-results/host-header-unavailable-${test.info().project.name}.png`,
+    clip: (await page.locator(".kana-header-widgets").boundingBox()) ?? undefined,
+  });
+});
+
+test("keeps an empty composer's hint on one line in a narrow bar", async ({ page }) => {
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
+  await expect(composer).toHaveCSS("white-space", "nowrap");
+  await composer.fill("A short draft");
+  await expect(composer).toHaveCSS("white-space", "pre-wrap");
+  await composer.fill("");
+  await expect(composer).toHaveCSS("white-space", "nowrap");
+});
+
+test("drags a header host widget into another zone and remembers the layout", async ({
+  page,
+}) => {
+  test.skip(
+    (page.viewportSize()?.width ?? 0) < 1024,
+    "The host widgets are desktop header surfaces.",
+  );
+  // Two loads of the full workspace are part of this journey.
+  test.setTimeout(60_000);
+  const band = page.locator(".kana-header-widgets");
+  const monitor = page.locator('[data-widget-id="monitor"]');
+  const time = page.locator('[data-widget-id="time"]');
+  const date = page.locator('[data-widget-id="date"]');
+  await expect(band).toBeVisible();
+  await expect(time).toBeVisible();
+  await expect(date).toBeVisible();
+  const defaultLayout = JSON.stringify({
+    left: ["monitor"],
+    center: ["time"],
+    right: ["date"],
+  });
+  await expect(band).toHaveAttribute("data-host-layout", defaultLayout);
+
+  const settle = async () => {
+    await page.evaluate(
+      () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+    );
+    await Promise.all(
+      [monitor, time, date].map((tile) =>
+        tile.evaluate((node) =>
+          Promise.all(node.getAnimations().map((animation) => animation.finished)).then(() => undefined),
+        ),
+      ),
+    );
+  };
+  const boxes = async () => {
+    const [bandBox, monitorBox, timeBox, dateBox] = await Promise.all([
+      band.boundingBox(),
+      monitor.boundingBox(),
+      time.boundingBox(),
+      date.boundingBox(),
+    ]);
+    if (!bandBox || !monitorBox || !timeBox || !dateBox) {
+      throw new Error("The host widgets are not positioned.");
+    }
+    return { band: bandBox, monitor: monitorBox, time: timeBox, date: dateBox };
+  };
+
+  // A plain click is not a drag.
+  await date.click();
+  await expect(band).toHaveAttribute("data-host-layout", defaultLayout);
+
+  const initial = await boxes();
+  const centerX = initial.time.x + initial.time.width / 2;
+  const y = initial.time.y + initial.time.height / 2;
+  const accentOutline = await page.evaluate(() => {
+    const probe = document.createElement("span");
+    probe.style.color = "var(--accent)";
+    document.body.append(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  });
+
+  // Far from the header, the layout preview is off and the drop cancels; only
+  // the held card follows the pointer.
+  await page.mouse.move(centerX, y);
+  await page.mouse.down();
+  await page.mouse.move(initial.band.x + 18, y + 200, { steps: 8 });
+  await settle();
+  await expect(band).toHaveAttribute("data-host-layout", defaultLayout);
+  const far = await boxes();
+  expect(far.monitor.x).toBeCloseTo(initial.monitor.x, 0);
+  expect((await time.boundingBox())?.y ?? 0).toBeGreaterThan(initial.time.y + 100);
+  await expect(time).toHaveCSS("outline-color", accentOutline);
+  await page.mouse.up();
+  await settle();
+  const cancelled = await boxes();
+  expect(Math.abs(cancelled.time.x - initial.time.x)).toBeLessThan(2);
+  expect(Math.abs(cancelled.time.y - initial.time.y)).toBeLessThan(2);
+  await expect(band).toHaveAttribute("data-host-layout", defaultLayout);
+
+  // Near the header, drag the clock into the LEFT zone before the monitor.
+  await page.mouse.move(centerX, y);
+  await page.mouse.down();
+  await page.mouse.move(initial.band.x + 18, y + 24, { steps: 8 });
+  await settle();
+  // The preview opens the gap by sliding the monitor; no insertion line is
+  // drawn. The held card follows the pointer in both axes.
+  await expect(page.locator(".kana-header-insertion")).toHaveCount(0);
+  const preview = await boxes();
+  expect(preview.monitor.x).toBeGreaterThan(initial.monitor.x + 80);
+  const held = await time.boundingBox();
+  expect((held?.y ?? 0)).toBeGreaterThan(initial.time.y + 12);
+  await page.mouse.up();
+  await settle();
+
+  const expected = JSON.stringify({
+    left: ["time", "monitor"],
+    center: [],
+    right: ["date"],
+  });
+  await expect(band).toHaveAttribute("data-host-layout", expected);
+  const moved = await boxes();
+  expect(moved.time.x).toBeLessThan(moved.monitor.x);
+  expect(Math.abs(moved.time.y - initial.time.y)).toBeLessThan(2);
+  expect(moved.monitor.x).toBeGreaterThan(initial.monitor.x + 80);
+  expect(moved.time.x + moved.time.width).toBeLessThanOrEqual(moved.monitor.x);
+  expect(moved.monitor.x + moved.monitor.width).toBeLessThanOrEqual(moved.date.x);
+
+  // The widgets stay inside the safe band, clear of the name pill and toolbar.
+  const title = await page.locator(".kana-session-title").boundingBox();
+  const nav = await page.locator(".kana-workspace-header nav").boundingBox();
+  expect(moved.time.x).toBeGreaterThanOrEqual((title?.x ?? 0) + (title?.width ?? 0));
+  expect(moved.date.x + moved.date.width).toBeLessThanOrEqual(nav?.x ?? 0);
+
+  // The zone and order survive a reload.
+  await page.reload();
+  await expect(page.locator(".kana-header-widgets")).toHaveAttribute(
+    "data-host-layout",
+    expected,
+  );
+  await expect(page.locator('[data-widget-id="time"]')).toBeVisible();
+  await settle();
+  const restored = await boxes();
+  expect(restored.time.x).toBeLessThan(restored.monitor.x);
+});
+
+test("targets the nearest block so a date dragged beside the monitor lands after it", async ({
+  page,
+}) => {
+  test.skip(
+    (page.viewportSize()?.width ?? 0) < 1024,
+    "The host widgets are desktop header surfaces.",
+  );
+  test.setTimeout(60_000);
+  const band = page.locator(".kana-header-widgets");
+  const monitor = page.locator('[data-widget-id="monitor"]');
+  const time = page.locator('[data-widget-id="time"]');
+  const date = page.locator('[data-widget-id="date"]');
+  await expect(band).toBeVisible();
+  await expect(date).toBeVisible();
+
+  const settle = async () => {
+    await page.evaluate(
+      () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+    );
+    await Promise.all(
+      [monitor, time, date].map((tile) =>
+        tile.evaluate((node) =>
+          Promise.all(node.getAnimations().map((animation) => animation.finished)).then(() => undefined),
+        ),
+      ),
+    );
+  };
+  const [bandBox, monitorBox, dateBox] = await Promise.all([
+    band.boundingBox(),
+    monitor.boundingBox(),
+    date.boundingBox(),
+  ]);
+  if (!bandBox || !monitorBox || !dateBox) {
+    throw new Error("The host widgets are not positioned.");
+  }
+
+  // Stop the card just past the monitor's middle, still far from the band's
+  // left third. The old pointer-third rule picked CENTER here; the held card's
+  // own position against the installed monitor now picks LEFT after it.
+  const grabX = dateBox.x + dateBox.width / 2;
+  const y = dateBox.y + dateBox.height / 2;
+  const dropX = monitorBox.x + monitorBox.width - 10;
+  expect(dropX).toBeGreaterThan(bandBox.x + bandBox.width / 3);
+  await page.mouse.move(grabX, y);
+  await page.mouse.down();
+  await page.mouse.move(dropX, y, { steps: 8 });
+  await settle();
+
+  await expect(page.locator(".kana-header-insertion")).toHaveCount(0);
+  await expect(time).toBeHidden();
+
+  await page.mouse.up();
+  await settle();
+  await expect(band).toHaveAttribute(
+    "data-host-layout",
+    JSON.stringify({ left: ["monitor", "date"], center: ["time"], right: [] }),
+  );
+  // The date stays visible in the LEFT gap; the clock yields so the blocks
+  // never touch.
+  await expect(date).toBeVisible();
+  await expect(time).toBeHidden();
+  const [landedMonitor, landedDate] = await Promise.all([
+    monitor.boundingBox(),
+    date.boundingBox(),
+  ]);
+  expect(Math.abs((landedDate?.x ?? 0) - ((landedMonitor?.x ?? 0) + (landedMonitor?.width ?? 0) + 10)))
+    .toBeLessThan(3);
+  expect(Math.abs((landedDate?.y ?? 0) - dateBox.y)).toBeLessThan(2);
 });
 
 test("keeps short settings rows on one line on phones", async ({ page }) => {
@@ -1968,8 +2329,8 @@ test("keeps a Kana default model for new conversations", async ({ page }) => {
   }
   const storedDefault = () =>
     page.evaluate(() => {
-      const raw = localStorage.getItem("kana.preferences.v5");
-      return raw ? JSON.parse(raw).defaultAgentModel : null;
+      const raw = localStorage.getItem("kana.preferences.v6");
+      return raw ? JSON.parse(raw).agentModelDefaults?.local ?? null : null;
     });
   await expect.poll(storedDefault).toEqual({
     provider: "openrouter",
@@ -2205,10 +2566,9 @@ test("voice input opens the focus composer only while dictation is active", asyn
   await page.getByRole("button", { name: "Open settings" }).click();
   const dialog = page.getByRole("dialog");
   // Immediate collapse keeps this check about the trigger, not the delay.
-  await dialog
-    .getByRole("radiogroup", { name: "Chatbar delay" })
-    .getByRole("radio", { name: "Off", exact: true })
-    .click();
+  const delaySlider = dialog.getByRole("slider", { name: "Chatbar delay", exact: true });
+  await delaySlider.focus();
+  await page.keyboard.press("Home");
   await dialog.getByRole("button", { name: /^Avatar(?: Avatar and stage)?$/ }).click();
   await dialog.getByRole("switch", { name: "Show avatar" }).click();
   await dialog.getByRole("button", { name: "Close settings" }).click();
@@ -2405,7 +2765,7 @@ async function openGatePage(
   browser: Browser,
   page: Page,
   options: {
-    runtime: "running" | "stopped" | "external-unreadable";
+    runtime: "running" | "stopped" | "external-unreadable" | "remote";
     connectOnFirstAttempt: boolean;
     runtimeDelayMs?: number;
   },
@@ -2422,16 +2782,30 @@ async function openGatePage(
     serviceWorkers: "block",
     storageState: { cookies: await page.context().cookies(), origins: [] },
   });
-  const runtime = {
-    controlAvailable: true,
-    state: options.runtime === "stopped" ? "stopped" : "running",
-    managed: false,
-    executable: "/usr/bin/hermes",
-    port: 9119,
-    websocketUrl: "ws://127.0.0.1:9119/api/ws",
-    tokenAvailable: options.runtime === "running",
-    message: "Hermes gateway detected.",
-  };
+  const runtime = options.runtime === "remote"
+    ? {
+        mode: "remote",
+        controlAvailable: false,
+        state: "stopped",
+        managed: false,
+        port: 0,
+        websocketUrl: "",
+        tokenAvailable: false,
+        authAvailable: true,
+        wakeAvailable: true,
+        message: "Kana connects to the remote Hermes dashboard configured in config.json.",
+      }
+    : {
+        mode: "local",
+        controlAvailable: true,
+        state: options.runtime === "stopped" ? "stopped" : "running",
+        managed: false,
+        executable: "/usr/bin/hermes",
+        port: 9119,
+        websocketUrl: "ws://127.0.0.1:9119/api/ws",
+        tokenAvailable: options.runtime === "running",
+        message: "Hermes gateway detected.",
+      };
   await context.route("**/api/kana/sessions", (route) =>
     route.fulfill({ json: { sessions: [] } }),
   );
@@ -2522,7 +2896,7 @@ test("plays the seating animation for the automatic connection", async ({
   const screen = gatePage.getByRole("region", { name: "Hermes connection" });
   // The automatic attempt shows the gate while the relay connects.
   await expect(screen.locator(".kana-connection-stage")).toHaveClass(/is-trying/);
-  await expect(screen.getByRole("heading", { name: "Reconnecting" })).toBeVisible();
+  await expect(screen.getByRole("heading", { name: "Connecting to Hermes" })).toBeVisible();
   // Connected is not the end: the cable seats, the workspace stays down until
   // the seating animation has played.
   await expect(screen.getByRole("heading", { name: "Connected to Hermes" })).toBeVisible();
@@ -2574,6 +2948,77 @@ test("names an external Hermes whose session token Kana cannot read", async ({
   await context.close();
 });
 
+test("offers an Instabox wake for a remote Hermes without exposing a command", async ({
+  page,
+  browser,
+}) => {
+  test.setTimeout(90_000);
+  const { context, gatePage } = await openGatePage(browser, page, {
+    runtime: "remote",
+    connectOnFirstAttempt: false,
+  });
+  const wakes: { method: string; body: string | null }[] = [];
+  await context.route("**/api/hermes/wake", async (route) => {
+    wakes.push({ method: route.request().method(), body: route.request().postData() });
+    await route.fulfill({ json: { ok: true, alreadyUp: false, woke: true, elapsedMs: 20 } });
+  });
+  await gatePage.goto("/");
+  const screen = gatePage.getByRole("region", { name: "Hermes connection" });
+  await expect(screen).toBeVisible();
+  // A sleeping Instabox is a normal remote state: the heading names the remote
+  // as unreachable, and waking is the primary action rather than a failure.
+  await expect(
+    screen.getByRole("heading", { name: "Remote Hermes is unreachable" }),
+  ).toBeVisible();
+  await expect(screen.getByText("Instabox may be paused. Wake the machine and Kana reconnects on its own.")).toBeVisible();
+  await expect(screen.getByText("Remote Hermes is configured in config.json.")).toBeVisible();
+  const wake = screen.getByRole("button", { name: "Wake Hermes" });
+  await expect(wake).toBeEnabled();
+  await expect(screen.getByRole("button", { name: "Connect again" })).toBeEnabled();
+  await expect(screen.getByText(/port 9119|Managed by Kana/)).toHaveCount(0);
+  await gatePage.screenshot({
+    path: `test-results/connection-remote-${test.info().project.name}.png`,
+  });
+
+  await wake.click();
+  await expect.poll(() => wakes.length).toBe(1);
+  expect(wakes[0]).toEqual({ method: "POST", body: null });
+  // The wake only readies the gateway; the same gate still owns the connection
+  // attempt and remains usable if Hermes is not up yet. A wake that succeeds
+  // while the relay still cannot connect must say so instead of looping.
+  await expect(
+    screen.getByText("Instabox is awake, but Kana still could not connect. Check the remote dashboard credentials in config.json."),
+  ).toBeVisible();
+  await expect(wake).toBeVisible();
+  await context.close();
+});
+
+test("reports a remote Hermes without local process controls", async ({ page }) => {
+  await page.route("**/api/local-runtime/hermes*", (route) =>
+    route.fulfill({
+      json: {
+        mode: "remote",
+        controlAvailable: false,
+        state: "stopped",
+        managed: false,
+        port: 0,
+        websocketUrl: "",
+        tokenAvailable: false,
+        authAvailable: true,
+        wakeAvailable: true,
+        message: "Kana connects to the remote Hermes dashboard configured in config.json.",
+      },
+    }),
+  );
+  await page.getByRole("button", { name: "Open settings" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: /^Connection/ }).click();
+  const panel = dialog.getByRole("region", { name: "Hermes process control" });
+  await expect(panel).toBeVisible();
+  await expect(panel.getByText("Remote", { exact: true })).toBeVisible();
+  await expect(panel.getByRole("button")).toHaveCount(0);
+});
+
 test("stands the workspace down while Hermes is unreachable and plugs in on connect", async ({
   page,
   browser,
@@ -2591,7 +3036,7 @@ test("stands the workspace down while Hermes is unreachable and plugs in on conn
   // composer must never show while the relay is still connecting.
   await expect(screen).toBeVisible();
   await expect(screen.locator(".kana-connection-stage")).toHaveClass(/is-trying/);
-  await expect(screen.getByRole("heading", { name: "Reconnecting" })).toBeVisible();
+  await expect(screen.getByRole("heading", { name: "Connecting to Hermes" })).toBeVisible();
   // Scope to the app: the Next.js dev overlay has its own empty alert region.
   await expect(gatePage.locator("main").getByRole("alert")).toHaveCount(0);
   await expect(screen.getByRole("heading", { name: "Connection failed" })).toHaveClass(/text-danger/);
@@ -2618,7 +3063,7 @@ test("stands the workspace down while Hermes is unreachable and plugs in on conn
   });
   await screen.getByRole("button", { name: "Connect Hermes" }).click();
   await expect(screen.locator(".kana-connection-stage")).toHaveClass(/is-trying/);
-  await expect(screen.getByRole("heading", { name: "Reconnecting" })).toBeVisible();
+  await expect(screen.getByRole("heading", { name: "Connecting to Hermes" })).toBeVisible();
   await expect(screen.getByRole("button", { name: "Connecting…" })).toBeDisabled();
   await gatePage.waitForTimeout(250);
   await gatePage.screenshot({
@@ -3008,6 +3453,8 @@ test("guides a new browser profile through onboarding onto the workspace", async
 test("turns the workspace into a chat-only view for a focused conversation", async ({
   page,
 }) => {
+  // The avatar stage may still be settling while the Live2D asset is blocked.
+  test.setTimeout(60_000);
   const stage = page.getByRole("region", { name: "Kana avatar stage" });
   const avatarLayer = page.locator(".kana-avatar-viewport");
   const dock = page.locator(".kana-chat-dock");
@@ -3015,8 +3462,14 @@ test("turns the workspace into a chat-only view for a focused conversation", asy
   const canvas = page.getByTestId("live2d-canvas");
   const scale = page.getByRole("button", { name: "Adjust avatar position and size" });
   const composer = page.getByRole("textbox", { name: "Message Kana" });
+  const desktop = (page.viewportSize()?.width ?? 0) >= 1024;
   await expect(stage).toBeVisible();
   await expect(avatarLayer).toBeVisible();
+  await expect(page.locator(".kana-chat-panel")).toHaveCSS("border-radius", "0px");
+  await expect(page.locator(".kana-chat-panel")).toHaveCSS(
+    "border-top-width",
+    desktop ? "4px" : "0px",
+  );
 
   await page.getByRole("button", { name: "Open settings" }).click();
   const dialog = page.getByRole("dialog");
@@ -3030,12 +3483,17 @@ test("turns the workspace into a chat-only view for a focused conversation", asy
   await expect(stage).toBeVisible();
   await expect(scale).toHaveCount(0);
   await expect(dock).toHaveClass(/is-sole/);
+  await expect(page.locator(".kana-chat-panel")).toHaveCSS(
+    "border-top-width",
+    desktop ? "2px" : "0px",
+  );
   const viewportSize = page.viewportSize();
   const viewport = viewportSize?.width ?? 0;
   const viewportHeight = viewportSize?.height ?? 0;
 
   if (viewport >= 1024) {
     await expect(rail).toBeVisible();
+    await expect(rail).toHaveCSS("border-radius", "0px");
     const railBox = await rail.boundingBox();
     expect(railBox?.x ?? 0).toBeGreaterThanOrEqual(15);
     expect(railBox?.x ?? 0).toBeLessThanOrEqual(17);
@@ -3071,6 +3529,9 @@ test("turns the workspace into a chat-only view for a focused conversation", asy
   // The canvas stays mounted, so the model and its WebGL context survive.
   await expect(canvas).toHaveCount(1);
   await expect(composer).toBeVisible();
+  if (viewport >= 1024) {
+    await page.screenshot({ path: `test-results/square-focus-${test.info().project.name}.png` });
+  }
 
   if (viewport >= 1024) {
     // The rail is a working surface: creating a conversation never opens the
@@ -3147,14 +3608,14 @@ test("falls back to the placeholder avatar when Live2D cannot load", async ({
   page,
 }) => {
   await page.evaluate(() => {
-    const raw = localStorage.getItem("kana.preferences.v5");
+    const raw = localStorage.getItem("kana.preferences.v6");
     if (!raw) throw new Error("Expected migrated Kana preferences.");
     const preferences = JSON.parse(raw);
     preferences.live2d.modelId = undefined;
     preferences.live2d.modelName = "Unavailable test model";
     preferences.live2d.modelUrl =
       "http://127.0.0.1:9/Unavailable.model3.json";
-    localStorage.setItem("kana.preferences.v5", JSON.stringify(preferences));
+    localStorage.setItem("kana.preferences.v6", JSON.stringify(preferences));
   });
 
   await page.reload();
@@ -3574,6 +4035,10 @@ test("marks the open conversation as a square, dimmed neutral row without a stro
   expect(styles.border).toBe("rgba(0, 0, 0, 0)");
   expect(styles.title).toBe(styles.ink);
   expect(styles.marker).toBe("none");
+  await expect(
+    page.locator(".kana-choice.is-plain:not(.is-selected)").first(),
+  ).toHaveCSS("border-radius", "0px");
+  await page.screenshot({ path: `test-results/square-history-${test.info().project.name}.png` });
 });
 
 test("shows a blinking kaomoji while the conversation is empty", async ({ page }) => {

@@ -5,7 +5,7 @@ Kana keeps optional server-side settings in one owner-only JSON file,
 accepts, its default, and how a change takes effect.
 
 **Read when:** you need to change Kana's speech engine, screen prompts before they reach Hermes, tell it where Hermes is, or expose it on a network.
-**Truth in code:** `lib/server/user-config.ts`, `lib/guardrails/policy.ts`, `config/default-config.json`, `lib/server/local-hermes-runtime.ts`, `lib/server/tts-provider/index.ts`
+**Truth in code:** `lib/server/user-config.ts`, `lib/server/remote-hermes.ts`, `lib/server/remote-hermes-auth.ts`, `lib/server/instabox-wake.ts`, `lib/guardrails/policy.ts`, `config/default-config.json`, `lib/server/local-hermes-runtime.ts`, `lib/server/tts-provider/index.ts`
 
 ## The configuration file
 
@@ -66,6 +66,109 @@ start Hermes itself.
 
 `KANA_HERMES_BIN` overrides `hermes.executable` and must also be absolute. Kana
 captures `hermes.port` when its own process starts, so restart Kana to apply it.
+
+### Remote Hermes
+
+By default Kana discovers or starts Hermes on the same machine. To use a Hermes
+on another machine, add a `hermes.remote` block. Its presence selects remote
+mode: Kana never discovers, adopts, starts, restarts, or stops a local Hermes,
+and `hermes.executable`, `hermes.port`, and `hermes.workingDirectory` are
+ignored. Removing the block returns Kana to local discovery.
+
+```json
+{
+  "hermes": {
+    "remote": {
+      "url": "wss://hermes.example.com",
+      "auth": {
+        "mode": "password",
+        "username": "misa",
+        "passwordEnv": "HERMES_REMOTE_PASSWORD"
+      },
+      "wake": {
+        "machineId": "m_xxxxxxxx",
+        "executable": "/home/you/.local/bin/instabox",
+        "timeoutSeconds": 120
+      }
+    }
+  }
+}
+```
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `hermes.remote.url` | required | `wss://` dashboard URL. A bare host or base path gets `/api/ws` appended. Credentials, query strings, and fragments are refused. |
+| `hermes.remote.auth.mode` | `"password"` | The only supported remote auth mode. |
+| `hermes.remote.auth.username` | required | Username for Hermes's dashboard `basic` provider. |
+| `hermes.remote.auth.password` | none | Password stored in this owner-only file. Exactly one of `password` and `passwordEnv` is required. |
+| `hermes.remote.auth.passwordEnv` | none | Name of a dedicated environment variable holding the password; read by the server at connect time. Names starting with `KANA_` or `HERMES_DASHBOARD_SESSION_TOKEN` are refused. |
+| `hermes.remote.wake` | none | Optional Instabox wake, described below. |
+| `hermes.remote.wake.machineId` | required with `wake` | Instabox machine id; letters, digits, dots, dashes, and underscores only. |
+| `hermes.remote.wake.executable` | `instabox` on `PATH` | Absolute path to the Instabox CLI. Its file name must be `instabox`. |
+| `hermes.remote.wake.timeoutSeconds` | `120` | How long to wait for the VM and Hermes health, 10–600 seconds. |
+| `hermes.remote.wake.env` | none | Extra environment variable names passed to the Instabox CLI, at most 32. Kana's own variables and the Hermes dashboard token are refused. |
+
+A non-loopback Hermes dashboard requires a login provider; configure its
+`basic` provider with `HERMES_DASHBOARD_BASIC_AUTH_USERNAME` and a password or
+password hash, then expose it over TLS. Kana logs in at
+`/auth/password-login`, keeps the returned cookie in server memory, and asks
+`/api/auth/ws-ticket` for a fresh single-use ticket before every WebSocket
+connection. The password and cookie never reach the browser. Remote token auth
+is not supported; `hermes.remote.token` is refused.
+
+The remote host must expose `/auth/password-login`, `/api/auth/ws-ticket`, and
+`/api/health`. Use HTTPS; basic auth over plain HTTP is not suitable for a
+public host. The connection screen and Settings report remote mode without
+exposing the URL, username, password, or a process control that cannot work.
+`/restart` explains that the remote gateway must be restarted where it runs.
+
+The Connection Host card and the desktop host monitor read the remote
+dashboard's `/api/system/stats` with the same login cookie. They show the
+remote hostname, CPU, memory, disk, and uptime plus the Hermes process RSS;
+samples are cached for 2.5 seconds on the Kana server. The server clock in the
+header remains Kana's clock.
+
+A reply from a remote Hermes may still carry `MEDIA:/path`; that path is on the
+remote machine. Kana keeps only the file name as text, never signs a path on its
+own disk, and offers no download for it.
+
+#### Instabox wake
+
+When the gateway is an Instabox VM that pauses while idle, set
+`hermes.remote.wake`. The connection screen then offers **Wake Hermes**. Kana
+runs exactly `instabox resume <machineId>` and, if that fails because the
+sandbox is stopped, `instabox start <machineId>` with no shell, then polls the
+gateway's `/api/health` until it answers or the timeout expires. It runs from
+the service account's home with a small environment allowlist; add names such
+as `INSTABOX_TOKEN` to `wake.env` if the CLI needs them. The route is
+authenticated, accepts no input from the browser, runs one wake at a time, and
+refuses another for 15 seconds after one finishes. Kana never wakes a VM
+automatically and never returns the command's output.
+
+Waking or starting the VM restores its processes; it does not start
+`hermes serve`. Run `hermes serve` as a service on the VM (for example a systemd
+user service enabled at boot) so the health poll can succeed after a resume. A
+running VM whose Hermes is stopped cannot be fixed by the wake command, and
+Kana reports the timeout instead of claiming success.
+
+The gate treats a paused VM as an ordinary state rather than a failure: it says
+**Remote Hermes is unreachable**, makes **Wake Hermes** the primary action,
+shows **Waking Instabox** while the request runs, and, if the wake succeeds but
+Kana still cannot connect, points at the remote dashboard credentials instead
+of repeating the same failure.
+
+The CLI must be installed and logged in on the machine that runs Kana, not on
+the Instabox VM. A different host, such as a serverless platform, cannot run
+this command; put Kana on an always-on server or use an external wake service.
+The remote gateway and its reverse proxy must allow a request long enough for
+`timeoutSeconds`.
+
+#### Hosting note
+
+Remote Hermes does not make Kana serverless. Kana still needs one long-lived
+Node.js process with a writable data root for the shared gateway socket, SSE
+streams, SQLite state, and the wake CLI. Vercel and similar function platforms
+are not supported hosts.
 
 ## Speech
 
@@ -294,6 +397,14 @@ that Kana started:
 | MCP servers | After `/reload-mcp now`; the first `/reload-mcp` asks for confirmation. |
 | Skills | After `/reload-skills`. |
 | Anything else Hermes reads only at startup | After `/restart`, which restarts the `hermes serve` Kana started and resumes the open conversation. |
+
+Kana's own default model for new conversations is a browser preference kept
+separately for each Hermes runtime (`local`, or an opaque identity for the
+configured remote dashboard). Before Kana sends it to `session.create`, it
+checks the connected Hermes's live model catalog; a provider or model that this
+Hermes no longer offers is dropped for that session, Kana says so, and Hermes's
+own default is used instead. Switching to another Hermes therefore never sends
+a provider that exists only on the previous one.
 
 ## See also
 

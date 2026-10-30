@@ -46,8 +46,8 @@ test("renders both official samples with model-specific bindings across reloads"
   page.on("pageerror", (error) => pageErrors.push(error.message));
 
   await page.addInitScript((prefs) => {
-    if (localStorage.getItem("kana.preferences.v5")) return;
-    localStorage.setItem("kana.preferences.v5", JSON.stringify(prefs));
+    if (localStorage.getItem("kana.preferences.v6")) return;
+    localStorage.setItem("kana.preferences.v6", JSON.stringify(prefs));
   }, HARU_PREFS);
 
   const login = await page.request.post("/api/auth/login", {
@@ -64,14 +64,14 @@ test("renders both official samples with model-specific bindings across reloads"
   // Persist a switch to Mao exactly like the settings flow would.
   await page.evaluate(
     ([maoUrl, maoBindings]) => {
-      const raw = localStorage.getItem("kana.preferences.v5");
+      const raw = localStorage.getItem("kana.preferences.v6");
       if (!raw) throw new Error("Expected Kana preferences.");
       const preferences = JSON.parse(raw);
       preferences.live2d.modelId = undefined;
       preferences.live2d.modelName = "Mao";
       preferences.live2d.modelUrl = maoUrl;
       preferences.live2d.mouthOpenParameter = maoBindings.mouthOpenParameter;
-      localStorage.setItem("kana.preferences.v5", JSON.stringify(preferences));
+      localStorage.setItem("kana.preferences.v6", JSON.stringify(preferences));
     },
     [OFFICIAL_MAO_MODEL_URL, DEFAULT_MAO_BINDINGS] as const,
   );
@@ -81,7 +81,7 @@ test("renders both official samples with model-specific bindings across reloads"
   await expect(page.locator(".avatar-skeleton")).toHaveCount(0);
 
   const maoPreferences = await page.evaluate(() =>
-    JSON.parse(localStorage.getItem("kana.preferences.v5") ?? "{}"),
+    JSON.parse(localStorage.getItem("kana.preferences.v6") ?? "{}"),
   );
   expect(maoPreferences.live2d.modelUrl).toBe(OFFICIAL_MAO_MODEL_URL);
   expect(
@@ -91,12 +91,12 @@ test("renders both official samples with model-specific bindings across reloads"
 
   // Reload once more on Haru to prove per-model bindings survive round trips.
   await page.evaluate((haruUrl) => {
-    const raw = localStorage.getItem("kana.preferences.v5");
+    const raw = localStorage.getItem("kana.preferences.v6");
     if (!raw) throw new Error("Expected Kana preferences.");
     const preferences = JSON.parse(raw);
     preferences.live2d.modelName = "Haru";
     preferences.live2d.modelUrl = haruUrl;
-    localStorage.setItem("kana.preferences.v5", JSON.stringify(preferences));
+    localStorage.setItem("kana.preferences.v6", JSON.stringify(preferences));
   }, OFFICIAL_HARU_MODEL_URL);
 
   await page.reload();
@@ -104,7 +104,7 @@ test("renders both official samples with model-specific bindings across reloads"
   await expect(page.locator(".avatar-skeleton")).toHaveCount(0);
 
   const haruPreferences = await page.evaluate(() =>
-    JSON.parse(localStorage.getItem("kana.preferences.v5") ?? "{}"),
+    JSON.parse(localStorage.getItem("kana.preferences.v6") ?? "{}"),
   );
   expect(haruPreferences.live2d.modelUrl).toBe(OFFICIAL_HARU_MODEL_URL);
   expect(

@@ -52,10 +52,15 @@ export function ChatComposer() {
     "preferences",
     (state) => state.preferences.composerCollapseDelaySeconds,
   );
-  const defaultAgentModel = useKanaStore(
-    "preferences",
-    (state) => state.preferences.defaultAgentModel,
+  const runtimeId = useKanaStore(
+    "workspace",
+    (state) => state.hermesRuntime?.runtimeId ?? null,
   );
+  const agentModelDefaults = useKanaStore(
+    "preferences",
+    (state) => state.preferences.agentModelDefaults,
+  );
+  const defaultAgentModel = runtimeId ? agentModelDefaults[runtimeId] ?? null : null;
   const activeConversationId = useKanaStore("conversations", (state) => state.activeConversationId ?? undefined);
   const conversation = useKanaStore("conversations", (state) => findConversation(state, state.activeConversationId));
   const busy = useKanaStore("agentSession", (state) => state.busy);
@@ -109,9 +114,8 @@ export function ChatComposer() {
   useEffect(() => {
     const input = inputRef.current;
     if (!input) return;
-    // An empty draft has no text to measure. The placeholder can wrap in the
-    // narrow resting bar and inflate scrollHeight, so a refresh must leave the
-    // height to rows=1 instead of growing the bar until the first keystroke.
+    // An empty draft has no text to measure; leave the height to rows=1 so a
+    // refresh never grows the bar before the first keystroke.
     if (message === "") {
       input.style.height = "";
       return;

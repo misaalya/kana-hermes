@@ -262,7 +262,16 @@ export async function sendMessage(
     session.setState({ busy: true, status: status().restarting });
     try {
       const hermes = deps.hermes;
-      if (!hermes || !(await hermes.inspect()).managed) {
+      if (!hermes) {
+        note(copy.restartNotManaged);
+        return;
+      }
+      const inspected = await hermes.inspect();
+      if (inspected.mode === "remote") {
+        note(copy.restartRemote);
+        return;
+      }
+      if (!inspected.managed) {
         note(copy.restartNotManaged);
         return;
       }

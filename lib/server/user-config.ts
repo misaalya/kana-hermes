@@ -17,6 +17,7 @@ export type KanaUserConfig = {
     executable?: string;
     port?: number;
     workingDirectory?: string;
+    remote?: KanaRemoteHermesConfig;
   };
   tts?: {
     /** The server-side audio source. Defaults to the local Irodori engine. */
@@ -27,6 +28,35 @@ export type KanaUserConfig = {
     irodoriLocal?: KanaIrodoriLocalConfig;
     pollinations?: KanaPollinationsTtsConfig;
   };
+};
+
+export type KanaRemoteHermesConfig = {
+  /** The wss:// dashboard URL (a loopback ws:// URL is accepted for testing). */
+  url: string;
+  /** Dashboard login for a gated remote gateway. */
+  auth: KanaRemoteHermesAuthConfig;
+  /** Optional Instabox VM wake; Kana runs the fixed instabox CLI itself. */
+  wake?: KanaInstaboxWakeConfig;
+};
+
+export type KanaRemoteHermesAuthConfig = {
+  /** The only supported remote auth mode. */
+  mode?: "password";
+  username: string;
+  /** Exactly one of password/passwordEnv. */
+  password?: string;
+  passwordEnv?: string;
+};
+
+export type KanaInstaboxWakeConfig = {
+  /** The Instabox machine id, used only as an argument to instabox resume/start. */
+  machineId: string;
+  /** Absolute path to the instabox CLI; defaults to `instabox` on PATH. */
+  executable?: string;
+  /** How long to wait for the VM and its Hermes health endpoint. */
+  timeoutSeconds?: number;
+  /** Extra environment variable names the Instabox CLI may receive. */
+  env?: string[];
 };
 
 export type KanaTtsProviderType = "irodori-local" | "pollinations";
@@ -342,6 +372,127 @@ function parseTtsConfig(tts: Record<string, unknown>): NonNullable<KanaUserConfi
   };
 }
 
+const REMOTE_ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
+const INSTABOX_MACHINE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+
+function isLoopbackHost(hostname: string): boolean {
+  return ["localhost", "127.0.0.1", "::1", "[::1]"].includes(hostname.toLowerCase());
+}
+
+/**
+ * A remote dashboard is a deliberate opt-in: its URL and credentials are
+ * server configuration, never browser input. Off this machine the dashboard
+ * password may only cross the network over TLS; plain ws:// is accepted solely
+ * for a loopback test endpoint.
+ */
+function parseRemoteHermes(record: Record<string, unknown>): KanaRemoteHermesConfig {
+  const section = "hermes.remote";
+  const rawUrl = optionalStringWithLimit(record, "url", section, 2048);
+  if (!rawUrl) throw new Error(`${section}.url is required.`);
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    throw new Error(`${section}.url must be a valid ws:// or wss:// URL.`);
+  }
+  if (url.protocol !== "ws:" && url.protocol !== "wss:") {
+    throw new Error(`${section}.url must use ws:// or wss://.`);
+  }
+  if (url.username || url.password) {
+    throw new Error(`${section}.url must not carry credentials.`);
+  }
+  if (url.search) {
+    throw new Error(`${section}.url must not include a query string; Kana adds the token itself.`);
+  }
+  if (url.hash) throw new Error(`${section}.url must not include a fragment.`);
+  if (url.protocol === "ws:" && !isLoopbackHost(url.hostname)) {
+    throw new Error(
+      `${section}.url must use wss:// outside loopback; plain ws:// is only for a loopback test endpoint.`,
+    );
+  }
+  const basePath = url.pathname.replace(/\/+$/, "");
+  url.pathname = basePath.endsWith("/api/ws") ? basePath : `${basePath}/api/ws`;
+
+  if (record.token !== undefined || record.tokenEnv !== undefined) {
+    throw new Error(
+      `${section} token auth was removed; use ${section}.auth with a username and password.`,
+    );
+  }
+  if (!isRecord(record.auth)) throw new Error(`${section}.auth must be a JSON object.`);
+  const authSection = `${section}.auth`;
+  const mode = optionalString(record.auth, "mode", authSection);
+  if (mode !== undefined && mode !== "password") {
+    throw new Error(`${authSection}.mode must be "password".`);
+  }
+  const username = optionalStringWithLimit(record.auth, "username", authSection, 256);
+  if (!username) throw new Error(`${authSection}.username is required.`);
+  const password = optionalStringWithLimit(record.auth, "password", authSection, 8192);
+  const passwordEnv = optionalStringWithLimit(record.auth, "passwordEnv", authSection, 128);
+  if ((password === undefined) === (passwordEnv === undefined)) {
+    throw new Error(`${authSection} needs exactly one of password or passwordEnv.`);
+  }
+  if (passwordEnv !== undefined && !REMOTE_ENV_NAME.test(passwordEnv)) {
+    throw new Error(`${authSection}.passwordEnv must be a valid environment variable name.`);
+  }
+  if (passwordEnv?.startsWith("KANA_") || passwordEnv === "HERMES_DASHBOARD_SESSION_TOKEN") {
+    throw new Error(
+      `${authSection}.passwordEnv must name a dedicated remote password variable, not a Kana or Hermes credential.`,
+    );
+  }
+
+  let wake: KanaInstaboxWakeConfig | undefined;
+  if (record.wake !== undefined) {
+    if (!isRecord(record.wake)) throw new Error(`${section}.wake must be a JSON object.`);
+    const machineId = optionalStringWithLimit(record.wake, "machineId", `${section}.wake`, 128);
+    if (!machineId) throw new Error(`${section}.wake.machineId is required.`);
+    if (!INSTABOX_MACHINE_ID.test(machineId)) {
+      throw new Error(`${section}.wake.machineId may contain only letters, digits, dots, dashes, and underscores.`);
+    }
+    const executable = optionalAbsolutePath(record.wake, "executable", `${section}.wake`);
+    if (executable !== undefined && path.basename(executable) !== "instabox") {
+      throw new Error(`${section}.wake.executable must name the instabox CLI.`);
+    }
+    const timeoutSeconds = optionalPositiveInteger(record.wake, "timeoutSeconds", `${section}.wake`, 600);
+    if (timeoutSeconds !== undefined && timeoutSeconds < 10) {
+      throw new Error(`${section}.wake.timeoutSeconds must be between 10 and 600.`);
+    }
+    let env: string[] | undefined;
+    if (record.wake.env !== undefined) {
+      if (!Array.isArray(record.wake.env) || record.wake.env.length > 32) {
+        throw new Error(`${section}.wake.env must be an array of at most 32 variable names.`);
+      }
+      env = [...new Set(record.wake.env.map((item) => {
+        if (typeof item !== "string" || !REMOTE_ENV_NAME.test(item)) {
+          throw new Error(`${section}.wake.env must contain valid environment variable names.`);
+        }
+        if (item.startsWith("KANA_") || item === "HERMES_DASHBOARD_SESSION_TOKEN") {
+          throw new Error(
+            `${section}.wake.env must not expose Kana or Hermes credentials to the Instabox CLI.`,
+          );
+        }
+        return item;
+      }))];
+    }
+    wake = {
+      machineId,
+      ...(executable === undefined ? {} : { executable }),
+      ...(timeoutSeconds === undefined ? {} : { timeoutSeconds }),
+      ...(env === undefined ? {} : { env }),
+    };
+  }
+
+  return {
+    url: url.toString(),
+    auth: {
+      ...(mode === undefined ? {} : { mode }),
+      username,
+      ...(password === undefined ? {} : { password }),
+      ...(passwordEnv === undefined ? {} : { passwordEnv }),
+    },
+    ...(wake === undefined ? {} : { wake }),
+  };
+}
+
 function parseKanaUserConfigFile(filePath: string): KanaUserConfig {
   let parsed: unknown;
   try {
@@ -373,6 +524,10 @@ function parseKanaUserConfigFile(filePath: string): KanaUserConfig {
       port: optionalPort(parsed.hermes, "port", "hermes"),
       workingDirectory: optionalAbsolutePath(parsed.hermes, "workingDirectory", "hermes"),
     };
+    if (parsed.hermes.remote !== undefined) {
+      if (!isRecord(parsed.hermes.remote)) throw new Error("hermes.remote must be a JSON object.");
+      config.hermes.remote = parseRemoteHermes(parsed.hermes.remote);
+    }
   }
   if (parsed.tts !== undefined) {
     if (!isRecord(parsed.tts)) throw new Error("tts must be a JSON object.");

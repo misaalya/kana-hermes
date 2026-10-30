@@ -11,6 +11,7 @@ import {
   readHermesProcessToken,
   scanHermesServeProcesses,
 } from "@/shared/hermes-discovery.mjs";
+import { LOCAL_HERMES_RUNTIME_ID } from "@/lib/runtime/runtime-identity";
 import { readKanaUserConfig } from "./user-config";
 
 export { hermesExecutableCandidates } from "@/shared/hermes-discovery.mjs";
@@ -22,9 +23,19 @@ export { hermesExecutableCandidates } from "@/shared/hermes-discovery.mjs";
 // and is never serialized into an API response or client storage.
 
 export type LocalHermesRuntimeStatus = {
+  /** "remote" means config.json points Kana at another machine. */
+  mode?: "local" | "remote";
+  /** Opaque identity of the Hermes runtime; browser model defaults are keyed by it. */
+  runtimeId?: string;
+  /** config.json itself could not be read; this is not a missing install. */
+  configError?: boolean;
   controlAvailable: boolean;
   state: "disabled" | "stopped" | "starting" | "running" | "stopping" | "failed";
   managed: boolean;
+  /** A remote dashboard username/password is available to the server. */
+  authAvailable?: boolean;
+  /** An Instabox wake is configured and can be requested from this host. */
+  wakeAvailable?: boolean;
   executable?: string;
   pid?: number;
   port: number;
@@ -177,6 +188,8 @@ async function probe(port: number, timeoutMs = PROBE_TIMEOUT_MS): Promise<boolea
 
 function publicStatus(current: ManagedRuntime, available: boolean): LocalHermesRuntimeStatus {
   return {
+    mode: "local",
+    runtimeId: LOCAL_HERMES_RUNTIME_ID,
     controlAvailable: available,
     state: available ? current.state : "disabled",
     managed: Boolean(current.child && !current.child.killed),

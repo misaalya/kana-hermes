@@ -105,7 +105,7 @@ export class WorkspaceSetup {
     const hermes: DependencyFindings["hermes"] =
       this.connected() || status?.state === "running"
         ? "running"
-        : status?.executable
+        : status?.configError || status?.mode === "remote" || status?.executable
           ? "installed"
           : "missing";
 
@@ -176,7 +176,12 @@ export class WorkspaceSetup {
     // unreachable. A snapshot from before the attempt cannot decide whether
     // Kana should start Hermes now.
     const runtime = await this.refreshRuntime();
-    if (runtime?.executable && runtime.state !== "running") {
+    if (
+      runtime?.mode !== "remote"
+      && !runtime?.configError
+      && runtime?.executable
+      && runtime.state !== "running"
+    ) {
       this.store.setState({ connectPhase: "auto_starting" });
       try {
         await this.startGateway();

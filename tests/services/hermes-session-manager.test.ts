@@ -29,6 +29,83 @@ describe("HermesSessionManager", () => {
     assert.equal(readActiveConversationPointer(harness.storage)?.persistentSessionId, undefined);
   });
 
+  it("never sends another Hermes runtime's default model", async () => {
+    const harness = createHarness({
+      preferences: {
+        uiLocale: "en",
+        agentModelDefaults: {
+          local: { provider: "custom:9router", model: "gpt-5" },
+        },
+      },
+      setupAgent: (agent) => {
+        agent.runtimeId = "remote-0123456789abcdef";
+      },
+    });
+    harness.conversations.initialize();
+    await harness.sessions.ensure(harness.active());
+    assert.equal(harness.agent.opened[0].model, undefined);
+    assert.equal(harness.agent.opened[0].provider, undefined);
+    assert.equal(harness.agent.modelLists.length, 0, "the other runtime's catalog is not even asked");
+    assert.equal(harness.stores.errors.getState().error, null);
+  });
+
+  it("sends this runtime's default model once its catalog lists it", async () => {
+    const harness = createHarness({
+      preferences: {
+        agentModelDefaults: {
+          local: { provider: "openrouter", model: "deepseek/deepseek-v4" },
+        },
+      },
+      setupAgent: (agent) => {
+        agent.models = {
+          provider: "openrouter",
+          model: "deepseek/deepseek-v4",
+          providers: [{
+            slug: "openrouter",
+            name: "OpenRouter",
+            models: ["deepseek/deepseek-v4"],
+            current: true,
+            authenticated: true,
+          }],
+        };
+      },
+    });
+    harness.conversations.initialize();
+    await harness.sessions.ensure(harness.active());
+    assert.equal(harness.agent.opened[0].model, "deepseek/deepseek-v4");
+    assert.equal(harness.agent.opened[0].provider, "openrouter");
+    assert.equal(harness.agent.modelLists.length, 1);
+  });
+
+  it("drops a default the current Hermes no longer lists and says so", async () => {
+    const harness = createHarness({
+      preferences: {
+        uiLocale: "en",
+        agentModelDefaults: {
+          local: { provider: "custom:9router", model: "gpt-5" },
+        },
+      },
+      setupAgent: (agent) => {
+        agent.models = {
+          provider: "openrouter",
+          model: "deepseek/deepseek-v4",
+          providers: [{
+            slug: "openrouter",
+            name: "OpenRouter",
+            models: ["deepseek/deepseek-v4"],
+            current: true,
+            authenticated: true,
+          }],
+        };
+      },
+    });
+    harness.conversations.initialize();
+    await harness.sessions.ensure(harness.active());
+    assert.equal(harness.agent.opened[0].model, undefined);
+    assert.equal(harness.agent.opened[0].provider, undefined);
+    assert.match(harness.stores.errors.getState().error ?? "", /default model .* unavailable/i);
+  });
+
   it("makes the session resumable as soon as Hermes accepts the first prompt", async () => {
     const harness = createHarness();
     harness.conversations.initialize();

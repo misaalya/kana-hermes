@@ -8,9 +8,9 @@ browser never holds a Hermes token.
 **Read when:** you are adding state, a cache, a preference, a persisted file,
 or a route that reads or writes one.
 **Truth in code:** `lib/services/kana-workspace.ts`, `lib/store/kana-stores.ts`,
-`lib/preferences/local-preferences-store.ts`, `lib/server/data-dir.ts`,
-`lib/server/app-state-store.ts`, `lib/server/activity-store.ts`,
-`lib/limits.ts`
+`lib/preferences/local-preferences-store.ts`, `lib/runtime/runtime-identity.ts`,
+`lib/server/data-dir.ts`, `lib/server/app-state-store.ts`,
+`lib/server/activity-store.ts`, `lib/limits.ts`
 
 ## Shared workspace state
 
@@ -35,7 +35,7 @@ never stores a Hermes endpoint, session token, or credential in any form.
 
 | Location | Holds |
 | --- | --- |
-| `localStorage` `kana.preferences.v5` | Presentation preferences. `load()` reads the legacy keys `kana.preferences.v4..v1` when v5 is absent, normalizes, and rewrites v5. Credentials are dropped on persist. |
+| `localStorage` `kana.preferences.v6` | Presentation preferences. `load()` reads the legacy keys `kana.preferences.v5..v1` when v6 is absent, normalizes, and rewrites v6. `agentModelDefaults` keeps Kana's default model per Hermes runtime identity (`local` or an opaque `remote-…`), so a provider learned from one Hermes is never sent to another; a v5 record's single `defaultAgentModel` migrates to the local runtime. Credentials are dropped on persist. |
 | `localStorage` `kana.active-conversation.v1` | The selected conversation pointer (id, title, createdAt, optional durable Hermes session id), so a refresh returns to the same Hermes session. |
 | `localStorage` `kana.avatar.portraits.v1` | The 16 newest stage portraits (192 px WebP) cut from the canvas; never uploaded or shipped. |
 | `localStorage` `kana.pending-input.v1` | Request metadata for an approval/clarification/sudo/secret dialog that Hermes does not replay. Answers, passwords, and secret values never pass through here. |
@@ -80,13 +80,17 @@ password survives whatever the whole-root migration decides.
 | `appstate.db` | `app_state` rows (`auth.password` hash + session version, `onboarding` completion), the `voice_clones` voice library, and the `revoked_sessions` logout list. Owner-only, WAL. |
 | `activities.db` | The per-turn tool activity log, schema v2. |
 | `jwt-secret` | The installation secret that signs session and login-device JWTs and derives other keys. `KANA_JWT_SECRET` overrides it (minimum 32 characters). |
-| `config.json` | The server-owned advanced config (deployment mode, Hermes executable/port/working folder, TTS provider and credentials, and the optional `guardrails` block). Created from `config/default-config.json`; never returned to the browser. |
+| `config.json` | The server-owned advanced config (deployment mode, local Hermes executable/port/working folder, optional remote Hermes URL/username/password/wake, TTS provider and credentials, and the optional `guardrails` block). Created from `config/default-config.json`; never returned to the browser, and the remote credentials are read only by the server auth bridge and wake path. |
 | `voices/` | Reference WAVs for the voice library; `appstate.db` holds only their metadata and paths. Engine/model installs and downloads live under `irodori/` (unless `tts.irodoriLocal.installDirectory` overrides it). |
 
 `config.json` has exactly one writer: `ensureKanaUserConfigFile` creates it once
 with `flag: "wx"`, owner-only, and never replaces it. That is what makes the
 `guardrails` block trustworthy as an owner-written policy — no route, setting, or
-browser request can change the rules or the TypeSafe key. The block is parsed by
+browser request can change the rules or the TypeSafe key. The same custody
+applies to `hermes.remote`: its URL, username, password (or passwordEnv), and
+Instabox machine id are server configuration, and the browser receives only a
+remote/available status with no endpoint, credential, cookie, ticket, or
+command. The block is parsed by
 `lib/guardrails/policy.ts` rather than by `parseKanaUserConfigFile`, so a broken
 rule cannot invalidate the rest of the file and a broken block elsewhere cannot
 silently disable the guardrail. The relay reads the rules on every turn to place
@@ -104,8 +108,12 @@ converge on a single row, which is what lets the feed splice a turn's tools
 back in after a refresh or in another browser.
 
 Host metrics are not stored either: `/api/kana/host` reads the OS and `/proc`
-per request, and the browser keeps only the current snapshot while the Host
-card is mounted. Closing Settings stops the polling.
+per request, and the browser keeps only the current snapshot while a host
+surface is mounted. Closing Settings stops the Host card's polling; the desktop
+header widgets poll while the header shows them and stop with the header on
+phones or during the greeting. The only saved part is each widget's zone and
+order, a presentation preference in the local preference record
+(`hostWidgetLayout`).
 
 Process-held state is deliberately not persisted: the Hermes session token and
 the shared gateway socket (`lib/server/hermes-bridge.ts`), the managed runtime

@@ -113,6 +113,32 @@ function stringChoices(value: unknown): string[] | null {
   return choices;
 }
 
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+/** The Kana dialog kind behind a Hermes 0.22+ server request. */
+function serverRequestKind(method: string): "approval" | "clarification" | "sudo" | "secret" | null {
+  if (method === "approval") return "approval";
+  if (method === "clarify") return "clarification";
+  if (method === "sudo") return "sudo";
+  if (method === "secret") return "secret";
+  return null;
+}
+
+/** One-string server requests Kana can skip without showing a dialog. */
+const SKIPPABLE_SERVER_REQUESTS = new Set([
+  "terminal.read",
+  "preview.read",
+  "window.read",
+  "vault.unlock_prompt",
+  "vault.save_login",
+  "vault.code",
+  "display.install.sudo",
+]);
+
 /**
  * Normalize a Hermes clarify payload into Kana's clarification request.
  *
@@ -256,6 +282,7 @@ export class HermesAgentClient implements AgentClient {
   readonly id = "hermes-relay";
   private readonly listeners = new Set<(event: AgentEvent) => void>();
   private state: AgentConnectionState = "disconnected";
+  private runtimeIdValue: string | null = null;
   private eventSource: EventSource | null = null;
   private openingSessions = 0;
   private connectPromise: Promise<void> | null = null;
@@ -279,12 +306,19 @@ export class HermesAgentClient implements AgentClient {
   private sessionStored = false;
   // The reconnect in progress; a second request joins it instead of resuming twice.
   private restoring: Promise<void> | null = null;
+  // Hermes 0.22+ asks the client questions as server→client requests; this is
+  // the one still waiting for the dialog, answered with a JSON-RPC response.
+  private pendingServerRequest: { id: string; method: string } | null = null;
   private readonly queuedPrompts: Array<{ message: string }> = [];
 
   constructor(private readonly options: HermesRelayOptions = {}) {}
 
   get connectionState(): AgentConnectionState {
     return this.state;
+  }
+
+  get runtimeId(): string | null {
+    return this.runtimeIdValue;
   }
 
   async connect(): Promise<void> {
@@ -335,6 +369,7 @@ export class HermesAgentClient implements AgentClient {
       }
       const source = new EventSource("/api/hermes/events", { withCredentials: true });
       this.eventSource = source;
+      this.runtimeIdValue = null;
 
       const timeout = setTimeout(() => {
         reject(new Error("Timed out waiting for the Hermes event stream."));
@@ -343,8 +378,14 @@ export class HermesAgentClient implements AgentClient {
 
       const onGateway = (event: MessageEvent) => {
         try {
-          const value = JSON.parse(event.data) as { connected?: boolean; message?: string };
+          const value = JSON.parse(event.data) as {
+            connected?: boolean;
+            message?: string;
+            runtimeId?: string | null;
+          };
           if (value.connected) {
+            this.runtimeIdValue =
+              typeof value.runtimeId === "string" && value.runtimeId ? value.runtimeId : null;
             clearTimeout(timeout);
             resolve();
           } else if (!this.connectedOnce) {
@@ -370,12 +411,25 @@ export class HermesAgentClient implements AgentClient {
 
       source.addEventListener("gateway", onGateway as EventListener);
       source.addEventListener("hermes", onHermes as EventListener);
+      source.addEventListener("server-request", ((event: MessageEvent) => {
+        try {
+          const frame = JSON.parse(event.data) as {
+            id?: unknown;
+            method?: unknown;
+            params?: unknown;
+          };
+          this.handleServerRequestFrame(frame);
+        } catch {
+          /* ignore malformed server requests */
+        }
+      }) as EventListener);
       source.addEventListener("open", () => {
         // The relay accepted the stream; wait for the gateway status before
         // resolving a first connection.
       });
       source.addEventListener("error", () => {
         clearTimeout(timeout);
+        this.runtimeIdValue = null;
         if (this.intentionallyClosing) {
           this.setConnection("disconnected");
           resolve();
@@ -418,6 +472,8 @@ export class HermesAgentClient implements AgentClient {
     this.recoveringTurn = false;
     this.connectedOnce = false;
     this.reconnectAttempt = 0;
+    this.runtimeIdValue = null;
+    this.pendingServerRequest = null;
     this.queuedPrompts.length = 0;
     this.closeEventStream();
     this.rejectPending(new Error("Kana disconnected from Hermes."));
@@ -479,6 +535,7 @@ export class HermesAgentClient implements AgentClient {
       options.persistentSessionId ??
       response.session_id;
 
+    this.pendingServerRequest = null;
     this.session = {
       sessionId: response.session_id,
       persistentSessionId,
@@ -535,6 +592,16 @@ export class HermesAgentClient implements AgentClient {
    * the turn is no longer running, anything remembered is stale and dropped.
    */
   private restorePendingInput(response: HermesSessionResponse, persistentSessionId: string): void {
+    // Hermes 0.22+ replays server→client requests here; they are authoritative,
+    // so the client's older event-shaped memory would only double-restore.
+    if (Array.isArray(response.open_requests)) {
+      clearPendingInput(persistentSessionId);
+      for (const entry of response.open_requests) {
+        const item = record(entry);
+        if (item) this.handleServerRequestFrame(item);
+      }
+      return;
+    }
     if (response.running !== true) {
       clearPendingInput(persistentSessionId);
       return;
@@ -578,6 +645,134 @@ export class HermesAgentClient implements AgentClient {
   private forgetPending(): void {
     const key = this.pendingInputKey();
     if (key) clearPendingInput(key);
+  }
+
+  /**
+   * Hermes 0.22+ asks the client questions as server→client requests instead
+   * of `*.request` events. Map the supported ones onto the same dialogs; a
+   * request Kana cannot show is declined at once so the agent never waits for
+   * a card that will not appear.
+   */
+  private handleServerRequestFrame(frame: {
+    id?: unknown;
+    method?: unknown;
+    params?: unknown;
+  }): void {
+    if (typeof frame.id !== "string" || typeof frame.method !== "string") return;
+    const id = frame.id;
+    const method = frame.method;
+    const params = record(frame.params) ?? {};
+    const sessionId = typeof params.session_id === "string" ? params.session_id : "";
+    if (
+      sessionId &&
+      (this.session ? sessionId !== this.session.sessionId : this.openingSessions === 0)
+    ) {
+      return;
+    }
+    // The same request can arrive live, in an SSE replay, and on resume.
+    if (this.pendingServerRequest?.id === id) return;
+    const kind = serverRequestKind(method);
+    if (!kind) {
+      void this.answerServerRequest(
+        id,
+        SKIPPABLE_SERVER_REQUESTS.has(method)
+          ? { result: { value: "" } }
+          : { error: { code: -32601, message: `Kana does not handle the ${method} request.` } },
+      ).catch(() => undefined);
+      return;
+    }
+    const request =
+      kind === "clarification"
+        ? (() => {
+            const parsed = clarifyRequest({ ...params, request_id: id });
+            return parsed ? { kind: "clarification" as const, ...parsed } : null;
+          })()
+        : inputRequest(
+            kind === "approval"
+              ? "approval.request"
+              : kind === "sudo"
+                ? "sudo.request"
+                : "secret.request",
+            { ...params, request_id: id },
+          );
+    if (!request || request.kind !== kind) {
+      void this.answerServerRequest(id, {
+        error: { code: -32602, message: `Hermes sent an invalid ${method} request.` },
+      }).catch(() => undefined);
+      return;
+    }
+    this.pendingServerRequest = { id, method };
+    this.emit({ type: "input.requested", request });
+    if (kind === "approval" && typeof params.request_id === "string" && this.session) {
+      // Starts the approval's own timeout clock now that the card is on screen.
+      void this.request("approval.received", {
+        session_id: this.session.sessionId,
+        request_id: params.request_id,
+      }).catch(() => undefined);
+    }
+  }
+
+  /** Write the JSON-RPC response frame through the relay. */
+  private async answerServerRequest(
+    id: string,
+    response:
+      | { result: Record<string, unknown> }
+      | { error: { code: number; message: string } },
+  ): Promise<void> {
+    const res = await fetch("/api/hermes/server-request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, ...response }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (res.ok) return;
+    const value = (await res.json().catch(() => null)) as { error?: unknown } | null;
+    throw new Error(
+      typeof value?.error === "string"
+        ? value.error
+        : `Could not answer the Hermes request (${res.status}).`,
+    );
+  }
+
+  private serverResponseMatches(method: string, response: AgentInputResponse): boolean {
+    const pending = this.pendingServerRequest;
+    if (method === "approval") return response.kind === "approval";
+    if (method === "clarify") {
+      return response.kind === "clarification" && response.requestId === pending?.id;
+    }
+    if (method === "sudo") return response.kind === "sudo" && response.requestId === pending?.id;
+    if (method === "secret") return response.kind === "secret" && response.requestId === pending?.id;
+    return false;
+  }
+
+  private serverResponseResult(
+    method: string,
+    response: AgentInputResponse,
+  ): { result: Record<string, unknown> } {
+    if (method === "approval" && response.kind === "approval") {
+      return { result: { choice: response.choice, all: response.all === true } };
+    }
+    if (method === "clarify" && response.kind === "clarification") {
+      if (response.cancelled || response.answers.length === 0) {
+        return { result: { outcome: "cancelled" } };
+      }
+      return {
+        result: {
+          answers: Object.fromEntries(
+            response.answers.map((answer) => [answer.qid, answer.answer]),
+          ),
+          outcome: "submitted",
+        },
+      };
+    }
+    if (method === "sudo" && response.kind === "sudo") {
+      return { result: { value: response.password } };
+    }
+    if (method === "secret" && response.kind === "secret") {
+      return { result: { value: response.value } };
+    }
+    return { result: {} };
   }
 
   async sendMessage(input: AgentMessageInput): Promise<void> {
@@ -747,14 +942,16 @@ export class HermesAgentClient implements AgentClient {
     });
   }
 
-  async listModels(options: { refresh?: boolean } = {}): Promise<AgentModelCatalog> {
+  async listModels(options: { refresh?: boolean; forNewSession?: boolean } = {}): Promise<AgentModelCatalog> {
     if (this.state !== "connected") {
       throw new Error("Connect to Hermes before listing models.");
     }
     const response = await this.request<HermesModelOptionsResponse>(
       "model.options",
       {
-        ...(this.session ? { session_id: this.session.sessionId } : {}),
+        ...(this.session && options.forNewSession !== true
+          ? { session_id: this.session.sessionId }
+          : {}),
         explicit_only: true,
         refresh: options.refresh === true,
       },
@@ -815,6 +1012,14 @@ export class HermesAgentClient implements AgentClient {
   async respondToInput(response: AgentInputResponse): Promise<void> {
     if (!this.session) {
       throw new Error("Open a Hermes session before responding to input.");
+    }
+
+    const server = this.pendingServerRequest;
+    if (server && this.serverResponseMatches(server.method, response)) {
+      this.pendingServerRequest = null;
+      this.forgetPending();
+      await this.answerServerRequest(server.id, this.serverResponseResult(server.method, response));
+      return;
     }
 
     if (response.kind === "approval") {
@@ -1404,6 +1609,34 @@ export class HermesAgentClient implements AgentClient {
       return;
     }
 
+    if (event.type === "request.cancel") {
+      const id = typeof payload.id === "string" ? payload.id : "";
+      const method = typeof payload.method === "string" ? payload.method : "";
+      if (id && this.pendingServerRequest?.id === id) {
+        this.pendingServerRequest = null;
+        this.forgetPending();
+        const kind = serverRequestKind(method);
+        if (kind) this.emit({ type: "input.expired", kind, requestId: id });
+      }
+      return;
+    }
+
+    if (event.type === "approval.cancelled") {
+      const requestIds = Array.isArray(payload.request_ids)
+        ? payload.request_ids.filter((id): id is string => typeof id === "string")
+        : [];
+      if (this.pendingServerRequest?.method === "approval") {
+        this.pendingServerRequest = null;
+        this.forgetPending();
+      }
+      this.emit({
+        type: "input.expired",
+        kind: "approval",
+        requestId: requestIds[0] ?? "",
+      });
+      return;
+    }
+
     if (
       (event.type === "sudo.expire" || event.type === "secret.expire" || event.type === "clarify.expire") &&
       typeof payload.request_id === "string"
@@ -1508,6 +1741,7 @@ export class HermesAgentClient implements AgentClient {
 
     if (event.type === "error") {
       this.running = false;
+      this.pendingServerRequest = null;
       this.forgetPending();
       this.emit({
         type: "agent.error",
@@ -1522,12 +1756,26 @@ export class HermesAgentClient implements AgentClient {
     // Hermes may replay a terminal event around reconnect boundaries. A turn
     // that is already terminal must not produce a second displayed response.
     if (!this.running) return;
+    // A terminal turn means any request it was blocked on is no longer open.
+    this.pendingServerRequest = null;
     const status = String(payload.status || "complete");
     const rawResponse = typeof payload.text === "string" ? payload.text : "";
 
     if (status === "interrupted") {
       this.running = false;
       this.forgetPending();
+      // Stop can race the last API call: Hermes persists the final response and
+      // still reports the turn as interrupted. Its own clients show that text,
+      // so Kana shows it too; the assistant message is what keeps the turn's
+      // tools in the transcript when the next prompt starts.
+      if (rawResponse.trim()) {
+        try {
+          const response = parseKanaResponse(rawResponse);
+          this.emit({ type: "assistant.message", response, rawResponse });
+        } catch {
+          // A partial that is not a Kana response stays out of the transcript.
+        }
+      }
       this.emit({ type: "agent.aborted" });
       this.drainQueuedPrompt();
       return;

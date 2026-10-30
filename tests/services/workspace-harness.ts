@@ -48,6 +48,8 @@ export class MemoryStorage implements PointerStorage {
 export class FakeAgent implements AgentClient {
   readonly id = "fake-hermes";
   connectionState: AgentConnectionState = "disconnected";
+  /** The connected Hermes runtime; tests can point it at a remote identity. */
+  runtimeId: string | null = "local";
   readonly opened: AgentSessionOptions[] = [];
   readonly sent: string[] = [];
   readonly queued: string[] = [];
@@ -125,7 +127,7 @@ export class FakeAgent implements AgentClient {
   readonly sessionModels = new Map<string, string>();
   /** Each switch and the session it landed on. */
   readonly switches: { sessionId: string | null; model: string }[] = [];
-  async listModels(options: { refresh?: boolean } = {}) {
+  async listModels(options: { refresh?: boolean; forNewSession?: boolean } = {}) {
     this.modelLists.push(options.refresh === true);
     const picked = this.openSessionId ? this.sessionModels.get(this.openSessionId) : undefined;
     return picked ? { ...this.models, model: picked } : this.models;

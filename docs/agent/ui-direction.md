@@ -8,7 +8,7 @@ direction, not a temporary theme.
 
 **Read when:** you are changing any component, `app/globals.css`, the composer, Settings, the avatar wardrobe, the chat feed, a stage pattern, or the fatal error pages.
 
-**Truth in code:** `app/globals.css`, `app/error.tsx`, `app/global-error.tsx`, `components/kana/chat-composer.tsx`, `components/kana/chat-dock.tsx`, `components/kana/focus-rail.tsx`, `components/kana/conversation-sidebar.tsx`, `components/kana/live-chat-feed.tsx`, `components/kana/settings-avatar-cards.tsx`, `components/kana/kana-select.tsx`, `components/kana/config-guide.tsx`, `app/docs/page.tsx`, `lib/ui/copy.ts`, `lib/presentation/markdown.ts`, `lib/presentation/json-highlight.ts`, `scripts/generate-stage-patterns.py`
+**Truth in code:** `app/globals.css`, `app/error.tsx`, `app/global-error.tsx`, `components/kana/chat-composer.tsx`, `components/kana/chat-dock.tsx`, `components/kana/focus-rail.tsx`, `components/kana/conversation-sidebar.tsx`, `components/kana/live-chat-feed.tsx`, `components/kana/header-host-monitor.tsx`, `components/kana/workspace-header.tsx`, `components/kana/settings-avatar-cards.tsx`, `components/kana/kana-select.tsx`, `components/kana/config-guide.tsx`, `app/docs/page.tsx`, `lib/ui/copy.ts`, `lib/presentation/markdown.ts`, `lib/presentation/json-highlight.ts`, `scripts/generate-stage-patterns.py`
 
 ## Colours
 
@@ -45,11 +45,9 @@ Components copy Clara's vocabulary (shared classes in `app/globals.css`):
 - Header actions are a blue pill tray (`kana-bar`) of round tabs. An open tab
   turns into the white disc, and a label bubble (`kana-tip`) appears under a tab
   while it is pointed at or open.
-- On a desktop the header's free middle carries a wide host widget (380–520
-  px): CPU, memory, and disk each with a big value over a 12-tick accent meter,
-  then uptime with Kana's own uptime and RSS, on one neutral `surface-strong`
-  panel split by dotted rules. It is read-only, polls only while mounted, and
-  is not rendered on phones.
+- On a desktop the header's safe middle band carries the host widget cards (the
+  monitor, the local/server clock, and the date) in the fixed LEFT, CENTER, and
+  RIGHT zones described under Header host widgets below.
 - The conversation title is a blue name chip.
 - Buttons are heavy pills (`kana-pill`, with `kana-pill-accent` striped blue for
   primary actions and `kana-pill-soft` for secondary ones) that hop up on hover.
@@ -107,8 +105,10 @@ Modals have square corners: this is Kana's signature. That covers Settings, the
 setup screens, conversation history, the Hermes approval/input dialog, the
 connection gate, the composer's model chooser, and the avatar layout ("Scale")
 popover. The Settings sidebar items (`kana-settings-nav-item`, the selected one
-included) are square too. Controls inside a modal keep their rounded shapes, and
-the greeting dialogue box (`kana-greeting`) is not a modal. On phones the
+included) are square too. The chat panel, the desktop focus rail, and
+conversation rows are square as well. Controls inside a modal keep their
+rounded shapes, and the greeting dialogue box (`kana-greeting`) is not a modal.
+On phones the
 sidebar becomes a sideways tab row that scrolls the active tab to its centre,
 so a selected section is never left half cut at an edge.
 
@@ -119,9 +119,12 @@ controls stack.
 Settings → Connection ends with the Host card: the hostname and OS line, then
 a 2×2 grid of flat tiles for CPU/load, memory, root disk, and uptime. CPU,
 memory, and disk carry a thin accent bar with their percentage and usage;
-uptime carries Kana's own uptime and RSS. There is no live label; a failed poll
-keeps the last values and shows an error line. Nothing is charted or stored,
-and the card polls only while it is mounted.
+uptime carries Kana's own uptime and RSS. With `hermes.remote` configured, the
+same card samples the remote Hermes dashboard's `/api/system/stats` instead:
+the hostname/OS line and host metrics are the remote machine's, and the uptime
+detail names the Hermes process at `Hermes <uptime> · <RSS>`. There is no live
+label; a failed poll keeps the last values and shows an error line. Nothing is
+charted or stored, and the card polls only while it is mounted.
 
 Floating surfaces and dialogs keep themselves inside the window horizontally:
 `useShiftIntoViewport` measures the surface and shifts it right when it crosses
@@ -130,12 +133,59 @@ with relative `left` (so its fixed-position dropdowns still measure from the
 viewport); menus move with `translate` so their entrance transform still
 composes. A menu or dialog is never cropped at the window edge.
 
+## Header host widgets
+
+On a desktop, the header's safe middle band between the conversation name chip
+and the tool tray holds three widget cards. The monitor shows CPU, memory, and
+disk as big values over 20 square accent ticks, then uptime with Kana's own
+uptime and RSS. With `hermes.remote` configured it shows the remote Hermes
+host's CPU, memory, and root disk, its uptime, and the Hermes process at
+`Hermes <uptime> · <RSS>`; the card's hostname is the remote host's. The clock
+shows the browser's local time beside the server clock, each with its zone; the
+server clock is anchored to `/api/kana/host`'s server time and zone and is
+corrected on every poll. The date follows the browser. Each card is a neutral
+`surface-strong` block in dark mode and the chat panel's `surface` in light
+mode, with a 12 px radius and a thin dim inset stroke that turns Kana blue only
+while the card is lifted for a drag; the monitor splits its cells with dotted
+rules.
+
+The cards live in three fixed zones, LEFT, CENTER, and RIGHT, each holding any
+number of cards with one 10 px gap. LEFT packs from the band's left edge in
+its saved order. RIGHT packs from the band's right edge with the first saved
+card rightmost. CENTER is one block whose offset is `(band - block width) / 2`,
+so it re-centres whenever a card enters or leaves. Zone widths come from the
+cards' measured widths, never a fixed zone size. When a block would cross the
+band or touch its neighbour, cards step out of view until the blocks clear. A
+side block meeting CENTER yields a CENTER card first (normally the clock, so a
+date placed beside the monitor stays visible); a LEFT and RIGHT touch with no
+CENTER block yields the RIGHT card; a block wider than the band drops its own
+lowest-priority card. Within one zone the yield order is date, then clock, then
+monitor. A hidden card keeps its place in the saved layout and returns when
+there is room.
+
+Dragging any card starts only after the pointer moves 5 px, so a click is not a
+drag. After that the card is held under the pointer in both axes, slightly
+scaled. While the pointer is within 40 px of the band, the held card's own
+centre chooses the target, not the pointer's third of the band: it is measured
+against the block each zone would have without that card (or the zone's edge
+when that block is empty), the nearest block wins, and the card is inserted at
+that block's nearest gap by centre. The zone already previewed keeps the target
+until another is more than 12 px closer, so the gap does not flicker between
+neighbours. The cards already there slide to leave the gap, with no insertion
+line drawn. Moving farther away clears the gap; a release there cancels the
+move. A drop inside the proximity settles the held card back into the header
+row at the gap, recomputes the zones, and saves the zone and order as
+`hostWidgetLayout` in the local preferences. An invalid saved layout falls back to monitor LEFT,
+clock CENTER, date RIGHT. The cards never cover the conversation name chip or
+the tool tray, take no input beyond their drags, poll the host only while
+mounted, and are absent on phones.
+
 ## Conversation history
 
 Conversation history has no "Recent" label. A dotted stroke like the Settings
 sidebar edge, inset to the search field's edges with room above and below,
 separates the search from the list. Only a search result count gets a label
-bubble. A conversation row is rounded and plain until hovered. The open
+bubble. A conversation row is square and plain until hovered. The open
 conversation is a square, dimmed neutral block (`surface-strong`) with ordinary
 ink: no accent fill, stroke, or corner check badge. It is a real dim, not a
 tinted or desaturated blue.
@@ -275,10 +325,12 @@ copy shows that snapshot in a selectable block instead of failing silently.
 
 ## The chat panel and composer
 
-The chat panel is the plain tray inside the blue `--chat-frame` border: no
-texture. With the avatar visible it keeps its original styling: a dock no wider
-than 480px, `--chat-depth` behind the transcript, `--chat-bubble` replies, and
-the blue composer band with white text, white model pill, and white Send disc.
+The chat panel is the plain, square-cornered tray inside the blue `--chat-frame`
+border: no texture. With the avatar visible it keeps its original styling: a
+dock no wider than 480px, `--chat-depth` behind the transcript, `--chat-bubble`
+replies, and the blue composer band with white text, white model pill, and white
+Send disc. On a desktop, focus mode draws a 2 px frame instead of 4 px, so the
+panel reads as one workspace rather than a phone edge; phones keep no frame.
 An empty conversation shows one large `--accent` kaomoji, `(๑ > ᴗ < ๑)`, whose
 eyes close to `•` for a blink now and then; the eye slots keep one width so the
 rest of the line never shifts. The quiet description is hidden text for screen
@@ -291,14 +343,17 @@ Markdown and the reader's own message keeps a quiet `--chat-bubble-user` bubble
 on the right. Its composer is one pill row on a `--surface-strong` fill: attach
 at the left, the draft, the model as a quiet text control, dictation, and Send
 as an accent disc while there is something to send. The bar rests at 380 px
-with its placeholder hidden. Writing in the text area, a draft, an attachment,
+with its placeholder hidden. An empty composer keeps its hint on one line even
+in a narrow bar, clipping it at the end instead of wrapping a second line under
+the single-row height; a real draft wraps normally. Writing in the text area, a draft, an attachment,
 or a live dictation opens it to the transcript's measure (up to 900 px) with a
 width transition; focusing the model chooser or the microphone is not enough.
 Once all of those are gone the bar keeps its wide state for the configured
 delay before it narrows, and its hint stays with it until then. The delay is a
-segmented preset in Settings → Experience: Off, 15 s, 30 s, 1 min, or 2 min
-(30 s by default; `composerCollapseDelaySeconds` still stores the number of
-seconds, so an older custom value keeps its own segment). A draft with a line
+tick-ruler slider in Settings → Experience: one tick per step, a Kana-blue fill,
+and a raised thumb, from Off to 2 minutes in 5-second steps (30 s by default;
+`composerCollapseDelaySeconds` still stores the number of seconds, so an older
+custom value keeps its own ruler up to the stored bound). A draft with a line
 break turns the bar into a rounded card, with the
 words on top and the controls on a row underneath. Phones keep the blue band and
 bubble in both states. The model chooser is a compact square popover above the

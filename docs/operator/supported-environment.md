@@ -32,6 +32,10 @@ make an untested host supported.
 - More than one Kana server process per data root. The shared Hermes WebSocket,
   the request-cancellation registry, and the voice-engine supervisor live in
   that process; clustered replicas against one directory are not supported.
+- Serverless and function hosts such as Vercel. Kana needs one long-lived
+  process with in-memory gateway state, SSE streams, SQLite storage, and a
+  writable data root. A remote Hermes changes where the agent runs, not this
+  hosting requirement.
 - Firefox and Safari may work, but their folder input, WebGL, Web Audio, and
   IndexedDB behavior has no release claim until a CI browser target exists.
 - Streaming speech, and a signed native desktop application: Kana is a web
@@ -78,8 +82,12 @@ never directly, and nothing falls back to an external provider on its own.
 - Restart recovery for every kind of pending Hermes protected input, two custom
   Live2D packages, and target-host voice p50/p95 still need field validation.
 - Hermes 0.21's batch clarify requests, and the pending approval or clarify it
-  replays on `session.resume`, are implemented from that protocol. The tested
-  baseline is 0.20.1, and no 0.21 installation has validated them here.
+  replays on `session.resume`, are implemented from that protocol. Hermes 0.22+
+  moves clarify, approval, sudo, and secret prompts to server-to-client JSON-RPC
+  requests; Kana advertises `client.capabilities`, bridges those requests, and
+  restores `open_requests`. Those 0.22.5 shapes were compared against the
+  0.22.5 gateway contract and an installed 0.22.5 source tree. The tested
+  baseline remains 0.20.1; live 0.22.5 interaction still needs owner validation.
 
 ## Hermes auto-detection on Linux
 
@@ -114,6 +122,26 @@ under Kana. If an adopted gateway restarts with a new token or port, Kana
 re-discovers it on the next failed connection. `kana doctor` reports what was
 found, including token readability.
 
+## Remote Hermes
+
+A `hermes.remote` block in `config.json` points Kana at a dashboard on another
+machine and disables local discovery and process control. The URL must use
+`wss://`, and the dashboard must use Hermes's `basic` provider with a username
+and password supplied in the owner-only file or through
+`hermes.remote.auth.passwordEnv`; neither reaches the browser. Kana logs in,
+keeps the cookie in server memory, and requests a fresh WebSocket ticket for
+each connection. The remote machine must expose `/auth/password-login`,
+`/api/auth/ws-ticket`, `/api/auth/ws`, and `/api/health` behind TLS, and the Kana
+host must be able to reach it. Conversation transcripts stay on that Hermes;
+Kana's data root still holds authentication, SQLite state, preferences, and the
+activity log.
+
+An Instabox VM can pause while idle. When `hermes.remote.wake` is configured,
+Kana's connection screen can run the installed `instabox` CLI on the Kana host,
+then poll health. The CLI must be installed and logged in there; Kana does not
+run a shell and accepts no wake input from the browser. `configure.md` has the
+keys, and `security.md` has the controls.
+
 ## VPS deploy checklist
 
 Kana keeps all server-side files (`auth.password`, the session secret, and
@@ -121,12 +149,13 @@ Kana keeps all server-side files (`auth.password`, the session secret, and
 `~/.kana`. Files from earlier roots (`$XDG_DATA_HOME/kana`,
 `~/.local/share/kana`, `./data`) are moved into it on the first start.
 
-A service unit needs no second data root. Kana must run under the account that
-owns Hermes, because Linux only lets that user read the Hermes session token,
-and that account already has a home: `~/.kana` is its data root, exactly as on a
-desktop. Set `KANA_DATA_DIR` only when you deliberately want the state
-elsewhere, for example a dedicated volume; it must then be an absolute path the
-service account can write.
+A service unit needs no second data root. For a local gateway Kana must run
+under the account that owns Hermes, because Linux only lets that user read the
+Hermes session token; that account already has a home, and `~/.kana` is its data
+root, exactly as on a desktop. A remote gateway removes that ownership
+requirement but not the data root. Set `KANA_DATA_DIR` only when you
+deliberately want the state elsewhere, for example a dedicated volume; it must
+then be an absolute path the service account can write.
 
 1. Run Kana under the Linux account that owns Hermes (see above).
 
@@ -201,8 +230,9 @@ service account can write.
    (`/api/voice/tts/speech`) each need their own `location` with
    `proxy_buffering off`, the same `proxy_pass` and
    `proxy_set_header Host $http_host;` line, and a longer
-   `proxy_read_timeout`: 1h for events, and above `tts.timeoutSeconds` for
-   speech.
+   `proxy_read_timeout`: 1h for events, above `tts.timeoutSeconds` for speech,
+   and at least the configured Instabox wake timeout (default 120s) for
+   `/api/hermes/wake`.
 
    Keep those timeouts above `tts.timeoutSeconds`. `Host $http_host` keeps a
    non-default port, unlike `$host`, and the cross-site request guard requires

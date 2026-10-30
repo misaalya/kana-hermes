@@ -15,6 +15,10 @@ function SettingsHost() {
   const { actions } = workspace;
   const open = useKanaStore("workspace", (state) => state.settingsOpen);
   const preferences = useKanaStore("preferences", (state) => state.preferences);
+  const runtimeId = useKanaStore(
+    "workspace",
+    (state) => state.hermesRuntime?.runtimeId ?? null,
+  );
   const modelCatalog = useKanaStore("models", (state) => state.entry?.catalog ?? null);
   const avatarPortraits = useKanaStore("avatar", (state) => state.portraits);
   const presence = useModalPresence(open);
@@ -32,6 +36,7 @@ function SettingsHost() {
       key={generation}
       closing={presence.closing}
       preferences={preferences}
+      runtimeId={runtimeId}
       onSave={actions.savePreferences}
       onImportAvatar={actions.importAvatarFiles}
       onListAvatarModels={actions.listAvatarModels}

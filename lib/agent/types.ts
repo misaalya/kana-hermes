@@ -181,7 +181,7 @@ export type AgentEvent =
     }
   | {
       type: "input.expired";
-      kind: "clarification" | "sudo" | "secret";
+      kind: "approval" | "clarification" | "sudo" | "secret";
       requestId: string;
     }
   | { type: "agent.finished" }
@@ -285,6 +285,11 @@ export type AgentSession = {
 export interface AgentClient {
   readonly id: string;
   readonly connectionState: AgentConnectionState;
+  /**
+   * Opaque identity of the runtime this client is connected to, or null while
+   * disconnected. Kana keys per-Hermes state (model defaults) by it.
+   */
+  readonly runtimeId: string | null;
 
   connect(): Promise<void>;
   disconnect(): Promise<void>;
@@ -315,7 +320,12 @@ export interface AgentClient {
    * model arguments are completed from it instead of asking Hermes again.
    */
   completeCommands(input: string, options?: { models?: AgentModelCatalog }): Promise<AgentCommandSuggestion[]>;
-  listModels(options?: { refresh?: boolean }): Promise<AgentModelCatalog>;
+  /**
+   * The provider/model catalog. `forNewSession` asks what a brand-new session
+   * would resolve, without the open session's overrides; use it before
+   * `session.create`.
+   */
+  listModels(options?: { refresh?: boolean; forNewSession?: boolean }): Promise<AgentModelCatalog>;
   selectModel(
     selection: AgentModelSelection,
     options?: { confirm?: boolean },

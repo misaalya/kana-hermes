@@ -29,6 +29,7 @@ import { VoiceEnginePanel } from "./voice-engine-panel";
 import { VoicePanel } from "./voice-panel";
 import { AvatarExpressionPanel } from "./avatar-expression-panel";
 import { fadeAvatarModeChange } from "./avatar-mode-transition";
+import { ComposerDelaySlider } from "./composer-delay-slider";
 import { HostPanel } from "./host-panel";
 import { ModelControlPanel } from "./model-control-panel";
 import { AdvancedConfigCard, SecuritySection } from "./settings-access-section";
@@ -56,12 +57,10 @@ import {
   SettingsSegmented,
 } from "./settings-layout";
 
-/** The offered collapse delays, in seconds. A stored value outside this list
-    keeps its own segment so the panel never misreports it. */
-const COMPOSER_DELAY_PRESETS: readonly number[] = [0, 15, 30, 60, 120];
-
 type SettingsDialogProps = {
   preferences: KanaPreferences;
+  /** The connected Hermes runtime; Kana's model default belongs to it. */
+  runtimeId?: string | null;
   onSave(preferences: KanaPreferences): Promise<void>;
   onImportAvatar(files: File[]): Promise<AvatarModelSummary>;
   onListAvatarModels(): Promise<AvatarModelSummary[]>;
@@ -109,6 +108,7 @@ type SettingsNavItem = {
 
 export function SettingsDialog({
   preferences,
+  runtimeId = null,
   onSave,
   onClose,
   onImportAvatar,
@@ -144,21 +144,6 @@ export function SettingsDialog({
     id,
     ...settingsCopy.sections[id],
   }));
-  const composerDelayOptions = (() => {
-    const current = draft.composerCollapseDelaySeconds;
-    const seconds = COMPOSER_DELAY_PRESETS.includes(current)
-      ? COMPOSER_DELAY_PRESETS
-      : [...COMPOSER_DELAY_PRESETS, current].sort((a, b) => a - b);
-    return seconds.map((value) => ({
-      value: String(value),
-      label:
-        value === 0
-          ? settingsCopy.composerDelayOff
-          : value % 60 === 0
-            ? `${value / 60} ${settingsCopy.composerDelayMinutesShort}`
-            : `${value} ${settingsCopy.composerDelaySecondsShort}`,
-    }));
-  })();
   const [section, setSection] = useState<SettingsSection>("experience");
   const navRef = useRef<HTMLElement | null>(null);
 
@@ -554,15 +539,15 @@ export function SettingsDialog({
                   <SettingsRow
                     label={settingsCopy.composerDelayTitle}
                     description={settingsCopy.composerDelayDescription}
+                    stacked
                   >
-                    <SettingsSegmented
-                      label={settingsCopy.composerDelayTitle}
-                      value={String(draft.composerCollapseDelaySeconds)}
-                      options={composerDelayOptions}
-                      onChange={(value) =>
+                    <ComposerDelaySlider
+                      locale={draft.uiLocale}
+                      value={draft.composerCollapseDelaySeconds}
+                      onChange={(composerCollapseDelaySeconds) =>
                         setDraft((current) => ({
                           ...current,
-                          composerCollapseDelaySeconds: Number(value),
+                          composerCollapseDelaySeconds,
                         }))
                       }
                     />
@@ -736,11 +721,21 @@ export function SettingsDialog({
                       catalog={agentModelCatalog}
                       onList={onListAgentModels}
                       onSelect={onSelectAgentModel}
-                      defaultModel={draft.defaultAgentModel}
-                      onSetDefault={(defaultAgentModel) =>
-                        setDraft((current) => ({ ...current, defaultAgentModel }))
-                      }
+                      defaultModel={runtimeId ? draft.agentModelDefaults[runtimeId] ?? null : null}
+                      onSetDefault={runtimeId
+                        ? (choice) =>
+                            setDraft((current) => ({
+                              ...current,
+                              agentModelDefaults: {
+                                ...current.agentModelDefaults,
+                                [runtimeId]: choice,
+                              },
+                            }))
+                        : undefined}
                     />
+                    <p className="mt-3 text-[11px] leading-relaxed text-faint">
+                      {settingsCopy.modelDefaultScope}
+                    </p>
                   </div>
                 </SettingsGroup>
               </>

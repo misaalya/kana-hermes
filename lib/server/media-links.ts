@@ -5,6 +5,7 @@ import path from "node:path";
 import { installationKey } from "@/lib/server/auth/session";
 import { resolveKanaDataDir } from "@/lib/server/data-dir";
 import { MEDIA_ROUTE } from "@/lib/presentation/media";
+import { inspectKanaUserConfig } from "./user-config";
 
 // Files Hermes delivers with `MEDIA:/local/path` reach the browser as signed
 // links, never as paths:
@@ -212,8 +213,36 @@ function spacedPath(text: string, start: number): { resolved: string; end: numbe
  * A path that does not name a deliverable file stays as written, as Hermes
  * leaves it: a hallucinated, deleted, or denied path is never served.
  */
+function remoteDelivery(): boolean {
+  const inspection = inspectKanaUserConfig();
+  // An unreadable config is fail-closed: never turn a path from another
+  // machine into a signed link for a file on this one.
+  return inspection.error !== null || inspection.config.hermes?.remote !== undefined;
+}
+
+/**
+ * A remote Hermes writes `MEDIA:` paths on its own disk. Kana cannot read
+ * them, so only the file name survives; the path never reaches the browser
+ * and is never checked against Kana's local filesystem.
+ */
+function rewriteRemoteMediaTags(text: string): string {
+  const masked = maskCode(text);
+  let output = "";
+  let cursor = 0;
+  for (const match of masked.matchAll(MEDIA_TAG)) {
+    const start = match.index ?? 0;
+    const end = start + match[0].length;
+    if (start < cursor) continue;
+    const name = path.basename(normalizeTagPath(match[1]));
+    output += text.slice(cursor, start) + (name === "." || name === path.sep ? "" : name);
+    cursor = end;
+  }
+  return output + text.slice(cursor);
+}
+
 export function rewriteMediaTags(text: string): string {
   if (!text.includes("MEDIA:")) return text;
+  if (remoteDelivery()) return rewriteRemoteMediaTags(text);
   const masked = maskCode(text);
   let output = "";
   let cursor = 0;

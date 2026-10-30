@@ -143,7 +143,7 @@ async function installStandInHermes(page: Page): Promise<void> {
           this.dispatchEvent(new Event("open"));
           this.dispatchEvent(
             new MessageEvent("gateway", {
-              data: JSON.stringify({ connected: true }),
+              data: JSON.stringify({ connected: true, runtimeId: "local" }),
             }),
           );
         });
@@ -181,6 +181,7 @@ async function installStandInHermes(page: Page): Promise<void> {
         controlAvailable: true,
         state: "running",
         managed: false,
+        runtimeId: "local",
         executable: "/usr/local/bin/hermes",
         port: 9119,
         websocketUrl: "ws://127.0.0.1:9119/api/ws",
@@ -361,7 +362,7 @@ export async function openWorkspace(
   const { theme = "light", avatarVisible = true } = options;
   await page.addInitScript(
     ({ preferences, theme }) => {
-      localStorage.setItem("kana.preferences.v5", JSON.stringify(preferences));
+      localStorage.setItem("kana.preferences.v6", JSON.stringify(preferences));
       localStorage.setItem("kana.theme", theme);
     },
     { preferences: { ...PREFERENCES, avatarVisible }, theme },

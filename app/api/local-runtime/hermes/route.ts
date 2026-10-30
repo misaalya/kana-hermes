@@ -6,6 +6,9 @@ import {
   startLocalHermesRuntime,
   stopLocalHermesRuntime,
 } from "@/lib/server/local-hermes-runtime";
+import { hermesGatewayConnected, hermesGatewayRuntimeId } from "@/lib/server/hermes-bridge";
+import { configErrorRuntimeStatus, remoteRuntimeStatus } from "@/lib/server/remote-hermes";
+import { inspectKanaUserConfig } from "@/lib/server/user-config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,6 +30,22 @@ function optionalPort(value: unknown): number | undefined {
 }
 
 export const GET = withSession(async (request) => {
+  const inspection = inspectKanaUserConfig();
+  if (inspection.error) {
+    return Response.json(configErrorRuntimeStatus(), { headers: NO_STORE });
+  }
+  const remote = inspection.config.hermes?.remote;
+  if (remote) {
+    const connected = hermesGatewayConnected("remote");
+    return Response.json(
+      remoteRuntimeStatus(
+        remote,
+        connected,
+        connected ? hermesGatewayRuntimeId() : null,
+      ),
+      { headers: NO_STORE },
+    );
+  }
   const preferredPort = Number(new URL(request.url).searchParams.get("port") ?? "");
   return Response.json(
     await inspectLocalHermesRuntime(
@@ -38,6 +57,19 @@ export const GET = withSession(async (request) => {
 
 export const POST = withSession(async (request) => {
   try {
+    const inspection = inspectKanaUserConfig();
+    if (inspection.error) {
+      return jsonError(new Error("Kana's config.json could not be read; fix it and reconnect."), 400);
+    }
+    if (inspection.config.hermes?.remote) {
+      return Response.json(
+        {
+          error:
+            "Hermes is configured as remote in config.json; Kana cannot start, restart, or stop it.",
+        },
+        { status: 400, headers: NO_STORE },
+      );
+    }
     const value = await readJsonObject(request, MAX_BODY_BYTES);
     if (value.action === "stop") {
       return Response.json(await stopLocalHermesRuntime(), { headers: NO_STORE });

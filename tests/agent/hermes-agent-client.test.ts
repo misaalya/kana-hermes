@@ -24,11 +24,13 @@ class FakeRelay {
   static handler: RpcHandler = () => ({});
   static requests: RpcRequest[] = [];
   static streams: FakeEventSource[] = [];
+  static serverResponses: Array<Record<string, unknown>> = [];
 
   static reset(): void {
     FakeRelay.handler = () => ({});
     FakeRelay.requests = [];
     FakeRelay.streams = [];
+    FakeRelay.serverResponses = [];
   }
 
   static rpcResponse(result: unknown): Response {
@@ -103,6 +105,15 @@ function installBrowserGlobals(): void {
     writable: true,
     value: async (input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url === "/api/hermes/server-request") {
+        FakeRelay.serverResponses.push(
+          JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>,
+        );
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
       if (url !== "/api/hermes/rpc" && url !== "/api/hermes/attachments") {
         return new Response("not found", { status: 404 });
       }
@@ -201,6 +212,18 @@ describe("HermesAgentClient (relay transport)", () => {
     await Promise.all(activeClients.map((client) => client.disconnect()));
     for (const stream of FakeEventSource.instances) stream.close();
     restoreBrowserGlobals();
+  });
+
+  it("exposes the runtime identity the relay reports and forgets it on a lost stream", async () => {
+    const client = await connectedClient(() => ({}));
+    assert.equal(client.runtimeId, null);
+    latestStream().send("gateway", {
+      connected: true,
+      runtimeId: "remote-0123456789abcdef",
+    });
+    assert.equal(client.runtimeId, "remote-0123456789abcdef");
+    latestStream().unexpectedClose();
+    assert.equal(client.runtimeId, null);
   });
 
   it("uploads files before submitting their unescaped Hermes references", async () => {
@@ -632,6 +655,34 @@ describe("HermesAgentClient (relay transport)", () => {
     assert.equal(promptCount, 3);
   });
 
+  it("keeps a final response that arrived before an interrupt", async () => {
+    const client = await connectedClient((request) => {
+      if (request.method === "session.create") {
+        return { session_id: "runtime-1", stored_session_id: "stored-1" };
+      }
+      if (request.method === "prompt.submit") return { accepted: true };
+      return {};
+    });
+    const events: AgentEvent[] = [];
+    await openSession(client);
+    client.subscribe((event) => events.push(event));
+    await client.sendMessage({ text: "Halo" });
+    latestStream().emitEvent("message.complete", {
+      status: "interrupted",
+      text: responseText(),
+    });
+    await tick();
+
+    const message = events.find(
+      (event): event is Extract<AgentEvent, { type: "assistant.message" }> =>
+        event.type === "assistant.message",
+    );
+    assert.ok(message, "the persisted reply is shown despite the interrupt");
+    assert.equal(message.response.subtitle.text, "Hello.");
+    assert.ok(events.some((event) => event.type === "agent.aborted"));
+    assert.equal(events.some((event) => event.type === "agent.finished"), false);
+  });
+
   it("uses dedicated approval, title, branch, secure input, and interrupt RPCs", async () => {
     const calls: RpcRequest[] = [];
     const client = await connectedClient((request) => {
@@ -806,6 +857,175 @@ describe("HermesAgentClient (relay transport)", () => {
     // Skip cancels the whole call with a plain empty answer and no question_id.
     await client.respondToInput({ kind: "clarification", requestId: "batch-1", answers: [], cancelled: true });
     assert.deepEqual(FakeRelay.requests.at(-1)?.params, { request_id: "batch-1", answer: "" });
+  });
+
+  it("answers a Hermes 0.22 clarify server request", async () => {
+    const events: AgentEvent[] = [];
+    const client = await connectedClient((request) => {
+      if (request.method === "session.create") {
+        return { session_id: "runtime-1", stored_session_id: "stored-1" };
+      }
+      return {};
+    });
+    await openSession(client);
+    client.subscribe((event) => events.push(event));
+
+    latestStream().send("server-request", {
+      jsonrpc: "2.0",
+      id: "srq-0123456789ab",
+      method: "clarify",
+      params: {
+        session_id: "runtime-1",
+        questions: [
+          { qid: "q0", question: "Which option?", choices: ["A", "B"], multi_select: false },
+        ],
+      },
+    });
+    const requested = events.find((event) => event.type === "input.requested");
+    assert.ok(requested?.type === "input.requested" && requested.request.kind === "clarification");
+    assert.equal(requested.request.requestId, "srq-0123456789ab");
+    assert.equal(requested.request.questions[0]?.question, "Which option?");
+
+    await client.respondToInput({
+      kind: "clarification",
+      requestId: "srq-0123456789ab",
+      answers: [{ qid: "q0", answer: "A" }],
+      cancelled: false,
+    });
+    assert.deepEqual(FakeRelay.serverResponses.at(-1), {
+      id: "srq-0123456789ab",
+      result: { answers: { q0: "A" }, outcome: "submitted" },
+    });
+    assert.equal(
+      FakeRelay.requests.some((request) => request.method === "clarify.respond"),
+      false,
+    );
+  });
+
+  it("clears a server request when Hermes withdraws it", async () => {
+    const events: AgentEvent[] = [];
+    const client = await connectedClient((request) => {
+      if (request.method === "session.create") {
+        return { session_id: "runtime-1", stored_session_id: "stored-1" };
+      }
+      return {};
+    });
+    await openSession(client);
+    client.subscribe((event) => events.push(event));
+
+    latestStream().send("server-request", {
+      jsonrpc: "2.0",
+      id: "srq-0123456789ac",
+      method: "clarify",
+      params: {
+        session_id: "runtime-1",
+        questions: [{ qid: "q0", question: "Which option?" }],
+      },
+    });
+    latestStream().emitEvent(
+      "request.cancel",
+      { id: "srq-0123456789ac", method: "clarify", reason: "timeout" },
+      "runtime-1",
+    );
+    assert.ok(
+      events.some(
+        (event) =>
+          event.type === "input.expired" &&
+          event.kind === "clarification" &&
+          event.requestId === "srq-0123456789ac",
+      ),
+    );
+  });
+
+  it("restores a server request replayed by session.resume", async () => {
+    const events: AgentEvent[] = [];
+    const client = await connectedClient((request) => {
+      if (request.method === "session.resume") {
+        return {
+          session_id: "runtime-2",
+          stored_session_id: "stored-1",
+          resumed: "stored-1",
+          running: true,
+          messages: [],
+          open_requests: [
+            {
+              id: "srq-0123456789ad",
+              method: "clarify",
+              params: {
+                session_id: "runtime-2",
+                questions: [{ qid: "q0", question: "Resume question?", choices: ["Yes", "No"] }],
+              },
+            },
+          ],
+        };
+      }
+      return {};
+    });
+    client.subscribe((event) => events.push(event));
+    await client.openSession({ persistentSessionId: "stored-1" });
+
+    const requested = events.find((event) => event.type === "input.requested");
+    assert.ok(requested?.type === "input.requested" && requested.request.kind === "clarification");
+    assert.equal(requested.request.requestId, "srq-0123456789ad");
+    await client.respondToInput({
+      kind: "clarification",
+      requestId: "srq-0123456789ad",
+      answers: [{ qid: "q0", answer: "Yes" }],
+      cancelled: false,
+    });
+    assert.deepEqual(FakeRelay.serverResponses.at(-1), {
+      id: "srq-0123456789ad",
+      result: { answers: { q0: "Yes" }, outcome: "submitted" },
+    });
+  });
+
+  it("answers an approval server request and declines desktop-only prompts", async () => {
+    const events: AgentEvent[] = [];
+    const client = await connectedClient((request) => {
+      if (request.method === "session.create") {
+        return { session_id: "runtime-1", stored_session_id: "stored-1" };
+      }
+      return {};
+    });
+    await openSession(client);
+    client.subscribe((event) => events.push(event));
+
+    latestStream().send("server-request", {
+      jsonrpc: "2.0",
+      id: "srq-0123456789ae",
+      method: "approval",
+      params: {
+        session_id: "runtime-1",
+        request_id: "approval-1",
+        command: "rm -rf build",
+        description: "Hermes wants to run this command.",
+        choices: ["once", "deny"],
+      },
+    });
+    const requested = events.find((event) => event.type === "input.requested");
+    assert.ok(requested?.type === "input.requested" && requested.request.kind === "approval");
+    await client.respondToInput({ kind: "approval", choice: "once" });
+    assert.deepEqual(FakeRelay.serverResponses.at(-1), {
+      id: "srq-0123456789ae",
+      result: { choice: "once", all: false },
+    });
+
+    latestStream().send("server-request", {
+      jsonrpc: "2.0",
+      id: "srq-0123456789af",
+      method: "terminal.read",
+      params: { session_id: "runtime-1" },
+    });
+    await tick();
+    assert.deepEqual(FakeRelay.serverResponses.at(-1), {
+      id: "srq-0123456789af",
+      result: { value: "" },
+    });
+    assert.equal(
+      events.filter((event) => event.type === "input.requested").length,
+      1,
+      "a desktop-only prompt never opens a Kana dialog",
+    );
   });
 
   it("keeps answering legacy flat clarify requests and surfaces clarify expiry", async () => {
@@ -1391,6 +1611,18 @@ describe("HermesAgentClient (relay transport)", () => {
     const catalog = await client.listModels();
     assert.equal(catalog.provider, "fireworks_ai");
     assert.equal(catalog.providers[1]?.models[0], "deepseek/deepseek-v4");
+    assert.equal(
+      FakeRelay.requests.findLast((request) => request.method === "model.options")?.params?.session_id,
+      "runtime-1",
+    );
+
+    // A default for a brand-new conversation must be checked against the
+    // catalog a new session would resolve, never the open session's overrides.
+    await client.listModels({ forNewSession: true });
+    assert.equal(
+      FakeRelay.requests.findLast((request) => request.method === "model.options")?.params?.session_id,
+      undefined,
+    );
 
     const suggestions = await client.completeCommands("/model deepseek-v4");
     assert.equal(suggestions.length, 2);

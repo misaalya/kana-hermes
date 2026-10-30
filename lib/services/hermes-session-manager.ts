@@ -13,6 +13,7 @@ import {
   type HermesConversationDirectoryEntry,
 } from "@/lib/conversation/active-conversation";
 import { createId, type Conversation } from "@/lib/conversation/types";
+import type { AgentModelChoice, KanaPreferences } from "@/lib/preferences/types";
 import type { KanaStores } from "@/lib/store/kana-stores";
 import { getCopy } from "@/lib/ui/copy";
 import {
@@ -97,38 +98,7 @@ export class HermesSessionManager {
       // second caller joins the first open rather than creating a session.
       if (this.opening?.conversationId !== conversation.id) {
         this.tracking.openingId = conversation.id;
-        const preferences = this.deps.preferences.current();
-        const persistentSessionId = resumableSessionId(conversation);
-        const defaultModel = persistentSessionId ? null : preferences.defaultAgentModel;
-        const openOptions = {
-          // Automatic titles (the default, or the first message) are left to
-          // Hermes, which names the session itself.
-          title: conversation.titleChosen ? conversation.title : undefined,
-          // A session Hermes never stored cannot be resumed; open a new one.
-          persistentSessionId,
-          cwd: preferences.hermes.cwd || undefined,
-        };
-        const open = defaultModel
-          ? agent
-              .openSession({
-                ...openOptions,
-                model: defaultModel.model,
-                provider: defaultModel.provider,
-              })
-              .catch(async () => {
-                // A saved default can outlive its provider or model. Never let
-                // that block the conversation: open with Hermes's own default
-                // and say what happened.
-                const opened = await agent.openSession(openOptions);
-                this.deps.stores.errors.getState().report(
-                  "agent",
-                  getCopy(preferences.uiLocale).composer.defaultModelFallback(defaultModel.model),
-                  "session",
-                );
-                return opened;
-              })
-          : agent.openSession(openOptions);
-        const promise = open.finally(() => {
+        const promise = this.openConversationSession(agent, conversation).finally(() => {
           if (this.opening?.promise === promise) this.opening = null;
         });
         this.opening = { conversationId: conversation.id, promise };
@@ -136,6 +106,75 @@ export class HermesSessionManager {
       await this.opening.promise;
     }
     return agent;
+  }
+
+  /**
+   * Open the conversation's Hermes session, applying Kana's default model for
+   * this conversation only. The default belongs to the connected runtime and
+   * must exist in its live catalog first: `session.create` accepts a provider
+   * before the deferred agent build rejects it, so a stale default would break
+   * the first turn rather than the open.
+   */
+  private async openConversationSession(agent: AgentClient, conversation: Conversation) {
+    const preferences = this.deps.preferences.current();
+    const persistentSessionId = resumableSessionId(conversation);
+    const openOptions = {
+      // Automatic titles (the default, or the first message) are left to
+      // Hermes, which names the session itself.
+      title: conversation.titleChosen ? conversation.title : undefined,
+      // A session Hermes never stored cannot be resumed; open a new one.
+      persistentSessionId,
+      cwd: preferences.hermes.cwd || undefined,
+    };
+    const defaultModel = persistentSessionId
+      ? null
+      : await this.runtimeDefaultModel(agent, preferences);
+    if (!defaultModel) return agent.openSession(openOptions);
+    try {
+      return await agent.openSession({
+        ...openOptions,
+        model: defaultModel.model,
+        provider: defaultModel.provider,
+      });
+    } catch {
+      // A saved default can outlive its provider or model. Never let that
+      // block the conversation: open with Hermes's own default and say what
+      // happened.
+      const opened = await agent.openSession(openOptions);
+      this.reportDefaultFallback(preferences.uiLocale, defaultModel.model);
+      return opened;
+    }
+  }
+
+  /** The connected runtime's saved default, if its catalog still lists it. */
+  private async runtimeDefaultModel(
+    agent: AgentClient,
+    preferences: KanaPreferences,
+  ): Promise<AgentModelChoice | null> {
+    const runtimeId = agent.runtimeId;
+    const saved = runtimeId ? preferences.agentModelDefaults[runtimeId] ?? null : null;
+    if (!saved) return null;
+    let catalog: AgentModelCatalog;
+    try {
+      catalog = await agent.listModels({ forNewSession: true });
+    } catch {
+      this.reportDefaultFallback(preferences.uiLocale, saved.model);
+      return null;
+    }
+    const available = catalog.providers.some(
+      (provider) => provider.slug === saved.provider && provider.models.includes(saved.model),
+    );
+    if (!available) {
+      this.reportDefaultFallback(preferences.uiLocale, saved.model);
+      return null;
+    }
+    return saved;
+  }
+
+  private reportDefaultFallback(locale: KanaPreferences["uiLocale"], model: string): void {
+    this.deps.stores.errors
+      .getState()
+      .report("agent", getCopy(locale).composer.defaultModelFallback(model), "session");
   }
 
   /**

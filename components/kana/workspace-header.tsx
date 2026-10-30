@@ -14,8 +14,9 @@ import { useUpdateAvatarLayout } from "./workspace-stage";
 export function WorkspaceHeader({ connectionDown = false }: { connectionDown?: boolean }) {
   const workspace = useKanaWorkspace();
   const { theme, toggleTheme } = useTheme();
-  const locale = useKanaStore("preferences", (state) => state.preferences.uiLocale);
-  const live2d = useKanaStore("preferences", (state) => state.preferences.live2d);
+  const preferences = useKanaStore("preferences", (state) => state.preferences);
+  const locale = preferences.uiLocale;
+  const live2d = preferences.live2d;
   const title = useKanaStore("conversations", (state) => selectActiveConversation(state)?.title);
   const avatarLayoutOpen = useKanaStore("workspace", (state) => state.avatarLayoutOpen);
   const avatarVisible = useKanaStore("preferences", (state) => state.preferences.avatarVisible);
@@ -25,26 +26,31 @@ export function WorkspaceHeader({ connectionDown = false }: { connectionDown?: b
   const copy = getCopy(locale);
   const text = copy.workspace;
   const setWorkspace = workspace.stores.workspace.setState;
+  const { actions } = workspace;
 
   return (
     <header
-      className={`kana-workspace-header pointer-events-none absolute inset-x-0 top-0 z-20 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 p-4 max-sm:p-3 ${greeting ? "is-away" : ""}`}
+      className={`kana-workspace-header pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-4 p-4 max-sm:p-3 ${greeting ? "is-away" : ""}`}
       inert={greeting || undefined}
     >
       {/* Phones and tablets use that corner for the avatar tile. */}
-      <div className="pointer-events-auto col-start-1 min-w-0 max-w-[34vw] max-lg:hidden">
+      <div className="pointer-events-auto min-w-0 max-w-[34vw] max-lg:hidden">
         <p className="kana-session-title w-fit max-w-full truncate">
           {title ?? text.newMoment}
         </p>
       </div>
 
       {!usesMobileChat && !greeting ? (
-        <div className="col-start-2">
-          <HeaderHostMonitor locale={locale} />
-        </div>
+        <HeaderHostMonitor
+          locale={locale}
+          layout={preferences.hostWidgetLayout}
+          onLayout={(layout) => {
+            void actions.savePreferences({ ...preferences, hostWidgetLayout: layout });
+          }}
+        />
       ) : null}
 
-      <nav className="kana-bar pointer-events-auto col-start-3 justify-self-end" aria-label={text.actions}>
+      <nav className="kana-bar pointer-events-auto ml-auto shrink-0 lg:ml-0" aria-label={text.actions}>
         <button
           type="button"
           className="kana-workspace-action kana-focus"

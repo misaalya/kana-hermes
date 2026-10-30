@@ -53,6 +53,37 @@ after(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
+describe("remote Hermes media", () => {
+  it("keeps only the file name and never signs a path on Kana's disk", () => {
+    const configPath = path.join(root, "kana-data", "config.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        hermes: {
+          remote: {
+            url: "wss://hermes.example.com",
+            token: "remote-secret",
+          },
+        },
+      }),
+    );
+    try {
+      const rewritten = rewriteMediaTags(
+        "Here is the report:\n\nMEDIA:/srv/hermes/cache/report.pdf",
+      );
+      assert.equal(rewritten, "Here is the report:\n\nreport.pdf");
+      assert.equal(rewritten.includes("/srv/hermes"), false);
+      // A tag inside code is still an example, not a delivery.
+      assert.equal(
+        rewriteMediaTags("Use `MEDIA:/srv/hermes/cache/report.pdf` as an example."),
+        "Use `MEDIA:/srv/hermes/cache/report.pdf` as an example.",
+      );
+    } finally {
+      rmSync(configPath, { force: true });
+    }
+  });
+});
+
 describe("media delivery rule", () => {
   it("allows Hermes's cache and ordinary files, resolving ~", () => {
     assert.equal(deliverablePath(audio), audio);

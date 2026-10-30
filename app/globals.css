@@ -107,6 +107,14 @@
   --chat-text: #1c1c1c;
 }
 
+/* Light mode gives the header widgets the chat panel's white reading surface;
+   dark mode keeps the stronger neutral behind them. */
+[data-theme="light"] .kana-header-host,
+[data-theme="light"] .kana-header-clock,
+[data-theme="light"] .kana-header-date {
+  background: var(--surface);
+}
+
 
 html,
 body {
@@ -860,7 +868,7 @@ details[open] > .kana-plus-summary::before {
     flex-direction: column;
     overflow: hidden;
     border: 2px solid var(--line);
-    border-radius: 32px;
+    border-radius: 0;
     background: var(--surface);
   }
 
@@ -888,6 +896,12 @@ details[open] > .kana-plus-summary::before {
 
 .kana-chat-dock.is-sole .kana-chat-toggle {
   display: none;
+}
+
+/* Focus mode reads as one square workspace, so its frame is lighter than the
+   avatar dock's blue phone edge. */
+.kana-chat-dock.is-sole .kana-chat-panel {
+  border-width: 2px;
 }
 
 /* Kana's first-run greeting clears the stage: chat and header step away. */
@@ -971,6 +985,16 @@ details[open] > .kana-plus-summary::before {
   font-family: var(--kana-font);
   font-weight: 700;
   color: #ffffff;
+}
+
+/* An empty composer's hint is one line even in a narrow bar: wrapping it
+   would push a second line under the bar's single-row height. As soon as the
+   field has a draft, the pseudo-class stops matching and normal wrapping
+   returns. */
+.kana-composer textarea:placeholder-shown {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .kana-composer textarea::placeholder {
@@ -2434,6 +2458,156 @@ video.kana-media-preview {
   height: 0;
   border: 0;
   background: transparent;
+}
+
+/* Chatbar delay: a tick ruler under a Kana-blue fill. The visible track is
+   inset by half the thumb so the fill, ticks, and native thumb centre travel
+   agree; the native thumb itself stays invisible and only supplies input. */
+.kana-delay-frame {
+  --kana-delay-thumb: 56px;
+}
+
+.kana-delay-slider {
+  position: relative;
+  height: 44px;
+  user-select: none;
+}
+
+.kana-delay-labels {
+  padding-inline: calc(var(--kana-delay-thumb) / 2);
+}
+
+.kana-delay-fill {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--kana-delay-thumb) / 2);
+  width: calc((100% - var(--kana-delay-thumb)) * var(--kana-delay-progress, 0) / 100);
+  height: 26px;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-hover));
+  pointer-events: none;
+}
+
+.kana-delay-ticks {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--kana-delay-thumb) / 2);
+  right: calc(var(--kana-delay-thumb) / 2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.kana-delay-tick {
+  width: 2px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--line-strong);
+}
+
+.kana-delay-tick.is-past {
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.kana-delay-range {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  appearance: none;
+  background: transparent;
+  border-radius: 999px;
+  outline: none;
+  cursor: pointer;
+}
+
+.kana-delay-range::-webkit-slider-runnable-track {
+  height: 100%;
+  background: transparent;
+}
+
+.kana-delay-range::-moz-range-track {
+  height: 100%;
+  background: transparent;
+}
+
+.kana-delay-range::-moz-range-progress {
+  background: transparent;
+}
+
+.kana-delay-range::-webkit-slider-thumb {
+  width: 0;
+  height: 100%;
+  appearance: none;
+  border: 0;
+  background: transparent;
+}
+
+.kana-delay-range::-moz-range-thumb {
+  width: 0;
+  height: 0;
+  border: 0;
+  background: transparent;
+}
+
+.kana-delay-range:active {
+  cursor: grabbing;
+}
+
+/* Focus belongs to the handle, not the whole ruler: an outline around the
+   full-width ruler reads as a second border. */
+.kana-delay-range:focus-visible ~ .kana-delay-thumb {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.kana-delay-thumb {
+  position: absolute;
+  top: 50%;
+  left: calc((100% - var(--kana-delay-thumb)) * var(--kana-delay-progress, 0) / 100);
+  width: var(--kana-delay-thumb);
+  height: 30px;
+  transform: translateY(-50%);
+  border: 2px solid var(--accent);
+  border-radius: 11px;
+  background: var(--raised);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
+  pointer-events: none;
+}
+
+.kana-delay-thumb::before,
+.kana-delay-thumb::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 2px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--accent);
+  transform: translateY(-50%);
+}
+
+.kana-delay-thumb::before {
+  left: calc(50% - 4px);
+}
+
+.kana-delay-thumb::after {
+  left: calc(50% + 2px);
+}
+
+@media (hover: hover) {
+  .kana-delay-slider:hover .kana-delay-thumb {
+    border-color: var(--accent-hover);
+  }
+
+  .kana-delay-slider:hover .kana-delay-thumb::before,
+  .kana-delay-slider:hover .kana-delay-thumb::after {
+    background: var(--accent-hover);
+  }
 }
 
 .kana-layout-surface {

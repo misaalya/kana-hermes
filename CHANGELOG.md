@@ -4,31 +4,119 @@
 
 ### Changed
 
-- The open conversation row in History and the desktop focus rail is a square,
-  dimmed neutral row with ordinary ink; it no longer takes an accent fill, an
-  accent stroke, a rounded shape, or the corner check badge.
+- History rows keep square corners. The open conversation is a dimmed neutral
+  row with ordinary ink; it takes no accent fill, accent stroke, or corner
+  check badge.
+- The chat panel and the desktop focus rail are square-cornered surfaces,
+  matching the square modal signature; their controls keep their rounded
+  shapes. On a desktop, the focus-mode chat frame is 2 px instead of 4 px.
+- An empty composer's placeholder stays on one line in a narrow bar instead of
+  wrapping a second line under the single-row height; a real draft still wraps
+  normally.
 - The composer's model chooser keeps one fixed height on desktop and phones
   instead of resizing with the models it lists; filtering, loading, or a short
   catalog leaves the panel in place and only the list scrolls.
 - An empty conversation shows one large Kana-blue kaomoji that blinks now and
   then instead of the two-line greeting; the old description stays as hidden
   text for screen readers.
+- The header host widget cards carry a thin dim inset stroke that turns Kana
+  blue only while a card is lifted for a drag. In light mode their fill matches
+  the chat panel's white surface.
+- Settings → Experience draws the chatbar delay as a tick-ruler slider: a
+  Kana-blue fill, white passed ticks, and a raised grip thumb, from Off to 2
+  minutes in five-second steps. Pointer and keyboard both move it, the value is
+  read out above the ruler, and an older stored delay above 2 minutes keeps its
+  own ruler instead of being silently clamped.
+- With an Instabox wake configured, an unreachable remote keeps the cable
+  screen in a calm "Remote Hermes is unreachable" state instead of a generic
+  failure. **Wake Hermes** is the primary action with Connect again beside it;
+  the heading and status line show Waking Instabox while the request runs, and
+  a wake that succeeds while the relay still cannot connect names the remote
+  credentials as the next thing to check.
 
 ### Fixed
 
+- Hermes 0.22+ no longer loses protected prompts: clarify, approval, sudo, and
+  secret are server-to-client JSON-RPC requests there. Kana advertises
+  `client.capabilities`, relays each request over SSE, answers through
+  `POST /api/hermes/server-request`, restores still-open requests from
+  `session.resume`, and clears a dialog on `request.cancel` or
+  `approval.cancelled`. Desktop-only requests Kana cannot render are declined
+  at once instead of leaving the agent waiting.
+- History keeps a Hermes 0.22 directory in its most-recent-first order; that
+  `session.list` no longer returns `last_active`, so the sidebar no longer
+  re-sorts it by start time, and rows date from `started_at` when needed.
+- A remote dashboard that accepts a connection but stops answering no longer
+  pins the connection screen: login, ticket, and dashboard reads carry
+  deadlines, a whole remote upgrade shares a 12-second budget, and a stalled
+  session-directory read retires the half-open gateway socket so the next
+  attempt redials. A first connection now says **Connecting to Hermes**;
+  **Reconnecting** is reserved for a retry after a drop.
+- Stopping a turn no longer discards a final answer Hermes had already
+  stored. When Stop races the last API call, the interrupted payload still
+  carries that answer: Kana shows it, keeps its tool activity attached to the
+  assistant message, and only a truly empty interrupt ends as a bare stop.
+  The host widget also centres its "Host metrics are unavailable." and
+  "Reading host metrics…" states.
+- Switching from local Hermes to a remote Hermes no longer sends the local
+  Kana default model (for example `custom:9router`) to a runtime that does not
+  know that provider. Kana now keys its default model per Hermes runtime
+  identity and checks the connected runtime's live model catalog before
+  applying it; an unavailable default is dropped for that session and reported,
+  and switching back restores each runtime's own choice. A stored v5 preference
+  record migrates its single default to the local runtime.
 - On phones, the Show avatar switch and Installation mode keep their label and
   control on one row instead of stacking.
 
 ### Added
 
+- A `hermes.remote` block in `config.json` can point Kana at a gated Hermes
+  dashboard on another machine. Kana logs in with the dashboard username and
+  password from the owner-only file or a named environment variable, keeps the
+  cookie in server memory, and requests a single-use WebSocket ticket for each
+  connection over `wss://`. It never falls back to local discovery, keeps the
+  credentials and ticket out of the browser, reports itself without process
+  control, and explains on `/restart` that the gateway must be restarted where
+  it runs.
+- An optional `hermes.remote.wake` block lets the connection screen wake an
+  idle Instabox VM. Kana runs only `instabox resume/start <machineId>` without a
+  shell from the service account's home, with a minimal environment plus
+  `wake.env` names, polls `/api/health`, accepts no browser input, and runs one
+  wake at a time with a 15-second cooldown. The CLI must be installed on the
+  Kana host.
+- In remote mode, the Settings Host card and the desktop host monitor read the
+  remote Hermes dashboard's `/api/system/stats`: the remote hostname, CPU,
+  memory, disk, and uptime, plus the Hermes process RSS, cached for 2.5 seconds
+  on the Kana server.
+- A remote Hermes's `MEDIA:` paths are never signed against Kana's local disk;
+  only the file name survives, because the file lives on the other machine.
 - Settings → Connection has a read-only Host card with four stat tiles:
   CPU/load, memory, root disk, and host uptime with Kana's own uptime and RSS.
   It polls `/api/kana/host` every three seconds only while the card is mounted,
   takes no input, and persists nothing.
-- The desktop header shows the same reading as a wide host widget: CPU, memory,
-  and disk with big values over 12-tick meters, and uptime with Kana's own
-  uptime and RSS. It takes no input, polls `/api/kana/host` only while mounted,
-  and never renders on phones.
+- The desktop header carries three widget cards in fixed LEFT, CENTER, and
+  RIGHT zones: the host monitor (CPU, memory, and disk with big values over 20
+  square tick segments, and uptime with Kana's own uptime and RSS), a clock with
+  local and server time plus zones, and today's date. Cards pack from the zone
+  edges with one 10 px gap; CENTER is re-centred from the measured block width.
+  Each card has a 12 px radius. The server clock is anchored to
+  `/api/kana/host`'s server time and zone and corrected on every poll. Dragging
+  starts after 5 px and holds the card under the pointer in both axes, slightly
+  scaled. While the pointer is near the band, the held card's centre picks the
+  nearest installed block (or a zone edge when the zone is empty) and that
+  block's nearest gap, rather than the pointer's third of the band, so a date
+  moved beside the monitor previews and lands right after it; the previewed
+  zone holds until another is more than 12 px closer. A release there settles
+  the card into the gap; the preview draws no insertion line. Moving farther
+  away clears the preview and cancels the move. `hostWidgetLayout` keeps each
+  card's zone and order across reloads, falling back to the default on invalid
+  data.
+  Colliding blocks hide cards until they clear: a block meeting CENTER yields a
+  CENTER card first (normally the clock), a LEFT and RIGHT touch without CENTER
+  yields the RIGHT card, and an over-wide block yields its own lowest-priority
+  card. The cards never cover the conversation chip or the tool tray, take
+  no input beyond their drags, poll the host only while mounted, and never
+  render on phones.
 
 ## 0.6.1 — 2026-10-24
 

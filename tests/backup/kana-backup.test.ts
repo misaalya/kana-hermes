@@ -53,6 +53,39 @@ describe("Kana local backup", () => {
     assert.equal(restored.preferences.stageBackground, "plain");
   });
 
+  it("keeps per-runtime model defaults and migrates a pre-v6 global one", () => {
+    const backup = JSON.parse(
+      serializeKanaBackup(
+        createKanaBackup(
+          {
+            ...DEFAULT_PREFERENCES,
+            agentModelDefaults: {
+              local: { provider: "openrouter", model: "deepseek/deepseek-v4" },
+              "remote-0123456789abcdef": { provider: "custom:9router", model: "gpt-5" },
+            },
+          },
+          [],
+        ),
+      ),
+    );
+    const restored = parseKanaBackup(JSON.stringify(backup));
+    assert.deepEqual(restored.preferences.agentModelDefaults, {
+      local: { provider: "openrouter", model: "deepseek/deepseek-v4" },
+      "remote-0123456789abcdef": { provider: "custom:9router", model: "gpt-5" },
+    });
+
+    delete backup.preferences.agentModelDefaults;
+    backup.preferences.defaultAgentModel = {
+      provider: "openrouter",
+      model: "deepseek/deepseek-v4",
+    };
+    const legacy = parseKanaBackup(JSON.stringify(backup));
+    assert.deepEqual(legacy.preferences.agentModelDefaults, {
+      local: { provider: "openrouter", model: "deepseek/deepseek-v4" },
+    });
+    assert.equal("defaultAgentModel" in legacy.preferences, false);
+  });
+
   it("restores the delivery mode from a backup made with the Qwen3-TTS voice service", () => {
     const backup = JSON.parse(serializeKanaBackup(createKanaBackup(DEFAULT_PREFERENCES, [])));
     const { voice: _current, ...legacyPreferences } = backup.preferences;

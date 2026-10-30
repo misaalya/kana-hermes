@@ -3,7 +3,7 @@
 Kana is a presentation layer in front of the user's existing Hermes Agent installation. This document is the surface of Hermes that Kana is allowed to call and the behavior an agent must respect when changing it.
 
 **Read when:** you are touching the agent adapter, the server relay, slash handling, session lifecycle, or anything that reaches Hermes.
-**Truth in code:** `app/api/hermes/rpc/route.ts`, `app/api/hermes/events/route.ts`, `lib/agent/types.ts`, `lib/agent/hermes/hermes-agent-client.ts`, `lib/agent/hermes/gateway-types.ts`, `lib/server/hermes-bridge.ts`, `lib/server/local-hermes-runtime.ts`, `lib/services/send-message.ts`, `lib/guardrails/`
+**Truth in code:** `app/api/hermes/rpc/route.ts`, `app/api/hermes/events/route.ts`, `app/api/hermes/server-request/route.ts`, `lib/agent/types.ts`, `lib/agent/hermes/hermes-agent-client.ts`, `lib/agent/hermes/gateway-types.ts`, `lib/server/hermes-bridge.ts`, `lib/server/hermes-event-stream.ts`, `lib/server/local-hermes-runtime.ts`, `lib/server/remote-hermes.ts`, `lib/server/remote-hermes-auth.ts`, `lib/server/instabox-wake.ts`, `lib/server/user-config.ts`, `lib/services/send-message.ts`, `lib/guardrails/`
 
 ## Integration boundary
 
@@ -11,7 +11,11 @@ Kana is a presentation layer in front of the user's existing Hermes Agent instal
 
 A browser cannot spawn the Hermes binary, so Kana's Next.js server owns the gateway lifecycle (`lib/server/local-hermes-runtime.ts`). On first connect the server either adopts a running `hermes serve` (process scan plus `/proc/<pid>/environ` token read) or spawns the unmodified binary with a token it minted itself. That token lives in server process memory only: the browser reaches Hermes through `/api/hermes/*` with its Kana session cookie, and `hermes serve` inherits no `KANA_*` setting (`hermesServeEnvironment`).
 
-`lib/server/hermes-bridge.ts` holds one upstream WebSocket and fans events out over SSE; `POST /api/hermes/rpc` forwards one JSON-RPC request over that shared socket. Request ids are namespaced per caller (`kana-relay-<n>`), pending calls are rejected when the socket drops, and frames larger than 8 MiB are ignored.
+A `hermes.remote` block in `config.json` replaces that local lifecycle with one explicit remote target. The bridge dials the `wss://` dashboard with `hermes.remote.auth` username/password from the owner-only file or a named environment variable, and never falls back to local discovery or a spawn. It logs in at `/auth/password-login`, keeps the cookie in server memory, and requests a single-use ticket from `/api/auth/ws-ticket` for each WebSocket. Remote mode has no process control: `/api/local-runtime/hermes` reports it and refuses start/restart/stop, and `/restart` points at the machine that owns Hermes. Delivered `MEDIA:` paths are on the remote disk, so Kana keeps only the file name and never creates a local signed link for them. The Settings Host card and desktop monitor read the fixed `/api/system/stats` path with the same cookie and cache the sample for 2.5 seconds. `lib/server/remote-hermes.ts` owns URL and HTTP endpoint resolution; `lib/server/remote-hermes-auth.ts` owns login/cookies/tickets; `lib/server/instabox-wake.ts` owns the optional fixed-argument Instabox wake. Every remote HTTP request carries a deadline, and a whole remote upgrade (login, ticket, WebSocket) shares a 12-second budget, so a remote that accepts a connection but stops answering cannot pin the one shared gateway attempt.
+
+`lib/server/hermes-bridge.ts` holds one upstream WebSocket and fans events out over SSE; `POST /api/hermes/rpc` forwards one JSON-RPC request over that shared socket. Request ids are namespaced per caller (`kana-relay-<n>`), pending calls are rejected when the socket drops, and frames larger than 8 MiB are ignored. `GET /api/kana/sessions` reads `session.list` under a short timeout and retires the socket when that read stalls, so a half-open connection left by a paused VM cannot hold the connection screen until the long RPC timeout.
+
+JSON-RPC is peer-to-peer. Hermes 0.22+ also sends server-to-client requests for clarify, approval, sudo, and secret prompts. On every new socket the bridge advertises `client.capabilities { server_requests: true }`; without it Hermes treats the relay as an old client and fails those prompts immediately instead of sending them. Request frames are forwarded over SSE as `server-request` events and held by id; `POST /api/hermes/server-request` writes the one JSON-RPC response frame back and only accepts an id the gateway actually asked about. `session.resume` replays unanswered requests as `open_requests`, and a withdrawn request arrives as the `request.cancel` event. Desktop-only requests Kana cannot render (preview, terminal, tour, theme, vault, setup cards) are declined immediately so the agent never waits for a card that cannot appear.
 
 Hermes gates most RPCs to one active session per connection. Kana is a single-user surface, so one shared connection matches the product model.
 
@@ -19,13 +23,15 @@ Hermes gates most RPCs to one active session per connection. Kana is a single-us
 
 | Route | Owns |
 | --- | --- |
-| `GET /api/hermes/events` | SSE downstream of the shared socket |
+| `GET /api/hermes/events` | SSE downstream of the shared socket, including open server-to-client requests |
 | `POST /api/hermes/rpc` | Allow-listed JSON-RPC forward |
+| `POST /api/hermes/server-request` | One response to an open Hermes server-to-client request |
 | `POST /api/hermes/attachments` | Prompt attachments (`file.attach`) |
 | `GET /api/kana/sessions` | `session.list` filtered to `source: "kana"` |
 | `GET/PUT /api/kana/activities` | Per-turn tool activity SQLite store |
 | `GET/HEAD /api/media/[token]/[name]` | Streams a file Hermes delivered |
-| `GET/POST /api/local-runtime/hermes` | Inspect/start/restart/stop the managed `hermes serve` |
+| `GET/POST /api/local-runtime/hermes` | Inspect/start/restart/stop the managed local `hermes serve`; in remote mode it reports the remote transport and refuses process actions |
+| `POST /api/hermes/wake` | Kana's own Instabox wake; no Hermes RPC, no browser input |
 
 Every route requires the Kana session cookie (`withSession`); none exposes the Hermes token.
 
@@ -40,8 +46,8 @@ Only the methods in `ALLOWED_METHODS` (`app/api/hermes/rpc/route.ts`) are forwar
 | Prompts and events | `prompt.submit` |
 | Slash commands | `commands.catalog`, `complete.slash`, `slash.exec`, `command.dispatch` |
 | Models and config | `model.options`, `config.set` |
-| Approvals | `approval.respond` |
-| Protected input | `clarify.respond`, `sudo.respond`, `secret.respond` |
+| Approvals | `approval.respond`, `approval.received` |
+| Protected input | `clarify.respond`, `sudo.respond`, `secret.respond` (legacy event prompts; Hermes 0.22+ uses the server-request route instead) |
 | Message handoff | `handoff.request` |
 | Gateway reloads | `reload.env`, `reload.mcp`, `skills.reload` |
 
@@ -86,7 +92,7 @@ Command-generated prompts are different: Hermes's TUI queues slash commands whil
 
 ## Reconnection
 
-An unexpected stream drop rejects pending RPCs, marks a running turn for recovery, and schedules a reconnect (`DEFAULT_RECONNECT_DELAYS_MS`). After reconnecting, the client reopens the durable session, which restores its transcript and reports whether the turn is still running. `reconnectNow` skips the delay when Kana has just restarted `hermes serve`, and a second request joins the reconnect already under way instead of resuming twice. While the gate is up after a live drop, its Connect Hermes button uses `reconnectNow` instead of waiting for the next scheduled attempt, and starts a stopped `hermes serve` that Kana manages, so a dead process never leaves the button disabled behind its own retry loop. Clarification prompts arrive in two wire shapes — the legacy flat `{request_id, question, choices}` and the batch `{request_id, questions: [...]}` with per-question locks — and a reconnect replay can carry answers already locked (`clarifyRequest`).
+An unexpected stream drop rejects pending RPCs, marks a running turn for recovery, and schedules a reconnect (`DEFAULT_RECONNECT_DELAYS_MS`). After reconnecting, the client reopens the durable session, which restores its transcript and reports whether the turn is still running. `reconnectNow` skips the delay when Kana has just restarted `hermes serve`, and a second request joins the reconnect already under way instead of resuming twice. While the gate is up after a live drop, its Connect Hermes button uses `reconnectNow` instead of waiting for the next scheduled attempt, and starts a stopped `hermes serve` that Kana manages, so a dead process never leaves the button disabled behind its own retry loop. Protected prompts arrive in three wire shapes: the legacy flat `{request_id, question, choices}` event, the batch `{request_id, questions: [...]}` event with per-question locks (Hermes 0.21), and the Hermes 0.22+ server-to-client request (`srq-…`, replayed by `session.resume` as `open_requests`). A reconnect replay can carry answers already locked (`clarifyRequest`, `restorePendingInput`).
 
 ## Events
 
@@ -101,11 +107,15 @@ An unexpected stream drop rejects pending RPCs, marks a running turn for recover
 | `message.complete` | `assistant.message` after `parseKanaResponse`, or `agent.error` |
 | `tool.start`, `tool.progress`/`tool.generating`, `tool.complete` | `tool.started`, `tool.progress`, `tool.finished` |
 | `status.update` | `status.updated` |
-| `approval.request`, `clarify.request`, `sudo.request`, `secret.request` | `input.requested` |
-| `sudo.expire`, `secret.expire`, `clarify.expire` | `input.expired` |
+| `approval.request`, `clarify.request`, `sudo.request`, `secret.request` | `input.requested` (legacy event prompts) |
+| `sudo.expire`, `secret.expire`, `clarify.expire` | `input.expired` (legacy) |
+| `request.cancel` | `input.expired` for the matching open request |
+| `approval.cancelled` | `input.expired` for an approval |
 | `error` | `agent.error` |
 
-`session.resume` also drives `history.restored` and, when the turn is still running, `agent.started` with `resumed: true` plus `status.updated`; its restored tools seed the live activity log instead of clearing it. `message.complete` with `status: "interrupted"` emits `agent.aborted`. Only the finished reply is shown for `message.delta`: streaming chunks update the status line, and the media relay blanks their text because a chunk can end halfway through a delivered path (`rewriteMediaInEvent` in `lib/server/media-links.ts`).
+`server-request` is an SSE-only event (not a Hermes `event` frame): it carries a Hermes server-to-client request. `clarify`, `approval`, `sudo`, and `secret` become the same `input.requested` dialogs as the legacy events; answering one posts the matching result to `/api/hermes/server-request`. Desktop-only requests are declined at once. `session.resume` replays still-open requests as `open_requests` before the client restores its older event-shaped memory.
+
+`session.resume` also drives `history.restored` and, when the turn is still running, `agent.started` with `resumed: true` plus `status.updated`; its restored tools seed the live activity log instead of clearing it. `message.complete` with `status: "interrupted"` emits `agent.aborted`; when Stop raced the last API call and the payload still carries the final response Hermes persisted, Kana emits that assistant message first so the answer and the turn's tools stay in the transcript instead of vanishing with the next prompt. Only the finished reply is shown for `message.delta`: streaming chunks update the status line, and the media relay blanks their text because a chunk can end halfway through a delivered path (`rewriteMediaInEvent` in `lib/server/media-links.ts`).
 
 Events are ignored when they belong to another tab's session, unless this client is opening its own (`handleGatewayEvent`).
 
@@ -117,7 +127,7 @@ Events are ignored when they belong to another tab's session, unless this client
 - Commands run through `slash.exec`, falling back to `command.dispatch` — except after a guardrail refusal, where the fallback would screen the same words again. The structured result is honored: `exec`/`plugin` output, `alias` (re-executed, depth-capped), `prefill` (returns a draft), and `send`/`skill`, which are submitted to the same Hermes session with the Kana response contract and never trigger a second model. A `send`/`skill` prompt that arrives mid-turn is queued for the next turn.
 - Dedicated RPCs replace terminal-text parsing: `/approve` and `/deny` use `approval.respond`; `/title` uses `session.title`; `/branch` uses `session.branch`; `/save`, `/status`, `/compress`, `/steer`, `/handoff` use `session.save`, `session.status`, `session.compress`, `session.steer`, `handoff.request`.
 - `/reload`, `/reload-mcp`, and `/reload-skills` use `reload.env`, `reload.mcp`, and `skills.reload`, as Hermes's TUI does. Through `slash.exec` they would act on Hermes's separate slash worker instead of the `hermes serve` Kana talks to. `/reload-mcp` asks first (`confirm_required`); `now`, `approve`, `once`, `yes`, or `always` confirms.
-- `/restart` is Kana's own command, not Hermes's gateway restart. It restarts only the `hermes serve` Kana started, on the same port with a new token (`restartLocalHermesRuntime`, `POST /api/local-runtime/hermes` `{"action":"restart"}`), then resumes the open conversation. An adopted or externally started server is left alone, and discovery is off during the restart so another Hermes is never adopted.
+- `/restart` is Kana's own command, not Hermes's gateway restart. It restarts only the `hermes serve` Kana started, on the same port with a new token (`restartLocalHermesRuntime`, `POST /api/local-runtime/hermes` `{"action":"restart"}`), then resumes the open conversation. An adopted or externally started server is left alone, a remote gateway is refused with the machine that owns it, and discovery is off during the restart so another Hermes is never adopted.
 
 ## When a Hermes change becomes visible
 
@@ -128,3 +138,5 @@ Models and providers added to `config.yaml` appear in `model.options` at once, b
 Hermes delivers a file by writing `MEDIA:/local/path` on its own line in a reply (the same convention its messaging gateways use). Before any payload reaches the browser, Kana rewrites every deliverable path to a signed `MEDIA:/api/media/<token>/<name>` link (`rewriteMediaInResult` for RPC results and restored transcripts, `rewriteMediaInEvent` for live events). User rows are left untouched, and the browser never receives the path.
 
 A deliverable is an existing regular file with symlinks resolved, outside system paths, home credential files and folders, Hermes's secret files, and Kana's own data root; the route rechecks the file on every request (`lib/server/media-links.ts`, `app/api/media/[token]/[name]`). A path that is not deliverable, and any `MEDIA:` tag inside code, stays as text. The token is the resolved path, encrypted and authenticated with a key derived from the installation secret, so the same file always maps to the same link and stored links survive a restart.
+
+With a remote gateway the path belongs to the remote machine. Kana never checks or signs it locally; only the file name stays as text, so a remote reply cannot turn a coincidental local path into a download. An unreadable `config.json` is treated the same way, fail-closed.

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { selectShowGate } from "@/lib/services/workspace-setup";
 import { getCopy } from "@/lib/ui/copy";
 import { useKanaStore, useKanaWorkspace } from "./kana-workspace-context";
-import { btnPrimary } from "./ui";
+import { btnPrimary, btnSecondary } from "./ui";
 
 /** Whether the workspace should stand down and show the cable screen. */
 export function useConnectionGate(): boolean {
@@ -353,6 +353,8 @@ export function ConnectionScreen({ screen }: { screen: ConnectionScreenControlle
   const connectPhase = useKanaStore("workspace", (state) => state.connectPhase);
   const hermesRuntime = useKanaStore("workspace", (state) => state.hermesRuntime);
   const hermesRuntimeNotice = useKanaStore("workspace", (state) => state.hermesRuntimeNotice);
+  const [waking, setWaking] = useState(false);
+  const [wakeNotice, setWakeNotice] = useState<string | null>(null);
   const connectionInTransition = connectionState === "connecting";
   const plugged = connectionState === "connected";
   const connectingPhase = connectPhase === "connecting" || connectPhase === "auto_starting";
@@ -371,34 +373,86 @@ export function ConnectionScreen({ screen }: { screen: ConnectionScreenControlle
   const gateCopy = copy.gate;
   // A gateway Kana can see but not authenticate: Hermes was started without a
   // session token in its environment, so only that process knows the token.
+  const remote = hermesRuntime?.mode === "remote";
+  const remoteWake = Boolean(
+    remote && hermesRuntime?.wakeAvailable && hermesRuntime.authAvailable,
+  );
+  // A paused Instabox is an ordinary state, not a local Hermes failure: the
+  // heading says what is unreachable and the wake action is the way out.
+  const remoteOffline = remoteWake && connectionState === "error";
+  const configError = Boolean(hermesRuntime?.configError);
   const adoptionBlocked =
     hermesRuntime &&
     hermesRuntime.state === "running" &&
     !hermesRuntime.managed &&
-    !hermesRuntime.tokenAvailable
+    !hermesRuntime.tokenAvailable &&
+    !remote
       ? hermesRuntime
       : null;
-  const detectedExternalGateway = Boolean(hermesRuntime?.state === "running" && !hermesRuntime.managed);
+  const detectedExternalGateway = Boolean(
+    !remote && hermesRuntime?.state === "running" && !hermesRuntime.managed,
+  );
   const runtimeHint = !hermesRuntime || adoptionBlocked
     ? null
-    : detectedExternalGateway
-      ? gateCopy.detectedExternal(hermesRuntime.port)
-      : hermesRuntime.state === "running" && hermesRuntime.managed
-        ? gateCopy.managedRunning(hermesRuntime.pid ?? null)
-        : hermesRuntime.executable
-          ? null
-          : gateCopy.missingBinary;
+    : configError
+      ? gateCopy.configInvalid
+      : remote
+        ? hermesRuntime.authAvailable
+          ? gateCopy.remoteConfigured
+          : gateCopy.remoteAuthMissing
+        : detectedExternalGateway
+          ? gateCopy.detectedExternal(hermesRuntime.port)
+          : hermesRuntime.state === "running" && hermesRuntime.managed
+            ? gateCopy.managedRunning(hermesRuntime.pid ?? null)
+            : hermesRuntime.executable
+              ? null
+              : gateCopy.missingBinary;
   const showRuntimeHint =
-    Boolean(hermesRuntime?.controlAvailable) && !plugged && Boolean(runtimeHint || hermesRuntimeNotice);
+    Boolean(hermesRuntime?.controlAvailable || remote || configError)
+    && !plugged
+    && Boolean(runtimeHint || hermesRuntimeNotice);
   // Keep the seated frame on screen through the fade: leaving is only set
   // once playback has finished. The pose class must not change at the moment
   // playback starts, or the settle would lose the wobble it is easing out of.
   const stageMode =
-    screen.playing || (screen.leaving && !screen.blocked) ? "play" : busy ? "try" : "idle";
-  const stagePose = stageMode === "play" || busy ? "try" : "idle";
+    screen.playing || (screen.leaving && !screen.blocked) ? "play" : busy || waking ? "try" : "idle";
+  const stagePose = stageMode === "play" || busy || waking ? "try" : "idle";
 
   const connect = () => {
+    setWakeNotice(null);
     void workspace.actions.connectHermes();
+  };
+
+  const wake = async () => {
+    setWaking(true);
+    setWakeNotice(null);
+    try {
+      const response = await fetch("/api/hermes/wake", { method: "POST" });
+      const body = (await response.json().catch(() => null)) as { code?: string } | null;
+      if (!response.ok) {
+        setWakeNotice(
+          body?.code === "busy"
+            ? gateCopy.wakeBusy
+            : body?.code === "unavailable"
+              ? gateCopy.wakeUnavailable
+              : body?.code === "timeout"
+                ? gateCopy.wakeTimeout
+                : gateCopy.wakeFailed,
+        );
+        return;
+      }
+      await workspace.actions.connectHermes();
+      // A retry already in flight owns the gate; only a settled, non-connected
+      // state is a failed post-wake connection worth naming.
+      const state = workspace.stores.agentSession.getState().connectionState;
+      if (state !== "connected" && state !== "connecting" && state !== "reconnecting") {
+        setWakeNotice(gateCopy.wakeConnectFailed);
+      }
+    } catch {
+      setWakeNotice(gateCopy.wakeFailed);
+    } finally {
+      setWaking(false);
+    }
   };
 
   return (
@@ -419,13 +473,18 @@ export function ConnectionScreen({ screen }: { screen: ConnectionScreenControlle
       <div className="flex w-full flex-1 flex-col items-center">
         <h2
           aria-live="polite"
-          className={`mt-2 text-xl font-bold sm:text-2xl ${plugged || busy ? "text-ink" : "text-danger"}`}
+          className={`mt-2 text-xl font-bold sm:text-2xl ${plugged || busy || waking || remoteOffline ? "text-ink" : "text-danger"}`}
         >
           {plugged ? (
             gateCopy.connectedTitle
+          ) : waking ? (
+            <>
+              {gateCopy.wakingTitle}
+              <ConnectingDots />
+            </>
           ) : busy ? (
             <>
-              {gateCopy.reconnecting}
+              {connectionState === "reconnecting" ? gateCopy.reconnecting : gateCopy.connectingTitle}
               <ConnectingDots />
             </>
           ) : adoptionBlocked ? (
@@ -434,6 +493,8 @@ export function ConnectionScreen({ screen }: { screen: ConnectionScreenControlle
             gateCopy.authInvalid
           ) : connectionState === "incompatible" ? (
             gateCopy.incompatible
+          ) : remoteOffline ? (
+            gateCopy.remoteOfflineTitle
           ) : connectionState === "error" ? (
             gateCopy.failed
           ) : (
@@ -441,28 +502,72 @@ export function ConnectionScreen({ screen }: { screen: ConnectionScreenControlle
           )}
         </h2>
 
+        {remoteOffline && !busy && !waking ? (
+          <p className="mt-4 w-full max-w-lg text-center text-[11.5px] leading-relaxed text-muted">
+            {gateCopy.remoteOfflineBody}
+          </p>
+        ) : null}
+
+        {waking ? (
+          <p
+            role="status"
+            className="mt-4 w-full max-w-lg text-center text-[11.5px] leading-relaxed text-muted"
+          >
+            {gateCopy.wakingBody}
+          </p>
+        ) : null}
+
         {adoptionBlocked && !busy ? (
           <p className="mt-4 w-full max-w-prose text-center text-sm leading-6 text-muted">
             {gateCopy.externalTokenBody(adoptionBlocked.port)}
           </p>
         ) : null}
 
-        <button
-          type="button"
-          className={`${btnPrimary} mt-7 min-w-52 text-sm`}
-          onClick={connect}
-          disabled={busy || plugged}
-        >
-          {plugged
-            ? gateCopy.connected
-            : connectionInTransition || connectPhase === "connecting"
-              ? gateCopy.connecting
-              : connectPhase === "auto_starting"
-                ? gateCopy.startButton
-                : adoptionBlocked
-                  ? gateCopy.connectAgain
-                  : gateCopy.connectButton}
-        </button>
+        {remoteWake ? (
+          <div className="mt-7 flex w-full max-w-sm flex-row items-center justify-center gap-3">
+            <button
+              type="button"
+              className={`${btnPrimary} min-w-0 flex-1 whitespace-nowrap text-sm`}
+              onClick={() => void wake()}
+              disabled={busy || waking || plugged}
+            >
+              {waking ? gateCopy.wakingHermes : gateCopy.wakeHermes}
+            </button>
+            <button
+              type="button"
+              className={`${btnSecondary} min-w-0 flex-1 whitespace-nowrap text-sm`}
+              onClick={connect}
+              disabled={busy || waking || plugged}
+            >
+              {connectionInTransition || connectPhase === "connecting"
+                ? gateCopy.connecting
+                : gateCopy.connectAgain}
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className={`${btnPrimary} mt-7 min-w-52 text-sm`}
+            onClick={connect}
+            disabled={busy || waking || plugged}
+          >
+            {plugged
+              ? gateCopy.connected
+              : connectionInTransition || connectPhase === "connecting"
+                ? gateCopy.connecting
+                : connectPhase === "auto_starting"
+                  ? gateCopy.startButton
+                  : adoptionBlocked
+                    ? gateCopy.connectAgain
+                    : gateCopy.connectButton}
+          </button>
+        )}
+
+        {wakeNotice ? (
+          <p role="status" className="mt-3 max-w-lg text-[11px] leading-relaxed text-faint">
+            {wakeNotice}
+          </p>
+        ) : null}
 
         {showRuntimeHint ? (
           <div className="mt-4 flex max-w-xs flex-col items-center gap-1 text-[11px] leading-relaxed">

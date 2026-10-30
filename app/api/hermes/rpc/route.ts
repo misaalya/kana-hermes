@@ -42,6 +42,7 @@ const ALLOWED_METHODS = new Set([
   "slash.exec",
   "command.dispatch",
   "approval.respond",
+  "approval.received",
   "clarify.respond",
   "sudo.respond",
   "secret.respond",

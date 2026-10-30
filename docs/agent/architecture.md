@@ -9,7 +9,9 @@ is reached through a same-origin Kana route.
 **Read when:** you need to know where a behaviour lives, which process owns it,
 or which route carries a flow before changing code.
 **Truth in code:** `proxy.ts`, `lib/server/hermes-bridge.ts`,
-`lib/server/local-hermes-runtime.ts`, `lib/services/kana-workspace.ts`,
+`lib/server/local-hermes-runtime.ts`, `lib/server/remote-hermes.ts`,
+`lib/server/remote-hermes-auth.ts`, `lib/server/instabox-wake.ts`,
+`lib/services/kana-workspace.ts`,
 `lib/agent/types.ts`, `app/api/hermes/rpc/route.ts`, `lib/guardrails/`
 
 ## Process boundary
@@ -17,7 +19,7 @@ or which route carries a flow before changing code.
 ```text
 browser
   -> Kana Next.js server (same origin, kana_session cookie)
-  -> hermes-bridge: ONE server-held WebSocket to `hermes serve`
+  -> hermes-bridge: ONE server-held WebSocket to local or configured remote `hermes serve`
   -> Hermes agent loop, tools, filesystem, MCP, subagents, memory, context
 
 browser
@@ -32,6 +34,14 @@ adopts an already running `hermes serve` (process scan plus
 a token Kana mints. The token stays in server process memory and is never
 serialized into an API response, storage, or backup. Kana never patches,
 vendors, or writes into the Hermes installation or source checkout.
+
+A `hermes.remote` block makes the same bridge dial another machine instead.
+It logs in with username/password from owner-only `config.json` or a named
+environment variable, keeps the cookie in server memory, and requests a
+single-use WebSocket ticket for each connection. It skips local discovery and
+process control entirely. The optional Instabox wake runs on the Kana host as a
+fixed, shell-free CLI call; the browser only asks for a wake and never supplies
+an argument.
 
 `proxy.ts` runs before every request: it rejects a foreign host in local mode
 (421, DNS-rebinding guard), rejects cross-site state-changing requests (403),
@@ -61,18 +71,20 @@ mock agent mode.
 
 | Route | What flows through it |
 | --- | --- |
-| `GET /api/hermes/events` (SSE) | Every gateway event frame the bridge receives, with `MEDIA:` paths rewritten to signed links. Ends when the shared socket drops, so each tab reconnects and resumes. |
+| `GET /api/hermes/events` (SSE) | Every gateway event frame the bridge receives; local `MEDIA:` paths are rewritten to signed links while remote ones keep only the file name. It also replays open server-to-client requests. Ends when the shared socket drops, so each tab reconnects and resumes. |
 | `POST /api/hermes/rpc` | One allow-listed JSON-RPC request forwarded over the shared socket; the response returns correlated. `config.set` accepts only a session-scoped `model` value, the owner's prompt guardrail may refuse a turn here before it reaches the bridge, and the owner's rules are placed in Kana's note on every `prompt.submit`. |
+| `POST /api/hermes/server-request` | One JSON-RPC response to an open Hermes 0.22+ server-to-client request (clarify, approval, sudo, secret); only an id the gateway asked about is accepted. |
 | `POST /api/hermes/attachments` | One base64 chat attachment, validated then forwarded as Hermes `file.attach`; this method is not on the RPC allow-list. |
 | `GET /api/kana/sessions` | `session.list` filtered server-side to `source: "kana"`, i.e. Kana's cross-browser conversation directory. |
 | `GET`/`PUT /api/kana/activities` | The per-turn activity snapshots read from and written to `activities.db`. |
 | `GET`/`PUT /api/kana/setup` | Install-level onboarding completion in `appstate.db`, shared by every browser of this user. |
 | `GET /api/kana/config` | The `config.json` path, whether it exists, the deployment mode, and the prompt guardrail's state and rule count; never the file's contents, the key, or a rule's text. |
-| `GET /api/kana/host` | A read-only snapshot of the machine Kana runs on: CPU counters and load, memory, root disk, uptime, and the Kana process's own uptime and RSS. No input and nothing persisted; the browser polls only while the Host card is open. |
+| `GET /api/kana/host` | A read-only snapshot for the host surfaces. Local mode samples this machine (CPU counters and load, memory, root disk, uptime, Kana's own uptime and RSS). Remote mode reads the configured dashboard's `/api/system/stats` with the existing login cookie, maps the remote host's metrics and Hermes process RSS, and caches the sample for 2.5 seconds so many tabs do not poll the remote host repeatedly. The server clock and IANA zone remain Kana's. No input and nothing persisted; the browser polls only while a host surface (the Settings Host card or the desktop header widgets) is mounted. |
 | `GET`/`POST`/`DELETE /api/kana/voices` | The voice library: reference WAVs on disk plus rows in `appstate.db`. |
 | `POST /api/kana/voices/preview` | The sample for one voice: the bundled or user-uploaded reference WAV itself, or a prepared generation for the model voice. It never starts the engine. |
 | `GET`/`HEAD /api/media/<token>/<name>` | One delivered file, streamed with byte ranges and ETag revalidation; the token is the only input that picks the file. |
-| `GET`/`POST /api/local-runtime/hermes` | Inspect, `start`, `restart`, or `stop` the `hermes serve` Kana manages. A browser chooses only the action and optional port. |
+| `GET`/`POST /api/local-runtime/hermes` | Inspect, `start`, `restart`, or `stop` the `hermes serve` Kana manages. A browser chooses only the action and optional port. With `hermes.remote`, GET reports the remote transport and POST refuses process control. |
+| `POST /api/hermes/wake` | Kana's own Instabox wake for a configured remote gateway. The body is empty, the machine id comes from `config.json`, and the CLI runs without a shell. |
 | `GET /api/voice/tts/provider` | Safe provider metadata and health; credentials and upstream URLs stay server-side. |
 | `POST /api/voice/tts/speech` | Synthesis: JSON in, raw audio bytes out, cancellable while bytes are still being delivered. |
 | `POST /api/voice/tts/requests/[requestId]/cancel` | Cancels the active synthesis and releases the local engine process. |
@@ -116,6 +128,11 @@ Agent contract:
   `AgentHistoryRow`, `AgentInputRequest`/`Response`, `ActivityItem`, model and
   session types. Components and services depend on these, never on Hermes
   wire shapes.
+- `AgentClient.runtimeId` names the connected Hermes with an opaque identity:
+  `local`, or a server-computed `remote-…` hash of the configured endpoint and
+  username. Kana keys per-Hermes browser state, such as its default model, by
+  it; the relay reports the same value in the gateway event and in the runtime
+  status, so the URL and credentials never reach the browser.
 - `lib/agent/hermes/` is the only place that knows Hermes JSON-RPC:
   `hermes-agent-client.ts` (EventSource on `/api/hermes/events`, fetch to
   `/api/hermes/rpc`, event translation), `gateway-types.ts` (wire types), and
@@ -126,9 +143,13 @@ Agent contract:
 Server:
 
 - `lib/server/hermes-bridge.ts` (one shared socket, request correlation,
-  connection-lost fan-out), `lib/server/hermes-event-stream.ts` (the SSE
-  stream, heartbeat and slow-reader limit), `lib/server/local-hermes-runtime.ts`
-  (spawn, discovery, restart, token custody),
+  server-to-client request capture and answers, connection-lost fan-out),
+  `lib/server/hermes-event-stream.ts` (the SSE stream, heartbeat and
+  slow-reader limit), `lib/server/local-hermes-runtime.ts`
+  (spawn, discovery, restart, token custody), `lib/server/remote-hermes.ts`
+  (remote URL/HTTP endpoint/health resolution), `lib/server/remote-hermes-auth.ts`
+  (login cookie and WS ticket), `lib/server/instabox-wake.ts` (fixed
+  CLI wake, health poll, single-flight),
   `lib/server/data-dir.ts`, `lib/server/app-state-store.ts`,
   `lib/server/activity-store.ts`, `lib/server/media-links.ts`,
   `lib/server/media-response.ts`, `lib/server/user-config.ts`,

@@ -162,28 +162,47 @@ export function createKanaBackup(
   };
 }
 
+function parseAgentModelChoice(value: unknown): { provider: string; model: string } | null {
+  if (!isRecord(value)) return null;
+  return {
+    provider: typeof value.provider === "string" ? value.provider : "",
+    model: typeof value.model === "string" ? value.model : "",
+  };
+}
+
+/** Backups written before v6 kept one global default; it belonged to local. */
+function parseAgentModelDefaults(
+  value: unknown,
+  legacy: unknown,
+): Record<string, { provider: string; model: string }> {
+  const defaults: Record<string, { provider: string; model: string }> = {};
+  if (isRecord(value)) {
+    for (const [runtimeId, choice] of Object.entries(value)) {
+      const parsed = parseAgentModelChoice(choice);
+      if (parsed) defaults[runtimeId] = parsed;
+    }
+  }
+  if (!Object.keys(defaults).length) {
+    const parsed = parseAgentModelChoice(legacy);
+    if (parsed) defaults.local = parsed;
+  }
+  return defaults;
+}
+
 function parsePreferences(value: unknown): KanaPreferences {
   if (!isRecord(value)) throw new Error("Invalid preferences in Kana backup.");
   const hermes = isRecord(value.hermes) ? value.hermes : {};
   // Backups from builds with the Qwen3-TTS service kept voice choices in qwen3Tts.
   const voice = isRecord(value.voice) ? value.voice : isRecord(value.qwen3Tts) ? value.qwen3Tts : {};
   const live2d = isRecord(value.live2d) ? value.live2d : {};
-  const defaultAgentModel = isRecord(value.defaultAgentModel)
-    ? {
-        provider:
-          typeof value.defaultAgentModel.provider === "string"
-            ? value.defaultAgentModel.provider
-            : "",
-        model:
-          typeof value.defaultAgentModel.model === "string"
-            ? value.defaultAgentModel.model
-            : "",
-      }
-    : null;
+  const agentModelDefaults = parseAgentModelDefaults(
+    value.agentModelDefaults,
+    value.defaultAgentModel,
+  );
   return sanitizeBackupPreferences({
     ...DEFAULT_PREFERENCES,
     onboardingCompleted: true,
-    defaultAgentModel,
+    agentModelDefaults,
     stageBackground: isStageBackground(value.stageBackground)
       ? value.stageBackground
       : "plain",

@@ -367,8 +367,10 @@ export function handleAgentEvent(context: AgentEventContext, event: AgentEvent):
     case "input.expired": {
       const copy = getCopy(locale(context)).agentStatus;
       const current = session.getState().pendingInput;
+      // An approval carries no request id; another kind must match its own.
       const expired =
-        current?.kind === event.kind && "requestId" in current && current.requestId === event.requestId;
+        current?.kind === event.kind &&
+        (!("requestId" in current) || current.requestId === event.requestId);
       session.setState({
         ...(expired ? { pendingInput: null } : {}),
         respondingToInput: false,

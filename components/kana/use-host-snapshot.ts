@@ -8,6 +8,8 @@ const POLL_MS = 3_000;
 
 export type HostReading = {
   snapshot: HostSnapshot | null;
+  /** The browser's clock when the latest sample arrived. */
+  receivedAt: number | null;
   cpu: number | null;
   error: boolean;
 };
@@ -15,6 +17,7 @@ export type HostReading = {
 /** One read-only host sample every three seconds, only while mounted. */
 export function useHostSnapshot(): HostReading {
   const [snapshot, setSnapshot] = useState<HostSnapshot | null>(null);
+  const [receivedAt, setReceivedAt] = useState<number | null>(null);
   const [cpu, setCpu] = useState<number | null>(null);
   const [error, setError] = useState(false);
   const previousCpu = useRef<HostSnapshot["cpu"]["times"] | null>(null);
@@ -29,7 +32,12 @@ export function useHostSnapshot(): HostReading {
         const next = await readHostSnapshot(controller.signal);
         if (!live) return;
         setSnapshot(next);
-        setCpu(cpuPercent(previousCpu.current, next.cpu.times));
+        setReceivedAt(Date.now());
+        setCpu(
+          typeof next.cpu.percent === "number"
+            ? next.cpu.percent
+            : cpuPercent(previousCpu.current, next.cpu.times),
+        );
         previousCpu.current = next.cpu.times;
         setError(false);
       } catch (reason) {
@@ -46,5 +54,5 @@ export function useHostSnapshot(): HostReading {
     };
   }, []);
 
-  return { snapshot, cpu, error };
+  return { snapshot, receivedAt, cpu, error };
 }

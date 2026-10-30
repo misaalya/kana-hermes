@@ -135,6 +135,10 @@ export type Copy = {
     managedByKana: string;
     externalHermes: string;
     externalChip: string;
+    remoteChip: string;
+    remoteHermes: string;
+    remoteAuthMissing: string;
+    configInvalid: string;
     controlUnavailable: string;
     missingExecutable: string;
     startedNotice: string;
@@ -167,6 +171,7 @@ export type Copy = {
   };
   gate: {
     connecting: string;
+    connectingTitle: string;
     reconnecting: string;
     authInvalid: string;
     incompatible: string;
@@ -183,6 +188,20 @@ export type Copy = {
     externalTokenBody(port: number): string;
     managedRunning(pid: number | null): string;
     missingBinary: string;
+    remoteConfigured: string;
+    remoteAuthMissing: string;
+    remoteOfflineTitle: string;
+    remoteOfflineBody: string;
+    configInvalid: string;
+    wakeHermes: string;
+    wakingHermes: string;
+    wakingTitle: string;
+    wakingBody: string;
+    wakeFailed: string;
+    wakeTimeout: string;
+    wakeConnectFailed: string;
+    wakeUnavailable: string;
+    wakeBusy: string;
   };
   workspace: {
     preparing: string;
@@ -285,6 +304,7 @@ export type Copy = {
     restartReconnecting: string;
     restartBusy: string;
     restartNotManaged: string;
+    restartRemote: string;
     restartFailed(message: string): string;
   };
   agentInput: {
@@ -420,6 +440,7 @@ export type Copy = {
     modelTitle: string;
     defaultModelBadge: string;
     modelSetDefault: string;
+    modelDefaultScope: string;
     modelActions: string;
     modelLoading: string;
     modelLoadFailed: string;
@@ -448,9 +469,13 @@ export type Copy = {
     hostMemory: string;
     hostDisk: string;
     hostUptime: string;
+    hostLocalTime: string;
+    hostServerTime: string;
+    hostDate: string;
     hostCpuDetail(cores: number, load: string): string;
     hostUsage(used: string, total: string): string;
     hostKanaDetail(uptime: string, rss: string): string;
+    hostHermesDetail(uptime: string, rss: string): string;
     accessTitle: string;
     avatarNamePrompt: string;
     removeAvatarConfirm(name: string): string;
@@ -682,6 +707,10 @@ const id: Copy = {
     managedByKana: "Dijalankan oleh Kana.",
     externalHermes: "Dijalankan di luar Kana, jadi Kana tidak bisa memulai ulang atau mematikannya.",
     externalChip: "Tidak dikelola Kana",
+    remoteChip: "Remote",
+    remoteHermes: "Diatur di config.json; Kana hanya terhubung sebagai klien, jadi tidak bisa menyalakan atau mematikannya.",
+    remoteAuthMissing: "Username atau password dashboard remote belum tersedia di server. Periksa hermes.remote.auth.",
+    configInvalid: "config.json tidak dapat dibaca. Perbaiki berkas itu lalu hubungkan lagi.",
     controlUnavailable: "Kontrol proses hanya tersedia lewat launcher Kana (`kana serve`).",
     missingExecutable: "Hermes belum ditemukan. Jalankan `kana doctor`, lalu atur hermes.executable di config.json.",
     startedNotice: "Hermes dijalankan.",
@@ -710,6 +739,7 @@ const id: Copy = {
   },
   gate: {
     connecting: "Menghubungkan…",
+    connectingTitle: "Menghubungkan ke Hermes",
     reconnecting: "Menghubungkan ulang",
     authInvalid: "Sesi Kana tidak valid",
     incompatible: "Versi Hermes tidak kompatibel",
@@ -727,6 +757,20 @@ const id: Copy = {
       `Kana menemukan gateway Hermes di port ${port}, tetapi token sesinya hanya diketahui proses yang menjalankannya. Hentikan proses itu di terminal asalnya (Ctrl+C), lalu tekan tombol di bawah. Kana akan menjalankan Hermes sendiri dengan token yang dikelolanya.`,
     managedRunning: (pid: number | null) => `Hermes sedang berjalan (PID ${pid ?? "—"}).`,
     missingBinary: "Hermes tidak ditemukan. Jalankan `kana doctor`.",
+    remoteConfigured: "Hermes remote diatur di config.json.",
+    remoteAuthMissing: "Username atau password dashboard remote belum tersedia di server. Periksa hermes.remote.auth.",
+    remoteOfflineTitle: "Hermes remote tidak terjangkau",
+    remoteOfflineBody: "Instabox mungkin sedang pause. Bangunkan mesinnya, lalu Kana menghubungkan ulang sendiri.",
+    configInvalid: "config.json tidak dapat dibaca. Perbaiki berkas itu lalu hubungkan lagi.",
+    wakeHermes: "Bangunkan Hermes",
+    wakingHermes: "Membangunkan Hermes…",
+    wakingTitle: "Membangunkan Instabox",
+    wakingBody: "Menyalakan mesin dan menunggu Hermes menjawab. Ini bisa memakan waktu satu menit.",
+    wakeFailed: "CLI Instabox tidak dapat menjalankan wake. Periksa instalasi dan login Instabox di mesin ini.",
+    wakeTimeout: "Instabox belum membuat Hermes siap sebelum waktu habis. Pastikan `hermes serve` berjalan di mesin remote.",
+    wakeConnectFailed: "Instabox sudah bangun, tetapi Kana masih tidak bisa terhubung. Periksa kredensial dashboard remote di config.json.",
+    wakeUnavailable: "Fitur bangunkan Instabox tidak tersedia.",
+    wakeBusy: "Wake baru saja dijalankan. Tunggu sebentar, lalu coba lagi.",
   },
   workspace: {
     preparing: "Menyiapkan Kana",
@@ -827,6 +871,7 @@ const id: Copy = {
     restartReconnecting: "Hermes sudah dimulai ulang. Kana sedang menyambung lagi…",
     restartBusy: "Tunggu Kana selesai menjawab, lalu ketik /restart lagi.",
     restartNotManaged: "Hermes ini tidak dijalankan oleh Kana, jadi Kana tidak bisa memulai ulangnya. Mulai ulang dari tempat Hermes dijalankan, misalnya terminal.",
+    restartRemote: "Hermes berjalan di mesin lain, jadi Kana tidak bisa memulai ulangnya. Mulai ulang di mesin tempat Hermes berjalan.",
     restartFailed: (message) => `Hermes tidak dapat dimulai ulang: ${message}`,
   },
   agentInput: {
@@ -982,6 +1027,7 @@ const id: Copy = {
     modelTitle: "Model AI",
     defaultModelBadge: "Default",
     modelSetDefault: "Jadikan default",
+    modelDefaultScope: "Default ini milik koneksi Hermes yang sedang aktif; Hermes lain menyimpan pilihannya sendiri.",
     modelActions: "Aksi model",
     modelLoading: "Memuat model dari Hermes…",
     modelLoadFailed: "Model tidak dapat dimuat.",
@@ -1010,9 +1056,13 @@ const id: Copy = {
     hostMemory: "Memori",
     hostDisk: "Disk",
     hostUptime: "Waktu aktif",
+    hostLocalTime: "Lokal",
+    hostServerTime: "Server",
+    hostDate: "Tanggal",
     hostCpuDetail: (cores, load) => `${cores} inti · beban ${load}`,
     hostUsage: (used, total) => `${used} dari ${total}`,
     hostKanaDetail: (uptime, rss) => `Kana ${uptime} · ${rss}`,
+    hostHermesDetail: (uptime, rss) => `Hermes ${uptime} · ${rss}`,
     accessTitle: "Perlindungan akses",
     avatarNamePrompt: "Nama avatar",
     removeAvatarConfirm: (name) => `Hapus “${name}” dari browser ini?`,
@@ -1277,6 +1327,10 @@ const en: Copy = {
     managedByKana: "Started by Kana.",
     externalHermes: "Started outside Kana, so Kana cannot restart or stop it.",
     externalChip: "Not managed by Kana",
+    remoteChip: "Remote",
+    remoteHermes: "Configured in config.json; Kana connects only as a client and cannot start or stop it.",
+    remoteAuthMissing: "The remote dashboard username or password is not available on the server. Check hermes.remote.auth.",
+    configInvalid: "config.json could not be read. Fix it and reconnect.",
     controlUnavailable: "Process control is available only through the Kana launcher (`kana serve`).",
     missingExecutable: "Hermes was not found. Run `kana doctor`, then set hermes.executable in config.json.",
     startedNotice: "Hermes started.",
@@ -1305,6 +1359,7 @@ const en: Copy = {
   },
   gate: {
     connecting: "Connecting…",
+    connectingTitle: "Connecting to Hermes",
     reconnecting: "Reconnecting",
     authInvalid: "Kana session is invalid",
     incompatible: "Incompatible Hermes version",
@@ -1322,6 +1377,20 @@ const en: Copy = {
       `Kana found a Hermes gateway on port ${port}, but only the process that started it knows its session token. Stop that process in its terminal (Ctrl+C), then press the button below. Kana will start Hermes itself with a token it manages.`,
     managedRunning: (pid: number | null) => `Hermes is running (PID ${pid ?? "—"}).`,
     missingBinary: "Hermes was not found. Run `kana doctor`.",
+    remoteConfigured: "Remote Hermes is configured in config.json.",
+    remoteAuthMissing: "The remote dashboard username or password is not available on the server. Check hermes.remote.auth.",
+    remoteOfflineTitle: "Remote Hermes is unreachable",
+    remoteOfflineBody: "Instabox may be paused. Wake the machine and Kana reconnects on its own.",
+    configInvalid: "config.json could not be read. Fix it and reconnect.",
+    wakeHermes: "Wake Hermes",
+    wakingHermes: "Waking Hermes…",
+    wakingTitle: "Waking Instabox",
+    wakingBody: "Starting the machine and waiting for Hermes to answer. This can take a minute.",
+    wakeFailed: "The Instabox CLI could not run the wake. Check the Instabox install and login on this machine.",
+    wakeTimeout: "Instabox did not bring Hermes online before the timeout. Make sure `hermes serve` runs on the remote machine.",
+    wakeConnectFailed: "Instabox is awake, but Kana still could not connect. Check the remote dashboard credentials in config.json.",
+    wakeUnavailable: "Instabox wake is not available.",
+    wakeBusy: "A wake just finished. Wait a moment, then try again.",
   },
   workspace: {
     preparing: "Preparing Kana",
@@ -1422,6 +1491,7 @@ const en: Copy = {
     restartReconnecting: "Hermes restarted. Kana is reconnecting…",
     restartBusy: "Wait for Kana to finish answering, then type /restart again.",
     restartNotManaged: "This Hermes was not started by Kana, so Kana cannot restart it. Restart it where it runs, for example in a terminal.",
+    restartRemote: "This Hermes runs on another machine, so Kana cannot restart it. Restart it where it runs.",
     restartFailed: (message) => `Hermes could not restart: ${message}`,
   },
   agentInput: {
@@ -1577,6 +1647,7 @@ const en: Copy = {
     modelTitle: "AI model",
     defaultModelBadge: "Default",
     modelSetDefault: "Set as default",
+    modelDefaultScope: "This default belongs to the connected Hermes; another Hermes keeps its own choice.",
     modelActions: "Model actions",
     modelLoading: "Loading models from Hermes…",
     modelLoadFailed: "Could not load models.",
@@ -1605,9 +1676,13 @@ const en: Copy = {
     hostMemory: "Memory",
     hostDisk: "Disk",
     hostUptime: "Uptime",
+    hostLocalTime: "Local",
+    hostServerTime: "Server",
+    hostDate: "Date",
     hostCpuDetail: (cores, load) => `${cores} cores · load ${load}`,
     hostUsage: (used, total) => `${used} of ${total}`,
     hostKanaDetail: (uptime, rss) => `Kana ${uptime} · ${rss}`,
+    hostHermesDetail: (uptime, rss) => `Hermes ${uptime} · ${rss}`,
     accessTitle: "Access protection",
     avatarNamePrompt: "Avatar name",
     removeAvatarConfirm: (name) => `Remove “${name}” from this browser?`,

@@ -106,7 +106,7 @@ describe("Kana stores", () => {
   it("starts on the app default locale and adopts the stored one", () => {
     const store = createUiLocaleStore({
       getItem: (key) =>
-        key === "kana.preferences.v5" ? '{"uiLocale":"en"}' : null,
+        key === "kana.preferences.v6" ? '{"uiLocale":"en"}' : null,
       setItem: () => {},
       removeItem: () => {},
     });
@@ -119,7 +119,7 @@ describe("Kana stores", () => {
   it("keeps the app default locale when the record is missing, unknown, or unreadable", () => {
     const reading = (record: string | null) => ({
       getItem: (key: string) =>
-        key === "kana.preferences.v5" ? record : null,
+        key === "kana.preferences.v6" ? record : null,
       setItem: () => {},
       removeItem: () => {},
     });

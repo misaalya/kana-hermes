@@ -4,18 +4,22 @@ Kana displays sensitive agent activity in a browser, so "localhost" is not
 automatically trusted. This covers the trust boundaries and enforced controls.
 
 **Read when:** you are deploying Kana, reviewing its threat model, or placing it behind a reverse proxy.
-**Truth in code:** `proxy.ts`, `lib/server/request-origin.ts`, `lib/server/auth/`, `lib/server/media-links.ts`, `lib/guardrails/policy.ts`
+**Truth in code:** `proxy.ts`, `lib/server/request-origin.ts`, `lib/server/auth/`, `lib/server/media-links.ts`, `lib/server/remote-hermes.ts`, `lib/server/remote-hermes-auth.ts`, `lib/server/instabox-wake.ts`, `lib/guardrails/policy.ts`
 
 ## Trust boundaries
 
 - Hermes and the selected TTS provider are separate, user-controlled services.
-  Hermes is the only agent and executes every tool; Kana runs no shell command,
-  filesystem action, MCP call, or model request itself.
+  Hermes is the only agent and executes every tool; Kana exposes no shell or
+  tool runner, filesystem agent, MCP client, or model loop. The server starts
+  only its own child processes: the pinned local voice engine and, when the
+  owner configures it, the Instabox wake CLI with fixed arguments and no shell.
 - The browser holds non-secret preferences and imported avatar packages, and
   reaches Hermes and the voice engine only through Kana's same-origin relay.
-  Hermes owns conversation transcripts; Kana's server mints or discovers the
-  Hermes session token, keeps it in process memory, and never returns it to the
-  browser, preferences, diagnostics, URLs, or backups.
+  Hermes owns conversation transcripts. For a local gateway Kana mints or
+  discovers the session token; for a remote dashboard the username and password
+  come from `config.json` or a named environment variable, and the login cookie
+  and WebSocket ticket stay in server memory. None of them reaches the browser,
+  preferences, diagnostics, response URLs, or backups.
 - Remote Live2D model URLs are untrusted data. Cubism Core is executable, and
   is restricted to Live2D's official HTTPS SDK path. Files Hermes delivers are
   untrusted input and are treated in Delivered files below.
@@ -33,7 +37,9 @@ automatically trusted. This covers the trust boundaries and enforced controls.
 | Cross-site requests | State-changing requests are rejected unless `Origin` matches the addressed host (or `Sec-Fetch-Site` is same-origin). SameSite=Lax alone allows another app on the same host with a different port |
 | DNS rebinding | In local mode the proxy answers only to `localhost`, `*.localhost`, `[::1]`, and the `127.*` addresses; every other Host gets 421. A rebound page sends a matching Host and Origin, which the cross-site check alone would accept |
 | Login lockout | Not keyed by IP. A browser that signed in before carries a signed device cookie and has its own bucket; all other attempts share one strict progressive bucket, so guessing cannot lock the owner's devices out. One password check runs per bucket at a time |
-| Delivered files | `MEDIA:` paths become signed links only for regular files outside system paths, home credential folders and files, Hermes's secrets, and Kana's data root; the file is re-checked on every request |
+| Delivered files | `MEDIA:` paths become signed links only for regular files outside system paths, home credential folders and files, Hermes's secrets, and Kana's data root; the file is re-checked on every request. A remote gateway's paths are never checked or signed locally: only the file name is kept, and no download is offered |
+| Remote Hermes | The dashboard URL must be `wss://`; credentials, query strings, and fragments are refused. Username and password come from the owner-only file or a named environment variable, never from the browser. Kana keeps the login cookie in server memory and mints a fresh single-use WebSocket ticket for each connection; a remote config never falls back to a local discovery or spawn. Host surfaces read only the fixed `/api/system/stats` path with that cookie, and the browser never sees it |
+| Instabox wake | An authenticated, bodyless request runs only `instabox resume/start <validated machine id>` with no shell, no browser-supplied argument, a home working directory, and a minimal environment allowlist plus explicit `wake.env` names. Kana and Hermes credentials cannot be allowlisted. The health poll, single-flight guard, and 15-second cooldown bound cost; the command's output is discarded |
 | Protected input | Password and secret fields are uncontrolled, ephemeral, sent directly to Hermes, and never added to Kana history, activity details, preferences, or local storage |
 | Prompt guardrail | The screen is optional and off without an owner-set key, while the rules still ride in Kana's prompt note as instructions. The owner's rules and key live in `config.json`, which Kana has no writer for, and the key never reaches the browser. A rule that fires, or a check that could not run, refuses the turn before it reaches Hermes |
 | Local voice engine | No listening service: each utterance is a short-lived child process with a minimal environment; every downloaded artifact is pinned by size and SHA-256 and verified before it is unpacked or run |

@@ -18,6 +18,7 @@ import {
   configPath,
   manifest,
   readConfigSafely,
+  remoteHermesSummary,
   voiceProviderName,
   runtimeRoot,
   serverEntry,
@@ -101,23 +102,30 @@ export async function doctor({ dataRoot }) {
   else if (existsSync(configPath(dataRoot))) status.success("Config", displayPath(configPath(dataRoot)));
   else status.info("Config", "defaults (config.json is created on first start)");
 
-  const hermes = await locateHermes(config.value);
-  if (hermes.warning) status.warning(hermes.warning);
-  if (hermes.executable) status.success("Hermes", displayPath(hermes.executable));
-  else status.error("Hermes", "not found — install Hermes or set hermes.executable in config.json");
+  const remote = remoteHermesSummary(config.value);
+  if (remote) {
+    if (remote.url) status.success("Hermes", `remote ${remote.url}`);
+    else status.error("Hermes", "remote config is invalid — check hermes.remote.url in config.json");
+    status.info("Hermes gateway", "remote — local discovery and process control are off");
+  } else {
+    const hermes = await locateHermes(config.value);
+    if (hermes.warning) status.warning(hermes.warning);
+    if (hermes.executable) status.success("Hermes", displayPath(hermes.executable));
+    else status.error("Hermes", "not found — install Hermes or set hermes.executable in config.json");
 
-  const gateways = await runningGateways();
-  if (gateways.length === 0) {
-    status.info("Hermes gateway", "not running — Kana starts it when you connect");
-  }
-  for (const gateway of gateways) {
-    if (gateway.tokenReadable) {
-      status.success("Hermes gateway", `port ${gateway.port} (pid ${gateway.pid})`);
-    } else {
-      status.warning(
-        "Hermes gateway",
-        `port ${gateway.port} (pid ${gateway.pid}) — its session token is not readable; start it from Kana or as this user with HERMES_DASHBOARD_SESSION_TOKEN`,
-      );
+    const gateways = await runningGateways();
+    if (gateways.length === 0) {
+      status.info("Hermes gateway", "not running — Kana starts it when you connect");
+    }
+    for (const gateway of gateways) {
+      if (gateway.tokenReadable) {
+        status.success("Hermes gateway", `port ${gateway.port} (pid ${gateway.pid})`);
+      } else {
+        status.warning(
+          "Hermes gateway",
+          `port ${gateway.port} (pid ${gateway.pid}) — its session token is not readable; start it from Kana or as this user with HERMES_DASHBOARD_SESSION_TOKEN`,
+        );
+      }
     }
   }
 
@@ -161,9 +169,15 @@ export async function password({ dataRoot, fromStdin }) {
 export async function setup({ dataRoot }) {
   heading("Kana voice setup");
   const config = readConfigSafely(dataRoot);
-  const hermes = await locateHermes(config.value);
-  if (hermes.executable) status.success("Hermes", displayPath(hermes.executable));
-  else status.warning("Hermes", "not found — Kana starts, but chat needs Hermes");
+  const remote = remoteHermesSummary(config.value);
+  if (remote) {
+    if (remote.url) status.success("Hermes", `remote ${remote.url}`);
+    else status.warning("Hermes", "remote config is invalid — check hermes.remote.url");
+  } else {
+    const hermes = await locateHermes(config.value);
+    if (hermes.executable) status.success("Hermes", displayPath(hermes.executable));
+    else status.warning("Hermes", "not found — Kana starts, but chat needs Hermes");
+  }
 
   const provider = voiceProviderName(config.value);
   if (provider !== "irodori-local") {

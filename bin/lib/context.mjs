@@ -136,6 +136,42 @@ export function voiceProviderName(config) {
   return "irodori-local";
 }
 
+/**
+ * The remote block's presence and a browser/log-safe URL. A URL with
+ * credentials, a query, a fragment, or plain ws away from loopback is reported
+ * as configured but invalid, never echoed. Null means local discovery.
+ */
+export function remoteHermesSummary(config) {
+  const remote = config?.hermes?.remote;
+  if (remote === undefined) return null;
+  if (!remote || typeof remote !== "object" || Array.isArray(remote)) return { url: null };
+  const auth = remote.auth;
+  if (!auth || typeof auth !== "object" || Array.isArray(auth)) return { url: null };
+  if (typeof auth.username !== "string" || !auth.username.trim()) return { url: null };
+  if (
+    (typeof auth.password !== "string" || !auth.password)
+    && (typeof auth.passwordEnv !== "string" || !auth.passwordEnv)
+  ) {
+    return { url: null };
+  }
+  const raw = typeof remote.url === "string" ? remote.url.trim() : "";
+  if (!raw) return { url: null };
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "ws:" && url.protocol !== "wss:") return { url: null };
+    if (url.username || url.password || url.search || url.hash) return { url: null };
+    if (
+      url.protocol === "ws:"
+      && !["localhost", "127.0.0.1", "::1", "[::1]"].includes(url.hostname.toLowerCase())
+    ) {
+      return { url: null };
+    }
+    return { url: `${url.protocol}//${url.host}${url.pathname}` };
+  } catch {
+    return { url: null };
+  }
+}
+
 /** Server entry for this installation, or a reason it is not runnable yet. */
 export function serverEntry() {
   const entry = path.join(runtimeRoot, "server.js");

@@ -301,3 +301,89 @@ it("validates the readable synthesis timeout setting", () => {
     assert.throws(() => readKanaUserConfig(), /timeoutSeconds/);
   }
 });
+
+describe("remote Hermes configuration", () => {
+  const writeRemote = (remote: unknown) =>
+    writeFileSync(kanaUserConfigPath(), JSON.stringify({ hermes: { remote } }));
+  const auth = { mode: "password", username: "misa", password: "secret" };
+  const withAuth = (remote: Record<string, unknown>) => ({ ...remote, auth });
+
+  it("normalizes the gateway URL and reads password auth plus Instabox wake", () => {
+    writeRemote(withAuth({
+      url: "wss://hermes.example.com:9119",
+      wake: {
+        machineId: "m_abc123",
+        executable: "/usr/local/bin/instabox",
+        timeoutSeconds: 180,
+      },
+    }));
+    assert.deepEqual(readKanaUserConfig().hermes?.remote, {
+      url: "wss://hermes.example.com:9119/api/ws",
+      auth,
+      wake: {
+        machineId: "m_abc123",
+        executable: "/usr/local/bin/instabox",
+        timeoutSeconds: 180,
+      },
+    });
+
+    writeRemote(withAuth({ url: "wss://hermes.example.com/hermes" }));
+    assert.equal(
+      readKanaUserConfig().hermes?.remote?.url,
+      "wss://hermes.example.com/hermes/api/ws",
+    );
+    writeRemote(withAuth({ url: "ws://127.0.0.1:9119" }));
+    assert.equal(readKanaUserConfig().hermes?.remote?.url, "ws://127.0.0.1:9119/api/ws");
+  });
+
+  it("requires TLS away from loopback and refuses ambiguous credentials", () => {
+    const invalid = [
+      { url: "https://hermes.example.com", auth },
+      { url: "ws://hermes.example.com", auth },
+      { url: "wss://user:pass@hermes.example.com", auth },
+      { url: "wss://hermes.example.com/api/ws?token=secret", auth },
+      { url: "wss://hermes.example.com/api/ws#fragment", auth },
+      { url: "wss://hermes.example.com" },
+      { url: "wss://hermes.example.com", token: "old" },
+      { url: "wss://hermes.example.com", tokenEnv: "OLD_TOKEN" },
+      { url: "wss://hermes.example.com", auth: { mode: "oauth", username: "misa", password: "secret" } },
+      { url: "wss://hermes.example.com", auth: { mode: "password", password: "secret" } },
+      { url: "wss://hermes.example.com", auth: { mode: "password", username: "misa" } },
+      { url: "wss://hermes.example.com", auth: { mode: "password", username: "misa", password: "a", passwordEnv: "B" } },
+      { url: "wss://hermes.example.com", auth: { mode: "password", username: "misa", passwordEnv: "bad-name" } },
+      { url: "wss://hermes.example.com", auth: { mode: "password", username: "misa", passwordEnv: "KANA_JWT_SECRET" } },
+      { url: "wss://hermes.example.com", auth: { mode: "password", username: "misa", passwordEnv: "HERMES_DASHBOARD_SESSION_TOKEN" } },
+    ];
+    for (const remote of invalid) {
+      writeRemote(remote);
+      assert.throws(() => readKanaUserConfig(), /hermes\.remote/, JSON.stringify(remote));
+    }
+  });
+
+  it("narrows Instabox wake to the CLI and a safe machine id", () => {
+    const invalid = [
+      { url: "wss://hermes.example.com", auth, wake: { machineId: "m/../x" } },
+      { url: "wss://hermes.example.com", auth, wake: { machineId: "m_ok", executable: "/usr/bin/bash" } },
+      { url: "wss://hermes.example.com", auth, wake: { machineId: "m_ok", executable: "instabox" } },
+      { url: "wss://hermes.example.com", auth, wake: { machineId: "m_ok", timeoutSeconds: 5 } },
+      { url: "wss://hermes.example.com", auth, wake: {} },
+      { url: "wss://hermes.example.com", auth, wake: { machineId: "m_ok", env: ["KANA_JWT_SECRET"] } },
+      { url: "wss://hermes.example.com", auth, wake: { machineId: "m_ok", env: ["HERMES_DASHBOARD_SESSION_TOKEN"] } },
+      { url: "wss://hermes.example.com", auth, wake: { machineId: "m_ok", env: ["bad-name"] } },
+    ];
+    for (const remote of invalid) {
+      writeRemote(remote);
+      assert.throws(() => readKanaUserConfig(), /hermes\.remote\.wake/, JSON.stringify(remote));
+    }
+
+    writeRemote({
+      url: "wss://hermes.example.com",
+      auth,
+      wake: { machineId: "m_ok", env: ["INSTABOX_TOKEN"] },
+    });
+    assert.deepEqual(
+      readKanaUserConfig().hermes?.remote?.wake?.env,
+      ["INSTABOX_TOKEN"],
+    );
+  });
+});

@@ -197,6 +197,48 @@ HERMES_DASHBOARD_SESSION_TOKEN=<token> hermes serve --host 127.0.0.1 --port 9119
 
 Kana membaca token dari lingkungan proses itu, dan token tetap tersimpan di server, bukan di browser.
 
+### Gateway Hermes di mesin lain
+
+Secara bawaan Kana memakai Hermes di mesinnya sendiri. Tambahkan blok `remote` untuk terhubung ke gateway di mesin lain; Kana kemudian tidak mencari, menjalankan, memulai ulang, atau menghentikan Hermes lokal. Hapus blok itu untuk kembali ke pencarian lokal.
+
+| Kunci | Nilai bawaan | Keterangan |
+| --- | --- | --- |
+| `remote.url` | wajib | URL dashboard `wss://`. Host tanpa path akan ditambahi `/api/ws`. Kredensial, query string, dan fragmen ditolak. |
+| `remote.auth.mode` | `"password"` | Satu-satunya mode auth remote yang didukung. |
+| `remote.auth.username` | wajib | Username untuk provider `basic` dashboard Hermes. |
+| `remote.auth.password` | kosong | Password yang tersimpan di berkas khusus pemilik. Tepat satu dari `password` dan `passwordEnv` wajib diisi. |
+| `remote.auth.passwordEnv` | kosong | Nama variabel lingkungan khusus yang menyimpan password. `KANA_*` dan token dashboard Hermes ditolak. |
+| `remote.wake.machineId` | kosong | ID mesin Instabox untuk tombol bangunkan opsional. |
+| `remote.wake.executable` | `instabox` di `PATH` | Path absolut CLI Instabox; nama berkasnya harus `instabox`. |
+| `remote.wake.timeoutSeconds` | `120` | Total tunggu untuk mesin dan kesehatan Hermes, 10–600 detik. |
+| `remote.wake.env` | kosong | Nama variabel lingkungan tambahan untuk CLI Instabox, maksimal 32; kredensial Kana dan Hermes ditolak. |
+
+```json
+{
+  "hermes": {
+    "remote": {
+      "url": "wss://hermes.example.com",
+      "auth": {
+        "mode": "password",
+        "username": "misa",
+        "passwordEnv": "HERMES_REMOTE_PASSWORD"
+      },
+      "wake": { "machineId": "m_xxxxxxxx", "timeoutSeconds": 120 }
+    }
+  }
+}
+```
+
+Mesin remote harus menyediakan `/auth/password-login`, `/api/auth/ws-ticket`, `/api/auth/ws`, dan `/api/health` di belakang TLS. Kana login dengan provider `basic` dashboard, menyimpan cookie di server, dan meminta ticket WebSocket sekali pakai baru untuk setiap koneksi. URL, username, dan password tetap di `config.json` atau lingkungan server dan tidak pernah mencapai browser. Auth token remote tidak didukung. `/restart` tidak dapat memulai ulang gateway remote; mulai ulang di mesin tempat ia berjalan.
+
+Kana menyimpan model default-nya sendiri untuk percakapan baru secara terpisah untuk runtime lokal dan setiap dashboard remote yang dikonfigurasi. Sebelum menerapkannya, Kana memeriksa bahwa katalog model langsung di Hermes tersebut masih memuat provider dan model itu; jika tidak, Kana memakai default Hermes untuk percakapan tersebut.
+
+Balasan remote dapat menyebut `MEDIA:/path`. Path itu milik mesin remote, sehingga Kana hanya menampilkan nama berkasnya dan tidak dapat menyediakan unduhan. Kana tetap memerlukan server berjalan lama dengan folder data yang dapat ditulis; Hermes remote tidak membuatnya berjalan di platform serverless seperti Vercel.
+
+#### Bangunkan Instabox
+
+Apabila gateway remote adalah mesin Instabox yang berhenti saat menganggur, atur `remote.wake`. Layar koneksi kemudian menampilkan **Bangunkan Hermes**: Kana menjalankan `instabox resume <machineId>`, lalu `instabox start <machineId>` bila sandbox berhenti, dan memeriksa kesehatan sampai menjawab. CLI harus terpasang dan sudah login di mesin yang menjalankan Kana. CLI berjalan dari home akun layanan dengan allowlist environment kecil; tambahkan variabel token yang dibutuhkan CLI ke `remote.wake.env`. Kana tidak membangunkan mesin secara otomatis, menjalankan satu wake dalam satu waktu, dan menunggu 15 detik sebelum wake berikutnya. Membangunkan mesin tidak menjalankan `hermes serve`; jalankan sebagai service di mesin remote agar health menjawab setelah resume. Saat mesin tidak terjangkau, layar menampilkan **Hermes remote tidak terjangkau** dan menjadikan **Bangunkan Hermes** tindakan utama; selama permintaan berjalan tampil **Membangunkan Instabox**, dan bila wake berhasil tetapi Kana tetap tidak bisa terhubung, layar menunjuk kredensial dashboard remote.
+
 ## Guardrail prompt {#guardrail}
 
 Bagian `guardrails` memeriksa pesan Anda sebelum Kana mengirimkannya ke Hermes. Anda menulis aturan sebagai pernyataan biasa tentang apa yang tidak boleh dilakukan Kana; Kana mengubahnya menjadi satu pertanyaan ya/tidak yang diajukan kepada Jev, model TypeSafe. Jev mengembalikan probabilitas, bukan teks, dan Kana sendiri yang membandingkan probabilitas itu dengan ambang batas Anda lalu menolak pesannya.

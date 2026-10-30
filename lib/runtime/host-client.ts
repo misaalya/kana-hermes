@@ -4,6 +4,8 @@ export type HostCpuTimes = {
 };
 
 export type HostSnapshot = {
+  /** Local Kana host or the configured remote Hermes dashboard. */
+  source?: "local" | "remote";
   hostname: string;
   platform: string;
   release: string;
@@ -12,6 +14,8 @@ export type HostSnapshot = {
     model: string;
     cores: number;
     times: HostCpuTimes;
+    /** Present on a remote sample, which reports a percentage rather than counters. */
+    percent?: number;
   };
   load: [number, number, number];
   memory: {
@@ -26,6 +30,11 @@ export type HostSnapshot = {
   kana: {
     uptime: number;
     rss: number;
+  };
+  /** The server's clock and IANA zone at sample time. */
+  serverTime: {
+    now: number;
+    zone: string;
   };
   sampledAt: number;
 };

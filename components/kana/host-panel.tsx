@@ -5,9 +5,10 @@ import { getCopy, type UiLocale } from "@/lib/ui/copy";
 import { useHostSnapshot } from "./use-host-snapshot";
 
 /**
- * A read-only snapshot of the machine Kana runs on, as four stat tiles.
- * Polling lives only while this panel is mounted, so switching Settings away
- * or closing it stops the requests; nothing is stored.
+ * A read-only snapshot for the host surfaces: this Kana machine in local mode,
+ * or the configured remote Hermes dashboard. Polling lives only while this
+ * panel is mounted, so switching Settings away or closing it stops the
+ * requests; nothing is stored.
  */
 export function HostPanel({ locale }: { locale: UiLocale }) {
   const copy = getCopy(locale).settings;
@@ -69,10 +70,15 @@ export function HostPanel({ locale }: { locale: UiLocale }) {
         <Tile
           label={copy.hostUptime}
           value={formatDuration(snapshot.uptime)}
-          detail={copy.hostKanaDetail(
-            formatDuration(snapshot.kana.uptime),
-            formatBytes(snapshot.kana.rss),
-          )}
+          detail={snapshot.source === "remote"
+            ? copy.hostHermesDetail(
+                formatDuration(snapshot.kana.uptime),
+                formatBytes(snapshot.kana.rss),
+              )
+            : copy.hostKanaDetail(
+                formatDuration(snapshot.kana.uptime),
+                formatBytes(snapshot.kana.rss),
+              )}
         />
       </div>
 

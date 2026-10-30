@@ -16,6 +16,21 @@ export type HermesJsonRpcFrame = {
   };
 };
 
+/** A server-to-client request frame (Hermes 0.22+): the gateway asks Kana. */
+export type HermesServerRequestFrame = {
+  jsonrpc?: "2.0";
+  id?: string | number | null;
+  method?: string;
+  params?: Record<string, unknown>;
+};
+
+/** One unanswered server request replayed by session.resume. */
+export type HermesOpenRequest = {
+  id?: string;
+  method?: string;
+  params?: Record<string, unknown>;
+};
+
 export type HermesSessionResponse = {
   session_id: string;
   stored_session_id?: string;
@@ -41,6 +56,11 @@ export type HermesSessionResponse = {
    * payload). Same shape as the live event.
    */
   pending_approval?: Record<string, unknown>;
+  /**
+   * Hermes 0.22+ server-to-client requests still waiting on this session:
+   * clarify, approval, sudo, secret, and desktop-only bridges.
+   */
+  open_requests?: HermesOpenRequest[] | null;
   inflight?: {
     assistant?: string;
     error?: string;

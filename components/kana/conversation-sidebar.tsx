@@ -123,7 +123,7 @@ export const ConversationSidebar = memo(function ConversationSidebar({
 
   const rowClass = (active: boolean) =>
     `kana-focus kana-choice is-plain grid w-full grid-cols-[minmax(0,1fr)_auto] items-start gap-3 py-2.5 pl-3.5 pr-3.5 text-left disabled:opacity-50 ${
-      active ? "is-selected" : "rounded-[22px]"
+      active ? "is-selected" : ""
     }`;
 
   return (
@@ -278,7 +278,7 @@ export const ConversationSidebar = memo(function ConversationSidebar({
                   <span className="min-w-0">
                     <span className="block truncate text-[13px] font-extrabold text-ink">{session.title}</span>
                     <span className="mt-0.5 block text-[11.5px] text-muted">
-                      {copy.messages(session.messageCount)} · {dateFormatter.format(session.lastActive * 1000)}
+                      {copy.messages(session.messageCount)} · {dateFormatter.format((session.lastActive || session.startedAt) * 1000)}
                     </span>
                   </span>
                 </button>

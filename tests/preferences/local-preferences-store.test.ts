@@ -40,7 +40,7 @@ describe("LocalPreferencesStore", () => {
 
     store.save({ ...DEFAULT_PREFERENCES });
 
-    const raw = persistent.getItem("kana.preferences.v5") ?? "";
+    const raw = persistent.getItem("kana.preferences.v6") ?? "";
     assert.ok(raw);
     assert.equal(raw.includes("token"), false);
     assert.equal(raw.includes("websocketUrl"), false);
@@ -68,7 +68,7 @@ describe("LocalPreferencesStore", () => {
     assert.equal("subtitleLanguage" in loaded, false);
     assert.equal(loaded.hermes.cwd, "/tmp/kana");
     assert.equal(persistent.getItem("kana.preferences.v2"), null);
-    const persisted = persistent.getItem("kana.preferences.v5") ?? "";
+    const persisted = persistent.getItem("kana.preferences.v6") ?? "";
     assert.equal(persisted.includes("legacy-token"), false);
     assert.equal(persisted.includes("ws://127.0.0.1"), false);
     assert.equal(loaded.onboardingCompleted, true);
@@ -123,43 +123,61 @@ describe("LocalPreferencesStore", () => {
     );
   });
 
-  it("persists Kana's default model for new conversations and drops malformed values", () => {
+  it("keeps a default model per Hermes runtime and drops malformed values", () => {
     const persistent = new MemoryStorage();
     const store = new LocalPreferencesStore(persistent);
-    assert.equal(store.load().defaultAgentModel, null);
+    assert.deepEqual(store.load().agentModelDefaults, {});
 
     store.save({
       ...DEFAULT_PREFERENCES,
-      defaultAgentModel: { provider: "openrouter", model: "deepseek/deepseek-v4" },
+      agentModelDefaults: {
+        local: { provider: "openrouter", model: "deepseek/deepseek-v4" },
+        "remote-0123456789abcdef": { provider: "custom:9router", model: "gpt-5" },
+      },
     });
-    assert.deepEqual(store.load().defaultAgentModel, {
-      provider: "openrouter",
-      model: "deepseek/deepseek-v4",
+    assert.deepEqual(store.load().agentModelDefaults, {
+      local: { provider: "openrouter", model: "deepseek/deepseek-v4" },
+      "remote-0123456789abcdef": { provider: "custom:9router", model: "gpt-5" },
     });
 
     persistent.setItem(
-      "kana.preferences.v5",
-      JSON.stringify({ defaultAgentModel: { provider: "openrouter" } }),
+      "kana.preferences.v6",
+      JSON.stringify({
+        agentModelDefaults: {
+          local: { provider: "openrouter" },
+          "not-a-runtime": { provider: "openrouter", model: "deepseek/deepseek-v4" },
+          "remote-0123456789abcdef": { provider: "  ", model: "gpt-5" },
+        },
+      }),
     );
-    assert.equal(store.load().defaultAgentModel, null);
+    assert.deepEqual(store.load().agentModelDefaults, {});
+  });
 
+  it("migrates the one global default model to the local runtime", () => {
+    const persistent = new MemoryStorage();
     persistent.setItem(
       "kana.preferences.v5",
-      JSON.stringify({ defaultAgentModel: { provider: "  ", model: "deepseek/deepseek-v4" } }),
+      JSON.stringify({ defaultAgentModel: { provider: "openrouter", model: "deepseek/deepseek-v4" } }),
     );
-    assert.equal(store.load().defaultAgentModel, null);
+    const store = new LocalPreferencesStore(persistent);
+    assert.deepEqual(store.load().agentModelDefaults, {
+      local: { provider: "openrouter", model: "deepseek/deepseek-v4" },
+    });
+    const persisted = persistent.getItem("kana.preferences.v6") ?? "";
+    assert.equal(persisted.includes("defaultAgentModel"), false);
+    assert.equal(persistent.getItem("kana.preferences.v5"), null);
   });
 
   it("keeps the chatbar collapse delay within 0-600 seconds", () => {
     const persistent = new MemoryStorage();
     // A record from a build without the setting starts at 30 seconds.
-    persistent.setItem("kana.preferences.v5", JSON.stringify({ uiLocale: "en" }));
+    persistent.setItem("kana.preferences.v6", JSON.stringify({ uiLocale: "en" }));
     assert.equal(
       new LocalPreferencesStore(persistent).load().composerCollapseDelaySeconds,
       30,
     );
     persistent.setItem(
-      "kana.preferences.v5",
+      "kana.preferences.v6",
       JSON.stringify({ uiLocale: "en", composerCollapseDelaySeconds: -5 }),
     );
     assert.equal(
@@ -174,10 +192,45 @@ describe("LocalPreferencesStore", () => {
     assert.equal(store.load().composerCollapseDelaySeconds, 600);
   });
 
+  it("keeps a complete header host layout or falls back to the default", () => {
+    const persistent = new MemoryStorage();
+    persistent.setItem("kana.preferences.v6", JSON.stringify({ uiLocale: "en" }));
+    assert.deepEqual(
+      new LocalPreferencesStore(persistent).load().hostWidgetLayout,
+      { left: ["monitor"], center: ["time"], right: ["date"] },
+    );
+    persistent.setItem(
+      "kana.preferences.v6",
+      JSON.stringify({
+        uiLocale: "en",
+        hostWidgetLayout: {
+          left: ["date", "monitor"],
+          center: [],
+          right: ["time"],
+        },
+      }),
+    );
+    assert.deepEqual(
+      new LocalPreferencesStore(persistent).load().hostWidgetLayout,
+      { left: ["date", "monitor"], center: [], right: ["time"] },
+    );
+    persistent.setItem(
+      "kana.preferences.v6",
+      JSON.stringify({
+        uiLocale: "en",
+        hostWidgetLayout: { left: ["monitor"], center: ["date"], right: [] },
+      }),
+    );
+    assert.deepEqual(
+      new LocalPreferencesStore(persistent).load().hostWidgetLayout,
+      { left: ["monitor"], center: ["time"], right: ["date"] },
+    );
+  });
+
   it("falls back safely when a stored stage background is unknown", () => {
     const persistent = new MemoryStorage();
     persistent.setItem(
-      "kana.preferences.v5",
+      "kana.preferences.v6",
       JSON.stringify({ stageBackground: "future-unknown-pattern" }),
     );
 
@@ -199,7 +252,7 @@ describe("LocalPreferencesStore", () => {
     const loaded = store.load();
     assert.equal(loaded.stageBackground, "custom");
     assert.equal(loaded.customBackgroundId, "background-local-1");
-    assert.equal((persistent.getItem("kana.preferences.v5") ?? "").includes("data:image"), false);
+    assert.equal((persistent.getItem("kana.preferences.v6") ?? "").includes("data:image"), false);
   });
 
   it("starts with voice off, since local speech needs an explicit engine download", () => {
@@ -231,9 +284,9 @@ describe("LocalPreferencesStore", () => {
     // Qwen voice ids named service-side profiles; the bundled Kana voice is used instead.
     assert.deepEqual(loaded.voice, { voiceId: "", deliveryMode: "complete" });
     assert.equal(loaded.voiceEnabled, true, "an existing voice choice is kept");
-    assert.equal((persistent.getItem("kana.preferences.v5") ?? "").includes("7860"), false);
+    assert.equal((persistent.getItem("kana.preferences.v6") ?? "").includes("7860"), false);
     assert.equal(persistent.getItem("kana.preferences.v4"), null);
-    assert.ok(persistent.getItem("kana.preferences.v5"));
+    assert.ok(persistent.getItem("kana.preferences.v6"));
   });
 
   it("strips a token embedded in a legacy WebSocket URL during migration", () => {
@@ -250,7 +303,7 @@ describe("LocalPreferencesStore", () => {
 
     store.load();
 
-    const persisted = persistent.getItem("kana.preferences.v5") ?? "";
+    const persisted = persistent.getItem("kana.preferences.v6") ?? "";
     assert.equal(persisted.includes("legacy-query-secret"), false);
     assert.equal(persisted.includes("websocketUrl"), false);
   });
@@ -272,7 +325,7 @@ describe("LocalPreferencesStore", () => {
         },
       }),
     );
-    const persisted = persistent.getItem("kana.preferences.v5") ?? "";
+    const persisted = persistent.getItem("kana.preferences.v6") ?? "";
     assert.equal(persisted.includes("javascript:"), false);
     assert.equal(persisted.includes("arbitrary.js"), false);
   });
@@ -281,10 +334,10 @@ describe("LocalPreferencesStore", () => {
     const persistent = new MemoryStorage();
     // A record from a build without the setting, and a tampered value, both
     // stay a chat-and-avatar workspace.
-    persistent.setItem("kana.preferences.v5", JSON.stringify({ uiLocale: "en" }));
+    persistent.setItem("kana.preferences.v6", JSON.stringify({ uiLocale: "en" }));
     assert.equal(new LocalPreferencesStore(persistent).load().avatarVisible, true);
     persistent.setItem(
-      "kana.preferences.v5",
+      "kana.preferences.v6",
       JSON.stringify({ uiLocale: "en", avatarVisible: "no" }),
     );
     assert.equal(new LocalPreferencesStore(persistent).load().avatarVisible, true);

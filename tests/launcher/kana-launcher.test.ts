@@ -137,6 +137,57 @@ describe("npm launcher", () => {
     });
   });
 
+  it("reports a remote Hermes without echoing URL credentials or query secrets", () => {
+    withFreshHome((environment, home) => {
+      const dataDirectory = path.join(home, ".kana");
+      mkdirSync(dataDirectory, { recursive: true });
+      const configFile = path.join(dataDirectory, "config.json");
+
+      writeFileSync(
+        configFile,
+        JSON.stringify({
+          hermes: {
+            remote: {
+              url: "wss://user:pass@hermes.example.com/api/ws?token=query-secret",
+              auth: { mode: "password", username: "misa", password: "literal-secret" },
+            },
+          },
+        }),
+      );
+      const invalid = spawnSync(process.execPath, [launcher, "doctor"], {
+        cwd: root,
+        env: environment,
+        encoding: "utf8",
+      });
+      assert.equal(invalid.status, 0, invalid.stderr);
+      assert.match(invalid.stderr, /remote config is invalid/);
+      assert.doesNotMatch(
+        `${invalid.stdout}\n${invalid.stderr}`,
+        /user:pass|query-secret|literal-secret/,
+      );
+
+      writeFileSync(
+        configFile,
+        JSON.stringify({
+          hermes: {
+            remote: {
+              url: "wss://hermes.example.com",
+              auth: { mode: "password", username: "misa", password: "literal-secret" },
+            },
+          },
+        }),
+      );
+      const valid = spawnSync(process.execPath, [launcher, "doctor"], {
+        cwd: root,
+        env: environment,
+        encoding: "utf8",
+      });
+      assert.equal(valid.status, 0, valid.stderr);
+      assert.match(valid.stdout, /remote wss:\/\/hermes\.example\.com\//);
+      assert.doesNotMatch(valid.stdout, /literal-secret/);
+    });
+  });
+
   it("discovers Hermes from every PATH directory", () => {
     withFreshHome((environment, home) => {
       const customBin = path.join(home, "tools", "bin");

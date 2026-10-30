@@ -69,6 +69,25 @@ describe("Hermes event stream lifecycle", () => {
     while (!(await reader.read()).done) { /* Drain already queued frames. */ }
   });
 
+  it("reports the connected runtime identity with the gateway event", async () => {
+    const stream = createHermesEventStream(new AbortController().signal, {
+      connect: async () => {},
+      runtimeId: () => "remote-0123456789abcdef",
+      subscribe: () => () => {},
+      authorized: async () => true,
+    });
+    const reader = stream.getReader();
+    const decoder = new TextDecoder();
+    let text = "";
+    while (!text.includes('"connected":true')) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      text += decoder.decode(value, { stream: true });
+    }
+    await reader.cancel();
+    assert.match(text, /"connected":true,"runtimeId":"remote-0123456789abcdef"/);
+  });
+
   it("says the gateway is unreachable and ends, so the browser retries", async () => {
     let subscriptions = 0;
     const stream = createHermesEventStream(new AbortController().signal, {

@@ -24,6 +24,15 @@ const STOPPED: HermesRuntimeStatus = {
   message: "No running Hermes gateway was detected on this machine.",
 };
 
+const CONFIG_ERROR: HermesRuntimeStatus = {
+  ...STOPPED,
+  executable: undefined,
+  state: "failed",
+  configError: true,
+  controlAvailable: false,
+  message: "Kana's config.json could not be read; fix it and reconnect.",
+};
+
 function harness(options: {
   connectionState?: AgentConnectionState;
   runtime?: HermesRuntimeStatus | null;
@@ -70,6 +79,19 @@ function harness(options: {
 }
 
 describe("workspace setup manual connect", () => {
+  it("treats an unreadable config as installed and never starts a local gateway", async () => {
+    const { setup, calls } = harness({
+      runtime: CONFIG_ERROR,
+      inspect: async () => CONFIG_ERROR,
+      connect: async () => {},
+    });
+
+    const findings = await setup.inspectDependencies();
+    assert.equal(findings.hermes, "installed");
+    await setup.connectHermes();
+    assert.equal(calls.start, 0);
+  });
+
   it("retries at once during a live drop instead of waiting for the timer", async () => {
     const { stores, setup, calls } = harness({
       connectionState: "reconnecting",
