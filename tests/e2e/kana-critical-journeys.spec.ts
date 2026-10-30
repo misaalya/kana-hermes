@@ -4105,9 +4105,10 @@ test("wipes between the avatar and focus mode with a candy wave", async ({ page 
   expect(layers.position).toBe("fixed");
   expect(layers.pointerEvents).toBe("none");
   expect(layers.sheetMask).toContain("data:image/svg+xml");
-  // Desktop repeats a phone-width wave tile so the crests stay as tightly
-  // packed as on mobile; phones keep the full-width stretch.
-  expect(layers.sheetMaskRepeat).toBe(desktop ? "repeat-x" : "no-repeat");
+  // Wide screens use one full-width irregular mask; phones keep the smooth
+  // four-crest mask. Neither repeats.
+  expect(layers.sheetMaskRepeat).toBe("no-repeat");
+  expect(layers.sheetMask).toContain(desktop ? "C1.2" : "Q6.25");
   // The sheet is plain Kana blue; the depth comes from the two wave layers,
   // not from a pattern.
   expect(layers.sheetBackground).not.toContain("data:image/svg+xml");

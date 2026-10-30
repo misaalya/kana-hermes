@@ -6,10 +6,12 @@
 
 - Switching between avatar mode and focus mode is now a candy wave wipe: a
   Kana-blue sheet layered with white and light-blue waves, accented by small
-  four-point sparkles, sweeps down from above. The new layout is written while
-  the screen is fully covered, and the sheet leaves through the bottom. It
-  replaces the previous View Transition morph; reduced motion still switches
-  immediately.
+  four-point sparkles, sweeps down from above. Wide screens use many crests of
+  varied width and height so the tighter sweep never reads as a repeating
+  pattern; phones keep the original smooth waves. The new layout is written
+  while the screen is fully covered, and the sheet leaves through the bottom.
+  It replaces the previous View Transition morph; reduced motion still
+  switches immediately.
 - The Instabox block in `config.json` is now `hermes.remote.instabox` (was
   `hermes.remote.wake`). The old `wake` key is rejected with a rename error
   instead of being silently ignored.
