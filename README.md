@@ -84,7 +84,7 @@ into `~/.kana` when you ask for it.
   </tr>
   <tr>
     <td align="center"><sub>Hermes slash commands, read live from your installation</sub></td>
-    <td align="center"><sub>An avatar wardrobe and stage backgrounds</sub></td>
+    <td align="center"><sub>An avatar library and stage backgrounds</sub></td>
   </tr>
   <tr>
     <td colspan="2" align="center"><img src=".github/readme/mobile-v6.jpg" width="50%" alt="Kana on two phones, light and dark, on the Seigaiha pattern: the chat fills the screen and Kana sits in a small call-style tile"></td>
@@ -124,7 +124,7 @@ into `~/.kana` when you ask for it.
 
 **Character**
 - Live2D avatars: the official Haru and Mao samples, or a model folder
-  imported into your browser. Settings → Avatar is a wardrobe of portrait
+  imported into your browser. Settings → Avatar is a library of portrait
   cards.
 - Emotions, motions, lip sync, and cursor-following gaze.
 - Stage backgrounds (an illustrated room, soft patterns, or your own image), plus
@@ -339,7 +339,8 @@ manual-update dialog, and the split between a private app and a published CLI
 package.
 
 Both projects are references for the implementation; Kana does not bundle
-either repository.
+either repository. Both are MIT-licensed; their upstream notices are
+reproduced in [NOTICE](NOTICE).
 
 ## License
 
