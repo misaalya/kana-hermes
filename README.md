@@ -338,9 +338,8 @@ dashboard sign-in pattern, the login limiter, the JWT session cookie, the
 manual-update dialog, and the split between a private app and a published CLI
 package.
 
-Both projects are references for the implementation; Kana does not bundle
-either repository. Both are MIT-licensed; their upstream notices are
-reproduced in [NOTICE](NOTICE).
+Kana does not vendor either repository; adapted code and patterns remain under
+their upstream MIT notices, reproduced in [NOTICE](NOTICE).
 
 ## License
 

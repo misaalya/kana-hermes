@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.0 — 2026-10-31
 
 ### Changed
 
@@ -726,7 +726,7 @@
   deployment), in the same code block as /docs with a Copy button. It no
   longer shows raw backticks, and the sign-in form appears by itself a few
   seconds after the password is created.
-- Settings → Avatar is a wardrobe, like the Clara dressing room. Every avatar
+- Settings → Avatar is a wardrobe. Every avatar
   is a card with its portrait and name; the chosen one has a blue ring and a
   check. Kana takes the portrait from the stage a moment after an avatar
   appears and keeps it in this browser only. An imported avatar's size,

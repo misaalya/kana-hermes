@@ -1,12 +1,10 @@
 # UI direction
 
-Kana uses a cozy game-menu style that follows the Clara dressing-room viewer
-(itself modelled on Nintendo life-sim menus such as Animal Crossing and
-Tomodachi Life), in Kana's own colours. It is soft, round, and friendly, but it
-stays a calm workspace rather than an ornamental dashboard. This is a product
-direction, not a temporary theme.
+Kana uses its own cozy game-menu style, in Kana's colours. It is soft, round,
+and friendly, but it stays a calm workspace rather than an ornamental
+dashboard. This is a product direction, not a temporary theme.
 
-**Read when:** you are changing any component, `app/globals.css`, the composer, Settings, the avatar wardrobe, the chat feed, a stage pattern, or the fatal error pages.
+**Read when:** you are changing any component, `app/globals.css`, the composer, Settings, the avatar library, the chat feed, a stage pattern, or the fatal error pages.
 
 **Truth in code:** `app/globals.css`, `app/error.tsx`, `app/global-error.tsx`, `components/kana/chat-composer.tsx`, `components/kana/chat-dock.tsx`, `components/kana/focus-rail.tsx`, `components/kana/conversation-sidebar.tsx`, `components/kana/live-chat-feed.tsx`, `components/kana/header-host-monitor.tsx`, `components/kana/workspace-header.tsx`, `components/kana/settings-avatar-cards.tsx`, `components/kana/kana-select.tsx`, `components/kana/config-guide.tsx`, `app/docs/page.tsx`, `lib/ui/copy.ts`, `lib/presentation/markdown.ts`, `lib/presentation/json-highlight.ts`, `scripts/generate-stage-patterns.py`
 
@@ -40,7 +38,7 @@ alike. Headings and pills use the heavy weights (700–800).
 
 ## Component vocabulary
 
-Components copy Clara's vocabulary (shared classes in `app/globals.css`):
+Components share a small vocabulary (shared classes in `app/globals.css`):
 
 - Header actions are a blue pill tray (`kana-bar`) of round tabs. An open tab
   turns into the white disc, and a label bubble (`kana-tip`) appears under a tab
@@ -53,7 +51,7 @@ Components copy Clara's vocabulary (shared classes in `app/globals.css`):
   primary actions and `kana-pill-soft` for secondary ones) that hop up on hover.
 - Choices are rounded cards (`kana-choice`). The selection is a blue ring plus a
   round check badge (`kana-check`) on the corner.
-- Settings → Avatar is Clara's wardrobe (`kana-wardrobe`,
+- Settings → Avatar is the avatar library (`kana-wardrobe`,
   `settings-avatar-cards.tsx`). Cards wrap in a grid, never a carousel or rows of
   buttons. An avatar card is its stage portrait on a soft blue disc over its
   name; an imported one keeps its size, with Rename and Remove in a ⋯ menu on
@@ -471,10 +469,10 @@ writes the preference while the screen is covered, then lets the sheet leave
 through the bottom. The sheet is Kana blue with two wave layers behind it, one
 white and one light blue, each masked into its own wavy top and bottom, so
 both the leading and trailing edges read as several stacked waves; small
-four-point sparkles in Kana blue and white ride the exposed bands instead of
-the reference's bubbles. Wide screens swap in one full-width mask with many
-crests of varied width and height, so the tighter sweep does not repeat like
-wallpaper; phones keep the smooth four/five/three-crest masks.
+four-point sparkles in Kana blue and white ride the exposed bands. Wide
+screens swap in one full-width mask with many crests of varied width and
+height, so the tighter sweep does not repeat like wallpaper; phones keep the
+smooth four/five/three-crest masks.
 `app/globals.css` owns the art and the two WAAPI phases own the timing.
 Reduced motion changes immediately. A second toggle
 during a wipe applies at once, and the running wipe reveals the latest layout

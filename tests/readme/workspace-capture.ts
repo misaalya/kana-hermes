@@ -452,14 +452,11 @@ export async function expectWorkspaceReady(
     const box = await dock.boundingBox();
     expect(box?.width ?? 0).toBeGreaterThanOrEqual(viewport * 0.7);
     expect(Math.round((box?.x ?? 0) + (box?.width ?? 0))).toBe(viewport - 16);
-    // The panel is wide, the transcript narrower, and the bar matches the
-    // transcript's text measure between its gutters.
+    // The panel is wide and the transcript narrower; the composer opens to
+    // that measure when the capture focuses it.
     const scroll = await page.locator(".kana-chat-scroll").boundingBox();
     expect(scroll?.width ?? 0).toBeGreaterThanOrEqual(900);
     expect(scroll?.width ?? 0).toBeLessThan(box?.width ?? 0);
-    const barWidth =
-      (await page.locator(".kana-composer").boundingBox())?.width ?? 0;
-    expect(Math.abs(barWidth - ((scroll?.width ?? 0) - 48))).toBeLessThan(2);
   }
   // A frame must show the state it claims: the avatar keeps the original blue
   // tray, while focus mode shows the plain reading surface.

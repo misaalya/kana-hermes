@@ -32,12 +32,6 @@ const eslintConfig = defineConfig([
     "auth-reference/**",
     // Gitignored study checkouts of other projects (see .gitignore).
     ".study/**",
-    // The gitignored local security assessment's cloned tooling (see
-    // .gitignore). It is not Kana code and has never been linted from here.
-    "security-audit/**",
-    // Downloaded ChatGPT bundles kept for local composer study. They stay in
-    // the tree on purpose but are minified third-party code, never Kana code.
-    "chatbar-study/**",
   ]),
 ]);
 

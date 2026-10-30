@@ -3,9 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { AvatarIcon, CheckIcon, MoreIcon, PlusIcon } from "./icons";
 
-// Settings → Avatar pieces, after the Clara wardrobe cards: a picture over a
-// short name, a blue ring and check badge on the chosen one, and a dashed
-// card at the end of each grid that adds a new one.
+// Settings → Avatar pieces: a picture over a short name, a blue ring and check
+// badge on the chosen one, and a dashed card at the end of each grid that adds
+// a new one.
 
 /** One wardrobe grid; cards wrap and keep their width. */
 export function WardrobeGrid({ label, wide = false, busy = false, children }: {

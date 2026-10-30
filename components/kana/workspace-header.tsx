@@ -22,6 +22,10 @@ export function WorkspaceHeader({ connectionDown = false }: { connectionDown?: b
   const avatarVisible = useKanaStore("preferences", (state) => state.preferences.avatarVisible);
   const greeting = useKanaStore("workspace", (state) => state.greeting);
   const usesMobileChat = useKanaStore("workspace", (state) => state.usesMobileChat);
+  // The desktop focus rail already lists every conversation; a second history
+  // button would only duplicate it. Phones have no rail and keep the button,
+  // and a disconnected workspace keeps its only entry point.
+  const historyInRail = !avatarVisible && !usesMobileChat && !connectionDown;
   const updateAvatarLayout = useUpdateAvatarLayout();
   const copy = getCopy(locale);
   const text = copy.workspace;
@@ -71,15 +75,17 @@ export function WorkspaceHeader({ connectionDown = false }: { connectionDown?: b
             onReset={() => updateAvatarLayout({ ...DEFAULT_LIVE2D_MODEL_LAYOUT })}
           />
         ) : null}
-        <button
-          type="button"
-          className="kana-workspace-action kana-focus"
-          onClick={() => setWorkspace({ avatarLayoutOpen: false, sessionsOpen: true })}
-          aria-label={text.openHistory}
-        >
-          <HistoryIcon />
-          <span className="kana-tip">{text.history}</span>
-        </button>
+        {historyInRail ? null : (
+          <button
+            type="button"
+            className="kana-workspace-action kana-focus"
+            onClick={() => setWorkspace({ avatarLayoutOpen: false, sessionsOpen: true })}
+            aria-label={text.openHistory}
+          >
+            <HistoryIcon />
+            <span className="kana-tip">{text.history}</span>
+          </button>
+        )}
         <button
           type="button"
           className="kana-workspace-action kana-focus"

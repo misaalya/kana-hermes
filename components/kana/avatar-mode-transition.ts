@@ -12,10 +12,10 @@ const REVEAL_EASING = "cubic-bezier(0.22, 0.8, 0.28, 1)";
 const WAVE_CLASS = "kana-wave-wipe";
 
 /**
- * Kana's four-point sparkles ride the wave bands instead of the reference's
- * bubbles: deeper Kana blue on the white sheet, white on the pale-blue one.
- * Positions are outside the main sheet (above its top, below its bottom), so
- * each star sits on the layered edge that is visible during that phase.
+ * Kana's four-point sparkles ride the wave bands: deeper Kana blue on the
+ * white sheet, white on the pale-blue one. Positions are outside the main
+ * sheet (above its top, below its bottom), so each star sits on the layered
+ * edge that is visible during that phase.
  */
 const SPARKLES: ReadonlyArray<{
   left: string;

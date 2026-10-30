@@ -1,4 +1,4 @@
-import { test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { rmSync } from "node:fs";
 import path from "node:path";
 import {
@@ -41,6 +41,13 @@ test("desktop: the workspace and focus mode", async ({ page }) => {
   // The still shows the composer's open state; at rest it is narrower.
   await page.getByRole("textbox", { name: "Message Kana" }).focus();
   await page.waitForTimeout(450);
+  const transcript = await page.locator(".kana-chat-scroll").boundingBox();
+  await expect
+    .poll(async () => {
+      const bar = await page.locator(".kana-composer").boundingBox();
+      return Math.abs((bar?.width ?? 0) - ((transcript?.width ?? 0) - 48));
+    })
+    .toBeLessThan(2);
   await page.screenshot({
     path: path.join(README_DIR, "focus-mode-v6.jpg"),
     ...JPEG,

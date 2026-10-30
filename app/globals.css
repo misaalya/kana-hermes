@@ -436,7 +436,7 @@ button,
   background: var(--raised);
 }
 
-/* ---- Game-menu components, after the Clara dressing-room screen ----
+/* ---- Game-menu components ----
    Flat colour shapes only: no drop shadows anywhere. Motion is a springy
    lift on hover and a small press on click; the global reduced-motion rule
    below turns it off. */
@@ -1631,7 +1631,7 @@ video.kana-media-preview {
   mask-size: calc(var(--kana-pattern-size) * 0.5) auto;
 }
 
-/* Settings → Avatar: the Clara wardrobe. Cards keep one width and wrap; the
+/* Settings → Avatar: the avatar library. Cards keep one width and wrap; the
    chosen card gets the blue ring and the check badge on its corner. */
 .kana-wardrobe {
   display: grid;
@@ -2085,7 +2085,7 @@ video.kana-media-preview {
 }
 
 /* Text, number, and password fields: a soft grey pill at rest that turns
-   white with one solid accent ring while active, like a picked Clara card.
+   white with one solid accent ring while active.
    None of the browser's own field chrome shows: no focus ring, no search
    clear button (Kana draws its own), no number spinners, no password reveal,
    no autofill tint. */
@@ -2969,7 +2969,7 @@ video.kana-media-preview {
 
 /* An open control stays filled with a white icon in both themes; the rule
    comes after :hover so hovering an open control does not change it. */
-/* An open tab is the white disc, like the selected tab on Clara's bar. */
+/* An open tab is the white disc. */
 .kana-workspace-action[aria-expanded="true"] {
   background: #ffffff;
   color: var(--accent);

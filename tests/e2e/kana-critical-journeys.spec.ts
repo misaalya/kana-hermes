@@ -982,6 +982,19 @@ test("keeps the avatar chat tray blue and gives focus mode a plain reading colum
   await dialog.getByRole("button", { name: "Close settings" }).click();
   await expect(page.locator(".kana-chat-dock")).toHaveClass(/is-sole/);
 
+  // The desktop focus rail already owns history, so the toolbar does not
+  // repeat it. Phones have no rail and keep the toolbar entry.
+  if (desktop) {
+    await expect(page.locator(".kana-focus-rail")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Open conversation history" }),
+    ).toHaveCount(0);
+  } else {
+    await expect(
+      page.getByRole("button", { name: "Open conversation history" }),
+    ).toBeVisible();
+  }
+
   // Enables Send so its painted state can be read, too.
   await composer.fill("draft");
   const focus = await readStyles();
@@ -4115,7 +4128,7 @@ test("wipes between the avatar and focus mode with a candy wave", async ({ page 
   expect(layers.backMasks).toHaveLength(2);
   expect(layers.backMasks.every((mask) => mask.includes("data:image/svg+xml"))).toBe(true);
   expect(layers.backColors).toEqual(["rgb(201, 237, 251)", "rgb(255, 255, 255)"]);
-  // Kana's sparkles replace the reference's bubbles; both tones ride the bands.
+  // Kana's four-point sparkles ride both wave bands.
   expect(layers.sparkles).toBeGreaterThanOrEqual(10);
   expect(layers.inkSparkles).toBeGreaterThan(0);
   expect(layers.whiteSparkles).toBeGreaterThan(0);
