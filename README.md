@@ -30,7 +30,7 @@ Hermes stays the only agent: its tools, files, memory, and sessions work exactly
 - [How it works](#how-it-works)
 - [Development](#development)
 - [Documentation](#documentation)
-- [Credits](#credits)
+- [Acknowledgements](#acknowledgements)
 
 ## Quick start
 
@@ -325,7 +325,7 @@ Contributor rules are in [AGENTS.md](AGENTS.md).
 | The documentation map | [docs/README.md](docs/README.md) |
 | Changes and migration notes | [CHANGELOG.md](CHANGELOG.md) |
 
-## Credits
+## Acknowledgements
 
 Kana's Live2D stage is modelled on [Project AIRI](https://github.com/moeru-ai/airi):
 its Pixi 6 stage architecture, model fitting, motion-manager and lip-sync hooks,
