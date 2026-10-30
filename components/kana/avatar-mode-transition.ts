@@ -5,10 +5,10 @@
 
 import { flushSync } from "react-dom";
 
-const COVER_MS = 280;
-const REVEAL_MS = 340;
-const COVER_EASING = "cubic-bezier(0.55, 0, 0.75, 0.35)";
-const REVEAL_EASING = "cubic-bezier(0.2, 0.8, 0.25, 1)";
+const COVER_MS = 500;
+const REVEAL_MS = 600;
+const COVER_EASING = "cubic-bezier(0.45, 0, 0.55, 1)";
+const REVEAL_EASING = "cubic-bezier(0.22, 0.8, 0.28, 1)";
 const WAVE_CLASS = "kana-wave-wipe";
 
 /** Distinguishes a running wipe from one whose mode change was superseded. */
@@ -29,6 +29,15 @@ function runWave(update: () => void, token: number): void {
   const wave = document.createElement("div");
   wave.className = WAVE_CLASS;
   wave.setAttribute("aria-hidden", "true");
+  // Two back layers extend past the main sheet's leading and trailing edges,
+  // so the sweep reads as stacked waves: light blue, white, then Kana blue.
+  const far = document.createElement("div");
+  far.className = `${WAVE_CLASS}__layer ${WAVE_CLASS}__layer--blue`;
+  const near = document.createElement("div");
+  near.className = `${WAVE_CLASS}__layer ${WAVE_CLASS}__layer--white`;
+  const sheet = document.createElement("div");
+  sheet.className = `${WAVE_CLASS}__sheet`;
+  wave.append(far, near, sheet);
   document.body.append(wave);
 
   const applyIfCurrent = () => {

@@ -319,12 +319,13 @@ button,
   transform: translateX(calc((var(--kana-chat-panel-width, var(--kana-chat-default-width)) + 1rem) / -2));
 }
 
-/* Switching between the avatar workspace and focus mode sweeps a candy wave
-   over the screen: a deep navy sheet with glossy accent rims and a plus
-   pattern enters from above, the new layout is written while it covers the
-   viewport, and the sheet leaves through the bottom. The mask gives the sheet
-   a wavy top and bottom, so both the leading and trailing edges carry the
-   candy rim. `avatar-mode-transition.ts` runs the two WAAPI phases. */
+/* Switching between the avatar workspace and focus mode sweeps stacked candy
+   waves over the screen: a Kana-blue sheet with two wave layers behind it (an
+   inner white layer and a farther light-blue layer) enters from above, the new
+   layout is written while it covers the viewport, and the whole stack leaves
+   through the bottom. Each layer is masked with its own wave rhythm, so the
+   leading and trailing edges read as several sheets instead of one flat band.
+   `avatar-mode-transition.ts` runs the two WAAPI phases. */
 .kana-wave-wipe {
   position: fixed;
   top: 0;
@@ -334,24 +335,51 @@ button,
   height: 120vh;
   pointer-events: none;
   transform: translateY(-106%);
-  background-color: #071e28;
-  background-image:
-    linear-gradient(
-      180deg,
-      #a9e0f4 0,
-      #63b3d6 1.2vh,
-      #4d9cc4 6vh,
-      rgba(77, 156, 196, 0) 9vh,
-      rgba(77, 156, 196, 0) calc(100% - 9vh),
-      #4d9cc4 calc(100% - 6vh),
-      #63b3d6 calc(100% - 1.2vh),
-      #a9e0f4 100%
-    ),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='52' height='52' viewBox='0 0 52 52'%3E%3Cpath d='M24 17h4v7h7v4h-7v7h-4v-7h-7v-4h7z' fill='%2369b6d9' fill-opacity='.18'/%3E%3C/svg%3E");
-  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cpath d='M0 3 Q6.25 0.8 12.5 3 T25 3 T37.5 3 T50 3 T62.5 3 T75 3 T87.5 3 T100 3 L100 97 Q93.75 99.2 87.5 97 T75 97 T62.5 97 T50 97 T37.5 97 T25 97 T12.5 97 T0 97 Z' fill='white'/%3E%3C/svg%3E");
+  will-change: transform;
+}
+
+.kana-wave-wipe__sheet,
+.kana-wave-wipe__layer {
+  position: absolute;
   mask-size: 100% 100%;
   mask-repeat: no-repeat;
-  will-change: transform;
+}
+
+.kana-wave-wipe__sheet {
+  inset: 0;
+  background: linear-gradient(180deg, #8fd5f1, #63b4da);
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cpath d='M0 3 Q6.25 0.8 12.5 3 T25 3 T37.5 3 T50 3 T62.5 3 T75 3 T87.5 3 T100 3 L100 97 Q93.75 99.2 87.5 97 T75 97 T62.5 97 T50 97 T37.5 97 T25 97 T12.5 97 T0 97 Z' fill='white'/%3E%3C/svg%3E");
+}
+
+.kana-wave-wipe__layer {
+  left: -3vw;
+  width: 106vw;
+}
+
+.kana-wave-wipe__layer--white {
+  top: -12vh;
+  height: 144vh;
+  background: #ffffff;
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cpath d='M0 3 Q5 0.8 10 3 T20 3 T30 3 T40 3 T50 3 T60 3 T70 3 T80 3 T90 3 T100 3 L100 97 Q95 99.2 90 97 T80 97 T70 97 T60 97 T50 97 T40 97 T30 97 T20 97 T10 97 T0 97 Z' fill='white'/%3E%3C/svg%3E");
+  animation: kana-wave-drift-left 1200ms cubic-bezier(0.45, 0, 0.55, 1) both;
+}
+
+.kana-wave-wipe__layer--blue {
+  top: -24vh;
+  height: 168vh;
+  background: #c9edfb;
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cpath d='M0 3 Q8.333 0.8 16.667 3 T33.333 3 T50 3 T66.667 3 T83.333 3 T100 3 L100 97 Q91.667 99.2 83.333 97 T66.667 97 T50 97 T33.333 97 T16.667 97 T0 97 Z' fill='white'/%3E%3C/svg%3E");
+  animation: kana-wave-drift-right 1200ms cubic-bezier(0.45, 0, 0.55, 1) both;
+}
+
+@keyframes kana-wave-drift-left {
+  from { transform: translateX(0); }
+  to { transform: translateX(-3vw); }
+}
+
+@keyframes kana-wave-drift-right {
+  from { transform: translateX(0); }
+  to { transform: translateX(2vw); }
 }
 
 [data-theme="light"] .kana-stage-pattern[data-background="room"] .kana-stage-backdrop {

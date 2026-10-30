@@ -4082,19 +4082,28 @@ test("wipes between the avatar and focus mode with a candy wave", async ({ page 
   await dialog.getByRole("switch", { name: "Show avatar" }).click();
   await expect(wave).toHaveCount(1);
   await expect(wave).toHaveAttribute("aria-hidden", "true");
-  const layer = await wave.evaluate((node) => {
+  const layers = await wave.evaluate((node) => {
     const computed = getComputedStyle(node);
+    const sheet = node.querySelector(".kana-wave-wipe__sheet");
+    const backs = Array.from(node.querySelectorAll(".kana-wave-wipe__layer"));
     return {
       position: computed.position,
       pointerEvents: computed.pointerEvents,
-      mask: computed.maskImage,
-      background: computed.backgroundImage,
+      sheetMask: sheet ? getComputedStyle(sheet).maskImage : "",
+      sheetBackground: sheet ? getComputedStyle(sheet).backgroundImage : "",
+      backMasks: backs.map((back) => getComputedStyle(back).maskImage),
+      backColors: backs.map((back) => getComputedStyle(back).backgroundColor),
     };
   });
-  expect(layer.position).toBe("fixed");
-  expect(layer.pointerEvents).toBe("none");
-  expect(layer.mask).toContain("data:image/svg+xml");
-  expect(layer.background).toContain("data:image/svg+xml");
+  expect(layers.position).toBe("fixed");
+  expect(layers.pointerEvents).toBe("none");
+  expect(layers.sheetMask).toContain("data:image/svg+xml");
+  // The sheet is plain Kana blue; the depth comes from the two wave layers,
+  // not from a pattern.
+  expect(layers.sheetBackground).not.toContain("data:image/svg+xml");
+  expect(layers.backMasks).toHaveLength(2);
+  expect(layers.backMasks.every((mask) => mask.includes("data:image/svg+xml"))).toBe(true);
+  expect(layers.backColors).toEqual(["rgb(201, 237, 251)", "rgb(255, 255, 255)"]);
 
   await dialog.getByRole("button", { name: "Close settings" }).click();
   await expect(avatarLayer).toBeHidden();
