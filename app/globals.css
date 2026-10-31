@@ -1122,7 +1122,7 @@ details[open] > .kana-plus-summary::before {
   top: 50%;
   right: 0;
   z-index: 30;
-  width: min(22vw, 72px);
+  width: min(28vw, 108px);
   transform: translate(0, -50%);
   transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -1139,6 +1139,10 @@ details[open] > .kana-plus-summary::before {
   border: 2px solid var(--line);
   border-right: 0;
   border-radius: 20px 0 0 20px;
+  background: var(--surface-strong);
+}
+
+[data-theme="light"] .kana-host-panel {
   background: var(--surface);
 }
 
