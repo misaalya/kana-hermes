@@ -67,6 +67,7 @@ export type Copy = {
   composer: {
     reviewAttachments: string;
     filesNeedRegularMessage: string;
+    commandNeedsArgument(command: string, hint: string): string;
     dismissError: string;
     attachments: string;
     remove(name: string): string;
@@ -220,6 +221,8 @@ export type Copy = {
     scale: string;
     hideChat: string;
     showChat: string;
+    showHost: string;
+    hideHost: string;
     resizeChat: string;
     messagePlaceholder: string;
     messageAria: string;
@@ -291,13 +294,12 @@ export type Copy = {
   };
   slash: {
     commands: string;
-    ask: string;
     finding: string;
     navigate: string;
     skill: string;
     command: string;
     unavailable: string;
-    kanaSessionGroup: string;
+    commandGroup: string;
     hermesControlsGroup: string;
     newDescription: string;
     sessionsDescription: string;
@@ -681,6 +683,8 @@ const id: Copy = {
   composer: {
     reviewAttachments: "Periksa file terlampir.",
     filesNeedRegularMessage: "Kirim file bersama pesan biasa setelah respons selesai, bukan perintah slash.",
+    commandNeedsArgument: (command, hint) =>
+      `${command} membutuhkan parameter.${hint ? ` Gunakan ${command} ${hint}.` : ""}`,
     dismissError: "Tutup pesan kesalahan",
     attachments: "Lampiran",
     remove: (name) => `Hapus ${name}`,
@@ -846,6 +850,8 @@ const id: Copy = {
     scale: "Scale",
     hideChat: "Sembunyikan chat",
     showChat: "Tampilkan chat",
+    showHost: "Tampilkan metrik mesin",
+    hideHost: "Sembunyikan metrik mesin",
     resizeChat: "Ubah ukuran panel chat",
     messagePlaceholder: "Katakan sesuatu kepada Kana…",
     messageAria: "Pesan untuk Kana",
@@ -915,13 +921,12 @@ const id: Copy = {
   },
   slash: {
     commands: "Perintah Hermes",
-    ask: "Minta Hermes untuk…",
     finding: "Mencari tindakan…",
-    navigate: "↑↓ navigasi · Tab memilih",
+    navigate: "↑↓ navigasi · Tab lengkapi · Enter jalankan",
     skill: "Keahlian Hermes",
     command: "Perintah Hermes",
     unavailable: "tidak tersedia",
-    kanaSessionGroup: "Kana & sesi",
+    commandGroup: "Perintah",
     hermesControlsGroup: "Kontrol Hermes",
     newDescription: "Mulai percakapan Kana dan sesi Hermes baru",
     sessionsDescription: "Tampilkan percakapan Kana yang tersimpan secara lokal",
@@ -1359,6 +1364,8 @@ const en: Copy = {
   composer: {
     reviewAttachments: "Review the attached files.",
     filesNeedRegularMessage: "Send files with a regular message after the current reply finishes, without a slash command.",
+    commandNeedsArgument: (command, hint) =>
+      `${command} needs an argument.${hint ? ` Use ${command} ${hint}.` : ""}`,
     dismissError: "Dismiss error",
     attachments: "Attachments",
     remove: (name) => `Remove ${name}`,
@@ -1524,6 +1531,8 @@ const en: Copy = {
     scale: "Scale",
     hideChat: "Hide chat",
     showChat: "Show chat",
+    showHost: "Show host metrics",
+    hideHost: "Hide host metrics",
     resizeChat: "Resize chat panel",
     messagePlaceholder: "Say something to Kana…",
     messageAria: "Message Kana",
@@ -1593,13 +1602,12 @@ const en: Copy = {
   },
   slash: {
     commands: "Hermes commands",
-    ask: "Ask Hermes to…",
     finding: "Finding actions…",
-    navigate: "↑↓ navigate · Tab select",
+    navigate: "↑↓ navigate · Tab complete · Enter run",
     skill: "Hermes skill",
     command: "Hermes command",
     unavailable: "unavailable",
-    kanaSessionGroup: "Kana & session",
+    commandGroup: "Command",
     hermesControlsGroup: "Hermes controls",
     newDescription: "Start a new Kana conversation and Hermes session",
     sessionsDescription: "List locally stored Kana conversations",

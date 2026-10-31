@@ -209,7 +209,7 @@ detail.
   takes the nearest suggestion's name, shortest first, keeping typed arguments;
   no suggestion goes to Hermes as typed; only the name is substituted, never a
   completion's argument fallback. The rewritten command is what the transcript
-  shows.
+  shows. Tab on a name-only draft fills that same nearest name; Enter sends it.
 - Commands execute through `slash.exec`, falling back to `command.dispatch`
   where Hermes requires it. Quick commands, aliases, plugins, bundles, and
   skills must honor the structured result Hermes returns (`output`, `alias`,
@@ -222,6 +222,16 @@ detail.
   and `skills.reload`, as the Hermes TUI does: through `slash.exec` they would
   run in Hermes's slash worker, a separate process, and never reach the
   `hermes serve` Kana talks to.
+- `/reasoning <level>` uses `config.set` with `key: "reasoning"` and session
+  scope for the same reason: `slash.exec` would change the slash worker and
+  report success while the serving session kept its old effort level. Kana
+  refuses `--global` there; a global default belongs in Hermes's config.
+- A bare command whose live usage hint has a required `<placeholder>` outside
+  an optional `[...]` group is not sent. The composer keeps the draft, shakes,
+  and shows the command with its usage. The hint comes from the catalog and
+  completion text; Kana keeps no second command list. `/reasoning` is the one
+  Kana-policy exception: its Hermes hint is optional, but Kana's reasoning path
+  needs a level, so bare `/reasoning` is blocked too.
 - `/restart` is Kana's own command, because Hermes's `/restart` restarts the
   messaging gateway. It restarts the `hermes serve` Kana started, on the same
   port with a new token, then resumes the open conversation; it leaves a Hermes

@@ -1,6 +1,16 @@
-import { memo } from "react";
+import { memo, useEffect, useRef } from "react";
 import type { AgentCommandSuggestion } from "@/lib/agent/types";
 import { getCopy, type UiLocale } from "@/lib/ui/copy";
+
+/** Session groups from Kana and Hermes read as one plain Command group. */
+const PLAIN_COMMAND_GROUPS = new Set([
+  "command",
+  "commands",
+  "kana",
+  "kana & session",
+  "kana & sesi",
+  "session",
+]);
 
 type SlashCommandMenuProps = {
   suggestions: AgentCommandSuggestion[];
@@ -23,12 +33,33 @@ export const SlashCommandMenu = memo(function SlashCommandMenu({
   locale,
 }: SlashCommandMenuProps) {
   const copy = getCopy(locale);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  const groupName = (suggestion: AgentCommandSuggestion): string => {
+    const raw = suggestion.group || copy.slash.commands;
+    return suggestion.kind === "command" && PLAIN_COMMAND_GROUPS.has(raw.toLowerCase())
+      ? copy.slash.commandGroup
+      : raw;
+  };
+
+  useEffect(() => {
+    const list = listRef.current;
+    const option = list?.querySelector<HTMLElement>(`#kana-command-option-${selectedIndex}`);
+    if (!list || !option) return;
+    const listRect = list.getBoundingClientRect();
+    const optionRect = option.getBoundingClientRect();
+    const topInset = listRect.top + 6;
+    const bottomInset = listRect.bottom - 6;
+    if (optionRect.top < topInset) list.scrollTop += optionRect.top - topInset;
+    else if (optionRect.bottom > bottomInset) list.scrollTop += optionRect.bottom - bottomInset;
+  }, [selectedIndex, suggestions]);
+
   if (!loading && !suggestions.length) return null;
 
   const groups = suggestions.reduce<
     Array<{ name: string; items: AgentCommandSuggestion[] }>
   >((current, suggestion) => {
-    const name = suggestion.group || copy.slash.commands;
+    const name = groupName(suggestion);
     const group = current.find((item) => item.name === name);
     if (group) group.items.push(suggestion);
     else current.push({ name, items: [suggestion] });
@@ -37,27 +68,28 @@ export const SlashCommandMenu = memo(function SlashCommandMenu({
 
   return (
     <div
-      className="kana-panel absolute bottom-full left-0 right-0 z-30 mb-3 max-h-[44dvh] overflow-hidden rounded-[28px] animate-kana-in"
+      className="kana-panel absolute bottom-full left-0 z-30 mb-3 max-h-[52dvh] w-full max-w-[620px] overflow-hidden rounded-[20px] animate-kana-in"
       id="kana-command-menu"
       role="listbox"
       aria-label={copy.slash.commands}
     >
-      <div className="flex items-center justify-between border-b-[3px] border-dotted border-line px-4 py-3">
-        <span className="kana-label-bubble">{copy.slash.ask}</span>
-        <small className="text-[9px] text-faint">{loading ? copy.slash.finding : copy.slash.navigate}</small>
-      </div>
-      <div className="max-h-[38dvh] overflow-y-auto p-2">
-        {groups.map((group) => (
-          <section key={group.name} className="mb-1 last:mb-0">
-            <p className="px-2.5 py-1.5 text-[11px] font-extrabold text-muted">{group.name}</p>
+      <div ref={listRef} id="kana-command-list" className="max-h-[46dvh] overflow-y-auto p-1.5">
+        {groups.map((group, groupIndex) => (
+          <section
+            key={group.name}
+            className={groupIndex > 0 ? "mt-1 border-t border-line/70 pt-1" : ""}
+          >
+            <p className="px-3 pb-1 pt-2 text-[10px] font-extrabold uppercase tracking-[0.08em] text-faint">
+              {group.name}
+            </p>
             {group.items.map((suggestion) => {
               const index = suggestions.indexOf(suggestion);
               const selected = index === selectedIndex;
               const unavailable = suggestion.availability === "unavailable";
               return (
                 <button
-                  className={`kana-focus grid w-full grid-cols-[minmax(100px,0.7fr)_minmax(0,1.6fr)_auto] items-center gap-3 rounded-full px-4 py-2.5 text-left transition-colors ${
-                    selected ? "bg-accent text-on-accent" : "hover:bg-surface-strong"
+                  className={`kana-focus flex w-full items-center gap-3 rounded-[12px] px-3 py-2 text-left transition-colors ${
+                    selected ? "bg-ink/10" : "hover:bg-surface-strong"
                   } ${unavailable ? "opacity-50" : ""}`}
                   id={`kana-command-option-${index}`}
                   type="button"
@@ -65,24 +97,39 @@ export const SlashCommandMenu = memo(function SlashCommandMenu({
                   aria-selected={index === selectedIndex}
                   aria-disabled={unavailable}
                   key={`${suggestion.kind}:${suggestion.text}`}
-                  onMouseEnter={() => onHighlight(index)}
+                  onMouseMove={() => {
+                    if (!selected) onHighlight(index);
+                  }}
                   onClick={() => onSelect(suggestion.text)}
                 >
-                  <span className={`truncate text-xs font-extrabold ${selected ? "" : "text-accent-strong"}`}>{suggestion.display}</span>
-                  <span className={`truncate text-[11px] ${selected ? "" : "text-muted"}`}>
-                    {suggestion.description ||
-                      (suggestion.kind === "skill"
-                        ? copy.slash.skill
-                        : copy.slash.command)}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[12.5px] font-extrabold text-ink">
+                      {suggestion.display}
+                    </span>
+                    <span className="mt-0.5 block truncate text-[11px] text-muted">
+                      {suggestion.description ||
+                        (suggestion.kind === "skill"
+                          ? copy.slash.skill
+                          : copy.slash.command)}
+                    </span>
                   </span>
-                  <span className={`rounded-full px-2.5 py-1 text-[9px] font-extrabold max-md:hidden ${selected ? "bg-white/25" : "bg-surface-strong text-muted"}`}>
-                    {unavailable ? copy.slash.unavailable : suggestion.kind === "skill" ? copy.slash.skill : copy.slash.command}
-                  </span>
+                  {unavailable ? (
+                    <span className="shrink-0 text-[9px] font-bold uppercase tracking-[0.08em] text-muted">
+                      {copy.slash.unavailable}
+                    </span>
+                  ) : null}
                 </button>
               );
             })}
           </section>
         ))}
+        {loading && !groups.length ? (
+          <p className="px-3 py-4 text-[11px] text-muted">{copy.slash.finding}</p>
+        ) : null}
+      </div>
+      <div className="hidden items-center justify-between gap-3 border-t border-line px-4 py-2 text-[10px] text-faint sm:flex">
+        <span>{copy.slash.navigate}</span>
+        {loading ? <span className="animate-kana-pulse">{copy.slash.finding}</span> : null}
       </div>
     </div>
   );

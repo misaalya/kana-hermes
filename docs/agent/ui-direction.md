@@ -178,7 +178,14 @@ row at the gap, recomputes the zones, and saves the zone and order as
 `hostWidgetLayout` in the local preferences. An invalid saved layout falls back to monitor LEFT,
 clock CENTER, date RIGHT. The cards never cover the conversation name chip or
 the tool tray, take no input beyond their drags, poll the host only while
-mounted, and are absent on phones.
+mounted, and are absent on phones. On phones the same CPU, memory, disk, and
+uptime readings live behind a right-edge tab shaped like the chat dock's
+handle: opening it slides in a narrow vertical strip whose metrics carry a
+segmented vertical gauge beside the label and value, uptime stacks its hours
+and minutes on two lines, and the clock and date stay desktop-only. The strip
+keeps one fixed height in its loading and loaded states, and the last reading
+stays cached while it is closed: a sample younger than 15 seconds is reused
+instead of requesting the host again. It polls only while open.
 
 ## Conversation history
 
@@ -391,8 +398,17 @@ for the whole layout, so filtering, loading, or a short catalog never resizes
 it; only the list inside scrolls. Choosing a row applies at once,
 with Hermes's cost confirmation when it asks for one. The chooser and the slash
 menu are popovers, not bar controls: the focus ink and attachment-chip rules
-stop at the bar's own buttons, so the list keeps its own text colours and the
-slash menu keeps the selected row's accent ink. Settings → AI model adds a
+stop at the bar's own buttons, so the list keeps its own text colours. The
+slash menu is a flat command palette: small uppercase group labels, two-line
+rows with the command over its description, no repeated command/kind badges,
+and a neutral dimmed selected row with no accent fill or accent ink. Kana's own
+commands and Hermes's plain commands share one Command group, and the list
+scrolls the selected row into view as the user navigates. It is anchored to the
+composer's left
+edge, never centred. A bare command
+whose live usage hint marks a required placeholder is not sent: the composer
+shakes and shows the command and its usage in the red alert above the bar,
+keeping the draft. Settings → AI model adds a
 quiet Set as default action for the provider and model currently selected in
 the panel; once that pair is Kana's default the same action reads Default and
 stays disabled. There is no separate default-model panel, no summary line, and
@@ -467,11 +483,22 @@ HTML/XML, CSS, JavaScript/TypeScript, JSON, Python, shell, SQL, and YAML have
 profiles, other named languages use a generic profile, and blocks with no
 language or a text language stay plain.
 
+A system row (a Hermes note, such as "Fresh Kana conversation created on a new
+Hermes session") is not a card. It is a flat note: a small uppercase label, a
+dotted rule stretching to the timestamp, and the note text below. It keeps the
+feed's surface and adds no background, border, or corner.
+
 ## Activity blocks
 
 A turn's Hermes activity block stays open while the turn runs, even between
 tools, unless the reader closes it, and collapses when the reply lands (the feed
-remounts it under the reply's key). Finished turns start collapsed.
+remounts it under the reply's key). Finished turns start collapsed. The block
+uses a fixed `1.5rem` corner and a `3rem` collapsed summary height, so the
+radius is never shrunk by CSS and stays identical when the details open and the
+box grows. Its disclosure is Kana's blue plus/minus disc; the title and step
+count are plain text, with no count pill or extra status colours. Open rows are
+a flat timeline separated by hairlines, each with the tool and detail and its
+duration or state.
 
 ## Copying a message
 

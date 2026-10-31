@@ -5,6 +5,7 @@ import { getCopy } from "@/lib/ui/copy";
 import { ChatDock } from "./chat-dock";
 import { ConnectionScreen, useConnectionScreen } from "./connection-screen";
 import { KanaWorkspaceProvider, useKanaStore, useKanaWorkspace } from "./kana-workspace-context";
+import { MobileHostPanel } from "./mobile-host-panel";
 import { SessionsModal } from "./sessions-modal";
 import { WorkspaceDialogs } from "./workspace-dialogs";
 import { WorkspaceHeader } from "./workspace-header";
@@ -60,6 +61,7 @@ function Workspace() {
       {connectionDown ? null : <WorkspaceStage />}
       <WorkspaceHeader connectionDown={connectionDown} />
       {connectionDown ? null : <ChatDock />}
+      {connectionDown ? null : <MobileHostPanel />}
       <SessionsModal />
       <ConnectionScreen screen={connection} />
       <WorkspaceDialogs />

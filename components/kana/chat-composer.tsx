@@ -18,7 +18,7 @@ import {
 } from "@/lib/conversation/prompt-history";
 import { findConversation } from "@/lib/store/conversation-store";
 import { isVoiceActive } from "@/lib/store/voice-store";
-import { resolveTypedCommand } from "@/lib/services/send-message";
+import { resolveTypedCommand, missingCommandArgument } from "@/lib/services/send-message";
 import { getCopy, type Copy } from "@/lib/ui/copy";
 import { ComposerDictation } from "./composer-dictation";
 import { ComposerModelChoice } from "./composer-model-choice";
@@ -69,6 +69,7 @@ export function ChatComposer() {
   const error = useKanaStore("errors", (state) => state.error);
   const suggestions = useKanaStore("commands", (state) => state.suggestions);
   const suggestionsLoading = useKanaStore("commands", (state) => state.loading);
+  const requiredArguments = useKanaStore("commands", (state) => state.requiredArguments);
   const message = useKanaStore("workspace", (state) =>
     activeConversationId ? (state.drafts[activeConversationId] ?? "") : "",
   );
@@ -83,9 +84,11 @@ export function ChatComposer() {
   const modelCatalog = useKanaStore("models", (state) => state.entry?.catalog ?? null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const shakeAnimation = useRef<Animation | null>(null);
   /** Arrow-key recall of this conversation's sent prompts (desktop only). */
   const [recall, setRecall] = useState<PromptRecall>(NO_PROMPT_RECALL);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [argumentNotice, setArgumentNotice] = useState("");
   const sentPrompts = useMemo(() => promptHistory(conversation?.messages ?? []), [conversation?.messages]);
   const copy = getCopy(locale);
   const text = copy.workspace;
@@ -117,12 +120,32 @@ export function ChatComposer() {
   };
   const setNotice = (composerNotice: string) => setWorkspace({ composerNotice });
 
+  const shakeDraft = () => {
+    const node = inputRef.current;
+    if (!node || typeof node.animate !== "function") return;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const distance = reduced ? 4 : 8;
+    shakeAnimation.current?.cancel();
+    shakeAnimation.current = node.animate(
+      [
+        { transform: "translateX(0)" },
+        { transform: `translateX(-${distance}px)` },
+        { transform: `translateX(${distance - 1}px)` },
+        { transform: `translateX(-${distance - 2}px)` },
+        { transform: `translateX(${distance - 3}px)` },
+        { transform: "translateX(0)" },
+      ],
+      { duration: reduced ? 240 : 380, easing: "ease-in-out" },
+    );
+  };
+
   useEffect(() => {
     // Deferred like the notice below: a walk belongs to one conversation, and
     // switching conversations must not recall another one's prompt. Setting the
     // shared constant back is a no-op for React, so nothing re-renders.
     queueMicrotask(() => {
       setRecall(NO_PROMPT_RECALL);
+      setArgumentNotice("");
       setWorkspace({ composerNotice: "" });
     });
   }, [activeConversationId, setWorkspace]);
@@ -180,16 +203,18 @@ export function ChatComposer() {
   const selectCommand = useCallback(
     (command: string) => {
       setRecall(NO_PROMPT_RECALL);
+      setArgumentNotice("");
       if (activeConversationId) workspace.stores.workspace.getState().setDraft(activeConversationId, `${command} `);
       actions.clearCommandSuggestions();
     },
-    [actions, activeConversationId, workspace],
+    [actions, activeConversationId, workspace, setRecall, setArgumentNotice],
   );
 
   const submitMessage = async () => {
     const draft = message.trim() || (files.length ? copy.composer.reviewAttachments : "");
     const state = workspace.stores.workspace.getState();
     if (!draft || state.submitting || state.dictating) return;
+    setArgumentNotice("");
     if (files.length && (busy || commandName)) {
       setNotice(copy.composer.filesNeedRegularMessage);
       return;
@@ -199,7 +224,17 @@ export function ChatComposer() {
     if (workspace.preferences.current().voiceEnabled) actions.unlockVoice();
     // Confirm the command that will actually run: Enter sends the nearest name
     // for an unknown command, so `/updat` must be confirmed as /update.
+    // Validate the resolved name: Enter would send /reasoning for /reaso.
     const resolved = resolveTypedCommand(draft, suggestions);
+    const missingArgument = missingCommandArgument(resolved, requiredArguments);
+    if (missingArgument) {
+      actions.clearCommandSuggestions();
+      setArgumentNotice(copy.composer.commandNeedsArgument(missingArgument.command, missingArgument.hint));
+      setNotice("");
+      inputRef.current?.focus();
+      shakeDraft();
+      return;
+    }
     const confirmation = destructiveCommandPrompt(resolved, text);
     if (confirmation && !window.confirm(confirmation)) return;
     setWorkspace({ submitting: true, composerNotice: "" });
@@ -255,6 +290,11 @@ export function ChatComposer() {
           </button>
         </div>
       ) : null}
+      {argumentNotice ? (
+        <div role="alert" className="mb-2 flex items-start gap-2 rounded-[20px] border-2 border-[#ca2a30] bg-[#ca2a30] px-3.5 py-2 text-xs font-semibold text-white">
+          <p className="min-w-0 flex-1 break-words">{argumentNotice}</p>
+        </div>
+      ) : null}
       <div className="kana-composer-body relative">
         <SlashCommandMenu
           suggestions={suggestions}
@@ -303,23 +343,30 @@ export function ChatComposer() {
               // older prompt is never restored over what they just wrote.
               setRecall(NO_PROMPT_RECALL);
               setMessage(event.target.value);
+              setArgumentNotice("");
             }}
             onKeyDown={(event) => {
               if (suggestions.length > 0) {
                 if (event.key === "ArrowDown") {
                   event.preventDefault();
-                  highlightCommand((activeCommandIndex + 1) % suggestions.length);
+                  highlightCommand(Math.min(activeCommandIndex + 1, suggestions.length - 1));
                   return;
                 }
                 if (event.key === "ArrowUp") {
                   event.preventDefault();
-                  highlightCommand((activeCommandIndex - 1 + suggestions.length) % suggestions.length);
+                  highlightCommand(Math.max(activeCommandIndex - 1, 0));
                   return;
                 }
                 if (event.key === "Tab") {
                   event.preventDefault();
                   setRecall(NO_PROMPT_RECALL);
-                  setMessage(suggestions[activeCommandIndex]?.text ?? message);
+                  // Name completion uses the same nearest-command rule as
+                  // Enter; argument completion still takes the highlighted row.
+                  if (!/\s/.test(message.trim())) {
+                    setMessage(resolveTypedCommand(message, suggestions).trimEnd());
+                  } else {
+                    setMessage(suggestions[activeCommandIndex]?.text ?? message);
+                  }
                   return;
                 }
                 if (event.key === "Escape") {
@@ -348,6 +395,7 @@ export function ChatComposer() {
                   event.preventDefault();
                   setRecall(step.recall);
                   setMessage(step.text);
+                  setArgumentNotice("");
                   return;
                 }
               }
@@ -382,6 +430,7 @@ export function ChatComposer() {
             <ComposerDictation key={activeConversationId} locale={locale}
               disabled={submitting || busy || voiceActive || !activeConversationId}
               onText={(spoken) => {
+                setArgumentNotice("");
                 if (activeConversationId) workspace.stores.workspace.getState().appendDraft(activeConversationId, spoken);
               }}
               onActive={(active) => setWorkspace({ dictating: active })}

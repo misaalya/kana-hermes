@@ -1,4 +1,5 @@
 import { AttachmentUploadError, type AgentAttachment } from "@/lib/agent/attachments";
+import { kanaRequiredArgumentHint } from "@/lib/agent/command-arguments";
 import type { AgentCommandSuggestion } from "@/lib/agent/types";
 import { PromptGuardrailError } from "@/lib/guardrails/protocol";
 import {
@@ -24,6 +25,30 @@ export type SendMessageDependencies = {
   /** The hermes serve process Kana runs; /restart restarts it. */
   hermes?: Pick<HermesControl, "inspect" | "start">;
 };
+
+export type MissingCommandArgument = {
+  command: string;
+  hint: string;
+};
+
+/**
+ * The command in `input` plus the usage hint Hermes published, when the input
+ * names a command with a required argument and carries no argument at all.
+ */
+export function missingCommandArgument(
+  input: string,
+  requiredArguments: Record<string, string> | undefined,
+): MissingCommandArgument | null {
+  const match = /^\/([^\s/]+)([\s\S]*)$/.exec(input.trim());
+  if (!match) return null;
+  if (match[2].trim()) return null;
+  const command = `/${match[1].toLowerCase().replaceAll("_", "-")}`;
+  if (requiredArguments && command in requiredArguments) {
+    return { command, hint: requiredArguments[command] };
+  }
+  const fallback = kanaRequiredArgumentHint(command);
+  return fallback === undefined ? null : { command, hint: fallback };
+}
 
 export function shortTitle(text: string): string {
   const title = text.replace(/\s+/g, " ").trim();

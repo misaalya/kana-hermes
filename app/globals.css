@@ -903,9 +903,12 @@ details[open] > .kana-plus-summary::before {
   background: var(--chat-depth);
 }
 
-/* Hermes activity: a soft rounded row with a "+" / "–" disc. */
+/* Hermes activity: a fixed 1.5rem curve. The collapsed summary is 3rem tall,
+   so the radius fits without CSS shrinking it; opening the details grows the
+   box while the corners keep exactly the same curve. The blue plus/minus disc
+   is the Kana disclosure motif, not a status colour. */
 .kana-activity {
-  border-radius: 22px;
+  border-radius: 1.5rem;
   background: var(--surface-strong);
 }
 
@@ -917,28 +920,40 @@ details[open] > .kana-plus-summary::before {
 
 .kana-activity-title::before {
   display: grid;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
   place-items: center;
   border-radius: 999px;
   background: var(--accent);
   color: #ffffff;
   content: "+";
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 800;
   line-height: 1;
 }
 
-.kana-activity[open] .kana-activity-title::before {
+.kana-activity[data-expanded="true"] .kana-activity-title::before {
   content: "\2013";
 }
 
-.kana-activity-count {
-  border-radius: 999px;
-  background: var(--chat-bubble);
-  padding: 2px 10px;
-  color: var(--chat-text);
-  font-weight: 800;
+.kana-activity-reveal {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 160ms ease;
+}
+
+.kana-activity-reveal[data-open="true"] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.kana-activity-reveal > div {
+  min-height: 0;
+  overflow: hidden;
 }
 
 .kana-chat-dock {
@@ -1094,6 +1109,44 @@ details[open] > .kana-plus-summary::before {
 }
 
 .kana-chat-toggle:focus-visible path {
+  stroke: var(--ink);
+  stroke-width: 2px;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Phones tuck the host strip behind a right-edge tab shaped like the chat
+   dock's handle. The tab travels with the panel; when closed, the panel is
+   fully off-screen and only the tab remains. */
+.kana-host-dock {
+  position: fixed;
+  top: 50%;
+  right: 0;
+  z-index: 30;
+  width: min(32vw, 100px);
+  transform: translate(0, -50%);
+  transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.kana-host-dock.is-closed {
+  transform: translate(100%, -50%);
+}
+
+.kana-host-panel {
+  display: flex;
+  max-height: calc(100dvh - 2rem);
+  flex-direction: column;
+  overflow-y: auto;
+  border: 2px solid var(--line);
+  border-right: 0;
+  border-radius: 20px 0 0 20px;
+  background: var(--surface);
+}
+
+.kana-host-toggle:focus-visible {
+  outline: none;
+}
+
+.kana-host-toggle:focus-visible path {
   stroke: var(--ink);
   stroke-width: 2px;
   vector-effect: non-scaling-stroke;
@@ -2689,12 +2742,6 @@ video.kana-media-preview {
 
   .kana-chat-dock.is-sole .kana-composer .kana-model-dialog .kana-pill-accent,
   .kana-chat-dock.is-sole .kana-composer .kana-model-dialog .kana-pill-accent:disabled {
-    color: var(--on-accent);
-  }
-
-  /* The slash menu is a popover too; its selected row keeps the accent's own
-     ink instead of the bar's. */
-  .kana-chat-dock.is-sole .kana-composer .kana-panel button[aria-selected="true"] {
     color: var(--on-accent);
   }
 

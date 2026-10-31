@@ -114,6 +114,17 @@ describe("Kana stores", () => {
     assert.deepEqual(store.getState().drafts, { a: "Halo Kana", b: "only" });
   });
 
+  it("resets the slash selection when the draft becomes a new query", () => {
+    const store = createWorkspaceStore();
+    store.setState({ selectedCommandIndex: 1 });
+    store.getState().setDraft("a", "/reas");
+    assert.equal(store.getState().selectedCommandIndex, 0);
+
+    store.setState({ selectedCommandIndex: 1 });
+    store.getState().appendDraft("a", " high");
+    assert.equal(store.getState().selectedCommandIndex, 0);
+  });
+
   it("starts dark, adopts the stored theme, and persists a toggle", () => {
     const values = new Map([[THEME_STORAGE_KEY, "light"]]);
     const root = { dataset: {} as DOMStringMap };

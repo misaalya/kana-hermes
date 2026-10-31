@@ -346,6 +346,8 @@ async function installFakeHermes(page: Page): Promise<FakeHermes> {
               pairs: [
                 ["/status", "Show the current Hermes session status"],
                 ["/new", "Start a new conversation"],
+                ["/steer", "Inject a message after the next tool call (usage: /steer <prompt>)"],
+                ["/reasoning", "Manage reasoning effort (usage: /reasoning [level|show|hide|full|clamp] [--global])"],
               ],
             },
           ],
@@ -355,13 +357,26 @@ async function installFakeHermes(page: Page): Promise<FakeHermes> {
         // Like Hermes: name-prefix matches, so a partial command arrives with
         // its nearest real name on screen.
         const typed = String(body.params?.text ?? "").trim().split(/\s+/, 1)[0].toLowerCase();
-        const names = ["/status", "/new", "/codex-runtime"];
+        const names = ["/status", "/new", "/codex-runtime", "/steer", "/reasoning"];
+        // Long enough to overflow the menu, for the keyboard-scroll journey.
+        const bulk =
+          typed === "/zz"
+            ? Array.from({ length: 24 }, (_, index) => `/zz-${String(index + 1).padStart(2, "0")}`)
+            : [];
         const matched = typed.startsWith("/")
-          ? names.filter((name) => name.startsWith(typed))
+          ? [...bulk, ...names.filter((name) => name.startsWith(typed))]
           : [];
         result = {
           replace_from: 0,
-          items: matched.map((name) => ({ text: name, display: name })),
+          items: matched.map((name) => ({
+            text: name,
+            display: name,
+            ...(name === "/steer"
+              ? { meta: "Inject a message after the next tool call (usage: /steer <prompt>)" }
+              : name === "/reasoning"
+                ? { meta: "Manage reasoning effort (usage: /reasoning [level|show|hide|full|clamp] [--global])" }
+                : {}),
+          })),
         };
         break;
       }
@@ -1294,30 +1309,34 @@ test("keeps a running turn's Hermes activity through a refresh and renders its M
   await composer.fill("Research the Kupang weather");
   await submitDraft(page, composer);
   const activity = chat.getByRole("group").filter({ hasText: "Hermes activity" });
+  const activityToggle = activity.getByRole("button", { name: /Hermes activity/ });
   await expect(activity).toContainText("web_search");
-  await expect(activity).toHaveAttribute("open", "");
+  await expect(activityToggle).toHaveAttribute("aria-expanded", "true");
 
   // Hermes keeps working through a refresh; the tools it finished stay listed.
   await page.reload();
   await expect(composer).toBeVisible();
   await expect(activity).toContainText("web_search");
-  await expect(activity).toHaveAttribute("open", "");
+  await expect(activityToggle).toHaveAttribute("aria-expanded", "true");
 
   // Open while the turn runs, unless the reader closes it: then it stays closed.
-  await activity.locator("summary").click();
-  await expect(activity).not.toHaveAttribute("open");
+  await activityToggle.click();
+  await expect(activityToggle).toHaveAttribute("aria-expanded", "false");
   await hermes.advanceHeldTurn();
   await expect(activity).toContainText("web_extract");
-  await expect(activity).not.toHaveAttribute("open");
-  await activity.locator("summary").click();
-  await expect(activity).toHaveAttribute("open", "");
+  await expect(activityToggle).toHaveAttribute("aria-expanded", "false");
+  await activityToggle.click();
+  await expect(activityToggle).toHaveAttribute("aria-expanded", "true");
+  const activityRadius = await activity.evaluate((element) => getComputedStyle(element).borderRadius);
+  expect(activityRadius).toBe("24px");
 
   // The reply collapses the turn's activity and reads as formatted text.
   await hermes.finishHeldTurn();
   await expect(chat.locator("strong", { hasText: "BMKG warning:" })).toBeVisible();
   await expect(activity).toHaveCount(1);
-  await expect(activity).not.toHaveAttribute("open");
+  await expect(activityToggle).toHaveAttribute("aria-expanded", "false");
   await expect(activity).toContainText("2 steps");
+  expect(await activity.evaluate((element) => getComputedStyle(element).borderRadius)).toBe(activityRadius);
   await expect(chat.getByRole("listitem")).toHaveCount(2);
   await expect(chat).not.toContainText("**");
   const source = chat.getByRole("link", { name: /example\.com\/indonesia/ });
@@ -2036,6 +2055,56 @@ test("shows host metrics in the Connection panel and the desktop header", async 
   } else {
     expect(requests.length).toBe(atClose);
   }
+});
+
+test("opens the phone host strip from its edge tab", async ({ page }) => {
+  test.skip(
+    (page.viewportSize()?.width ?? 0) >= 1024,
+    "The host strip is a phone layout.",
+  );
+  let hostRequests = 0;
+  await page.route("**/api/kana/host", async (route) => {
+    hostRequests += 1;
+    await route.continue();
+  });
+  const toggle = page.getByRole("button", { name: "Show host metrics" });
+  await expect(toggle).toBeVisible();
+  await toggle.click();
+  const strip = page.getByRole("region", { name: "Host", exact: true });
+  await expect(strip).toBeVisible();
+  await expect(strip).toContainText("CPU");
+  await expect(strip).toContainText("Memory");
+  await expect(strip).toContainText("Disk");
+  await expect(strip).toContainText("Uptime");
+  await expect(strip).toContainText("Kana");
+  await expect(strip.locator("[data-host-ticks]")).toHaveCount(3);
+  await expect(strip.locator("[data-host-ticks] > span")).toHaveCount(48);
+  const panel = page.locator("#kana-host-panel");
+  const panelBox = await panel.boundingBox();
+  const viewport = page.viewportSize();
+  expect(panelBox).not.toBeNull();
+  expect(viewport).not.toBeNull();
+  // Content sets the height, the viewport caps it, and nothing scrolls.
+  expect(panelBox!.width).toBeLessThanOrEqual(101);
+  expect(panelBox!.height).toBeGreaterThan(420);
+  expect(panelBox!.height).toBeLessThanOrEqual(viewport!.height - 32);
+  expect(await panel.evaluate((element) => element.scrollHeight <= element.clientHeight)).toBe(true);
+  await page.screenshot({
+    path: `test-results/host-strip-${test.info().project.name}.png`,
+  });
+
+  const served = hostRequests;
+  await page.getByRole("button", { name: "Hide host metrics" }).click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await page.getByRole("button", { name: "Show host metrics" }).click();
+  await expect(strip).toBeVisible();
+  await expect(strip).toContainText("CPU");
+  await page.waitForTimeout(600);
+  expect(hostRequests).toBe(served);
+
+  await page.getByRole("button", { name: "Hide host metrics" }).click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator("#kana-host-panel")).toHaveAttribute("aria-hidden", "true");
 });
 
 test("centers the host widget's unavailable state", async ({ page }) => {
@@ -4114,6 +4183,35 @@ test("supports keyboard slash commands end to end", async ({ page }) => {
   expect(overflow.document).toBeLessThanOrEqual(overflow.viewport);
 });
 
+test("keeps the selected command visible while navigating with the keyboard", async ({
+  page,
+}) => {
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
+  await composer.click();
+  await composer.fill("/zz");
+  const options = page.getByRole("option", { name: /^\/zz-\d/ });
+  await expect(options).toHaveCount(24);
+  const list = page.locator("#kana-command-list");
+  for (let step = 0; step < 23; step += 1) await composer.press("ArrowDown");
+  await expect(options.nth(23)).toHaveAttribute("aria-selected", "true");
+  await composer.press("ArrowDown");
+  await expect(options.nth(23)).toHaveAttribute("aria-selected", "true");
+  await expect.poll(() => list.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  const listBox = await list.boundingBox();
+  const selectedBox = await options.nth(23).boundingBox();
+  expect(listBox).not.toBeNull();
+  expect(selectedBox).not.toBeNull();
+  expect(selectedBox!.y).toBeGreaterThanOrEqual(listBox!.y - 1);
+  expect(selectedBox!.y + selectedBox!.height).toBeLessThanOrEqual(
+    listBox!.y + listBox!.height + 1,
+  );
+
+  for (let step = 0; step < 23; step += 1) await composer.press("ArrowUp");
+  await expect(options.nth(0)).toHaveAttribute("aria-selected", "true");
+  await composer.press("ArrowUp");
+  await expect(options.nth(0)).toHaveAttribute("aria-selected", "true");
+});
+
 test("sends the nearest command Hermes offered when Enter runs an unknown one", async ({
   page,
 }) => {
@@ -4131,6 +4229,47 @@ test("sends the nearest command Hermes offered when Enter runs an unknown one", 
   await expect(
     page.getByText("/codex-runtime", { exact: true }).last(),
   ).toBeVisible();
+});
+
+test("keeps a command with a required argument from being sent bare", async ({ page }) => {
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
+  await composer.click();
+  await composer.fill("/steer");
+  await page.getByRole("option", { name: /\/steer/ }).first().waitFor();
+  await submitDraft(page, composer);
+
+  await expect
+    .poll(() => composer.evaluate((element) => element.getAnimations().length))
+    .toBeGreaterThan(0);
+  await expect(page.getByRole("alert").filter({ hasText: "/steer needs an argument" })).toBeVisible();
+  await expect(composer).toHaveValue("/steer");
+  await expect(page.getByRole("option", { name: /\/steer/ })).toHaveCount(0);
+
+  // Adding the argument clears the warning and keeps the draft sendable.
+  await composer.fill("/steer hello");
+  await expect(page.getByRole("alert").filter({ hasText: "/steer needs an argument" })).toHaveCount(0);
+});
+
+test("resolves a truncated command before checking its required argument", async ({ page }) => {
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
+  await composer.click();
+  await composer.fill("/reaso");
+  await page.getByRole("option", { name: /\/reasoning/ }).first().waitFor();
+  await submitDraft(page, composer);
+
+  // The nearest-command rewrite still picks /reasoning; the guard judges that
+  // resolved name instead of letting the bare command through.
+  await expect(page.getByRole("alert").filter({ hasText: "/reasoning needs an argument" })).toBeVisible();
+  await expect(composer).toHaveValue("/reaso");
+});
+
+test("completes a truncated command to the nearest name with Tab", async ({ page }) => {
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
+  await composer.click();
+  await composer.fill("/reaso");
+  await page.getByRole("option", { name: /\/reasoning/ }).first().waitFor();
+  await composer.press("Tab");
+  await expect(composer).toHaveValue("/reasoning");
 });
 
 test("never rewrites a command that is already real", async ({ page }) => {

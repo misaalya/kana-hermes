@@ -6,6 +6,7 @@ import {
   OFFICIAL_CUBISM_CORE_URL,
   OFFICIAL_HARU_MODEL_URL,
 } from "../../lib/avatar/defaults";
+import type { HostSnapshot } from "../../lib/runtime/host-client";
 import { E2E_ACCESS_PASSWORD } from "../e2e/access-password";
 
 /**
@@ -50,6 +51,48 @@ const REPLY_QUEUE = [
   { emotion: "neutral", body: FIRST_REPLY },
   { emotion: "happy", body: SECOND_REPLY },
 ];
+
+/**
+ * Synthetic host readings for the README. They are low, arbitrary, and never
+ * this machine's real load, timing, or process size.
+ */
+function readmeHostSnapshot(): HostSnapshot {
+  const roll = (min: number, span: number) => min + Math.floor(Math.random() * span);
+  const totalMemory = 16 * 1024 ** 3;
+  const totalDisk = 512 * 1024 ** 3;
+  const memoryUsed = roll(16, 17);
+  const diskUsed = roll(11, 19);
+  const uptimeMinutes = roll(4, 17);
+  return {
+    source: "local",
+    hostname: "kana-demo",
+    platform: "linux",
+    release: "6.8.0",
+    arch: "x64",
+    cpu: {
+      model: "Kana demo host",
+      cores: 8,
+      times: { idle: 0, total: 0 },
+      percent: roll(4, 16),
+    },
+    load: [0.2, 0.15, 0.1],
+    memory: {
+      total: totalMemory,
+      available: Math.round(totalMemory * (1 - memoryUsed / 100)),
+    },
+    disk: {
+      total: totalDisk,
+      available: Math.round(totalDisk * (1 - diskUsed / 100)),
+    },
+    uptime: uptimeMinutes * 60,
+    kana: {
+      uptime: Math.min(uptimeMinutes, roll(3, 13)) * 60,
+      rss: roll(90, 60) * 1024 * 1024,
+    },
+    serverTime: { now: Date.now(), zone: "UTC" },
+    sampledAt: Date.now(),
+  };
+}
 
 /**
  * Plain text at the end of each reply, which is what the rendered Markdown
@@ -172,6 +215,13 @@ async function installStandInHermes(page: Page): Promise<void> {
     route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({ sessions: [] }),
+    }),
+  );
+  const host = readmeHostSnapshot();
+  await page.route("**/api/kana/host", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify(host),
     }),
   );
   await page.route("**/api/local-runtime/hermes**", (route) =>
@@ -500,8 +550,9 @@ export async function expectWorkspaceReady(
 }
 
 /**
- * Types "/re" into the composer and waits for the live menu: Kana's /resume and
- * /restart groups plus Hermes controls, sourced from the stand-in's
+ * Types "/re" into the composer and waits for the live menu: Kana's /resume
+ * and Hermes's /retry, /refine, /reasoning, and /reload share the Command
+ * group, with /restart under Hermes controls, sourced from the stand-in's
  * `complete.slash` items, with the loading hint gone and no stale catalog rows.
  */
 export async function openSlashMenu(page: Page): Promise<void> {
@@ -514,7 +565,7 @@ export async function openSlashMenu(page: Page): Promise<void> {
   for (const command of ["/resume", "/restart", "/retry", "/refine", "/reasoning", "/reload"]) {
     await expect(menu.getByRole("option", { name: new RegExp(`^${command}`) })).toBeVisible();
   }
-  for (const group of ["Kana & session", "Hermes controls", "Commands"]) {
+  for (const group of ["Command", "Hermes controls"]) {
     await expect(menu.getByText(group, { exact: true })).toBeVisible();
   }
   // The completion has settled and the plain "/" catalog is not on screen.

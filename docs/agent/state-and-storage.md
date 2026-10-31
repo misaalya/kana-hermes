@@ -130,9 +130,10 @@ Host metrics are not stored either: `/api/kana/host` reads the OS and `/proc`
 per request, and the browser keeps only the current snapshot while a host
 surface is mounted. Closing Settings stops the Host card's polling; the desktop
 header widgets poll while the header shows them and stop with the header on
-phones or during the greeting. The only saved part is each widget's zone and
-order, a presentation preference in the local preference record
-(`hostWidgetLayout`).
+phones or during the greeting, and the phone host strip polls only while it is
+open and keeps its last reading while closed. The only saved part is each
+widget's zone and order, a presentation preference in the local preference
+record (`hostWidgetLayout`).
 
 Process-held state is deliberately not persisted: the Hermes session token and
 the shared gateway socket (`lib/server/hermes-bridge.ts`), the managed runtime

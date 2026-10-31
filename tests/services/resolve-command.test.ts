@@ -1,7 +1,11 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 import type { AgentCommandSuggestion } from "@/lib/agent/types";
-import { resolveTypedCommand, shortTitle } from "@/lib/services/send-message";
+import {
+  missingCommandArgument,
+  resolveTypedCommand,
+  shortTitle,
+} from "@/lib/services/send-message";
 
 function suggestion(text: string, availability?: "available" | "unavailable"): AgentCommandSuggestion {
   return { text, display: text, kind: "command", ...(availability ? { availability } : {}) };
@@ -53,6 +57,12 @@ describe("resolveTypedCommand", () => {
     assert.equal(resolveTypedCommand("/codex-run auto", CODEX), "/codex-runtime auto");
   });
 
+  it("resolves a truncated command to the name the argument check will use", () => {
+    const suggestions = [suggestion("/reasoning")];
+    assert.equal(resolveTypedCommand("/reaso", suggestions), "/reasoning");
+    assert.equal(resolveTypedCommand("/reaso high", suggestions), "/reasoning high");
+  });
+
   it("does not turn a multi-word command into an argument", () => {
     // /mcp add names a command whose remainder is another word, not an
     // argument. Nothing matched the typed name, so it goes as typed.
@@ -74,5 +84,39 @@ describe("resolveTypedCommand", () => {
     assert.equal(resolveTypedCommand("", CODEX), "");
     assert.equal(resolveTypedCommand("   ", CODEX), "");
     assert.equal(shortTitle("hello world"), "hello world");
+  });
+});
+
+describe("missingCommandArgument", () => {
+  const required = { "/steer": "<prompt>" };
+
+  it("blocks a required command with no argument", () => {
+    assert.deepEqual(missingCommandArgument("/steer", required), {
+      command: "/steer",
+      hint: "<prompt>",
+    });
+    assert.deepEqual(missingCommandArgument("/steer   ", required), {
+      command: "/steer",
+      hint: "<prompt>",
+    });
+  });
+
+  it("allows a required command once any argument is present", () => {
+    assert.equal(missingCommandArgument("/steer halo", required), null);
+    assert.equal(missingCommandArgument("/steer\nhalo", required), null);
+  });
+
+  it("does not block optional or unknown commands", () => {
+    assert.equal(missingCommandArgument("/title", required), null);
+    assert.equal(missingCommandArgument("/path", required), null);
+    assert.equal(missingCommandArgument("hello /steer", required), null);
+    assert.equal(missingCommandArgument("/steer", undefined), null);
+  });
+
+  it("requires a level for /reasoning before the completion map is warm", () => {
+    assert.deepEqual(missingCommandArgument("/reasoning", undefined), {
+      command: "/reasoning",
+      hint: "[level|show|hide|full|clamp] [--global]",
+    });
   });
 });

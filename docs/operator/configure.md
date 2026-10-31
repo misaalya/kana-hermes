@@ -412,6 +412,14 @@ warns that Hermes cannot rename before **Add as new** writes anything. Saving
 adds the new ID alongside the original, which remains available. To retire an
 ID, remove it in Hermes's own configuration; Kana does not edit that file.
 
+If a provider answers `Invalid inference request` while the same model works
+in another client, check the reasoning effort before the input size. Some
+OpenAI-compatible providers accept only a subset of Hermes's levels, and Hermes
+sends the active effort as a request parameter. Run `/reasoning high` or
+`/reasoning none` in that Kana conversation; Kana commits the choice to the
+serving Hermes session. A per-model `agent.reasoning_overrides` entry in
+Hermes's `config.yaml` keeps the choice for new sessions too.
+
 Kana sends these changes to Hermes's own dashboard API and never edits
 `config.yaml` or `.env` itself. Use the API root for the base URL, such as
 `https://api.example.com/v1`. If you paste the full `.../v1/chat/completions`

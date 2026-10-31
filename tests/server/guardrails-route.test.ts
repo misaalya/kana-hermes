@@ -270,3 +270,31 @@ describe("relay prompt guardrail", () => {
     assert.ok(String(relayed[1].params.text).includes("Never wipe a disk."));
   });
 });
+
+describe("relay config.set", () => {
+  it("forwards a session-scoped reasoning level and refuses global or unknown values", async () => {
+    const relayed = stubBridge();
+    const ok = await call({
+      method: "config.set",
+      params: { session_id: "s1", key: "reasoning", value: "high", scope: "session" },
+    });
+    assert.equal(ok.status, 200);
+    assert.deepEqual(relayed.at(-1), {
+      method: "config.set",
+      params: { session_id: "s1", key: "reasoning", value: "high", scope: "session" },
+    });
+
+    const global = await call({
+      method: "config.set",
+      params: { session_id: "s1", key: "reasoning", value: "high", scope: "global" },
+    });
+    assert.equal(global.status, 400);
+
+    const unknown = await call({
+      method: "config.set",
+      params: { session_id: "s1", key: "reasoning", value: "turbo", scope: "session" },
+    });
+    assert.equal(unknown.status, 400);
+    assert.equal(relayed.length, 1, "rejected requests never reach Hermes");
+  });
+});

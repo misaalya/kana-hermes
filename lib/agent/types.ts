@@ -230,6 +230,10 @@ export type AgentCommandSuggestion = {
   kind: "command" | "skill";
   availability?: "available" | "unavailable";
   unavailableReason?: string;
+  /** The usage hint Hermes published for this command, without the command name. */
+  argumentHint?: string;
+  /** True when the usage hint has a required placeholder outside an optional group. */
+  requiresArgument?: boolean;
 };
 
 export type AgentCommandInput = {

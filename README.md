@@ -306,8 +306,8 @@ Real-environment checks (need Hermes, network, or target hardware) are
 `npm run test:package:npm`. Local-voice latency stays a manual check on the
 target machine, because Kana ships no latency harness.
 `npm run screenshots:readme` photographs the README images out of the real UI,
-against a stand-in conversation and Live2D's official samples, into
-`.github/readme/`; a person still judges the result.
+against a stand-in conversation, synthetic low host metrics, and Live2D's
+official samples, into `.github/readme/`; a person still judges the result.
 Contributor rules are in [AGENTS.md](AGENTS.md).
 
 ## Documentation

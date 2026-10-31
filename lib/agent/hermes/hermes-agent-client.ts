@@ -1,5 +1,6 @@
 import { classifyHermesTool } from "@/lib/agent/tool-kind";
 import { isInterruptionNotice } from "@/lib/agent/interruption-notice";
+import { commandArgumentHint, commandArgumentPolicy } from "@/lib/agent/command-arguments";
 import { AttachmentUploadError, MAX_ATTACHMENTS, MAX_ATTACHMENT_TOTAL_BYTES, validateAttachment } from "@/lib/agent/attachments";
 import type {
   AgentBusyDelivery,
@@ -146,6 +147,19 @@ const SKIPPABLE_SERVER_REQUESTS = new Set([
   "vault.save_login",
   "vault.code",
   "display.install.sudo",
+]);
+
+/** The session-scoped levels Hermes accepts from `/reasoning`. */
+const REASONING_EFFORTS = new Set([
+  "none",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+  "ultra",
+  "reset",
 ]);
 
 /**
@@ -926,24 +940,34 @@ export class HermesAgentClient implements AgentClient {
         : rawText.startsWith("/")
           ? rawText
           : `/${rawText.replace(/^\/+/, "")}`;
+      const description =
+        !completingArgument && kanaUnavailableMessage(commandText)
+          ? kanaUnavailableMessage(commandText) ?? undefined
+          : item.meta
+            ? String(item.meta)
+            : undefined;
+      const kind = item.kind === "skill" ? "skill" : "command";
+      const hint =
+        !completingArgument && kind === "command"
+          ? commandArgumentHint(commandText, description)
+          : null;
+      const argument =
+        !completingArgument && kind === "command"
+          ? commandArgumentPolicy(commandText, hint)
+          : null;
       return {
         text: commandText,
         display: display || commandText,
-        description:
-          !completingArgument && kanaUnavailableMessage(commandText)
-            ? kanaUnavailableMessage(commandText) ?? undefined
-            : item.meta
-              ? String(item.meta)
-              : undefined,
+        description,
         group:
           !completingArgument && kanaUnavailableReason(commandText)
             ? "Unavailable in Kana"
             : completingArgument
               ? "Options"
-              : item.kind === "skill"
+              : kind === "skill"
                 ? "Skills"
                 : "Commands",
-        kind: item.kind === "skill" ? "skill" : "command",
+        kind,
         availability:
           !completingArgument && kanaUnavailableReason(commandText)
             ? "unavailable"
@@ -952,6 +976,8 @@ export class HermesAgentClient implements AgentClient {
           !completingArgument && kanaUnavailableMessage(commandText)
             ? kanaUnavailableMessage(commandText) ?? undefined
             : undefined,
+        argumentHint: argument?.hint ?? undefined,
+        requiresArgument: argument?.required ? true : undefined,
       };
     });
   }
@@ -1133,15 +1159,20 @@ export class HermesAgentClient implements AgentClient {
     for (const category of catalog.categories ?? []) {
       for (const [text, description] of category.pairs ?? []) {
         const unavailable = kanaUnavailableMessage(text);
+        const kind = skillNames.has(text.toLowerCase()) ? "skill" : "command";
+        const hint = kind === "command" && !unavailable ? commandArgumentHint(text, description) : null;
+        const argument = kind === "command" && !unavailable ? commandArgumentPolicy(text, hint) : null;
         categorized.add(text.toLowerCase());
         suggestions.push({
           text,
           display: text,
           description: unavailable || description,
           group: unavailable ? "Unavailable in Kana" : category.name || "Commands",
-          kind: skillNames.has(text.toLowerCase()) ? "skill" : "command",
+          kind,
           availability: unavailable ? "unavailable" : "available",
           unavailableReason: unavailable || undefined,
+          argumentHint: argument?.hint ?? undefined,
+          requiresArgument: argument?.required ? true : undefined,
         });
       }
     }
@@ -1149,18 +1180,23 @@ export class HermesAgentClient implements AgentClient {
     for (const [text, description] of catalog.pairs ?? []) {
       if (categorized.has(text.toLowerCase())) continue;
       const unavailable = kanaUnavailableMessage(text);
+      const kind = skillNames.has(text.toLowerCase()) ? "skill" : "command";
+      const hint = kind === "command" && !unavailable ? commandArgumentHint(text, description) : null;
+      const argument = kind === "command" && !unavailable ? commandArgumentPolicy(text, hint) : null;
       suggestions.push({
         text,
         display: text,
         description: unavailable || description,
         group: unavailable
           ? "Unavailable in Kana"
-          : skillNames.has(text.toLowerCase())
+          : kind === "skill"
             ? "Skills"
             : "Commands",
-        kind: skillNames.has(text.toLowerCase()) ? "skill" : "command",
+        kind,
         availability: unavailable ? "unavailable" : "available",
         unavailableReason: unavailable || undefined,
+        argumentHint: argument?.hint ?? undefined,
+        requiresArgument: argument?.required ? true : undefined,
       });
     }
 
@@ -1433,6 +1469,35 @@ export class HermesAgentClient implements AgentClient {
     if (name === "reload-skills") {
       const response = await this.request<{ output?: string }>("skills.reload", {});
       return { type: "output", output: response.output || "Reloaded Hermes's skills." };
+    }
+
+    // /reasoning acts on the serving session, as Hermes's TUI does. Through
+    // slash.exec it changes only the separate command worker, which reports
+    // success while the gateway keeps sending the old effort.
+    if (name === "reasoning") {
+      const value = arg.trim().toLowerCase();
+      if (REASONING_EFFORTS.has(value)) {
+        const response = await this.request<{ value?: string }>("config.set", {
+          session_id: this.session.sessionId,
+          key: "reasoning",
+          value,
+          scope: "session",
+        });
+        return {
+          type: "output",
+          output:
+            value === "reset"
+              ? "Reasoning effort reset to the configured default for this conversation."
+              : `Reasoning effort set to '${response.value ?? value}' for this conversation.`,
+        };
+      }
+      if (value.includes("--global")) {
+        return {
+          type: "output",
+          output:
+            "Kana changes reasoning for this conversation only. Change agent.reasoning_effort in Hermes's config for a global default.",
+        };
+      }
     }
 
     let raw: HermesSlashExecResponse;

@@ -11,9 +11,9 @@ import type { PreferencesAccess } from "./preferences-service";
 export function kanaCommandSuggestions(locale: KanaPreferences["uiLocale"]): AgentCommandSuggestion[] {
   const copy = getCopy(locale).slash;
   return [
-    { text: "/new", display: "/new", description: copy.newDescription, group: copy.kanaSessionGroup, kind: "command" },
-    { text: "/sessions", display: "/sessions", description: copy.sessionsDescription, group: copy.kanaSessionGroup, kind: "command" },
-    { text: "/resume", display: "/resume", description: copy.resumeDescription, group: copy.kanaSessionGroup, kind: "command" },
+    { text: "/new", display: "/new", description: copy.newDescription, group: copy.commandGroup, kind: "command" },
+    { text: "/sessions", display: "/sessions", description: copy.sessionsDescription, group: copy.commandGroup, kind: "command" },
+    { text: "/resume", display: "/resume", description: copy.resumeDescription, group: copy.commandGroup, kind: "command" },
     { text: "/approve", display: "/approve", description: copy.approveDescription, group: copy.hermesControlsGroup, kind: "command" },
     { text: "/deny", display: "/deny", description: copy.denyDescription, group: copy.hermesControlsGroup, kind: "command" },
     { text: "/commands", display: "/commands", description: copy.commandsDescription, group: copy.hermesControlsGroup, kind: "command" },
@@ -23,6 +23,10 @@ export function kanaCommandSuggestions(locale: KanaPreferences["uiLocale"]): Age
 
 function sameSuggestions(a: AgentCommandSuggestion[], b: AgentCommandSuggestion[]): boolean {
   return a.length === b.length && a.every((item, index) => item === b[index]);
+}
+
+function requiredCommandKey(item: AgentCommandSuggestion): string {
+  return item.text.trim().split(/\s+/, 1)[0].toLowerCase().replaceAll("_", "-");
 }
 
 export type CommandServiceDependencies = {
@@ -93,6 +97,7 @@ export class CommandService {
         return true;
       });
       if (this.request !== requestId) return;
+      this.rememberRequiredArguments([...localSuggestions, ...remoteSuggestions], input === "/");
       if (!sameSuggestions(suggestions, this.store.getState().suggestions)) this.store.setState({ suggestions });
     } catch (completionError) {
       // A vanished Hermes session is marked instead of being retried for every
@@ -107,6 +112,29 @@ export class CommandService {
   clear(): void {
     this.request += 1;
     this.clearMenu();
+  }
+
+  /**
+   * Keep the usage metadata from the catalog and from name completions. A
+   * trailing space moves the menu to argument options, which drops the command
+   * row; the map still knows that the command needs an argument at submit.
+   */
+  private rememberRequiredArguments(
+    suggestions: AgentCommandSuggestion[],
+    replace: boolean,
+  ): void {
+    const current = this.store.getState().requiredArguments ?? {};
+    const next: Record<string, string> = replace ? {} : { ...current };
+    for (const item of suggestions) {
+      if (item.kind !== "command" || !item.requiresArgument) continue;
+      const key = requiredCommandKey(item);
+      if (key) next[key] = item.argumentHint ?? "";
+    }
+    const changed =
+      replace ||
+      Object.keys(next).length !== Object.keys(current).length ||
+      Object.keys(next).some((key) => next[key] !== current[key]);
+    if (changed) this.store.setState({ requiredArguments: next });
   }
 
   private clearMenu(): void {

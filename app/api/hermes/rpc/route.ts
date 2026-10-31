@@ -56,6 +56,19 @@ const ALLOWED_METHODS = new Set([
 
 const LONG_RUNNING_METHODS = new Set(["session.compress", "model.options", "reload.mcp"]);
 
+// The session-scoped reasoning levels Hermes accepts from `/reasoning`.
+const REASONING_EFFORTS = new Set([
+  "none",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+  "ultra",
+  "reset",
+]);
+
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 
 type Refusal = Extract<GuardrailOutcome, { verdict: "refuse" }>;
@@ -116,7 +129,25 @@ export const POST = withSession(async (request) => {
       ? (body.params as Record<string, unknown>)
       : {};
   if (method === "config.set") {
-    if (
+    if (params.key === "reasoning") {
+      if (
+        typeof params.session_id !== "string" ||
+        typeof params.value !== "string" ||
+        !REASONING_EFFORTS.has(params.value) ||
+        (params.scope !== undefined && params.scope !== "session")
+      ) {
+        return Response.json(
+          { error: "Only a session-scoped reasoning level is supported." },
+          { status: 400, headers: NO_STORE },
+        );
+      }
+      params = {
+        session_id: params.session_id,
+        key: "reasoning",
+        value: params.value,
+        scope: "session",
+      };
+    } else if (
       params.key !== "model" ||
       typeof params.session_id !== "string" ||
       typeof params.value !== "string" ||
@@ -127,16 +158,17 @@ export const POST = withSession(async (request) => {
       /(^|\s)--(?:global|once)(\s|$)/.test(params.value)
     ) {
       return Response.json(
-        { error: "Only a session-scoped Hermes model selection is supported." },
+        { error: "Only a session-scoped Hermes model or reasoning selection is supported." },
         { status: 400, headers: NO_STORE },
       );
+    } else {
+      params = {
+        session_id: params.session_id,
+        key: "model",
+        value: params.value,
+        confirm_expensive_model: params.confirm_expensive_model === true,
+      };
     }
-    params = {
-      session_id: params.session_id,
-      key: "model",
-      value: params.value,
-      confirm_expensive_model: params.confirm_expensive_model === true,
-    };
   }
   const timeoutMs = LONG_RUNNING_METHODS.has(method) ? LONG_HERMES_RPC_TIMEOUT_MS : undefined;
   // Kana screens what the user wrote before it reaches Hermes. The guardrail

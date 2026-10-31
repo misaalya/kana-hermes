@@ -744,6 +744,27 @@ describe("CommandService", () => {
     await harness.commands.complete("/sta");
     assert.equal(harness.agent.opened.length, opened);
   });
+
+  it("keeps Hermes's argument requirement after the menu moves to argument options", async () => {
+    const harness = createHarness();
+    harness.conversations.initialize();
+    await harness.sessions.ensure(harness.active());
+    harness.agent.completions = [{
+      text: "/steer",
+      display: "/steer",
+      kind: "command",
+      requiresArgument: true,
+      argumentHint: "<prompt>",
+    }];
+    await harness.commands.complete("/");
+    assert.equal(harness.stores.commands.getState().requiredArguments["/steer"], "<prompt>");
+
+    // A trailing space lists argument options and drops the command row; the
+    // requirement must survive for the submit check.
+    harness.agent.completions = [{ text: "/steer ", display: "/steer", kind: "command" }];
+    await harness.commands.complete("/steer ");
+    assert.equal(harness.stores.commands.getState().requiredArguments["/steer"], "<prompt>");
+  });
 });
 
 describe("HermesSessionManager models", () => {

@@ -14,15 +14,23 @@ export type HostReading = {
   error: boolean;
 };
 
-/** One read-only host sample every three seconds, only while mounted. */
-export function useHostSnapshot(): HostReading {
+/**
+ * One read-only host sample every three seconds while active. A reading newer
+ * than `freshForMs` is reused when a surface reopens instead of asking again.
+ */
+export function useHostSnapshot(
+  options: { active?: boolean; freshForMs?: number } = {},
+): HostReading {
+  const { active = true, freshForMs = 0 } = options;
   const [snapshot, setSnapshot] = useState<HostSnapshot | null>(null);
   const [receivedAt, setReceivedAt] = useState<number | null>(null);
   const [cpu, setCpu] = useState<number | null>(null);
   const [error, setError] = useState(false);
   const previousCpu = useRef<HostSnapshot["cpu"]["times"] | null>(null);
+  const lastSampleAt = useRef(0);
 
   useEffect(() => {
+    if (!active) return;
     let live = true;
     let controller: AbortController | null = null;
     const tick = async () => {
@@ -33,6 +41,7 @@ export function useHostSnapshot(): HostReading {
         if (!live) return;
         setSnapshot(next);
         setReceivedAt(Date.now());
+        lastSampleAt.current = Date.now();
         setCpu(
           typeof next.cpu.percent === "number"
             ? next.cpu.percent
@@ -45,14 +54,14 @@ export function useHostSnapshot(): HostReading {
         setError(true);
       }
     };
-    void tick();
+    if (Date.now() - lastSampleAt.current >= freshForMs) void tick();
     const timer = window.setInterval(() => void tick(), POLL_MS);
     return () => {
       live = false;
       controller?.abort();
       window.clearInterval(timer);
     };
-  }, []);
+  }, [active, freshForMs]);
 
   return { snapshot, receivedAt, cpu, error };
 }

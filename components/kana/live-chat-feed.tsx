@@ -219,12 +219,13 @@ export const LiveChatFeed = memo(function LiveChatFeed({
 
           if (isSystem) {
             return (
-              <article key={message.id} className="rounded-[22px] border-2 border-line bg-raised px-4 py-2.5 max-sm:px-3 max-sm:py-2">
-                <div className="mb-1 flex items-center justify-between gap-3">
-                  <strong className="kana-label-bubble">{copy.chat.hermesNote}</strong>
-                  <span className="text-[11px] tabular-nums text-faint">{dateFormatter.format(message.timestamp)}</span>
+              <article key={message.id} className="px-1 py-0.5">
+                <div className="flex items-center gap-2.5">
+                  <strong className="shrink-0 text-[10px] font-extrabold uppercase tracking-[0.08em] text-muted">{copy.chat.hermesNote}</strong>
+                  <span aria-hidden="true" className="min-w-0 flex-1 border-t-2 border-dotted border-line-strong" />
+                  <span className="shrink-0 text-[10px] tabular-nums text-faint">{dateFormatter.format(message.timestamp)}</span>
                 </div>
-                <p className="whitespace-pre-wrap text-[12px] leading-relaxed text-ink-dim [overflow-wrap:anywhere] max-sm:text-[13px]">{messageCopy}</p>
+                <p className="mt-1.5 whitespace-pre-wrap text-[12.5px] leading-relaxed text-ink-dim [overflow-wrap:anywhere] max-sm:text-[13px]">{messageCopy}</p>
               </article>
             );
           }

@@ -604,6 +604,52 @@ describe("HermesAgentClient (relay transport)", () => {
     assert.equal(argumentsList[0]?.text, "/reasoning high");
   });
 
+  it("publishes the usage hint that makes an argument required", async () => {
+    const client = await connectedClient((request) => {
+      if (request.method === "commands.catalog") {
+        return {
+          categories: [
+            {
+              name: "Session",
+              pairs: [
+                ["/steer", "Inject a message (usage: /steer <prompt>)"],
+                ["/reasoning", "Reasoning controls (usage: /reasoning [level] [--global])"],
+                ["/title", "Set a title (usage: /title [name])"],
+              ],
+            },
+          ],
+        };
+      }
+      if (request.method === "complete.slash") {
+        return {
+          items: [
+            {
+              text: "steer",
+              display: "/steer",
+              meta: "Inject a message (usage: /steer <prompt>)",
+            },
+          ],
+        };
+      }
+      return {};
+    });
+
+    const catalog = await client.completeCommands("/");
+    const steer = catalog.find((item) => item.text === "/steer");
+    assert.equal(steer?.requiresArgument, true);
+    assert.equal(steer?.argumentHint, "<prompt>");
+    const reasoning = catalog.find((item) => item.text === "/reasoning");
+    // Hermes prints a status for a bare /reasoning, but Kana's bare command has
+    // nothing to apply, so the argument is required here.
+    assert.equal(reasoning?.requiresArgument, true);
+    const title = catalog.find((item) => item.text === "/title");
+    assert.notEqual(title?.requiresArgument, true);
+
+    const completion = await client.completeCommands("/ste");
+    assert.equal(completion[0]?.requiresArgument, true);
+    assert.equal(completion[0]?.argumentHint, "<prompt>");
+  });
+
   it("resolves aliases, prefills, and fallback command dispatch", async () => {
     const client = await connectedClient((request) => {
       if (request.method === "session.create") {
@@ -1619,6 +1665,30 @@ describe("HermesAgentClient (relay transport)", () => {
 
     const skills = await client.executeCommand({ command: "/reload-skills" });
     assert.match(skills.type === "output" ? skills.output : "", /3 skill\(s\) available/);
+    assert.equal(FakeRelay.requests.filter((request) => request.method === "slash.exec").length, 0);
+  });
+
+  it("changes reasoning on the serving session, never in the slash worker", async () => {
+    const client = await connectedClient((request) => {
+      if (request.method === "session.create") return { session_id: "runtime-1", stored_session_id: "stored-1" };
+      if (request.method === "config.set") {
+        return { key: "reasoning", value: request.params.value, scope: "session" };
+      }
+      throw new Error(`unexpected RPC ${request.method}`);
+    });
+    await openSession(client);
+
+    const high = await client.executeCommand({ command: "/reasoning high" });
+    assert.equal(high.type === "output" && high.output, "Reasoning effort set to 'high' for this conversation.");
+    assert.deepEqual(FakeRelay.requests.findLast((request) => request.method === "config.set")?.params, {
+      session_id: "runtime-1",
+      key: "reasoning",
+      value: "high",
+      scope: "session",
+    });
+
+    const reset = await client.executeCommand({ command: "/reasoning reset" });
+    assert.match(reset.type === "output" ? reset.output : "", /reset to the configured default/);
     assert.equal(FakeRelay.requests.filter((request) => request.method === "slash.exec").length, 0);
   });
 

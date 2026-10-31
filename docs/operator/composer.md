@@ -4,7 +4,7 @@ The composer writes the message, attaches files, captures dictation, and picks
 the Hermes model. This page covers its controls and limits.
 
 **Read when:** you are attaching files or dictating, or you need to know where an attachment goes.
-**Truth in code:** `components/kana/chat-composer.tsx`, `components/kana/live-chat-feed.tsx`, `lib/limits.ts`, `lib/services/send-message.ts`, `lib/services/model-catalog-service.ts`, `app/api/hermes/attachments/route.ts`
+**Truth in code:** `components/kana/chat-composer.tsx`, `components/kana/live-chat-feed.tsx`, `lib/limits.ts`, `lib/agent/command-arguments.ts`, `lib/services/send-message.ts`, `lib/services/command-service.ts`, `lib/services/model-catalog-service.ts`, `app/api/hermes/attachments/route.ts`
 
 ## Sending a message
 
@@ -39,6 +39,15 @@ may be refused before it reaches Hermes. Kana keeps your message in the
 conversation and answers it with one fixed line instead of a reply, because no
 model saw it. The same applies to a slash command and to `/steer`; a refused turn
 is not added to the Hermes transcript.
+
+If a slash command's live usage hint marks a required argument, Kana refuses to
+send the bare command. The composer keeps the draft, shakes, and shows the
+command with its usage; once an argument is present the command sends normally.
+Kana reads the hint from Hermes's catalog and completion text, not a second
+command list. `/reasoning` also needs a level in Kana even though Hermes's own
+hint treats it as optional. Tab on a partial command fills the nearest name
+Enter would use; Tab while choosing an argument still takes the highlighted
+option.
 
 ## File attachments
 

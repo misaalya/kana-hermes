@@ -71,7 +71,12 @@ export function createWorkspaceStore(): WorkspaceStore {
       set((state) =>
         state.drafts[conversationId] === value
           ? state
-          : { drafts: { ...state.drafts, [conversationId]: value } },
+          : {
+              drafts: { ...state.drafts, [conversationId]: value },
+              // A new draft is a new query: the old highlighted suggestion no
+              // longer describes what Enter would run.
+              selectedCommandIndex: 0,
+            },
       );
     },
     appendDraft(conversationId, text) {
@@ -80,6 +85,7 @@ export function createWorkspaceStore(): WorkspaceStore {
           ...state.drafts,
           [conversationId]: [state.drafts[conversationId]?.trimEnd(), text].filter(Boolean).join(" "),
         },
+        selectedCommandIndex: 0,
       }));
     },
     setFileDraft(conversationId, files) {

@@ -1,15 +1,25 @@
 import type { AgentToolKind } from "./types";
 
-const COMMAND_TOOL = /(terminal|shell|command|execute|bash|powershell|process)/i;
-const FILE_TOOL = /(patch|file|write|edit|delete|move|copy|directory)/i;
+// Exact Hermes tool names, never name patterns: search_files is a file tool,
+// and a future tool whose name merely contains "file" must not inherit it.
+const COMMAND_TOOLS = new Set([
+  "terminal",
+  "execute_code",
+  "process_manage",
+  "read_terminal",
+  "close_terminal",
+]);
+
+const FILE_TOOLS = new Set([
+  "search_files",
+  "read_file",
+  "write_file",
+  "patch",
+]);
 
 export function classifyHermesTool(name: string): AgentToolKind {
-  if (COMMAND_TOOL.test(name)) {
-    return "command";
-  }
-  if (FILE_TOOL.test(name)) {
-    return "file";
-  }
+  const key = name.trim().toLowerCase();
+  if (COMMAND_TOOLS.has(key)) return "command";
+  if (FILE_TOOLS.has(key)) return "file";
   return "tool";
 }
-
