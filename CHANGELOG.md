@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.7.1 — 2026-11-01
+
+### Added
+
+- Settings → AI providers manages Hermes custom endpoints without editing
+  Hermes's files: create a provider with its first model, add a model to an
+  existing provider, edit the name, base URL, or key, and see the model in the
+  picker after saving. A key is sent once through Hermes's dashboard API and is
+  never stored or shown by Kana again.
+- Saving a provider or model now restarts the managed local `hermes serve` when
+  Kana can, so the endpoint and key are loaded, then reconnects the open
+  conversation and refreshes the catalog. The provider status line says whether
+  the restart happened or why it was skipped (a running reply, a remote Hermes,
+  one Kana did not start, or a stopped one); a failed restart is shown as an
+  error, and Kana never restarts a Hermes it does not own.
+- `kana migrate --replace-existing` replaces a whole destination database
+  family with a verified copy of the source after backing up the destination,
+  including stale WAL and SHM files. The default still leaves existing entries
+  untouched.
+
+### Changed
+
+- The phone host widget is a compact typographic rail under the header: a small
+  uppercase label above a large right-aligned reading, no gauge, a dotted rule
+  between readings, and a height that hugs its content. It stays mounted while
+  closed, so its tab keeps its place instead of jumping to the top.
+- Slash commands stop their suggestion list at the ends, block a command whose
+  required argument is missing with a shake and its usage hint, and keep a
+  destructive confirmation naming the command that will actually run. Tool
+  activity is a keyboard-accessible toggle with a smoother reveal and clearer
+  rows.
+- The configuration guide covers the provider manager and its automatic
+  restart, replacement migration, Jev prompt rules, Instabox constraints,
+  missing environment variables, and the remote WebSocket endpoint. The Copy
+  for LLM action is generated from the same source, so it carries the same
+  corrections.
+- The CLI start screen uses Kana blue for its accent.
+
+### Fixed
+
+- Avatar-mode replies sit on the tray's own depth fill instead of a separate
+  blue plate; focus mode already used plain text, and the avatar composer keeps
+  its blue band.
+
 ## 0.7.0 — 2026-10-31
 
 ### Changed
