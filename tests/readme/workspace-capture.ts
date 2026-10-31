@@ -458,8 +458,9 @@ export async function expectWorkspaceReady(
     expect(scroll?.width ?? 0).toBeGreaterThanOrEqual(900);
     expect(scroll?.width ?? 0).toBeLessThan(box?.width ?? 0);
   }
-  // A frame must show the state it claims: the avatar keeps the original blue
-  // tray, while focus mode shows the plain reading surface.
+  // A frame must show the state it claims: the avatar keeps the original tray
+  // and blue composer band while replies wear the tray's depth, and focus mode
+  // shows the plain reading surface.
   if ((page.viewportSize()?.width ?? 0) >= 1024) {
     const interior = await page.evaluate(() => {
       const probe = (name: string) => {
@@ -473,7 +474,7 @@ export async function expectWorkspaceReady(
       const bubble = document.querySelector(".kana-message-assistant");
       const field = document.querySelector(".kana-composer");
       return {
-        bubbleToken: probe("--chat-bubble"),
+        depthToken: probe("--chat-depth"),
         surfaceStrong: probe("--surface-strong"),
         bubble: bubble ? getComputedStyle(bubble).backgroundColor : "",
         field: field ? getComputedStyle(field).backgroundColor : "",
@@ -481,7 +482,7 @@ export async function expectWorkspaceReady(
       };
     });
     if (options.avatarVisible) {
-      expect(interior.bubble).toBe(interior.bubbleToken);
+      expect(interior.bubble).toBe(interior.depthToken);
       expect((await page.locator(".kana-chat-dock").boundingBox())?.width ?? 0)
         .toBeLessThanOrEqual(481);
     } else {

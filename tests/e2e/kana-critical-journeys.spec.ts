@@ -881,7 +881,7 @@ test("previews image attachments and puts the file limit in the red composer err
   await page.screenshot({ path: `test-results/composer-attachment-error-${test.info().project.name}.png` });
 });
 
-test("keeps the avatar chat tray blue and gives focus mode a plain reading column", async ({
+test("keeps the avatar chat tray and gives focus mode a plain reading column", async ({
   page,
 }) => {
   // A long journey: several layouts plus a reload to seed the short delay.
@@ -936,9 +936,9 @@ test("keeps the avatar chat tray blue and gives focus mode a plain reading colum
     ),
   ).toBe("none");
   if (desktop) {
-    // The avatar keeps the original tray: blue replies, blue composer band,
-    // the depth fill, and the narrow dock.
-    expect(withAvatar.assistant?.background).toBe(withAvatar.bubble);
+    // The avatar keeps the original tray and its blue composer band, while a
+    // reply wears the tray's own depth instead of a blue plate.
+    expect(withAvatar.assistant?.background).toBe(withAvatar.depth);
     expect(withAvatar.shell?.background).toBe(withAvatar.frame);
     expect(withAvatar.feed?.background).toBe(withAvatar.depth);
     expect(withAvatar.field?.borderTop).toBe("0px");
@@ -947,7 +947,7 @@ test("keeps the avatar chat tray blue and gives focus mode a plain reading colum
     expect(avatarDock?.width ?? 0).toBeLessThanOrEqual(481);
   } else {
     expect(withAvatar.shell?.background).toBe(withAvatar.frame);
-    expect(withAvatar.assistant?.background).toBe(withAvatar.bubble);
+    expect(withAvatar.assistant?.background).toBe(withAvatar.depth);
     expect(withAvatar.feed?.background).toBe("rgba(0, 0, 0, 0)");
     expect(withAvatar.field?.borderTop).toBe("0px");
   }

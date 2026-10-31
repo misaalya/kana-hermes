@@ -1268,6 +1268,12 @@ details[open] > .kana-plus-summary::before {
   color: var(--chat-text);
 }
 
+/* With the avatar visible a reply keeps a plate over the stage, but it wears
+   the tray's own depth instead of a blue bubble. Focus mode drops it entirely. */
+.kana-chat-dock:not(.is-sole) .kana-message-assistant {
+  background: var(--chat-depth);
+}
+
 /* First-run greeting: Kana speaks through a game-style dialogue box with a
    tilted name tag, her words typed out as she says them. */
 .kana-greeting {

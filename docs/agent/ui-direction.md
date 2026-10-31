@@ -327,8 +327,9 @@ copy shows that snapshot in a selectable block instead of failing silently.
 The chat panel is the plain, square-cornered tray inside the blue `--chat-frame`
 border: no texture. With the avatar visible it keeps its original styling: a
 responsive dock whose standard width is also its minimum (390–480px),
-`--chat-depth` behind the transcript, `--chat-bubble` replies, and the blue
-composer band with white text, white model pill, and white Send disc. The left
+`--chat-depth` behind the transcript, replies on that same depth instead of a
+blue plate, and the blue composer band with white text, white model pill, and
+white Send disc. The left
 frame is a drag handle: dragging (or ArrowLeft/ArrowRight, Home/End) widens the
 dock up to 70% of the screen. While the handle is held the panel may follow the
 pointer past that ceiling up to the width the panel has in focus mode (the
@@ -370,8 +371,9 @@ thumbnail cards above the words, with a borderless image and a remove button
 that appears on hover (always visible on touch); other files keep their chips. A rejected file selection reports the file limits in the red error
 banner above the composer, not in the small status line. In the blue
 avatar-mode composer selected text takes a dark translucent wash, because the
-page's blue selection disappears on that band. Phones keep the blue band and
-bubble in both states. The model chooser is a compact square popover above the
+page's blue selection disappears on that band. Phones keep the blue band in
+both states, and the blue reply bubble remains only in focus mode. The model
+chooser is a compact square popover above the
 pill on desktop and a bottom sheet on phones, with one searchable flat list:
 each row is the model over its provider, the model in use carries a check, and
 Kana's default carries a small Default pill. The chooser keeps one fixed height
