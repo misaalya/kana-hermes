@@ -7,6 +7,7 @@ import { parseMarkdown } from "@/lib/presentation/markdown";
 import { LocalPreferencesStore } from "@/lib/preferences/local-preferences-store";
 import { useTheme } from "@/lib/state/use-theme";
 import {
+  buildConfigGuideLlm,
   CONFIG_GUIDE_GROUPS,
   CONFIG_GUIDE_PATH_BLOCK,
   getConfigGuideCopy,
@@ -18,6 +19,7 @@ import {
 import { getCopy, type UiLocale } from "@/lib/ui/copy";
 import { renderMarkdownBlocks, renderMarkdownInline, type MarkdownRenderers } from "./chat-markdown";
 import { CodeBlock, CopyButton } from "./code-block";
+import { CopyGuideButton } from "./copy-guide-button";
 import { MaterialSymbol, type MaterialSymbolName } from "./material-symbol";
 
 // Real icons here (Material Symbols), not the app's two-tone drawn glyphs.
@@ -162,6 +164,7 @@ export function ConfigGuide({
   const [active, setActive] = useState<string>("quickstart");
   const scrollerRef = useRef<HTMLElement>(null);
   const guide = useMemo(() => readConfigGuide(parseMarkdown(sources[locale])), [sources, locale]);
+  const llmGuide = useMemo(() => buildConfigGuideLlm(sources[locale], locale), [sources, locale]);
   const copy = getConfigGuideCopy(locale);
   const workspace = getCopy(locale).workspace;
 
@@ -265,6 +268,20 @@ export function ConfigGuide({
       <MaterialSymbol name={theme === "dark" ? "light_mode" : "dark_mode"} className="text-[19px]" />
     </button>
   );
+  const copyForLlm = (compact: boolean) => (
+    <CopyGuideButton
+      text={llmGuide}
+      label={copy.copyForLlm}
+      copiedLabel={copy.copiedForLlm}
+      ariaLabel={copy.copyForLlmAria}
+      compact={compact}
+      className={
+        compact
+          ? roundButton
+          : "kana-pill kana-pill-soft inline-flex min-h-9 w-full items-center justify-center gap-2 px-4 text-[12px]"
+      }
+    />
+  );
 
   return (
     <div className={`${fontClassName} grid h-dvh grid-cols-[260px_minmax(0,1fr)] bg-raised font-sans max-md:grid-cols-1 max-md:grid-rows-[auto_minmax(0,1fr)]`}>
@@ -273,6 +290,7 @@ export function ConfigGuide({
         <div className="mb-4 flex items-center justify-between gap-3 px-3 max-md:mb-1 max-md:px-4">
           <p className="text-[22px] font-extrabold text-ink">{copy.docs}</p>
           <div className="flex items-center gap-1.5 md:hidden">
+            {copyForLlm(true)}
             {themeButton}
             <Link href="/" className={roundButton} aria-label={copy.back}>
               <MaterialSymbol name="home" className="text-[19px]" />
@@ -307,12 +325,15 @@ export function ConfigGuide({
             </div>
           ))}
         </nav>
-        <div className="mt-auto flex items-center gap-2 px-3 pt-4 max-md:hidden">
-          <Link href="/" className="kana-focus kana-pill kana-pill-soft min-h-9 flex-1 px-4 text-[12px]">
-            <MaterialSymbol name="home" className="text-[17px]" />
-            {copy.back}
-          </Link>
-          {themeButton}
+        <div className="mt-auto grid gap-2 px-3 pt-4 max-md:hidden">
+          {copyForLlm(false)}
+          <div className="flex items-center gap-2">
+            <Link href="/" className="kana-focus kana-pill kana-pill-soft min-h-9 flex-1 px-4 text-[12px]">
+              <MaterialSymbol name="home" className="text-[17px]" />
+              {copy.back}
+            </Link>
+            {themeButton}
+          </div>
         </div>
       </aside>
 

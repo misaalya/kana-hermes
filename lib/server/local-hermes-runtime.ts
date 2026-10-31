@@ -85,6 +85,43 @@ export function managedRuntimeToken(): string | null {
   return runtime().token;
 }
 
+const DASHBOARD_TIMEOUT_MS = 15_000;
+const SESSION_HEADER = "X-Hermes-Session-Token";
+
+/**
+ * One authenticated dashboard JSON request to the local Hermes process. The
+ * token stays server-side; callers pass a fixed API path and a bounded body.
+ */
+export async function localHermesDashboardJson<T>(
+  path: string,
+  init: { method?: "GET" | "POST"; body?: unknown } = {},
+): Promise<T> {
+  if (!path.startsWith("/api/")) {
+    throw new Error("Hermes dashboard paths must start with /api/.");
+  }
+  const token = runtime().token;
+  if (!token) {
+    throw new Error(
+      "Kana does not hold this local Hermes gateway's session token. Start Hermes from Kana first.",
+    );
+  }
+  const response = await fetch(`http://127.0.0.1:${runtime().port}${path}`, {
+    method: init.method ?? "GET",
+    headers: {
+      [SESSION_HEADER]: token,
+      ...(init.body === undefined ? {} : { "Content-Type": "application/json" }),
+    },
+    body: init.body === undefined ? undefined : JSON.stringify(init.body),
+    cache: "no-store",
+    redirect: "error",
+    signal: AbortSignal.timeout(DASHBOARD_TIMEOUT_MS),
+  });
+  if (!response.ok) {
+    throw new Error(`Hermes dashboard request failed (${response.status}).`);
+  }
+  return (await response.json()) as T;
+}
+
 // Test/acceptance-script hook: install a token+port pair without spawning a
 // process. Never used by application code paths.
 export const __setTestToken = (token: string, port: number): void => {

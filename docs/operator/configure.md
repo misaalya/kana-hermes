@@ -390,6 +390,56 @@ have no environment override.
 | `KANA_DEV_ALLOWED_ORIGINS` | Development only: extra hosts allowed to reach `next dev`. |
 | `AUTH_COOKIE_SECURE` | `true` marks session cookies `Secure` when the proxy cannot forward `X-Forwarded-Proto`. |
 
+## Adding or editing a model provider
+
+Settings → AI providers, also linked from a row under the AI model controls,
+lists each custom endpoint. A provider is one OpenAI-compatible endpoint: a
+name, base URL, and key. One provider can serve many models, so the list shows
+each provider once and opens a detail page with its models.
+
+- **Add model** on a provider asks only for the model ID and optional context
+  length; the provider's URL and key are reused.
+- **Edit** changes that provider's name, base URL, or key, and lists the current
+  model IDs read-only so the scope of the change is visible. Leave the key empty
+  to keep the saved one. The provider's id stays the same when its display name
+  changes, so existing selections keep working.
+- **New provider** asks for the endpoint and its first model, because Hermes
+  requires a model when the endpoint is created. More models can follow.
+
+Hermes has no API to rename or remove a model ID. Each model ID in the detail
+page is an editable pill: change it, press the save icon beside it, and Kana
+warns that Hermes cannot rename before **Add as new** writes anything. Saving
+adds the new ID alongside the original, which remains available. To retire an
+ID, remove it in Hermes's own configuration; Kana does not edit that file.
+
+Kana sends these changes to Hermes's own dashboard API and never edits
+`config.yaml` or `.env` itself. Use the API root for the base URL, such as
+`https://api.example.com/v1`. If you paste the full `.../v1/chat/completions`
+endpoint, Kana removes the trailing `/chat/completions` before sending it,
+because the OpenAI client appends that path itself. A base URL that already ends
+with a longer path is left alone.
+
+The panel needs a gateway Kana can authenticate to the way it already does for
+chat: locally, the `hermes serve` Kana started or adopted with a readable session
+token; remotely, the dashboard login Kana keeps on the server. A key you enter is
+sent once to Hermes, which stores it in its own `.env` behind `key_env`; Kana
+neither stores nor shows it again. Hermes's synthetic direct-configuration entry
+(the one that mirrors `model.provider: custom`) is the exception: its key lives
+in the `model` block where this API cannot read it, so re-enter the key when
+editing that entry, or the provider entry would shadow the working credential.
+
+The save never changes the active model and never changes Kana's default: the
+model appears in the composer's picker after the catalog refresh, and you choose
+it (and optionally **Set as default**) in the usual way. Saving a model that
+already exists is harmless. The provider list is cached in server memory for 15
+seconds; a create or update clears that cache, so the manager shows the change
+immediately and other clients see an external Hermes edit within that window.
+
+Hermes's dashboard API covers the modern `providers:` mapping but not named
+entries in the legacy `custom_providers:` list. Those entries still appear in
+the model picker; to add a model to one, edit that list in the Hermes
+configuration where it lives, or create a new provider through this panel.
+
 ## Applying a change
 
 Speech settings are resolved per request, so a saved edit applies to the next

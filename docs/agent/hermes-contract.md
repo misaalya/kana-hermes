@@ -3,7 +3,7 @@
 Kana is a presentation layer in front of the user's existing Hermes Agent installation. This document is the surface of Hermes that Kana is allowed to call and the behavior an agent must respect when changing it.
 
 **Read when:** you are touching the agent adapter, the server relay, slash handling, session lifecycle, or anything that reaches Hermes.
-**Truth in code:** `app/api/hermes/rpc/route.ts`, `app/api/hermes/events/route.ts`, `app/api/hermes/server-request/route.ts`, `lib/agent/types.ts`, `lib/agent/hermes/hermes-agent-client.ts`, `lib/agent/hermes/gateway-types.ts`, `lib/server/hermes-bridge.ts`, `lib/server/hermes-event-stream.ts`, `lib/server/local-hermes-runtime.ts`, `lib/server/remote-hermes.ts`, `lib/server/remote-hermes-auth.ts`, `lib/server/instabox-wake.ts`, `lib/server/user-config.ts`, `lib/services/send-message.ts`, `lib/guardrails/`
+**Truth in code:** `app/api/hermes/rpc/route.ts`, `app/api/hermes/events/route.ts`, `app/api/hermes/server-request/route.ts`, `app/api/hermes/models/route.ts`, `lib/agent/types.ts`, `lib/agent/hermes/hermes-agent-client.ts`, `lib/agent/hermes/gateway-types.ts`, `lib/server/hermes-bridge.ts`, `lib/server/hermes-event-stream.ts`, `lib/server/hermes-model-admin.ts`, `lib/server/local-hermes-runtime.ts`, `lib/server/remote-hermes.ts`, `lib/server/remote-hermes-auth.ts`, `lib/server/instabox-wake.ts`, `lib/server/user-config.ts`, `lib/services/send-message.ts`, `lib/guardrails/`
 
 ## Integration boundary
 
@@ -27,6 +27,7 @@ Hermes gates most RPCs to one active session per connection. Kana is a single-us
 | `POST /api/hermes/rpc` | Allow-listed JSON-RPC forward |
 | `POST /api/hermes/server-request` | One response to an open Hermes server-to-client request |
 | `POST /api/hermes/attachments` | Prompt attachments (`file.attach`) |
+| `GET`/`POST /api/hermes/models` | Hermes's custom-endpoint API; list safe provider facts or save a model, without returning a key |
 | `GET /api/kana/sessions` | `session.list` filtered to `source: "kana"` |
 | `GET/PUT /api/kana/activities` | Per-turn tool activity SQLite store |
 | `GET/HEAD /api/media/[token]/[name]` | Streams a file Hermes delivered |
@@ -89,6 +90,20 @@ Command-generated prompts are different: Hermes's TUI queues slash commands whil
 ## Model selection
 
 `config.set` sends `<model> --provider <slug> --session` unquoted. Hermes's `/model` parser splits on whitespace and never unquotes, so shell quoting would arrive as part of the provider name. A switch warning is passed through except Hermes's own `Note:` model-listing parts, which ride on switches Hermes accepted and read like failures (`switchWarning`).
+
+## Adding or editing a custom model
+
+Settings → AI providers, linked from the AI model controls, opens a provider list. A provider is one custom endpoint (name, base URL, key) and can serve many models: adding a model to an existing provider sends only its id and optional context, while editing the provider replaces its name, base URL, and optionally its key. Creating a provider also supplies its first model because Hermes requires one. Kana does not edit Hermes configuration itself: `lib/server/hermes-model-admin.ts` calls Hermes's own dashboard API (`GET`/`POST /api/providers/custom-endpoints`) through `app/api/hermes/models`, which requires the Kana session cookie and a bounded 32 KiB JSON body.
+
+The call uses credentials the Kana server already holds. Locally that is the managed gateway's `X-Hermes-Session-Token` from server memory, so a Hermes Kana adopted without a readable token cannot serve this panel; remotely it is the dashboard cookie owned by `remote-hermes-auth.ts`. The browser receives neither. Provider records are reduced to id, name, base URL, model ids, key presence, discovery flag, and source (Hermes's `providers` mapping or its synthetic `direct-config` entry); `api_key` and `api_key_preview` are stripped. A key the user types travels once in the POST body and Hermes writes it to its own `.env` behind `key_env`; Kana keeps it only for that request, never stores or logs it, and never returns it.
+
+Input is validated before use: names, model ids, keys, and context length are bounded; base URLs must use http or https and carry no credentials, query, or fragment; provider ids must be safe slugs. A base URL whose path ends in `/chat/completions` is cut back to the API root before it reaches Hermes, because the OpenAI client appends that path itself. Updating an existing provider keeps its id while replacing the supplied name and base URL, merges the model list instead of dropping it, and omits an empty key so the saved credential survives. `make_default` is always false, so saving never switches the model Hermes or Kana uses. After a save Kana invalidates its catalog, re-reads `model.options`, and shows the result; the user still decides when to apply a model.
+
+The sanitized provider list is cached in server memory for 15 seconds per local gateway port or remote runtime identity. A successful create or update clears that cache, so the manager's follow-up read and any later list show the change immediately; an external Hermes edit appears within the TTL. The cache holds no credentials.
+
+Hermes's API adds and merges model IDs; it has no rename or removal operation. Kana therefore never presents a model ID as renamed. **Add as new** on a model row opens the add form with that ID prefilled and a warning, and saving adds the new ID beside the original. Removing an old ID is a Hermes configuration edit outside this panel.
+
+Hermes's dashboard API manages the modern `providers:` mapping. It also shows a synthetic entry for `model.provider: custom` (source `direct-config`), whose key lives in the `model` block and is not readable through this API; saving that entry without a new key would shadow the working credential with an empty one, so Kana requires the key to be entered again for that case. Named entries in the legacy `custom_providers:` list do not appear in this API at all. They remain in `model.options` and stay usable, but adding a model to one is a Hermes configuration edit, not something this panel does; create a provider in the panel, or edit that legacy list where it lives.
 
 ## Reconnection
 

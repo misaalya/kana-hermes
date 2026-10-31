@@ -75,6 +75,7 @@ mock agent mode.
 | `POST /api/hermes/rpc` | One allow-listed JSON-RPC request forwarded over the shared socket; the response returns correlated. `config.set` accepts only a session-scoped `model` value, the owner's prompt guardrail may refuse a turn here before it reaches the bridge, and the owner's rules are placed in Kana's note on every `prompt.submit`. |
 | `POST /api/hermes/server-request` | One JSON-RPC response to an open Hermes 0.22+ server-to-client request (clarify, approval, sudo, secret); only an id the gateway asked about is accepted. |
 | `POST /api/hermes/attachments` | One base64 chat attachment, validated then forwarded as Hermes `file.attach`; this method is not on the RPC allow-list. |
+| `GET`/`POST /api/hermes/models` | Hermes's own custom-endpoint API: list safe provider facts, save a model on an existing custom endpoint or a new OpenAI-compatible provider, or replace a provider's name, base URL, and key. The server holds the gateway token or dashboard cookie, validates and bounds the body, normalizes a pasted `/chat/completions` suffix, and strips every key and key preview before returning. |
 | `GET /api/kana/sessions` | `session.list` filtered server-side to `source: "kana"`, i.e. Kana's cross-browser conversation directory. |
 | `GET`/`PUT /api/kana/activities` | The per-turn activity snapshots read from and written to `activities.db`. |
 | `GET`/`PUT /api/kana/model-defaults` | The installation's default model per Hermes runtime, stored in `appstate.db`; every browser of this user hydrates the same map before its first session. |
@@ -120,8 +121,8 @@ State and services:
   `avatar-service.ts`, `preferences-service.ts`, and `workspace-setup.ts`
   (first-run wizard, connection gate, auto-connect).
 - `lib/runtime/` holds the small browser clients for Kana's own routes
-  (`setup-client.ts`, `hermes-control-client.ts`, `auth-client.ts`,
-  `update-client.ts`, `voice-*`).
+  (`setup-client.ts`, `hermes-control-client.ts`, `hermes-models-client.ts`,
+  `auth-client.ts`, `update-client.ts`, `voice-*`).
 
 Agent contract:
 

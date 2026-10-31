@@ -7,9 +7,8 @@ import {
   type VoiceEngineSnapshot,
 } from "@/lib/runtime/voice-engine-client";
 import { getCopy, type UiLocale } from "@/lib/ui/copy";
+import { DownloadIcon, PauseIcon, TrashIcon } from "./icons";
 import {
-  settingsButton,
-  settingsButtonDanger,
   SettingsGroup,
   SettingsRow,
   SettingsRows,
@@ -32,7 +31,6 @@ export function VoiceEnginePanel({ locale }: { locale: UiLocale }) {
   const [snapshot, setSnapshot] = useState<VoiceEngineSnapshot | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [confirmRemove, setConfirmRemove] = useState(false);
   const install = snapshot?.install ?? null;
 
   const refresh = useCallback(async () => {
@@ -70,7 +68,6 @@ export function VoiceEnginePanel({ locale }: { locale: UiLocale }) {
   const run = async (action: "install" | "cancel" | "remove") => {
     setBusy(true);
     setNotice(null);
-    setConfirmRemove(false);
     try {
       setSnapshot(await controlVoiceEngine(action));
     } catch (error) {
@@ -79,6 +76,10 @@ export function VoiceEnginePanel({ locale }: { locale: UiLocale }) {
     } finally {
       setBusy(false);
     }
+  };
+
+  const requestRemove = () => {
+    if (window.confirm(copy.confirmRemove)) void run("remove");
   };
 
   if (snapshot && !install) return null;
@@ -140,15 +141,50 @@ export function VoiceEnginePanel({ locale }: { locale: UiLocale }) {
               <Skeleton className="h-3.5 w-24" />
             </SettingsRow>
           </SettingsRows>
-          <div className="mt-3 flex flex-wrap justify-end gap-2 max-sm:justify-start" aria-hidden="true">
-            <Skeleton className="h-9 w-24 rounded-full" />
-          </div>
         </>
       ) : snapshot ? (
         <SettingsRows>
           <SettingsRow label={copy.modelLabel} inline>
-            <span className="text-xs font-semibold text-ink-dim">
-              {snapshot.provider?.model ?? "Irodori-TTS"}
+            <span className="flex items-center gap-1.5">
+              {install?.state === "installing" ? (
+                <button
+                  type="button"
+                  className="kana-focus grid size-8 shrink-0 place-items-center rounded-full text-muted opacity-70 transition-colors hover:bg-surface-strong disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={busy}
+                  onClick={() => void run("cancel")}
+                  aria-label={copy.cancel}
+                  title={copy.cancel}
+                >
+                  <PauseIcon className="size-4" />
+                </button>
+              ) : null}
+              {showFacts ? (
+                <button
+                  type="button"
+                  className="kana-focus grid size-8 shrink-0 place-items-center rounded-full text-success transition-colors hover:bg-surface-strong disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={busy || lowDisk}
+                  onClick={() => void run("install")}
+                  aria-label={partial ? copy.resume : copy.install}
+                  title={partial ? copy.resume : copy.install}
+                >
+                  <DownloadIcon className="size-4" />
+                </button>
+              ) : null}
+              {removable ? (
+                <button
+                  type="button"
+                  className="kana-focus grid size-8 shrink-0 place-items-center rounded-full text-danger transition-colors hover:bg-surface-strong disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={busy}
+                  onClick={requestRemove}
+                  aria-label={copy.remove}
+                  title={copy.remove}
+                >
+                  <TrashIcon className="size-4" />
+                </button>
+              ) : null}
+              <span className="text-xs font-semibold text-ink-dim">
+                {snapshot.provider?.model ?? "Irodori-TTS"}
+              </span>
             </span>
           </SettingsRow>
           {showFacts && install && install.downloadBytes > 0 ? (
@@ -199,30 +235,6 @@ export function VoiceEnginePanel({ locale }: { locale: UiLocale }) {
       ) : null}
       {message ? (
         <p role="status" className="mt-2 text-[11.5px] font-semibold text-danger">{message}</p>
-      ) : null}
-      {install?.state === "installing" || showFacts || removable ? (
-        <div className="mt-3 flex flex-wrap justify-end gap-2 max-sm:justify-start">
-          {install?.state === "installing" ? (
-            <button type="button" className={settingsButton} disabled={busy} onClick={() => void run("cancel")}>
-              {copy.cancel}
-            </button>
-          ) : null}
-          {showFacts ? (
-            <button type="button" className={settingsButton} disabled={busy || lowDisk} onClick={() => void run("install")}>
-              {partial ? copy.resume : copy.install}
-            </button>
-          ) : null}
-          {removable ? (
-            <button
-              type="button"
-              className={settingsButtonDanger}
-              disabled={busy}
-              onClick={() => (confirmRemove ? void run("remove") : setConfirmRemove(true))}
-            >
-              {confirmRemove ? copy.confirmRemove : copy.remove}
-            </button>
-          ) : null}
-        </div>
       ) : null}
     </SettingsGroup>
   );

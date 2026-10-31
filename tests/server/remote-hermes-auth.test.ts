@@ -10,7 +10,8 @@ import { kanaUserConfigPath } from "@/lib/server/user-config";
 
 const root = mkdtempSync(path.join(tmpdir(), "kana-remote-auth-"));
 const previousDataDir = process.env.KANA_DATA_DIR;
-const requests = { logins: 0, tickets: 0, rejectedTickets: 0 };
+const requests = { logins: 0, tickets: 0, rejectedTickets: 0, dashboardPosts: 0 };
+let lastDashboardBody: Record<string, unknown> | null = null;
 let server: ReturnType<typeof createServer>;
 let port = 0;
 let expireNextTicket = false;
@@ -49,6 +50,19 @@ before(async () => {
       }
       response.writeHead(200, { "content-type": "application/json" });
       response.end(JSON.stringify({ hostname: "instabox-box", cpu_percent: 12 }));
+      return;
+    }
+    if (request.url === "/api/providers/custom-endpoints" && request.method === "POST") {
+      const cookie = request.headers.cookie ?? "";
+      if (!cookie.includes("hermes_session_a=one")) {
+        response.writeHead(401, { "content-type": "application/json" });
+        response.end(JSON.stringify({ detail: "Unauthorized" }));
+        return;
+      }
+      requests.dashboardPosts += 1;
+      lastDashboardBody = JSON.parse(await body(request)) as Record<string, unknown>;
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ ok: true, endpoints: [] }));
       return;
     }
     if (request.url === "/slow") {
@@ -118,6 +132,19 @@ describe("remote Hermes dashboard auth", () => {
     );
     assert.equal(stats.hostname, "instabox-box");
     assert.equal(requests.logins, 1, "dashboard reads reuse the same cookie session");
+  });
+
+  it("sends dashboard writes with the server-held cookie and body", async () => {
+    const connection = remoteHermesConnection();
+    assert.ok(connection);
+    const result = await remoteDashboardJson<{ ok: boolean }>(
+      connection,
+      "/api/providers/custom-endpoints",
+      { method: "POST", body: { model: "m", api_key: "sk-remote-only" } },
+    );
+    assert.equal(result.ok, true);
+    assert.equal(requests.dashboardPosts, 1);
+    assert.deepEqual(lastDashboardBody, { model: "m", api_key: "sk-remote-only" });
   });
 
   it("logs in again when the cookie session is rejected", async () => {

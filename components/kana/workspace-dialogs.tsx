@@ -54,6 +54,8 @@ function SettingsHost() {
       agentModelCatalog={modelCatalog}
       onListAgentModels={actions.listAgentModels}
       onSelectAgentModel={actions.selectAgentModel}
+      onListHermesModelProviders={actions.listHermesModelProviders}
+      onAddHermesModel={actions.addHermesModel}
       onPreviewAvatarEmotion={actions.previewAvatarEmotion}
       onPreviewAvatarTalking={actions.previewAvatarTalking}
       avatarPortraits={avatarPortraits}

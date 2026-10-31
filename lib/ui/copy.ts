@@ -468,6 +468,56 @@ export type Copy = {
     modelInUse: string;
     modelUse: string;
     modelRefreshList: string;
+    modelAddTitle: string;
+    modelAddDescription: string;
+    modelAddExistingWarning: string;
+    modelAddName: string;
+    modelAddBaseUrl: string;
+    modelAddBaseUrlHint: string;
+    modelAddApiKey: string;
+    modelAddApiKeyHint: string;
+    modelAddModelId: string;
+    modelAddContextLength: string;
+    modelAddContextHint: string;
+    modelAddContextInvalid: string;
+    modelAddDirectConfigHint: string;
+    modelAddDirectConfigRequired: string;
+    modelAddSubmit: string;
+    modelAddSaving: string;
+    modelAddCancel: string;
+    modelAddSuccess: string;
+    modelAddFailed: string;
+    modelAddProvidersFailed: string;
+    modelAddRequired: string;
+    modelManagerDescription: string;
+    modelManagerBack: string;
+    modelProvidersEntryDescription: string;
+    modelProvidersManage: string;
+    modelProviderKeySaved: string;
+    modelProviderNoKey: string;
+    modelProviderDirect: string;
+    modelProviderModels: string;
+    modelProviderModelCount(count: number): string;
+    modelProviderModelsEditHint: string;
+    modelProviderNoModels: string;
+    modelProviderAdd: string;
+    modelProviderEdit: string;
+    modelProviderSaveModel: string;
+    modelProviderAddAsNew: string;
+    modelProviderAddModel: string;
+    modelProviderEmpty: string;
+    modelProviderNewTitle: string;
+    modelProviderNewDescription: string;
+    modelProviderConnectionSection: string;
+    modelProviderFirstModelSection: string;
+    modelProviderFirstModel: string;
+    modelProviderApiKeyHint: string;
+    modelProviderCreate: string;
+    modelProviderEditTitle: string;
+    modelProviderEditDescription: string;
+    modelProviderSave: string;
+    modelProviderRequired: string;
+    modelProviderFailed: string;
     hostTitle: string;
     hostLoading: string;
     hostFailed: string;
@@ -491,6 +541,7 @@ export type Copy = {
     advancedMode: string;
     advancedModeLocal: string;
     advancedModeDeployment: string;
+    advancedModeRemote: string;
     advancedConfigError: string;
     checkingAccess: string;
     currentPassword: string;
@@ -956,6 +1007,7 @@ const id: Copy = {
       voice: { label: "Suara" },
       avatar: { label: "Avatar" },
       model: { label: "Model AI" },
+      providers: { label: "Provider AI" },
       system: { label: "Koneksi" },
       privacy: { label: "Privasi" },
     },
@@ -1061,6 +1113,56 @@ const id: Copy = {
     modelInUse: "Sedang digunakan",
     modelUse: "Gunakan model ini",
     modelRefreshList: "Segarkan",
+    modelAddTitle: "Tambah model",
+    modelAddDescription: "Tambahkan model lain ke provider ini. Nama, base URL, dan kuncinya tidak berubah.",
+    modelAddExistingWarning: "Hermes tidak mendukung rename ID model. ID asli tetap tersedia; menyimpan di sini menambahkan ID baru sebagai model lain.",
+    modelAddName: "Nama provider",
+    modelAddBaseUrl: "Base URL",
+    modelAddBaseUrlHint: "Isi alamat API saja, misalnya https://api.example.com/v1. Akhiran /chat/completions dibuang otomatis.",
+    modelAddApiKey: "API key",
+    modelAddApiKeyHint: "Biarkan kosong untuk endpoint lokal atau untuk mempertahankan kunci yang sudah ada.",
+    modelAddModelId: "ID model",
+    modelAddContextLength: "Context length",
+    modelAddContextHint: "Opsional, dalam token.",
+    modelAddContextInvalid: "Context length harus bilangan bulat minimal 1 token.",
+    modelAddDirectConfigHint: "Endpoint ini dikonfigurasi langsung di Hermes. Kana tidak dapat membaca kuncinya, jadi masukkan ulang API key agar endpoint tetap terautentikasi.",
+    modelAddDirectConfigRequired: "Masukkan API key endpoint ini.",
+    modelAddSubmit: "Simpan model",
+    modelAddSaving: "Menyimpan…",
+    modelAddCancel: "Batal",
+    modelAddSuccess: "Tersimpan di Hermes.",
+    modelAddFailed: "Model tidak dapat disimpan.",
+    modelAddProvidersFailed: "Provider custom tidak dapat dimuat dari Hermes.",
+    modelAddRequired: "ID model wajib diisi.",
+    modelManagerDescription: "Satu provider adalah satu Base URL dan kunci. Pilih provider untuk mengelola modelnya.",
+    modelManagerBack: "Kembali",
+    modelProvidersEntryDescription: "Endpoint dan model yang tersedia",
+    modelProvidersManage: "Kelola",
+    modelProviderKeySaved: "API key aktif",
+    modelProviderNoKey: "API key belum diisi",
+    modelProviderDirect: "Langsung",
+    modelProviderModels: "Model",
+    modelProviderModelCount: (count) => `${count} model`,
+    modelProviderModelsEditHint: "ID model diedit di halaman provider; formulir ini hanya mengubah nama, base URL, dan kunci.",
+    modelProviderNoModels: "Belum ada model.",
+    modelProviderAdd: "Provider baru",
+    modelProviderEdit: "Ubah",
+    modelProviderSaveModel: "Simpan",
+    modelProviderAddAsNew: "Tambah baru",
+    modelProviderAddModel: "Tambah model",
+    modelProviderEmpty: "Belum ada provider custom.",
+    modelProviderNewTitle: "Provider baru",
+    modelProviderNewDescription: "Satu provider berisi satu Base URL dan kunci. Isi model pertamanya sekarang; model lain bisa ditambahkan nanti.",
+    modelProviderConnectionSection: "Koneksi",
+    modelProviderFirstModelSection: "Model",
+    modelProviderFirstModel: "ID model pertama",
+    modelProviderApiKeyHint: "Opsional. Biarkan kosong untuk endpoint yang tidak memerlukan kunci.",
+    modelProviderCreate: "Buat provider",
+    modelProviderEditTitle: "Ubah provider",
+    modelProviderEditDescription: "Perubahan berlaku untuk semua model di provider ini. Biarkan API key kosong untuk mempertahankan kunci yang ada.",
+    modelProviderSave: "Simpan provider",
+    modelProviderRequired: "Nama provider, Base URL, dan ID model pertama wajib diisi.",
+    modelProviderFailed: "Provider tidak dapat disimpan.",
     hostTitle: "Mesin",
     hostLoading: "Membaca metrik mesin…",
     hostFailed: "Metrik mesin tidak tersedia.",
@@ -1084,6 +1186,7 @@ const id: Copy = {
     advancedMode: "Mode instalasi",
     advancedModeLocal: "Lokal",
     advancedModeDeployment: "Deployment",
+    advancedModeRemote: "Remote",
     advancedConfigError: "File ini tidak valid, jadi Kana memakai pengaturan bawaan:",
     checkingAccess: "Memeriksa perlindungan akses…",
     currentPassword: "Kata sandi saat ini",
@@ -1162,9 +1265,9 @@ const id: Copy = {
     device: (int8) => (int8 ? "CPU int8 (AVX-512 VNNI)" : "CPU fp32"),
     install: "Unduh mesin suara",
     resume: "Lanjutkan unduhan",
-    cancel: "Batalkan",
+    cancel: "Jeda unduhan",
     remove: "Hapus",
-    confirmRemove: "Yakin hapus?",
+    confirmRemove: "Hapus mesin suara dan modelnya dari disk ini?",
     refresh: "Perbarui",
     failedCheck: "Status mesin suara tidak dapat diperiksa.",
   },
@@ -1582,6 +1685,7 @@ const en: Copy = {
       voice: { label: "Voice" },
       avatar: { label: "Avatar" },
       model: { label: "AI model" },
+      providers: { label: "AI providers" },
       system: { label: "Connection" },
       privacy: { label: "Privacy" },
     },
@@ -1687,6 +1791,56 @@ const en: Copy = {
     modelInUse: "In use",
     modelUse: "Use this model",
     modelRefreshList: "Refresh",
+    modelAddTitle: "Add a model",
+    modelAddDescription: "Add another model to this provider. Its name, base URL, and key stay the same.",
+    modelAddExistingWarning: "Hermes cannot rename a model ID. The original stays available; saving here adds the new ID as another model.",
+    modelAddName: "Provider name",
+    modelAddBaseUrl: "Base URL",
+    modelAddBaseUrlHint: "Use the API root, such as https://api.example.com/v1. A trailing /chat/completions is removed automatically.",
+    modelAddApiKey: "API key",
+    modelAddApiKeyHint: "Leave empty for a local endpoint or to keep the existing key.",
+    modelAddModelId: "Model ID",
+    modelAddContextLength: "Context length",
+    modelAddContextHint: "Optional, in tokens.",
+    modelAddContextInvalid: "Context length must be a whole number of at least 1 token.",
+    modelAddDirectConfigHint: "This endpoint is configured directly in Hermes. Kana cannot read its key, so re-enter the API key to keep the endpoint authenticated.",
+    modelAddDirectConfigRequired: "Enter this endpoint's API key.",
+    modelAddSubmit: "Save model",
+    modelAddSaving: "Saving…",
+    modelAddCancel: "Cancel",
+    modelAddSuccess: "Saved to Hermes.",
+    modelAddFailed: "Could not save the model.",
+    modelAddProvidersFailed: "Could not load custom providers from Hermes.",
+    modelAddRequired: "Model ID is required.",
+    modelManagerDescription: "A provider is one base URL and key. Choose a provider to manage its models.",
+    modelManagerBack: "Back",
+    modelProvidersEntryDescription: "Endpoints and their models",
+    modelProvidersManage: "Manage",
+    modelProviderKeySaved: "API key configured",
+    modelProviderNoKey: "No API key",
+    modelProviderDirect: "Direct",
+    modelProviderModels: "Models",
+    modelProviderModelCount: (count) => `${count} ${count === 1 ? "model" : "models"}`,
+    modelProviderModelsEditHint: "Model IDs are edited on the provider page; this form changes only its name, base URL, and key.",
+    modelProviderNoModels: "No models yet.",
+    modelProviderAdd: "New provider",
+    modelProviderEdit: "Edit",
+    modelProviderSaveModel: "Save",
+    modelProviderAddAsNew: "Add as new",
+    modelProviderAddModel: "Add model",
+    modelProviderEmpty: "No custom providers yet.",
+    modelProviderNewTitle: "New provider",
+    modelProviderNewDescription: "A provider has one base URL and key. Enter its first model now; more models can follow.",
+    modelProviderConnectionSection: "Connection",
+    modelProviderFirstModelSection: "Model",
+    modelProviderFirstModel: "First model ID",
+    modelProviderApiKeyHint: "Optional. Leave empty for an endpoint that needs no key.",
+    modelProviderCreate: "Create provider",
+    modelProviderEditTitle: "Edit provider",
+    modelProviderEditDescription: "Changes apply to every model under this provider. Leave the API key empty to keep the saved key.",
+    modelProviderSave: "Save provider",
+    modelProviderRequired: "Provider name, base URL, and first model ID are required.",
+    modelProviderFailed: "Could not save the provider.",
     hostTitle: "Host",
     hostLoading: "Reading host metrics…",
     hostFailed: "Host metrics are unavailable.",
@@ -1710,6 +1864,7 @@ const en: Copy = {
     advancedMode: "Installation mode",
     advancedModeLocal: "Local",
     advancedModeDeployment: "Deployment",
+    advancedModeRemote: "Remote",
     advancedConfigError: "This file is invalid, so Kana is using defaults:",
     checkingAccess: "Checking access protection…",
     currentPassword: "Current password",
@@ -1788,9 +1943,9 @@ const en: Copy = {
     device: (int8) => (int8 ? "CPU int8 (AVX-512 VNNI)" : "CPU fp32"),
     install: "Download voice engine",
     resume: "Resume download",
-    cancel: "Cancel",
+    cancel: "Pause download",
     remove: "Remove",
-    confirmRemove: "Remove it?",
+    confirmRemove: "Remove the voice engine and its model from this disk?",
     refresh: "Refresh",
     failedCheck: "Could not check the voice engine.",
   },

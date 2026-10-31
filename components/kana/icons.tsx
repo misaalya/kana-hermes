@@ -125,12 +125,47 @@ export function PlusIcon(props: IconProps) {
   return <Icon {...props}><path d="M12 5v14M5 12h14" /></Icon>;
 }
 
+export function EditIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4Z" />
+      <path d="m13.5 6.5 4 4" />
+    </Icon>
+  );
+}
+
+export function SaveIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M5 4h11l3 3v13H5V4Z" />
+      <path d="M8 4v5h7V4M8 20v-6h8v6" />
+    </Icon>
+  );
+}
+
+export function AlertIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 3 2.5 20h19L12 3Z" />
+      <path d="M12 9v5M12 17.5v.5" />
+    </Icon>
+  );
+}
+
 export function MicrophoneIcon(props: IconProps) {
   return <Icon {...props}><rect x="9" y="2" width="6" height="12" rx="3" /><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8" /></Icon>;
 }
 
 export function DownloadIcon(props: IconProps) {
   return <Icon {...props}><path d="M12 4v11m-5-5 5 5 5-5M5 20h14" /></Icon>;
+}
+
+export function PauseIcon(props: IconProps) {
+  return <Icon {...props}><path d="M9 5v14M15 5v14" /></Icon>;
+}
+
+export function TrashIcon(props: IconProps) {
+  return <Icon {...props}><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v6M14 11v6" /></Icon>;
 }
 
 export function FileIcon(props: IconProps) {
@@ -271,6 +306,15 @@ export function ServerIcon(props: IconProps) {
       <circle cx="7" cy="6.9" r="1.6" />
       <circle cx="7" cy="17.1" r="1.6" />
       <path d="M11.5 6.9h6M11.5 17.1h6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+    </DuoIcon>
+  );
+}
+
+export function PlugIcon(props: IconProps) {
+  return (
+    <DuoIcon {...props}>
+      <rect x="5" y="9" width="14" height="8" rx="4" opacity={SOFT} />
+      <path d="M8 3v6M16 3v6M12 17v4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
     </DuoIcon>
   );
 }

@@ -954,29 +954,34 @@ test("keeps the avatar chat tray and gives focus mode a plain reading column", a
 
   await page.getByRole("button", { name: "Open settings" }).click();
   const dialog = page.getByRole("dialog");
-  const storedComposerDelay = () =>
-    page.evaluate(() => {
-      const raw = localStorage.getItem("kana.preferences.v6");
-      return raw ? JSON.parse(raw).composerCollapseDelaySeconds : null;
-    });
-  // The idle assertions below expect the bar to narrow at once; its delayed
-  // collapse has its own check further down. The delay is a stepped choice,
-  // never a free number.
   const delaySlider = dialog.getByRole("slider", { name: "Chatbar delay", exact: true });
-  await expect(delaySlider).toHaveValue("30");
-  await expect(delaySlider).toHaveAttribute("aria-valuetext", "30 s");
-  // The ruler takes pointer input anywhere, not just on the raised thumb.
-  const delayTrack = await delaySlider.boundingBox();
-  if (!delayTrack) throw new Error("The chatbar delay slider is not visible.");
-  await page.mouse.click(
-    delayTrack.x + delayTrack.width / 2,
-    delayTrack.y + delayTrack.height / 2,
-  );
-  await expect(delaySlider).toHaveValue(/^(55|60|65)$/);
-  await delaySlider.focus();
-  await page.keyboard.press("Home");
-  await expect(delaySlider).toHaveAttribute("aria-valuetext", "Off");
-  await expect.poll(storedComposerDelay).toBe(0);
+  if (desktop) {
+    const storedComposerDelay = () =>
+      page.evaluate(() => {
+        const raw = localStorage.getItem("kana.preferences.v6");
+        return raw ? JSON.parse(raw).composerCollapseDelaySeconds : null;
+      });
+    // The idle assertions below expect the bar to narrow at once; its delayed
+    // collapse has its own check further down. The delay is a stepped choice,
+    // never a free number.
+    await expect(delaySlider).toHaveValue("30");
+    await expect(delaySlider).toHaveAttribute("aria-valuetext", "30 s");
+    // The ruler takes pointer input anywhere, not just on the raised thumb.
+    const delayTrack = await delaySlider.boundingBox();
+    if (!delayTrack) throw new Error("The chatbar delay slider is not visible.");
+    await page.mouse.click(
+      delayTrack.x + delayTrack.width / 2,
+      delayTrack.y + delayTrack.height / 2,
+    );
+    await expect(delaySlider).toHaveValue(/^(55|60|65)$/);
+    await delaySlider.focus();
+    await page.keyboard.press("Home");
+    await expect(delaySlider).toHaveAttribute("aria-valuetext", "Off");
+    await expect.poll(storedComposerDelay).toBe(0);
+  } else {
+    // The delay only exists in desktop focus mode; mobile Settings omits it.
+    await expect(delaySlider).toHaveCount(0);
+  }
   await dialog.getByRole("button", { name: /^Avatar(?: Avatar and stage)?$/ }).click();
   await dialog.getByRole("switch", { name: "Show avatar" }).click();
   await dialog.getByRole("button", { name: "Close settings" }).click();
@@ -1194,9 +1199,9 @@ test("keeps the avatar chat tray and gives focus mode a plain reading column", a
       .poll(async () => (await bar.boundingBox())?.height ?? Infinity)
       .toBeLessThanOrEqual(56);
   } else {
-    // Phones keep today's blue band and bubble with the avatar off, too.
+    // Phones keep the blue band, while replies use the neutral depth fill.
     expect(focus.shell?.background).toBe(focus.frame);
-    expect(focus.assistant?.background).toBe(focus.bubble);
+    expect(focus.assistant?.background).toBe(focus.depth);
     expect(focus.feed?.background).toBe("rgba(0, 0, 0, 0)");
     expect(focus.field?.borderTop).toBe("0px");
     expect(focus.field?.background).toBe("rgba(0, 0, 0, 0)");
@@ -1718,6 +1723,19 @@ test("the config guide opens from Settings and follows this installation", async
   await expect(page).toHaveTitle("Configuration guide · Kana");
   // This installation's own path, never a placeholder (and never the contents).
   await expect(page.getByTestId("config-guide-path")).toHaveText(/^\/.+\/config\.json$/);
+
+  // The human page stays human; this one action copies clean Markdown for an LLM.
+  const copyForLlm = page.getByRole("button", { name: /Copy for LLM/ });
+  await expect(copyForLlm).toBeVisible();
+  await copyForLlm.click();
+  await expect(page.getByRole("button", { name: "Copied for LLM" })).toBeVisible();
+  const llmGuide = await page.evaluate(() => navigator.clipboard.readText());
+  expect(llmGuide).toContain("> Kana configuration guide for an LLM.");
+  expect(llmGuide).toContain("# Configuration guide");
+  expect(llmGuide).toContain("## Upgrading from older builds");
+  expect(llmGuide).toContain("## If something goes wrong");
+  expect(llmGuide).not.toContain("{#");
+  expect(llmGuide).not.toContain("kana-config-path");
 
   const contents = page.getByRole("navigation", { name: "Contents" });
   await contents.getByRole("link", { name: "Pollinations" }).click();
@@ -2279,6 +2297,30 @@ test("keeps short settings rows on one line on phones", async ({ page }) => {
   expect(valueBox?.x ?? 0).toBeGreaterThan(modeBox?.x ?? 0);
 });
 
+test("shows Remote installation mode when Hermes is remote", async ({ page }) => {
+  await page.route("**/api/kana/config", (route) =>
+    route.fulfill({
+      json: {
+        path: "/tmp/kana/config.json",
+        exists: true,
+        deploymentMode: "local",
+        deploymentModeSource: "default",
+        hermesMode: "remote",
+        configError: null,
+        guardrail: { state: "disabled", rules: 0, reason: "guardrails.apiKey is empty" },
+      },
+    }),
+  );
+  await page.goto("/");
+  await page.getByRole("button", { name: "Open settings" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: /^Connection/ }).click();
+  const modeLabel = dialog.getByText("Installation mode", { exact: true });
+  await modeLabel.scrollIntoViewIfNeeded();
+  await expect(modeLabel).toBeVisible();
+  await expect(dialog.getByText("Remote", { exact: true })).toBeVisible();
+});
+
 test("shows the workspace update notice and stops Kana only after Copy & Shutdown", async ({
   page,
   context,
@@ -2721,6 +2763,226 @@ test("loads the installation's default model in a browser with no local copy", a
   await expect(chooser.getByRole("option", { name: /deepseek\/deepseek-v4/ })).toContainText(
     "Default",
   );
+});
+
+test("adds another model to one provider without asking for its key again", async ({ page }) => {
+  test.setTimeout(60_000);
+  const posts: Array<Record<string, unknown>> = [];  let providers = [{
+    id: "acme",
+    name: "Acme",
+    baseUrl: "https://api.example.com/v1",
+    models: ["alpha"],
+    hasApiKey: true,
+    discoverModels: false,
+    source: "providers",
+  }];
+  await page.route("**/api/hermes/models**", async (route) => {
+    if (route.request().method() === "POST") {
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      posts.push(body);
+      providers = providers.map((provider) => provider.id === body.providerId
+        ? { ...provider, models: [...new Set([...provider.models, String(body.model)])] }
+        : provider);
+      return route.fulfill({
+        json: { ok: true, provider: providers.find((provider) => provider.id === body.providerId) },
+      });
+    }
+    return route.fulfill({ json: { providers } });
+  });
+
+  await page.getByRole("button", { name: "Open settings" }).click();
+  const settings = page.getByRole("dialog");
+  await settings.getByRole("button", { name: /^AI model/ }).click();
+  const session = settings.getByRole("region", { name: "AI model", exact: true });
+  await session.getByRole("button", { name: /AI providers/ }).click();
+
+  const manager = settings.getByRole("region", { name: "AI providers" });
+  await expect(manager.getByText(/Choose a provider to manage its models/)).toBeVisible();
+  await manager.getByRole("button", { name: "Acme, 1 model, API key configured" }).click();
+  await expect(manager.getByLabel("Model ID: alpha")).toHaveValue("alpha");
+  await expect(manager.getByText("API key configured")).toBeVisible();
+  await manager.getByRole("button", { name: "Add model", exact: true }).click();
+
+  const form = manager.getByRole("form", { name: "Add a model" });
+  await expect(form).toBeVisible();
+  // Adding a model reuses the provider: no name, URL, or key fields.
+  await expect(form.getByLabel("Provider name")).toHaveCount(0);
+  await expect(form.getByLabel("Base URL")).toHaveCount(0);
+  await expect(form.getByLabel("API key")).toHaveCount(0);
+  await form.getByLabel("Model ID").fill("beta");
+  await form.getByLabel("Context length").fill("8192");
+  await form.getByRole("button", { name: "Save model", exact: true }).click();
+
+  await expect.poll(() => posts).toEqual([{
+    providerId: "acme",
+    model: "beta",
+    contextLength: 8192,
+  }]);
+  await expect(manager.getByText("Saved to Hermes.")).toBeVisible();
+  await expect(form).toHaveCount(0);
+  await expect(manager.getByLabel("Model ID: beta")).toHaveValue("beta");
+  await expect(manager.getByLabel("API key")).toHaveCount(0);
+});
+
+test("adds a corrected model ID as a new model and warns that rename is unsupported", async ({ page }) => {
+  test.setTimeout(60_000);
+  const posts: Array<Record<string, unknown>> = [];
+  let providers = [{
+    id: "acme",
+    name: "Acme",
+    baseUrl: "https://api.example.com/v1",
+    models: ["alpha"],
+    hasApiKey: true,
+    discoverModels: false,
+    source: "providers",
+  }];
+  await page.route("**/api/hermes/models**", async (route) => {
+    if (route.request().method() === "POST") {
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      posts.push(body);
+      providers = providers.map((provider) => provider.id === body.providerId
+        ? { ...provider, models: [...new Set([...provider.models, String(body.model)])] }
+        : provider);
+      return route.fulfill({
+        json: { ok: true, provider: providers.find((provider) => provider.id === body.providerId) },
+      });
+    }
+    return route.fulfill({ json: { providers } });
+  });
+
+  await page.getByRole("button", { name: "Open settings" }).click();
+  const settings = page.getByRole("dialog");
+  await settings.getByRole("button", { name: /^AI model/ }).click();
+  await settings.getByRole("region", { name: "AI model", exact: true })
+    .getByRole("button", { name: /AI providers/ }).click();
+  const manager = settings.getByRole("region", { name: "AI providers" });
+  await manager.getByRole("button", { name: "Acme, 1 model, API key configured" }).click();
+
+  // The model ID is a pill input; Save turns a changed ID into a warning
+  // before anything is written, because Hermes cannot rename a model.
+  const modelId = manager.getByLabel("Model ID: alpha");
+  await modelId.fill("gamma");
+  await manager.getByRole("button", { name: "Save: alpha" }).click();
+  await expect(manager.getByText(/cannot rename a model ID/)).toBeVisible();
+  await expect.poll(() => posts).toEqual([]);
+  await manager.getByRole("button", { name: "Add as new", exact: true }).click();
+
+  await expect.poll(() => posts).toEqual([{ providerId: "acme", model: "gamma" }]);
+  await expect(manager.getByText("Saved to Hermes.")).toBeVisible();
+  await expect(manager.getByLabel("Model ID: alpha")).toHaveValue("alpha");
+  await expect(manager.getByLabel("Model ID: gamma")).toHaveValue("gamma");
+});
+
+test("edits an existing provider's name and base URL without replacing its key", async ({ page }) => {
+  test.setTimeout(60_000);
+  const posts: Array<Record<string, unknown>> = [];
+  let providers = [{
+    id: "river-ai",
+    name: "river ai",
+    baseUrl: "https://api.river.ai/v1/chat/completions",
+    models: ["deepseek-ai/DeepSeek-V4.1-Flash-1017"],
+    hasApiKey: true,
+    discoverModels: false,
+    source: "providers",
+  }];
+  await page.route("**/api/hermes/models**", async (route) => {
+    if (route.request().method() === "POST") {
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      posts.push(body);
+      providers = providers.map((provider) => provider.id === body.providerId
+        ? { ...provider, name: String(body.name), baseUrl: String(body.baseUrl) }
+        : provider);
+      return route.fulfill({
+        json: { ok: true, provider: providers.find((provider) => provider.id === body.providerId) },
+      });
+    }
+    return route.fulfill({ json: { providers } });
+  });
+
+  await page.getByRole("button", { name: "Open settings" }).click();
+  const settings = page.getByRole("dialog");
+  await settings.getByRole("button", { name: /^AI model/ }).click();
+  const session = settings.getByRole("region", { name: "AI model", exact: true });
+  await session.getByRole("button", { name: /AI providers/ }).click();
+
+  const manager = settings.getByRole("region", { name: "AI providers" });
+  await manager.getByRole("button", { name: "river ai, 1 model, API key configured" }).click();
+  await manager.getByRole("button", { name: "Edit", exact: true }).click();
+  const form = manager.getByRole("form", { name: "Edit provider" });
+  await expect(form).toBeVisible();
+  await expect(form.getByLabel("Provider name")).toHaveValue("river ai");
+  await expect(form.getByLabel("Base URL")).toHaveValue("https://api.river.ai/v1/chat/completions");
+  await expect(form.getByLabel("API key")).toHaveValue("");
+  await expect(form.getByLabel("Model ID")).toHaveCount(0);
+  await expect(form.getByText("Models", { exact: true })).toBeVisible();
+  await expect(form.getByText("deepseek-ai/DeepSeek-V4.1-Flash-1017", { exact: true })).toBeVisible();
+  await form.getByLabel("Provider name").fill("River AI");
+  await form.getByLabel("Base URL").fill("https://api.river.ai/v1");
+  await form.getByRole("button", { name: "Save provider", exact: true }).click();
+
+  await expect.poll(() => posts).toEqual([{
+    providerId: "river-ai",
+    name: "River AI",
+    baseUrl: "https://api.river.ai/v1",
+    model: "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+  }]);
+  await expect(manager.getByText("Saved to Hermes.")).toBeVisible();
+  await expect(manager.getByText("River AI", { exact: true })).toBeVisible();
+  await expect(manager.getByText("https://api.river.ai/v1", { exact: true })).toBeVisible();
+  await expect(manager.getByText("API key configured")).toBeVisible();
+});
+
+test("creates a provider with its first model and key", async ({ page }) => {
+  test.setTimeout(60_000);
+  const posts: Array<Record<string, unknown>> = [];
+  let providers: Array<Record<string, unknown>> = [];
+  await page.route("**/api/hermes/models**", async (route) => {
+    if (route.request().method() === "POST") {
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      posts.push(body);
+      const provider = {
+        id: "local-test",
+        name: body.name,
+        baseUrl: body.baseUrl,
+        models: [body.model],
+        hasApiKey: Boolean(body.apiKey),
+        discoverModels: false,
+        source: "providers",
+      };
+      providers = [provider];
+      return route.fulfill({ json: { ok: true, provider } });
+    }
+    return route.fulfill({ json: { providers } });
+  });
+
+  await page.getByRole("button", { name: "Open settings" }).click();
+  const settings = page.getByRole("dialog");
+  await settings.getByRole("button", { name: /^AI model/ }).click();
+  const session = settings.getByRole("region", { name: "AI model", exact: true });
+  await session.getByRole("button", { name: /AI providers/ }).click();
+
+  const manager = settings.getByRole("region", { name: "AI providers" });
+  await expect(manager.getByText("No custom providers yet.")).toBeVisible();
+  await manager.getByRole("button", { name: "New provider" }).click();
+  const form = manager.getByRole("form", { name: "New provider" });
+  await form.getByLabel("Provider name").fill("Local test");
+  await form.getByLabel("Base URL").fill("https://api.example.test/v1");
+  await form.getByLabel("First model ID").fill("local-model");
+  await form.getByLabel("API key").fill("sk-provider-secret");
+  await form.getByLabel("Context length").fill("4096");
+  await form.getByRole("button", { name: "Create provider", exact: true }).click();
+
+  await expect.poll(() => posts).toEqual([{
+    name: "Local test",
+    baseUrl: "https://api.example.test/v1",
+    model: "local-model",
+    apiKey: "sk-provider-secret",
+    contextLength: 4096,
+  }]);
+  await expect(manager.getByText("Saved to Hermes.")).toBeVisible();
+  await manager.getByRole("button", { name: "Local test, 1 model, API key configured" }).click();
+  await expect(manager.getByLabel("Model ID: local-model")).toHaveValue("local-model");
+  await expect(page.getByText("sk-provider-secret")).toHaveCount(0);
 });
 
 test("keeps a Kana default model for new conversations", async ({ page }) => {
@@ -4385,11 +4647,13 @@ test("downloads the local voice engine only when asked and shows progress", asyn
 
   await engine.getByRole("button", { name: "Download voice engine" }).click();
   await expect(engine.getByRole("progressbar")).toBeVisible();
+  await expect(engine.getByRole("button", { name: "Pause download" })).toBeVisible();
   await expect(engine.getByText(/Downloading model · 50%/)).toBeVisible();
   await expect(engine.getByText("Installed")).toBeVisible({ timeout: 10_000 });
   await expect(engine.getByText("Download", { exact: true })).toHaveCount(0);
   await expect(engine.getByText("Device", { exact: true })).toBeVisible();
   await expect(engine.getByText("CPU int8 (AVX-512 VNNI)", { exact: true })).toBeVisible();
+  await expect(engine.getByRole("button", { name: "Remove" })).toBeVisible();
   expect(actions).toEqual(["install"]);
 });
 

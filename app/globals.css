@@ -39,6 +39,7 @@
   --color-accent-strong: var(--accent-strong);
   --color-on-accent: var(--on-accent);
   --color-danger: var(--danger);
+  --color-success: var(--success);
 
   --font-sans: var(--kana-font);
 
@@ -74,6 +75,7 @@
   --accent-strong: #83c1e5;
   --on-accent: #07131a;
   --danger: #e36a76;
+  --success: #7fce9c;
   --backdrop: rgba(0, 0, 0, 0.72);
   --chat-frame: #599dc6;
   --chat-depth: #1c1c1c;
@@ -99,6 +101,7 @@
   --accent-strong: #356f91;
   --on-accent: #ffffff;
   --danger: #c84f5d;
+  --success: #2f7d4f;
   --backdrop: rgba(28, 28, 28, 0.38);
   --chat-frame: #599dc6;
   --chat-depth: #f4f4f2;
@@ -1262,16 +1265,12 @@ details[open] > .kana-plus-summary::before {
   color: var(--on-accent);
 }
 
+/* A reply wears the tray's own depth, never a blue plate. Desktop focus is
+   the one place that removes the fill entirely and reads as plain Markdown. */
 .kana-message-assistant {
   border-color: transparent;
-  background: var(--chat-bubble);
-  color: var(--chat-text);
-}
-
-/* With the avatar visible a reply keeps a plate over the stage, but it wears
-   the tray's own depth instead of a blue bubble. Focus mode drops it entirely. */
-.kana-chat-dock:not(.is-sole) .kana-message-assistant {
   background: var(--chat-depth);
+  color: var(--chat-text);
 }
 
 /* First-run greeting: Kana speaks through a game-style dialogue box with a

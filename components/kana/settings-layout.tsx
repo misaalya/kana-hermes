@@ -54,16 +54,18 @@ export function SettingsRow({
   children,
   stacked = false,
   inline = false,
+  className = "",
 }: {
   label: React.ReactNode;
   description?: React.ReactNode;
   children?: React.ReactNode;
   stacked?: boolean;
   inline?: boolean;
+  className?: string;
 }) {
   return (
     <div
-      className={`py-3.5 ${
+      className={`py-3.5 ${className} ${
         stacked
           ? ""
           : inline

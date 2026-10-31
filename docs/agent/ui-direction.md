@@ -14,8 +14,9 @@ Colours are Kana's originals, defined in `app/globals.css` and exposed to
 Tailwind through `@theme inline`: the white/grey neutrals (light `#f4f4f2` /
 `#ffffff`, dark `#1c1c1c` / `#242424`), the brand blue `--accent` `#599dc6`
 with `--accent-hover`, `--accent-strong`, `--on-accent`, `--chat-frame`,
-`--chat-bubble`, and the stage-pattern inks. Do not tint the neutrals or add new
-shades of blue; style through the tokens.
+`--chat-bubble`, the success green `--success` used by the voice-engine download
+action, and the stage-pattern inks. Do not tint the neutrals or add new shades
+of blue; style through the tokens.
 
 ## Flat shapes, no shadows
 
@@ -112,7 +113,8 @@ so a selected section is never left half cut at an edge.
 
 On phones, a Settings row with a short control — the Show avatar switch and
 Installation mode — keeps its label and control on one line; rows with wide
-controls stack.
+controls stack. Installation mode reads Remote when `hermes.remote` is
+configured, otherwise Deployment or Local from `deployment.mode`.
 
 Settings → Connection ends with the Host card: the hostname and OS line, then
 a 2×2 grid of flat tiles for CPU/load, memory, root disk, and uptime. CPU,
@@ -236,14 +238,15 @@ Structure and content:
   parser). Settings go in Markdown tables.
   `tests/presentation/config-guide.test.ts` checks the structure and runs every
   JSON example through the real config parser.
-- Its delivery follows the Pollinations API docs
-  (https://gen.pollinations.ai/docs): a one-sentence summary quote under the
-  title, then bold-label key facts (**Config file:**, **Open it:**); a Quick
-  start of short headings each followed straight by code; one section per config
-  block that opens with one sentence, lists its keys in a Markdown table (Key |
-  Default or Required | Description) and uses `> **Note:**` callouts;
-  Troubleshooting last (symptom | fix, quoting Kana's exact messages). Short,
-  factual, formal sentences.
+- The page is task-oriented for a person who may not need to change anything.
+  The summary quote states that Kana works without `config.json`; the Quick
+  start is a need-to-section map, not a set of full templates. Every section
+  opens with when to skip it. Examples are the smallest configuration for one
+  task; keys that belong together are shown together only when necessary. A
+  key's reference table follows its task examples. Legacy names, old voice
+  formats, and `kana migrate` live in Upgrading from older builds, not in the
+  main setup path. Troubleshooting is last (symptom | fix, quoting Kana's exact
+  messages). Short, factual, formal sentences.
 - It is written for the person using Kana, not for agents, in a formal register:
   Indonesian is baku with "Anda" (no "kamu", no slang such as "pakai", "kalau",
   "ketemu"), English is professional documentation without contractions. One
@@ -252,6 +255,12 @@ Structure and content:
   structure may differ; the facts, section ids and example values stay shared. No
   JSON syntax lessons. Keep its facts in step with `lib/server/user-config.ts`
   and the configuration reference.
+- The human page has one bridge to an agent: **Copy for LLM** in the desktop
+  sidebar footer and as an icon in the phone header. It copies
+  `buildConfigGuideLlm(sources[locale], locale)`, built from the same Markdown
+  after removing page-only heading anchors and naming the path fence as text,
+  with a short LLM preamble. There is no second LLM document to maintain and no
+  raw-text panel on the page.
 
 Presentation:
 
@@ -372,7 +381,8 @@ that appears on hover (always visible on touch); other files keep their chips. A
 banner above the composer, not in the small status line. In the blue
 avatar-mode composer selected text takes a dark translucent wash, because the
 page's blue selection disappears on that band. Phones keep the blue band in
-both states, and the blue reply bubble remains only in focus mode. The model
+both states; their replies sit on the tray's depth fill rather than a blue
+bubble. The model
 chooser is a compact square popover above the
 pill on desktop and a bottom sheet on phones, with one searchable flat list:
 each row is the model over its provider, the model in use carries a check, and
@@ -387,10 +397,39 @@ quiet Set as default action for the provider and model currently selected in
 the panel; once that pair is Kana's default the same action reads Default and
 stays disabled. There is no separate default-model panel, no summary line, and
 no description: the button says what it does, and the model dropdown marks the Kana default
-with the same Default pill as the composer list. The three model actions keep
+with the same Default pill as the composer list. The model actions keep
 one minimum width
 (and fill the row on phones), so changing labels never reflow the row. The
 default is Kana-only and never changes Hermes's own configuration.
+
+Providers are a separate Settings destination, **AI providers**, reached from a
+plain text row below a hairline in AI model; the row carries no card fill of its
+own. Its sidebar icon is a plug, not a key or cloud. The section is a flat
+master-detail list with no cards and no frames: provider rows are separated by
+hairlines, each with a name, model count, key state, and a chevron. Key state is
+plain text, never a chip or a dot. On hover the
+name and chevron take the accent colour and the chevron nudges right; the row
+keeps its background, so nothing looks like a card appearing. **New provider**
+is a plain accent text action below the list, not another row. Selecting a
+provider replaces the list with its detail page: back control, name with **Edit**
+beside it, base URL, key state, Direct text where relevant, a **Models** header
+with its count at the right, a hairline-separated list of editable model pills,
+and **Add model** as the only action below.
+Each model ID is an editable pill; changing one reveals a save icon beside it,
+and pressing that icon shows the same solid red warning banner as the composer's
+error before anything is sent. **Add as new** confirms and adds the changed ID
+beside the original, because Hermes cannot rename a model. Add model
+asks only for Model ID and context length because the provider already owns the
+URL and key. Edit changes the provider's name, base URL, or replacement key
+(empty keeps the saved key), lists its current model IDs as read-only pills so
+the scope of the change stays visible, and the direct-configuration case asks
+for the key again where Hermes cannot read it. New provider asks for the
+endpoint and its
+first model in a single narrow column, grouped under Connection and Model; the
+other provider forms use the same stacked fields. A save returns to the provider
+detail, or to the list after creating a provider, with a muted success line and
+a refreshed model catalog without switching the active model. The key field is a
+password input and is discarded when its form closes.
 While Hermes works, or while the reply's voice is still being generated, the
 transcript shows a chat-app typing indicator (`kana-typing`, three hopping dots)
 with the status beside it, and Stop is a small icon-and-label pill next to that

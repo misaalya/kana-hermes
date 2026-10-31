@@ -40,7 +40,14 @@ function currentSelection(catalog: AgentModelCatalog) {
   };
 }
 
-export function ModelControlPanel({ locale, catalog: cachedCatalog, onList, onSelect, defaultModel = null, onSetDefault }: ModelControlPanelProps) {
+export function ModelControlPanel({
+  locale,
+  catalog: cachedCatalog,
+  onList,
+  onSelect,
+  defaultModel = null,
+  onSetDefault,
+}: ModelControlPanelProps) {
   const copy = getCopy(locale).settings;
   const [catalog, setCatalog] = useState<AgentModelCatalog | null>(null);
   const [provider, setProvider] = useState("");
@@ -181,13 +188,15 @@ export function ModelControlPanel({ locale, catalog: cachedCatalog, onList, onSe
 
   if (!catalog?.providers.length) {
     return (
-      <div className="space-y-3">
+      <div className="@container space-y-3">
         <p className="text-[11px] leading-relaxed text-muted">
           {notice || copy.modelEmpty}
         </p>
-        <button type="button" className={btnSecondary} onClick={() => void load(true)}>
-          {copy.modelRefresh}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" className={btnSecondary} onClick={() => void load(true)}>
+            {copy.modelRefresh}
+          </button>
+        </div>
       </div>
     );
   }

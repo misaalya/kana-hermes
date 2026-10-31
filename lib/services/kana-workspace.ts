@@ -9,6 +9,10 @@ import { classifyKanaError } from "@/lib/diagnostics/safe-diagnostics";
 import { LocalPreferencesStore } from "@/lib/preferences/local-preferences-store";
 import type { KanaPreferences } from "@/lib/preferences/types";
 import { controlHermesRuntime, inspectHermesRuntime } from "@/lib/runtime/hermes-control-client";
+import {
+  addHermesModel as addHermesModelRequest,
+  listHermesModelProviders as listHermesModelProvidersRequest,
+} from "@/lib/runtime/hermes-models-client";
 import { fetchSetupState, markOnboardingComplete } from "@/lib/runtime/setup-client";
 import { createKanaStores, type KanaStores } from "@/lib/store/kana-stores";
 import { inspectConfiguredTtsProvider } from "@/lib/voice/tts-relay-contract";
@@ -78,6 +82,12 @@ function createActions(parts: {
       const result = await sessions.selectModel(provider, model, confirm);
       if (!result.confirmationRequired) models.invalidate();
       return result;
+    },
+    listHermesModelProviders: () => listHermesModelProvidersRequest(),
+    async addHermesModel(input: Parameters<typeof addHermesModelRequest>[0]) {
+      const provider = await addHermesModelRequest(input);
+      models.invalidate();
+      return provider;
     },
     createConversation: () => sessions.createConversation(),
     selectConversation: (id: string) => sessions.selectConversation(id),

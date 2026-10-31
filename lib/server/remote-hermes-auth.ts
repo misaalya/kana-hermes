@@ -127,12 +127,20 @@ async function mintTicket(
   return (body as { ticket: string }).ticket;
 }
 
-/** An authenticated dashboard JSON read, logging in again on an expired cookie. */
+/**
+ * One authenticated dashboard JSON request, logging in again on an expired
+ * cookie. The cookie stays in this server process. A caller may pass a plain
+ * timeout (existing reads) or a bounded method/body for a write.
+ */
 export async function remoteDashboardJson<T>(
   connection: RemoteHermesConnection,
   path: string,
-  timeoutMs = DASHBOARD_TIMEOUT_MS,
+  options: number | { method?: "GET" | "POST"; body?: unknown; timeoutMs?: number } = DASHBOARD_TIMEOUT_MS,
 ): Promise<T> {
+  const { method = "GET", body, timeoutMs } =
+    typeof options === "number"
+      ? { method: "GET" as const, body: undefined, timeoutMs: options }
+      : { method: options.method ?? "GET", body: options.body, timeoutMs: options.timeoutMs ?? DASHBOARD_TIMEOUT_MS };
   const key = sessionKey(connection);
   const store = sessions();
   const signal = AbortSignal.timeout(timeoutMs);
@@ -141,7 +149,12 @@ export async function remoteDashboardJson<T>(
 
   const request = async (current: Session) => {
     return timedFetch(remoteHttpUrl(connection.config, path), {
-      headers: { Cookie: cookieHeader(current) },
+      method,
+      headers: {
+        Cookie: cookieHeader(current),
+        ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
       cache: "no-store",
       redirect: "manual",
     }, "dashboard request", signal);

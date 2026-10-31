@@ -35,6 +35,7 @@ export type ConfigGuideSectionId =
   | "guardrail"
   | "deployment"
   | "environment"
+  | "upgrade"
   | "troubleshooting";
 
 export type ConfigGuideCopy = {
@@ -52,6 +53,9 @@ export type ConfigGuideCopy = {
   guardrailOn(rules: number): string;
   guardrailOff(reason: string): string;
   guardrailInvalid(reason: string): string;
+  copyForLlm: string;
+  copiedForLlm: string;
+  copyForLlmAria: string;
 };
 
 export const CONFIG_GUIDE_GROUPS: {
@@ -61,7 +65,7 @@ export const CONFIG_GUIDE_GROUPS: {
   { id: "basics", sections: ["quickstart"] },
   { id: "voice", sections: ["voice", "irodori", "pollinations"] },
   { id: "system", sections: ["hermes", "guardrail", "deployment", "environment"] },
-  { id: "help", sections: ["troubleshooting"] },
+  { id: "help", sections: ["upgrade", "troubleshooting"] },
 ];
 
 const COPY: Record<UiLocale, ConfigGuideCopy> = {
@@ -80,6 +84,9 @@ const COPY: Record<UiLocale, ConfigGuideCopy> = {
     guardrailOn: (rules) => `aktif — ${rules} aturan`,
     guardrailOff: (reason) => `nonaktif — ${reason}`,
     guardrailInvalid: (reason) => `tidak dapat dipakai — ${reason}`,
+    copyForLlm: "Salin untuk LLM",
+    copiedForLlm: "Tersalin untuk LLM",
+    copyForLlmAria: "Salin untuk LLM: salin seluruh panduan sebagai Markdown",
   },
   en: {
     docs: "Documentation",
@@ -96,6 +103,9 @@ const COPY: Record<UiLocale, ConfigGuideCopy> = {
     guardrailOn: (rules) => `on — ${rules} ${rules === 1 ? "rule" : "rules"}`,
     guardrailOff: (reason) => `off — ${reason}`,
     guardrailInvalid: (reason) => `unusable — ${reason}`,
+    copyForLlm: "Copy for LLM",
+    copiedForLlm: "Copied for LLM",
+    copyForLlmAria: "Copy for LLM: copy the whole guide as Markdown",
   },
 };
 
@@ -162,4 +172,25 @@ export function readConfigGuide(blocks: MarkdownBlock[]): ConfigGuideDocument {
     }
   }
   return { title, intro, sections };
+}
+
+/**
+ * The guide as one Markdown document for an LLM: the same human source, with
+ * the page-only heading anchors removed and the path fence named as plain text.
+ * Keeping this derived from the source means the human page and the copied
+ * document cannot drift apart. The page itself stays the human interface.
+ */
+export function buildConfigGuideLlm(source: string, locale: UiLocale): string {
+  const language = locale === "id" ? "Indonesian" : "English";
+  const markdown = source
+    .replace(/\s*\{#[A-Za-z0-9_-]+\}/g, "")
+    .replaceAll("```kana-config-path", "```text")
+    .trim();
+  return [
+    "> Kana configuration guide for an LLM. This is the same content as the human /docs page. Treat every setting as optional unless this document says it is required; prefer the smallest configuration that answers the request.",
+    `> Language: ${language}. Source: Kana's in-app /docs configuration guide.`,
+    "",
+    markdown,
+    "",
+  ].join("\n");
 }

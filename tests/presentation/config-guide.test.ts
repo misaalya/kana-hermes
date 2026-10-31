@@ -7,6 +7,7 @@ import { parseMarkdown, type MarkdownBlock } from "@/lib/presentation/markdown";
 import { parseGuardrailsConfig } from "@/lib/guardrails/policy";
 import { readKanaUserConfig } from "@/lib/server/user-config";
 import {
+  buildConfigGuideLlm,
   CONFIG_GUIDE_FILES,
   CONFIG_GUIDE_GROUPS,
   CONFIG_GUIDE_PATH_BLOCK,
@@ -62,6 +63,22 @@ describe("the /docs config guide", () => {
 
       it("shows this installation's config path in the overview", () => {
         assert.ok(document.intro.some((block) => block.type === "code" && block.language === CONFIG_GUIDE_PATH_BLOCK));
+      });
+
+      it("builds a clean Markdown copy for an LLM", () => {
+        const source = readFileSync(CONFIG_GUIDE_FILES[locale], "utf8");
+        const llm = buildConfigGuideLlm(source, locale);
+        assert.match(llm, /^> Kana configuration guide for an LLM\./);
+        assert.match(llm, new RegExp(`Language: ${locale === "id" ? "Indonesian" : "English"}\\.`));
+        assert.ok(llm.includes(document.title));
+        assert.equal(llm.includes("{#"), false);
+        assert.equal(llm.includes("kana-config-path"), false);
+        assert.ok(llm.includes("```text"));
+        const copy = readConfigGuide(parseMarkdown(llm));
+        assert.deepEqual(
+          copy.sections.map((section) => section.title),
+          document.sections.map((section) => section.title),
+        );
       });
 
       it("only gives examples the config parser accepts", () => {

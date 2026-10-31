@@ -110,3 +110,12 @@ selected there; when that pair is already Kana's default the button reads
 Hermes clients are untouched, and existing conversations keep their model. If a
 saved default is no longer available, Kana opens the conversation with Hermes's
 default and says so.
+
+Settings → AI providers, linked from the AI model controls, lists custom
+endpoints. Adding a model to an existing provider reuses that provider's URL
+and key; **Edit** changes the provider itself, and **New provider** creates an
+endpoint with its first model. Everything goes through Hermes's dashboard API.
+The save refreshes this picker; it does not change the active model or Kana's
+default until you choose them. `configure.md` covers the provider/model split,
+the key handling, the `/chat/completions` suffix rule, and the legacy
+`custom_providers` limitation.

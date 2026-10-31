@@ -5,6 +5,7 @@ import type { KanaPreferences } from "@/lib/preferences/types";
 import type { AvatarModelSummary } from "@/lib/avatar/indexed-db-avatar-model-store";
 import type { AvatarPortraits } from "@/lib/avatar/portrait";
 import type { Live2DModelBindings } from "@/lib/avatar/live2d-avatar-provider";
+import type { AddHermesModelInput, HermesCustomProvider } from "@/lib/runtime/hermes-models-client";
 import {
   suggestLive2DModelBindings,
   type Live2DModelCapabilities,
@@ -32,6 +33,7 @@ import { wipeAvatarModeChange } from "./avatar-mode-transition";
 import { ComposerDelaySlider } from "./composer-delay-slider";
 import { HostPanel } from "./host-panel";
 import { ModelControlPanel } from "./model-control-panel";
+import { CustomModelManager } from "./custom-model-manager";
 import { AdvancedConfigCard, SecuritySection } from "./settings-access-section";
 import { AddCard, AvatarCard, WardrobeGrid } from "./settings-avatar-cards";
 import {
@@ -43,8 +45,10 @@ import {
   AvatarIcon,
   CheckIcon,
   BotIcon,
+  ChevronRightIcon,
   CloseIcon,
   GlobeIcon,
+  PlugIcon,
   ServerIcon,
   ShieldIcon,
   WaveformIcon,
@@ -79,6 +83,8 @@ type SettingsDialogProps = {
   agentModelCatalog?: AgentModelCatalog | null;
   onListAgentModels(refresh?: boolean): Promise<AgentModelCatalog>;
   onSelectAgentModel(provider: string, model: string, confirm?: boolean): Promise<AgentModelSwitchResult>;
+  onListHermesModelProviders(): Promise<HermesCustomProvider[]>;
+  onAddHermesModel(input: AddHermesModelInput): Promise<HermesCustomProvider>;
   onPreviewAvatarEmotion(preferences: KanaPreferences, emotion: Emotion): Promise<void>;
   onPreviewAvatarTalking(preferences: KanaPreferences): Promise<void>;
   /** Stage portraits for the avatar cards, by imported model id or model URL. */
@@ -88,15 +94,16 @@ type SettingsDialogProps = {
   onClose(): void;
 };
 
-type SettingsSection = "experience" | "voice" | "avatar" | "model" | "system" | "privacy";
+type SettingsSection = "experience" | "voice" | "avatar" | "model" | "providers" | "system" | "privacy";
 
-const NAV_IDS: SettingsSection[] = ["experience", "voice", "avatar", "model", "system", "privacy"];
+const NAV_IDS: SettingsSection[] = ["experience", "voice", "avatar", "model", "providers", "system", "privacy"];
 
 const SECTION_ICONS: Record<SettingsSection, (props: { className?: string }) => React.ReactElement> = {
   experience: GlobeIcon,
   voice: WaveformIcon,
   avatar: AvatarIcon,
   model: BotIcon,
+  providers: PlugIcon,
   system: ServerIcon,
   privacy: ShieldIcon,
 };
@@ -127,6 +134,8 @@ export function SettingsDialog({
   agentModelCatalog,
   onListAgentModels,
   onSelectAgentModel,
+  onListHermesModelProviders,
+  onAddHermesModel,
   onPreviewAvatarEmotion,
   onPreviewAvatarTalking,
   avatarPortraits = {},
@@ -540,6 +549,8 @@ export function SettingsDialog({
                     label={settingsCopy.composerDelayTitle}
                     description={settingsCopy.composerDelayDescription}
                     stacked
+                    // The delay only exists in desktop focus mode.
+                    className="max-lg:hidden"
                   >
                     <ComposerDelaySlider
                       locale={draft.uiLocale}
@@ -736,9 +747,40 @@ export function SettingsDialog({
                     <p className="mt-3 text-[11px] leading-relaxed text-faint">
                       {settingsCopy.modelDefaultScope}
                     </p>
+                    <div className="mt-5 border-t border-line pt-3">
+                      <button
+                        type="button"
+                        className="kana-focus group flex w-full items-center justify-between gap-3 rounded-[12px] py-2 text-left"
+                        onClick={() => setSection("providers")}
+                      >
+                        <span className="min-w-0">
+                          <span className="block text-[13px] font-bold text-ink transition-colors group-hover:text-accent-strong">
+                            {settingsCopy.sections.providers.label}
+                          </span>
+                          <span className="mt-0.5 block text-[11px] text-muted">
+                            {settingsCopy.modelProvidersEntryDescription}
+                          </span>
+                        </span>
+                        <span className="flex shrink-0 items-center gap-1 text-[12px] font-bold text-muted transition-colors group-hover:text-accent-strong">
+                          {settingsCopy.modelProvidersManage}
+                          <ChevronRightIcon className="size-4 transition-transform duration-150 group-hover:translate-x-0.5" />
+                        </span>
+                      </button>
+                    </div>
                   </div>
                 </SettingsGroup>
               </>
+            ) : null}
+
+            {section === "providers" ? (
+              <CustomModelManager
+                copy={settingsCopy}
+                onListProviders={onListHermesModelProviders}
+                onSubmit={onAddHermesModel}
+                onCatalogChanged={async () => {
+                  await onListAgentModels(false);
+                }}
+              />
             ) : null}
 
             {section === "system" ? (
