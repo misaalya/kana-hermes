@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  chmodSync,
   existsSync,
   mkdtempSync,
   mkdirSync,
@@ -417,5 +418,156 @@ describe("operator-run data root move", () => {
     assert.deepEqual(skipped, ["appstate.db"]);
     assert.equal(readFileSync(path.join(target, "appstate.db"), "utf8"), "kept");
     assert.equal(existsSync(path.join(source, "appstate.db")), true);
+  });
+
+  it("plans a whole-family replacement with every destination member named", () => {
+    const source = path.join(root, "replace-plan", "source");
+    const target = path.join(root, "replace-plan", "target");
+    mkdirSync(source, { recursive: true });
+    mkdirSync(target, { recursive: true });
+    writeFileSync(path.join(source, "appstate.db"), "new");
+    writeFileSync(path.join(source, "appstate.db-wal"), "new-wal");
+    writeFileSync(path.join(target, "appstate.db"), "old");
+    writeFileSync(path.join(target, "appstate.db-shm"), "old-shm");
+
+    const plan = planKanaDataRootMove({
+      targetDir: target,
+      legacyDirs: [source],
+      replaceExisting: true,
+    });
+
+    assert.deepEqual(
+      plan.move.map((entry) => entry.name).sort(),
+      ["appstate.db", "appstate.db-wal"],
+    );
+    assert.equal(plan.replace.length, 1);
+    assert.equal(plan.replace[0].family, "appstate.db");
+    assert.deepEqual(plan.replace[0].sourceMembers.sort(), ["appstate.db", "appstate.db-wal"]);
+    assert.deepEqual(
+      plan.replace[0].targetMembers.map((member) => member.name).sort(),
+      ["appstate.db", "appstate.db-shm"],
+    );
+    // A plan never touches either root.
+    assert.equal(readFileSync(path.join(target, "appstate.db"), "utf8"), "old");
+    assert.equal(existsSync(path.join(target, "appstate.db-wal")), false);
+    assert.equal(readFileSync(path.join(source, "appstate.db"), "utf8"), "new");
+  });
+
+  it("backs up and replaces a family whole, including plain files", () => {
+    const source = path.join(root, "replace", "source");
+    const target = path.join(root, "replace", "target");
+    mkdirSync(source, { recursive: true });
+    mkdirSync(target, { recursive: true });
+    writeFileSync(path.join(source, "appstate.db"), "new");
+    writeFileSync(path.join(source, "appstate.db-wal"), "new-wal");
+    writeFileSync(path.join(source, "jwt-secret"), "new-secret", { mode: 0o600 });
+    writeFileSync(path.join(target, "appstate.db"), "old");
+    writeFileSync(path.join(target, "appstate.db-wal"), "old-wal");
+    writeFileSync(path.join(target, "appstate.db-shm"), "old-shm");
+    writeFileSync(path.join(target, "jwt-secret"), "old-secret", { mode: 0o600 });
+    writeFileSync(path.join(target, "config.json"), "keep");
+
+    let backupDir: string | null = null;
+    const moved = migrateKanaDataRoot({
+      targetDir: target,
+      legacyDirs: [source],
+      copyOnly: true,
+      replaceExisting: true,
+      onBackupDir: (dir) => {
+        backupDir = dir;
+      },
+    });
+
+    assert.deepEqual(
+      moved.sort(),
+      ["appstate.db", "appstate.db-wal", "jwt-secret"],
+    );
+    // The source family arrives whole; the destination's stale journal is gone.
+    assert.equal(readFileSync(path.join(target, "appstate.db"), "utf8"), "new");
+    assert.equal(readFileSync(path.join(target, "appstate.db-wal"), "utf8"), "new-wal");
+    assert.equal(existsSync(path.join(target, "appstate.db-shm")), false);
+    assert.equal(readFileSync(path.join(target, "jwt-secret"), "utf8"), "new-secret");
+    assert.equal(readFileSync(path.join(target, "config.json"), "utf8"), "keep");
+    // Every destination member exists untouched in an owner-only backup.
+    assert.ok(backupDir);
+    assert.equal(path.dirname(backupDir), target);
+    assert.match(path.basename(backupDir), /^\.kana-migrate-backup-/);
+    assert.equal(readFileSync(path.join(backupDir, "appstate.db"), "utf8"), "old");
+    assert.equal(readFileSync(path.join(backupDir, "appstate.db-wal"), "utf8"), "old-wal");
+    assert.equal(readFileSync(path.join(backupDir, "appstate.db-shm"), "utf8"), "old-shm");
+    assert.equal(readFileSync(path.join(backupDir, "jwt-secret"), "utf8"), "old-secret");
+    assert.equal(statSync(path.join(backupDir, "jwt-secret")).mode & 0o777, 0o600);
+    // Copying still leaves the source whole.
+    assert.equal(readFileSync(path.join(source, "appstate.db"), "utf8"), "new");
+    assert.equal(readFileSync(path.join(source, "appstate.db-wal"), "utf8"), "new-wal");
+    assert.equal(readFileSync(path.join(source, "jwt-secret"), "utf8"), "new-secret");
+  });
+
+  it("deletes a replaced source family only after the destination is complete", () => {
+    const source = path.join(root, "replace-move", "source");
+    const target = path.join(root, "replace-move", "target");
+    mkdirSync(source, { recursive: true });
+    mkdirSync(target, { recursive: true });
+    writeFileSync(path.join(source, "appstate.db"), "new");
+    writeFileSync(path.join(source, "appstate.db-wal"), "new-wal");
+    writeFileSync(path.join(target, "appstate.db"), "old");
+    writeFileSync(path.join(target, "appstate.db-wal"), "old-wal");
+
+    let backupDir: string | null = null;
+    const moved = migrateKanaDataRoot({
+      targetDir: target,
+      legacyDirs: [source],
+      replaceExisting: true,
+      onBackupDir: (dir) => {
+        backupDir = dir;
+      },
+    });
+
+    assert.deepEqual(moved.sort(), ["appstate.db", "appstate.db-wal"]);
+    assert.equal(readFileSync(path.join(target, "appstate.db"), "utf8"), "new");
+    assert.equal(readFileSync(path.join(target, "appstate.db-wal"), "utf8"), "new-wal");
+    assert.equal(existsSync(source), false);
+    const backup = backupDir;
+    assert.ok(backup);
+    assert.equal(readFileSync(path.join(backup, "appstate.db"), "utf8"), "old");
+  });
+
+  it("restores the destination family when a replacement copy fails", (t) => {
+    if (process.getuid?.() === 0) {
+      t.skip("root can read a mode-000 file, so the copy cannot be made to fail this way");
+      return;
+    }
+    const source = path.join(root, "replace-fail", "source");
+    const target = path.join(root, "replace-fail", "target");
+    mkdirSync(source, { recursive: true });
+    mkdirSync(target, { recursive: true });
+    writeFileSync(path.join(source, "appstate.db"), "new", { mode: 0o600 });
+    writeFileSync(path.join(target, "appstate.db"), "old");
+    writeFileSync(path.join(target, "appstate.db-wal"), "old-wal");
+    chmodSync(path.join(source, "appstate.db"), 0o000);
+
+    const warnings: Error[] = [];
+    let backupDir: string | null = null;
+    const moved = migrateKanaDataRoot({
+      targetDir: target,
+      legacyDirs: [source],
+      copyOnly: true,
+      replaceExisting: true,
+      onBackupDir: (dir) => {
+        backupDir = dir;
+      },
+      warn: (_name, _fromDir, error) => {
+        warnings.push(error instanceof Error ? error : new Error(String(error)));
+      },
+    });
+    chmodSync(path.join(source, "appstate.db"), 0o600);
+
+    assert.deepEqual(moved, []);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0].message, /restored from the backup/);
+    assert.equal(readFileSync(path.join(target, "appstate.db"), "utf8"), "old");
+    assert.equal(readFileSync(path.join(target, "appstate.db-wal"), "utf8"), "old-wal");
+    assert.equal(readFileSync(path.join(source, "appstate.db"), "utf8"), "new");
+    assert.ok(backupDir);
   });
 });

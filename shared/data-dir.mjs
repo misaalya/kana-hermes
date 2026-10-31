@@ -8,6 +8,7 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
+  mkdtempSync,
   readdirSync,
   readlinkSync,
   renameSync,
@@ -176,19 +177,22 @@ function familyName(name) {
 /**
  * What a move would take, and what it would leave. The families of a source
  * root the target does not already hold, each paired with the one source root it
- * comes from, plus a reason for every source or family passed over.
+ * comes from, plus a reason for every source or family passed over. With
+ * `replaceExisting`, a family the target already holds is selected too, with the
+ * destination members the caller must back up and remove first.
  *
- * @param {{ targetDir: string, legacyDirs: readonly string[], requireMarker?: boolean }} input
+ * @param {{ targetDir: string, legacyDirs: readonly string[], requireMarker?: boolean, replaceExisting?: boolean }} input
  * @returns {{
  *   target: string,
  *   sources: string[],
- *   entries: { family: string, members: string[], sourceDir: string }[],
+ *   entries: { family: string, members: string[], sourceDir: string, replaceMembers: string[] }[],
  *   skips: { name: string, reason: string }[],
  * }}
  */
 function selectKanaDataEntries(input) {
   const target = path.resolve(input.targetDir);
   const requireMarker = input.requireMarker !== false;
+  const replaceExisting = input.replaceExisting === true;
   const skips = [];
 
   const sources = [];
@@ -213,6 +217,23 @@ function selectKanaDataEntries(input) {
     for (const name of readdirSync(/* turbopackIgnore: true */ source)) names.add(name);
   }
 
+  // Reading the destination once proves which members it holds and lets a
+  // replacement name every one it will back up. An unreadable destination is
+  // refused when replacing, because copying over an entry Kana cannot see would
+  // overwrite it without a backup.
+  let targetNames = [];
+  let targetReadable = true;
+  if (existsSync(/* turbopackIgnore: true */ target)) {
+    try {
+      targetNames = readdirSync(/* turbopackIgnore: true */ target);
+    } catch {
+      targetReadable = false;
+    }
+  }
+  if (replaceExisting && !targetReadable) {
+    throw new Error(`Cannot read the destination ${target}, so nothing was replaced.`);
+  }
+
   const families = new Map();
   for (const name of names) {
     const family = familyName(name);
@@ -223,25 +244,34 @@ function selectKanaDataEntries(input) {
   const entries = [];
   for (const [family, members] of families) {
     const familyNames = [family, ...members];
+    const targetMembers = targetNames
+      .filter((name) => familyName(name) === family)
+      .sort();
 
     // The whole family is left alone when the target already holds any part of
     // it. A database and its journal files must never come from two roots, so a
-    // target that holds one member keeps the family where it is.
-    if (
-      familyNames.some((name) =>
-        existsSync(/* turbopackIgnore: true */ path.join(target, name)),
-      )
-    ) {
+    // target that holds one member keeps the family where it is. Replacing is
+    // the explicit exception: the target family is what gets backed up and
+    // removed, and the source family arrives whole.
+    const collides =
+      targetMembers.length > 0 ||
+      (!targetReadable &&
+        familyNames.some((name) =>
+          existsSync(/* turbopackIgnore: true */ path.join(target, name)),
+        ));
+    if (collides && !replaceExisting) {
       skips.push({ name: family, reason: "target" });
       continue;
     }
 
     // The newest copy of the family's base name decides which root it comes
-    // from, so a database is never assembled from two different roots.
+    // from, so a database is never assembled from two different roots. A
+    // replacement must come from a root that actually holds the base file: a
+    // lone journal file may never replace a whole database.
     let sourceDir = null;
     let newest = -1;
     for (const dir of sources) {
-      for (const candidate of familyNames) {
+      for (const candidate of collides ? [family] : familyNames) {
         let stats;
         try {
           stats = statSync(/* turbopackIgnore: true */ path.join(dir, candidate));
@@ -254,9 +284,12 @@ function selectKanaDataEntries(input) {
         }
       }
     }
-    if (!sourceDir) continue;
+    if (!sourceDir) {
+      if (collides) skips.push({ name: family, reason: "incomplete" });
+      continue;
+    }
 
-    entries.push({ family, members, sourceDir });
+    entries.push({ family, members, sourceDir, replaceMembers: collides ? targetMembers : [] });
   }
 
   return { target, sources, entries, skips };
@@ -277,15 +310,24 @@ function selectKanaDataEntries(input) {
  * nothing. Both exist for the operator-run `kana migrate`, which must be able to
  * show a plan and to keep the source until the operator deletes it.
  *
+ * `replaceExisting` backs up every destination member of a colliding family
+ * into a new `.kana-migrate-backup-*` directory inside the destination, removes
+ * the destination family whole, and only then copies and verifies the source
+ * family. A failed replacement restores the destination from that backup. The
+ * source is still removed only after every copy verified, even when `copyOnly`
+ * is off.
+ *
  * @param {{
  *   targetDir: string,
  *   legacyDirs: readonly string[],
  *   log?: (name: string, fromDir: string, targetDir: string, result?: { mode: string, files: number, bytes: number }) => void,
  *   warn?: (name: string, fromDir: string, error: unknown) => void,
  *   skip?: (name: string, reason: string) => void,
+ *   onBackupDir?: (backupDir: string) => void,
  *   requireMarker?: boolean,
  *   copyOnly?: boolean,
  *   dryRun?: boolean,
+ *   replaceExisting?: boolean,
  * }} input
  * @returns {string[]} the names it moved, in the order it moved them
  */
@@ -295,9 +337,122 @@ export function migrateKanaDataRoot(input) {
 
   const moved = [];
   let createdTarget = false;
+  let backupDir = null;
+  let backupReported = false;
 
   for (const entry of entries) {
     const copied = [];
+    const replacing =
+      input.replaceExisting === true && (entry.replaceMembers?.length ?? 0) > 0;
+
+    if (replacing && !input.dryRun) {
+      try {
+        if (!createdTarget) {
+          mkdirSync(/* turbopackIgnore: true */ target, { recursive: true, mode: 0o700 });
+          createdTarget = true;
+        }
+        if (!backupDir) {
+          backupDir = mkdtempSync(path.join(target, ".kana-migrate-backup-"));
+        }
+        // The destination family is copied aside before any of it is removed.
+        for (const member of entry.replaceMembers) {
+          const from = path.join(target, member);
+          if (!existsSync(/* turbopackIgnore: true */ from)) continue;
+          copyPath(from, path.join(/* turbopackIgnore: true */ backupDir, member));
+        }
+        // Report the directory only once it holds a complete backup.
+        if (!backupReported) {
+          input.onBackupDir?.(backupDir);
+          backupReported = true;
+        }
+        // Remove every destination member, including a stale journal the
+        // source no longer has, so the new family is never mixed with the old.
+        for (const member of entry.replaceMembers) {
+          rmSync(/* turbopackIgnore: true */ path.join(target, member), {
+            recursive: true,
+            force: true,
+          });
+        }
+        const written = [];
+        for (const member of entry.members) {
+          const from = path.join(entry.sourceDir, member);
+          if (!existsSync(/* turbopackIgnore: true */ from)) continue;
+          const result = copyPath(from, path.join(target, member));
+          copied.push(member);
+          written.push({ member, result });
+        }
+        // A move deletes each source entry only after the whole family is
+        // written and verified, so a failure never leaves the source partial.
+        if (!input.copyOnly) {
+          for (const { member } of written) {
+            try {
+              rmSync(/* turbopackIgnore: true */ path.join(entry.sourceDir, member), {
+                recursive: true,
+                force: true,
+              });
+            } catch (error) {
+              input.warn?.(
+                member,
+                entry.sourceDir,
+                new Error(
+                  `copied and verified, but the source could not be removed: ${error instanceof Error ? error.message : String(error)}`,
+                ),
+              );
+            }
+          }
+        }
+        for (const { member, result } of written) {
+          moved.push(member);
+          input.log?.(member, entry.sourceDir, target, {
+            mode: input.copyOnly ? "copied" : "moved",
+            ...result,
+          });
+        }
+        continue;
+      } catch (error) {
+        // Take back the partial family and put the destination back exactly as
+        // it was. The backup remains on disk either way.
+        for (const member of copied) {
+          try {
+            rmSync(/* turbopackIgnore: true */ path.join(target, member), {
+              recursive: true,
+              force: true,
+            });
+          } catch {
+            // Keep restoring what can be restored.
+          }
+        }
+        const restored = [];
+        if (backupDir) {
+          for (const member of entry.replaceMembers) {
+            const backup = path.join(/* turbopackIgnore: true */ backupDir, member);
+            if (!existsSync(/* turbopackIgnore: true */ backup)) continue;
+            try {
+              copyPath(backup, path.join(target, member));
+              restored.push(member);
+            } catch {
+              // The warning below still names the backup directory.
+            }
+          }
+        }
+        const backupExpected = backupDir
+          ? entry.replaceMembers.filter((member) =>
+              existsSync(path.join(/* turbopackIgnore: true */ backupDir, member)),
+            ).length
+          : 0;
+        let detail = error instanceof Error ? error.message : String(error);
+        if (restored.length && restored.length === backupExpected) {
+          detail += "; the previous destination entries were restored from the backup";
+        } else if (restored.length) {
+          detail += `; only ${restored.length} of ${backupExpected} destination entries were restored from ${backupDir}`;
+        } else if (backupDir) {
+          detail += `; restore the destination from ${backupDir}`;
+        }
+        input.warn?.(entry.family, entry.sourceDir, new Error(detail));
+        continue;
+      }
+    }
+
     for (const member of entry.members) {
       const from = path.join(entry.sourceDir, member);
       if (!existsSync(/* turbopackIgnore: true */ from)) continue;
@@ -358,22 +513,57 @@ export function migrateKanaDataRoot(input) {
 
 /**
  * What a move would take, without taking it: the entries, how much they hold,
- * and why anything was passed over. `kana migrate` shows this before it asks for
- * agreement, and the move itself runs the same selection again, so a plan that
- * was read by a person and the move that follows it cannot disagree about the
- * rules.
+ * which destination members a replacement would back up, and why anything was
+ * passed over. `kana migrate` shows this before it asks for agreement, and the
+ * move itself runs the same selection again, so a plan that was read by a
+ * person and the move that follows it cannot disagree about the rules.
  *
- * @param {{ targetDir: string, legacyDirs: readonly string[], requireMarker?: boolean }} input
+ * @param {{ targetDir: string, legacyDirs: readonly string[], requireMarker?: boolean, replaceExisting?: boolean }} input
  * @returns {{
  *   target: string,
  *   move: { name: string, from: string, to: string, directory: boolean, files: number, bytes: number }[],
+ *   replace: {
+ *     family: string,
+ *     sourceDir: string,
+ *     sourceMembers: string[],
+ *     targetMembers: { name: string, path: string, directory: boolean, files: number, bytes: number }[],
+ *   }[],
  *   skip: { name: string, reason: string }[],
  * }}
  */
 export function planKanaDataRootMove(input) {
   const { target, entries, skips } = selectKanaDataEntries(input);
   const move = [];
+  const replace = [];
   for (const entry of entries) {
+    if (entry.replaceMembers?.length) {
+      const sourceMembers = [];
+      for (const member of entry.members) {
+        if (existsSync(/* turbopackIgnore: true */ path.join(entry.sourceDir, member))) {
+          sourceMembers.push(member);
+        }
+      }
+      const targetMembers = [];
+      for (const member of entry.replaceMembers) {
+        const from = path.join(target, member);
+        if (!existsSync(/* turbopackIgnore: true */ from)) continue;
+        const stats = lstatSync(/* turbopackIgnore: true */ from);
+        const measured = measurePath(from);
+        targetMembers.push({
+          name: member,
+          path: from,
+          directory: stats.isDirectory(),
+          files: measured.files,
+          bytes: measured.bytes,
+        });
+      }
+      replace.push({
+        family: entry.family,
+        sourceDir: entry.sourceDir,
+        sourceMembers,
+        targetMembers,
+      });
+    }
     for (const member of entry.members) {
       const from = path.join(entry.sourceDir, member);
       if (!existsSync(/* turbopackIgnore: true */ from)) continue;
@@ -389,5 +579,5 @@ export function planKanaDataRootMove(input) {
       });
     }
   }
-  return { target, move, skip: skips };
+  return { target, move, replace, skip: skips };
 }

@@ -246,6 +246,8 @@ function describeSkipReason(reason, target) {
       return "does not exist";
     case "unrecognized":
       return "holds nothing Kana writes";
+    case "incomplete":
+      return "has journal files but no database to replace";
     default:
       return reason;
   }
@@ -318,15 +320,27 @@ function resolveMigrateDestination({ to, source }) {
  * operator named, so this command is the only way data leaves one, and it does
  * nothing the operator has not agreed to: it shows the plan, copies by default,
  * verifies every file it writes, and keeps the source until the operator
- * removes it.
+ * removes it. A destination entry always wins unless the operator passes
+ * `--replace-existing`, which names and backs up the destination family before
+ * replacing it whole.
  */
-export async function migrate({ dataRoot, from, to, deleteSource, dryRun, force, assumeYes }) {
+export async function migrate({
+  dataRoot,
+  from,
+  to,
+  deleteSource,
+  replaceExisting,
+  dryRun,
+  force,
+  assumeYes,
+}) {
   const source = resolveMigrateSource({ from, dataRoot });
   const destination = resolveMigrateDestination({ to, source });
   const plan = planKanaDataRootMove({
     targetDir: destination,
     legacyDirs: [source],
     requireMarker: !force,
+    replaceExisting,
   });
 
   const unrecognized = plan.skip.find((skipped) => skipped.reason === "unrecognized");
@@ -339,13 +353,26 @@ export async function migrate({ dataRoot, from, to, deleteSource, dryRun, force,
 
   heading("Move a Kana data root");
   const bytes = plan.move.reduce((total, entry) => total + entry.bytes, 0);
-  print(keyValues([
+  const replacedBytes = plan.replace.reduce(
+    (total, replacement) =>
+      total + replacement.targetMembers.reduce((sum, member) => sum + member.bytes, 0),
+    0,
+  );
+  const rows = [
     ["From", displayPath(source)],
     ["To", displayPath(plan.target)],
     ["Entries", `${plan.move.length}`],
     ["Size", formatBytes(bytes)],
-    ["Source after the move", deleteSource ? "removed, entry by entry" : "kept"],
-  ], "  ").join("\n"));
+  ];
+  if (plan.replace.length) {
+    rows.push([
+      "Replace",
+      `${plan.replace.length} existing ${plan.replace.length === 1 ? "family" : "families"}, ${formatBytes(replacedBytes)} backed up first`,
+    ]);
+    rows.push(["Backup", "a new .kana-migrate-backup-* directory in the destination"]);
+  }
+  rows.push(["Source after the move", deleteSource ? "removed, entry by entry" : "kept"]);
+  print(keyValues(rows, "  ").join("\n"));
   print();
   for (const entry of plan.move) {
     const detail = entry.directory
@@ -353,13 +380,26 @@ export async function migrate({ dataRoot, from, to, deleteSource, dryRun, force,
       : formatBytes(entry.bytes);
     print(`  ${style.dim(symbols.bullet)} ${entry.name}  ${style.dim(detail)}`);
   }
+  for (const replacement of plan.replace) {
+    const names = replacement.targetMembers.map((member) => member.name).join(", ") || "entries";
+    status.warning(
+      replacement.family,
+      `replaces existing ${names}; backed up first`,
+    );
+  }
   for (const skipped of plan.skip) {
     status.info(displayPath(skipped.name), describeSkipReason(skipped.reason, plan.target));
   }
   print();
 
   if (!plan.move.length) {
-    status.warning("Nothing to move", `Every entry is already in ${displayPath(plan.target)}.`);
+    const incomplete = plan.skip.some((skipped) => skipped.reason === "incomplete");
+    status.warning(
+      "Nothing to move",
+      incomplete
+        ? `No complete source family can replace what ${displayPath(plan.target)} holds.`
+        : `Every entry is already in ${displayPath(plan.target)}.`,
+    );
     return;
   }
 
@@ -387,8 +427,11 @@ export async function migrate({ dataRoot, from, to, deleteSource, dryRun, force,
       );
     }
     const verb = deleteSource ? "Move" : "Copy";
+    const replaceNote = plan.replace.length
+      ? `, replacing ${plan.replace.length} existing ${plan.replace.length === 1 ? "family" : "families"}`
+      : "";
     agreed = await promptConfirm(
-      `${verb} ${formatEntries(plan.move.length)} from ${displayPath(source)} into ${displayPath(plan.target)}?`,
+      `${verb} ${formatEntries(plan.move.length)} from ${displayPath(source)} into ${displayPath(plan.target)}${replaceNote}?`,
     );
   }
   if (!agreed) {
@@ -397,11 +440,16 @@ export async function migrate({ dataRoot, from, to, deleteSource, dryRun, force,
   }
 
   print();
+  let backupDir = null;
   const moved = migrateKanaDataRoot({
     targetDir: plan.target,
     legacyDirs: [source],
     requireMarker: !force,
     copyOnly: !deleteSource,
+    replaceExisting,
+    onBackupDir: (dir) => {
+      backupDir = dir;
+    },
     log: (name, _fromDir, targetDir, result) => {
       status.success(
         name,
@@ -415,6 +463,15 @@ export async function migrate({ dataRoot, from, to, deleteSource, dryRun, force,
     },
   });
   print();
+
+  if (backupDir) {
+    status.info(
+      "Backup",
+      `${displayPath(backupDir)} holds the destination entries this run backed up; remove it once Kana reads the new root.`,
+    );
+  } else if (plan.replace.length) {
+    status.warning("Backup", "No replacement completed; the destination was left as it was.");
+  }
 
   const unfinished = plan.move.length - moved.length;
   if (unfinished > 0) {

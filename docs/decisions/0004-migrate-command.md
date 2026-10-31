@@ -1,6 +1,6 @@
 # ADR-0004: A requested move of a managed data root
 
-Status: accepted, 2026-10-19; adds the one path by which an operator-set root moves.
+Status: accepted, 2026-10-19; amended 2026-10-31 for `--replace-existing`; adds the one path by which an operator-set root moves.
 
 **Read when:** you are changing `kana migrate`, or anything that decides where an upgrade finds Kana's data.
 **Truth in code:** `shared/data-dir.mjs`, `bin/lib/commands.mjs`, `bin/kana.mjs`, `bin/lib/ui.mjs`
@@ -28,8 +28,24 @@ that the bytes it wrote equal the bytes it read, recreates a directory with its
 own mode, and takes a WAL database and its journal files together, exactly as the
 automatic path does. A copy has an undo: the source is still there until a person
 deletes it. `--delete-source` moves instead, using a rename inside one
-filesystem, so entries are never half-taken. A failed copy takes back what it
-wrote, reports the entry, and leaves the source whole for the next attempt.
+filesystem, so entries are never half-taken; a replacement always copies and
+verifies the whole family first and deletes source members only after that. A
+failed copy takes back what it wrote, reports the entry, and leaves the source
+whole for the next attempt.
+
+An entry the destination already holds still wins by default, because a
+destination that received a first-run database keeps it unless the operator says
+otherwise. `--replace-existing` is that explicit act: the plan names every
+destination member it would replace, and the move copies those members into a
+new owner-only `.kana-migrate-backup-*` directory inside the destination before
+removing anything. The destination family is then removed whole, including a
+journal file the source no longer has, and the source family is copied and
+verified in its place. If writing the new family fails, Kana removes what it
+wrote and restores the destination members from the backup; the backup stays on
+disk either way, because it carries the same credentials as the data root.
+Without the flag, the entry is reported as already present and is never
+overwritten. A source that holds only journal files can never replace a database
+family, since that would mix two roots or destroy the destination base file.
 
 Recognition stays strict. A directory is a candidate only when it holds
 `appstate.db`, `activities.db`, `jwt-secret`, `voices/`, or `irodori/`, and

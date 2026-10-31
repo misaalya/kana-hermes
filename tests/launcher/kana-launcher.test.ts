@@ -6,6 +6,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -317,6 +318,79 @@ describe("kana migrate", () => {
       assert.match(result.stdout, /unchanged; delete it yourself/);
       // A systemd unit belongs to the operator, so Kana only says what to change.
       assert.match(result.stdout, /KANA_DATA_DIR=/);
+    });
+  });
+
+  it("keeps an existing destination family unless --replace-existing is given", () => {
+    withFreshHome((environment, home) => {
+      const managed = managedRoot(home);
+      const target = path.join(home, ".kana");
+      mkdirSync(target, { recursive: true });
+      writeFileSync(path.join(target, "appstate.db"), "destination");
+      writeFileSync(path.join(target, "appstate.db-wal"), "destination-wal");
+
+      const result = run(["migrate", "--yes"], { ...environment, KANA_DATA_DIR: managed });
+
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(result.stdout, /already in/);
+      assert.equal(readFileSync(path.join(target, "appstate.db"), "utf8"), "destination");
+      assert.equal(readFileSync(path.join(target, "appstate.db-wal"), "utf8"), "destination-wal");
+      assert.equal(existsSync(path.join(managed, "appstate.db")), true);
+      assert.equal(
+        readdirSync(target).some((name) => name.startsWith(".kana-migrate-backup-")),
+        false,
+      );
+    });
+  });
+
+  it("lists and backs up the destination family when --replace-existing is given", () => {
+    withFreshHome((environment, home) => {
+      const managed = managedRoot(home);
+      const target = path.join(home, ".kana");
+      mkdirSync(target, { recursive: true });
+      writeFileSync(path.join(target, "appstate.db"), "destination");
+      writeFileSync(path.join(target, "appstate.db-wal"), "destination-wal");
+      writeFileSync(path.join(target, "appstate.db-shm"), "destination-shm");
+
+      const dry = run(["migrate", "--yes", "--dry-run", "--replace-existing"], {
+        ...environment,
+        KANA_DATA_DIR: managed,
+      });
+      assert.equal(dry.status, 0, dry.stderr);
+      assert.match(dry.stdout, /Replace\s+1 existing family/);
+      assert.match(
+        dry.stdout,
+        /replaces existing appstate\.db, appstate\.db-shm, appstate\.db-wal/,
+      );
+      assert.match(dry.stdout, /\.kana-migrate-backup-\*/);
+      assert.equal(readFileSync(path.join(target, "appstate.db"), "utf8"), "destination");
+      assert.equal(
+        readdirSync(target).some((name) => name.startsWith(".kana-migrate-backup-")),
+        false,
+      );
+
+      const replaced = run(["migrate", "--yes", "--replace-existing"], {
+        ...environment,
+        KANA_DATA_DIR: managed,
+      });
+      assert.equal(replaced.status, 0, replaced.stderr);
+      assert.match(replaced.stdout, /replaces existing appstate\.db/);
+      assert.match(replaced.stdout, /Backup\s+.*\.kana-migrate-backup-/);
+      assert.equal(readFileSync(path.join(target, "appstate.db"), "utf8"), "db");
+      assert.equal(readFileSync(path.join(target, "appstate.db-wal"), "utf8"), "wal");
+      // The old family's journal does not survive beside the new database.
+      assert.equal(existsSync(path.join(target, "appstate.db-shm")), false);
+
+      const backupName = readdirSync(target).find((name) =>
+        name.startsWith(".kana-migrate-backup-"),
+      );
+      assert.ok(backupName);
+      const backup = path.join(target, backupName);
+      assert.equal(readFileSync(path.join(backup, "appstate.db"), "utf8"), "destination");
+      assert.equal(readFileSync(path.join(backup, "appstate.db-wal"), "utf8"), "destination-wal");
+      assert.equal(readFileSync(path.join(backup, "appstate.db-shm"), "utf8"), "destination-shm");
+      // The default copy still leaves the source whole.
+      assert.equal(readFileSync(path.join(managed, "appstate.db"), "utf8"), "db");
     });
   });
 

@@ -96,6 +96,15 @@ service again with the same root undoes the copy. `--delete-source` moves the
 entries instead of copying them, `--yes` confirms without a prompt, and a
 directory that holds nothing Kana writes is refused unless `--force` is given.
 
+A destination entry always wins by default: a database already in `~/.kana` is
+left alone rather than overwritten. `--replace-existing` is the explicit request
+to replace such entries. It names every destination family it will replace,
+copies those members into a new owner-only `.kana-migrate-backup-*` directory
+inside the destination, removes the old family whole (including its WAL and SHM
+files), and then copies and verifies the source family. Keep the backup until
+you are sure the new root is the one Kana reads; it contains the same
+credentials as the data root itself.
+
 Kana never edits a systemd unit. Point `KANA_DATA_DIR` at the new root, or remove
 it so the service uses the `~/.kana` of the user that runs it, then start the
 service again and read the root Kana reports:
