@@ -6,6 +6,7 @@ import type { AvatarModelSummary } from "@/lib/avatar/indexed-db-avatar-model-st
 import type { AvatarPortraits } from "@/lib/avatar/portrait";
 import type { Live2DModelBindings } from "@/lib/avatar/live2d-avatar-provider";
 import type { AddHermesModelInput, HermesCustomProvider } from "@/lib/runtime/hermes-models-client";
+import type { AddHermesModelResult } from "@/lib/services/model-change-restart";
 import {
   suggestLive2DModelBindings,
   type Live2DModelCapabilities,
@@ -84,7 +85,7 @@ type SettingsDialogProps = {
   onListAgentModels(refresh?: boolean): Promise<AgentModelCatalog>;
   onSelectAgentModel(provider: string, model: string, confirm?: boolean): Promise<AgentModelSwitchResult>;
   onListHermesModelProviders(): Promise<HermesCustomProvider[]>;
-  onAddHermesModel(input: AddHermesModelInput): Promise<HermesCustomProvider>;
+  onAddHermesModel(input: AddHermesModelInput): Promise<AddHermesModelResult>;
   onPreviewAvatarEmotion(preferences: KanaPreferences, emotion: Emotion): Promise<void>;
   onPreviewAvatarTalking(preferences: KanaPreferences): Promise<void>;
   /** Stage portraits for the avatar cards, by imported model id or model URL. */

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import type { AddHermesModelInput, HermesCustomProvider } from "@/lib/runtime/hermes-models-client";
+import type { AddHermesModelResult, ModelChangeRestart } from "@/lib/services/model-change-restart";
 import { getCopy } from "@/lib/ui/copy";
 import { btnPrimary, btnSecondary, fieldLabel } from "./ui";
 import { settingsInput } from "./settings-layout";
@@ -41,6 +42,26 @@ function errorText(cause: unknown, fallback: string): string {
   return cause instanceof Error ? cause.message : fallback;
 }
 
+/** The saved change is already in Hermes; this says whether it is live yet. */
+function restartNote(copy: SettingsCopy, outcome: ModelChangeRestart): string {
+  switch (outcome.status) {
+    case "restarted":
+      return copy.modelRestartDone;
+    case "reconnecting":
+      return copy.modelRestartReconnecting;
+    case "busy":
+      return copy.modelRestartBusy;
+    case "not-managed":
+      return copy.modelRestartNotManaged;
+    case "remote":
+      return copy.modelRestartRemote;
+    case "not-running":
+      return copy.modelRestartNotRunning;
+    case "failed":
+      return copy.modelRestartFailed(outcome.message);
+  }
+}
+
 function ModelsHeader({ copy, count }: { copy: SettingsCopy; count: number }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
@@ -57,8 +78,8 @@ function NewProviderForm({
   onCancel,
 }: {
   copy: SettingsCopy;
-  onSubmit(input: AddHermesModelInput): Promise<unknown>;
-  onSaved(): Promise<void>;
+  onSubmit(input: AddHermesModelInput): Promise<AddHermesModelResult>;
+  onSaved(result: AddHermesModelResult): Promise<void>;
   onCancel(): void;
 }) {
   const [name, setName] = useState("");
@@ -84,7 +105,7 @@ function NewProviderForm({
     }
     setBusy(true);
     try {
-      await onSubmit({
+      const result = await onSubmit({
         name: name.trim(),
         baseUrl: baseUrl.trim(),
         model: model.trim(),
@@ -92,7 +113,7 @@ function NewProviderForm({
         ...(context !== undefined ? { contextLength: context } : {}),
       });
       setApiKey("");
-      await onSaved();
+      await onSaved(result);
     } catch (cause) {
       setError(errorText(cause, copy.modelProviderFailed));
     } finally {
@@ -198,8 +219,8 @@ function EditProviderForm({
 }: {
   copy: SettingsCopy;
   provider: HermesCustomProvider;
-  onSubmit(input: AddHermesModelInput): Promise<unknown>;
-  onSaved(): Promise<void>;
+  onSubmit(input: AddHermesModelInput): Promise<AddHermesModelResult>;
+  onSaved(result: AddHermesModelResult): Promise<void>;
   onCancel(): void;
 }) {
   const [name, setName] = useState(provider.name);
@@ -225,7 +246,7 @@ function EditProviderForm({
     }
     setBusy(true);
     try {
-      await onSubmit({
+      const result = await onSubmit({
         providerId: provider.id,
         name: name.trim(),
         baseUrl: baseUrl.trim(),
@@ -233,7 +254,7 @@ function EditProviderForm({
         ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
       });
       setApiKey("");
-      await onSaved();
+      await onSaved(result);
     } catch (cause) {
       setError(errorText(cause, copy.modelProviderFailed));
     } finally {
@@ -339,8 +360,8 @@ function AddModelForm({
 }: {
   copy: SettingsCopy;
   provider: HermesCustomProvider;
-  onSubmit(input: AddHermesModelInput): Promise<unknown>;
-  onSaved(): Promise<void>;
+  onSubmit(input: AddHermesModelInput): Promise<AddHermesModelResult>;
+  onSaved(result: AddHermesModelResult): Promise<void>;
   onCancel(): void;
 }) {
   const [model, setModel] = useState("");
@@ -369,14 +390,14 @@ function AddModelForm({
     }
     setBusy(true);
     try {
-      await onSubmit({
+      const result = await onSubmit({
         providerId: provider.id,
         model: model.trim(),
         ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
         ...(context !== undefined ? { contextLength: context } : {}),
       });
       setApiKey("");
-      await onSaved();
+      await onSaved(result);
     } catch (cause) {
       setError(errorText(cause, copy.modelAddFailed));
     } finally {
@@ -454,8 +475,8 @@ function ModelIdRow({
   copy: SettingsCopy;
   provider: HermesCustomProvider;
   model: string;
-  onSubmit(input: AddHermesModelInput): Promise<unknown>;
-  onAdded(): Promise<void>;
+  onSubmit(input: AddHermesModelInput): Promise<AddHermesModelResult>;
+  onAdded(result: AddHermesModelResult): Promise<void>;
 }) {
   const [value, setValue] = useState(model);
   const [confirming, setConfirming] = useState(false);
@@ -482,7 +503,7 @@ function ModelIdRow({
     setBusy(true);
     setError("");
     try {
-      await onSubmit({
+      const result = await onSubmit({
         providerId: provider.id,
         model: next,
         ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
@@ -490,7 +511,7 @@ function ModelIdRow({
       setApiKey("");
       setConfirming(false);
       setValue(model);
-      await onAdded();
+      await onAdded(result);
     } catch (cause) {
       setError(errorText(cause, copy.modelAddFailed));
     } finally {
@@ -583,12 +604,13 @@ export function CustomModelManager({
 }: {
   copy: SettingsCopy;
   onListProviders(): Promise<HermesCustomProvider[]>;
-  onSubmit(input: AddHermesModelInput): Promise<unknown>;
+  onSubmit(input: AddHermesModelInput): Promise<AddHermesModelResult>;
   onCatalogChanged(): void | Promise<void>;
 }) {
   const [providers, setProviders] = useState<HermesCustomProvider[] | null>(null);
   const [loadError, setLoadError] = useState("");
   const [status, setStatus] = useState("");
+  const [statusTone, setStatusTone] = useState<"muted" | "danger">("muted");
   const [view, setView] = useState<ProviderView>({ kind: "list" });
 
   useEffect(() => {
@@ -616,11 +638,13 @@ export function CustomModelManager({
 
   const go = (next: ProviderView) => {
     setStatus("");
+    setStatusTone("muted");
     setView(next);
   };
 
-  const handleSaved = async (next: ProviderView) => {
-    setStatus(copy.modelAddSuccess);
+  const handleSaved = async (result: AddHermesModelResult, next: ProviderView) => {
+    setStatus(`${copy.modelAddSuccess} ${restartNote(copy, result.restart)}`);
+    setStatusTone(result.restart.status === "failed" ? "danger" : "muted");
     await refreshProviders();
     setView(next);
     try {
@@ -699,7 +723,14 @@ export function CustomModelManager({
         </div>
       </header>
 
-      {status ? <p role="status" className="text-[11px] leading-relaxed text-muted">{status}</p> : null}
+      {status ? (
+        <p
+          role="status"
+          className={`text-[11px] leading-relaxed ${statusTone === "danger" ? "text-danger" : "text-muted"}`}
+        >
+          {status}
+        </p>
+      ) : null}
 
       {providers === null ? (
         <p className="text-[11px] text-muted">{copy.modelLoading}</p>
@@ -771,7 +802,7 @@ export function CustomModelManager({
                         provider={provider!}
                         model={model}
                         onSubmit={onSubmit}
-                        onAdded={() => handleSaved({ kind: "provider", providerId: provider!.id })}
+                        onAdded={(result) => handleSaved(result, { kind: "provider", providerId: provider!.id })}
                       />
                     ))}
                   </div>
@@ -798,7 +829,7 @@ export function CustomModelManager({
               copy={copy}
               provider={provider}
               onSubmit={onSubmit}
-              onSaved={() => handleSaved({ kind: "provider", providerId: provider.id })}
+              onSaved={(result) => handleSaved(result, { kind: "provider", providerId: provider.id })}
               onCancel={() => go({ kind: "provider", providerId: provider.id })}
             />
           ) : null}
@@ -808,7 +839,7 @@ export function CustomModelManager({
               copy={copy}
               provider={provider}
               onSubmit={onSubmit}
-              onSaved={() => handleSaved({ kind: "provider", providerId: provider.id })}
+              onSaved={(result) => handleSaved(result, { kind: "provider", providerId: provider.id })}
               onCancel={() => go({ kind: "provider", providerId: provider.id })}
             />
           ) : null}
@@ -817,7 +848,7 @@ export function CustomModelManager({
             <NewProviderForm
               copy={copy}
               onSubmit={onSubmit}
-              onSaved={() => handleSaved({ kind: "list" })}
+              onSaved={(result) => handleSaved(result, { kind: "list" })}
               onCancel={() => go({ kind: "list" })}
             />
           ) : null}

@@ -439,7 +439,12 @@ editing that entry, or the provider entry would shadow the working credential.
 The save never changes the active model and never changes Kana's default: the
 model appears in the composer's picker after the catalog refresh, and you choose
 it (and optionally **Set as default**) in the usual way. Saving a model that
-already exists is harmless. The provider list is cached in server memory for 15
+already exists is harmless. After a successful save Kana tries to restart the
+managed local `hermes serve` so the endpoint and key are loaded, then reconnects
+the open conversation. It does not restart while a turn is running, for a remote
+Hermes, for one Kana did not start, or when it is stopped; the provider status
+line says whether it restarted and what to do when it did not, and a failed
+restart is shown as an error. The provider list is cached in server memory for 15
 seconds; a create or update clears that cache, so the manager shows the change
 immediately and other clients see an external Hermes edit within that window.
 

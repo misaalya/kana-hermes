@@ -1115,16 +1115,18 @@ details[open] > .kana-plus-summary::before {
 }
 
 /* Phones tuck the host rail behind a right-edge tab shaped like the chat
-   dock's handle. The rail is a slim spine that runs from under the header to
-   the composer; when closed, the rail is fully off-screen and only the tab
-   remains. */
+   dock's handle. The rail hugs its readings under the header and is capped by
+   the space above the composer; when closed, the rail is fully off-screen and
+   only the tab remains. */
 .kana-host-dock {
   position: fixed;
   top: calc(var(--kana-header-clear) + 6px);
   right: 0;
-  bottom: calc(12rem + env(safe-area-inset-bottom, 0px));
   z-index: 30;
   width: min(22vw, 76px);
+  max-height: calc(
+    100dvh - var(--kana-header-clear) - 6px - 12rem - env(safe-area-inset-bottom, 0px)
+  );
   transform: translateX(0);
   transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -1135,7 +1137,7 @@ details[open] > .kana-plus-summary::before {
 
 .kana-host-panel {
   display: flex;
-  height: 100%;
+  max-height: inherit;
   flex-direction: column;
   overflow-y: auto;
   border: 2px solid var(--line);

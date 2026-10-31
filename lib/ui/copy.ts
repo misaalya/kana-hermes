@@ -488,6 +488,13 @@ export type Copy = {
     modelAddSaving: string;
     modelAddCancel: string;
     modelAddSuccess: string;
+    modelRestartDone: string;
+    modelRestartReconnecting: string;
+    modelRestartBusy: string;
+    modelRestartNotManaged: string;
+    modelRestartRemote: string;
+    modelRestartNotRunning: string;
+    modelRestartFailed(message: string): string;
     modelAddFailed: string;
     modelAddProvidersFailed: string;
     modelAddRequired: string;
@@ -1136,6 +1143,13 @@ const id: Copy = {
     modelAddSaving: "Menyimpan…",
     modelAddCancel: "Batal",
     modelAddSuccess: "Tersimpan di Hermes.",
+    modelRestartDone: "Hermes dimulai ulang agar perubahan langsung dipakai.",
+    modelRestartReconnecting: "Hermes dimulai ulang; Kana sedang menyambung lagi.",
+    modelRestartBusy: "Hermes tidak dimulai ulang karena Kana sedang menjawab. Ketik /restart setelah jawaban selesai.",
+    modelRestartNotManaged: "Hermes ini tidak dijalankan oleh Kana, jadi mulai ulang dari tempat Hermes dijalankan.",
+    modelRestartRemote: "Hermes berjalan di mesin lain, jadi mulai ulang di mesin tempat Hermes berjalan.",
+    modelRestartNotRunning: "Hermes sedang tidak berjalan; perubahan terbaca saat Hermes dinyalakan.",
+    modelRestartFailed: (message) => `Hermes tidak dapat dimulai ulang: ${message}`,
     modelAddFailed: "Model tidak dapat disimpan.",
     modelAddProvidersFailed: "Provider custom tidak dapat dimuat dari Hermes.",
     modelAddRequired: "ID model wajib diisi.",
@@ -1817,6 +1831,13 @@ const en: Copy = {
     modelAddSaving: "Saving…",
     modelAddCancel: "Cancel",
     modelAddSuccess: "Saved to Hermes.",
+    modelRestartDone: "Hermes restarted so the change takes effect.",
+    modelRestartReconnecting: "Hermes restarted; Kana is reconnecting…",
+    modelRestartBusy: "Hermes was not restarted because Kana is still answering. Type /restart once the reply finishes.",
+    modelRestartNotManaged: "This Hermes was not started by Kana; restart it where it runs.",
+    modelRestartRemote: "This Hermes runs on another machine; restart it there.",
+    modelRestartNotRunning: "Hermes is not running; the change will be read when it starts.",
+    modelRestartFailed: (message) => `Hermes could not restart: ${message}`,
     modelAddFailed: "Could not save the model.",
     modelAddProvidersFailed: "Could not load custom providers from Hermes.",
     modelAddRequired: "Model ID is required.",

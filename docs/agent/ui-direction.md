@@ -180,15 +180,17 @@ clock CENTER, date RIGHT. The cards never cover the conversation name chip or
 the tool tray, take no input beyond their drags, poll the host only while
 mounted, and are absent on phones. On phones the same CPU, memory, disk, and
 uptime readings live behind a right-edge tab shaped like the chat dock's
-handle: opening it slides in a slim rail that runs from under the header to
-just above the composer, its four readings spread down equal slices of the rail
-with a dotted rule between them. Each metric sets its label above a large
-reading and a ten-tick gauge that spans the rail; uptime stacks its hours and
-minutes over Kana's own uptime and RSS, and the clock and date stay
-desktop-only. The rail takes its height from the viewport between the header
-and the composer, and the last reading stays cached while it is closed: a
-sample younger than 15 seconds is reused instead of requesting the host again.
-It polls only while open.
+handle: opening it slides in a slim rail under the header, its four readings
+stacked with a dotted rule between them. The rail is typographic rather than
+instrument-like: each metric sets its small uppercase label above a large,
+right-aligned reading and nothing else, so the readings carry the data on their
+own. Uptime stacks its hours and minutes over Kana's own uptime and RSS, and the
+clock and date stay desktop-only. The rail hugs its readings instead of running
+down to the composer, capped by the space above the composer so overflow
+scrolls inside it. It keeps its height while closed, so the tab stays put
+instead of jumping to the top, and the last reading stays cached: a sample
+younger than 15 seconds is reused instead of requesting the host again. It
+polls only while open.
 
 ## Conversation history
 
@@ -447,8 +449,11 @@ endpoint and its
 first model in a single narrow column, grouped under Connection and Model; the
 other provider forms use the same stacked fields. A save returns to the provider
 detail, or to the list after creating a provider, with a muted success line and
-a refreshed model catalog without switching the active model. The key field is a
-password input and is discarded when its form closes.
+a refreshed model catalog without switching the active model. The success line
+also says whether Kana restarted the managed Hermes so the change applies, or
+why it could not (a running reply, a remote Hermes, one Kana did not start, or
+one that is stopped); a failed restart is shown in the danger colour. The key
+field is a password input and is discarded when its form closes.
 While Hermes works, or while the reply's voice is still being generated, the
 transcript shows a chat-app typing indicator (`kana-typing`, three hopping dots)
 with the status beside it, and Stop is a small icon-and-label pill next to that

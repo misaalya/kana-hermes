@@ -22,6 +22,7 @@ import { CommandService } from "./command-service";
 import { ConversationService } from "./conversation-service";
 import { HermesSessionManager } from "./hermes-session-manager";
 import { ModelCatalogService } from "./model-catalog-service";
+import { restartManagedHermesForModelChange } from "./model-change-restart";
 import { ModelDefaultsService } from "./model-defaults-service";
 import { PreferencesAccess } from "./preferences-service";
 import { savePreferences } from "./save-preferences";
@@ -86,8 +87,14 @@ function createActions(parts: {
     listHermesModelProviders: () => listHermesModelProvidersRequest(),
     async addHermesModel(input: Parameters<typeof addHermesModelRequest>[0]) {
       const provider = await addHermesModelRequest(input);
+      const restart = await restartManagedHermesForModelChange({
+        busy: stores.agentSession.getState().busy,
+        inspect: () => hermesControl.inspect(),
+        restart: () => hermesControl.start({ restart: true }),
+        reconnect: () => sessions.reconnect(),
+      });
       models.invalidate();
-      return provider;
+      return { provider, restart };
     },
     createConversation: () => sessions.createConversation(),
     selectConversation: (id: string) => sessions.selectConversation(id),

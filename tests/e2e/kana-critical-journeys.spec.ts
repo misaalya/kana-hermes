@@ -2077,11 +2077,13 @@ test("opens the phone host strip from its edge tab", async ({ page }) => {
   await expect(strip).toContainText("Disk");
   await expect(strip).toContainText("Uptime");
   await expect(strip).toContainText("Kana");
-  await expect(strip.locator("[data-host-meter]")).toHaveCount(3);
-  await expect(strip.locator("[data-host-meter] > span")).toHaveCount(30);
-  for (const metric of ["CPU", "Memory", "Disk"]) {
-    await expect(strip.getByRole("progressbar", { name: metric, exact: true })).toBeVisible();
+  // Pure typography: the readings carry the data, set flush to the right edge.
+  const values = strip.locator("[data-host-value]");
+  await expect(values).toHaveCount(4);
+  for (let index = 0; index < 4; index += 1) {
+    await expect(values.nth(index)).toHaveCSS("text-align", "right");
   }
+  await expect(values.first()).toHaveCSS("font-size", "22px");
   const panel = page.locator("#kana-host-panel");
   const panelBox = await panel.boundingBox();
   const composerBox = await page.locator(".kana-composer-shell").boundingBox();
@@ -2089,20 +2091,28 @@ test("opens the phone host strip from its edge tab", async ({ page }) => {
   expect(panelBox).not.toBeNull();
   expect(composerBox).not.toBeNull();
   expect(viewport).not.toBeNull();
-  // A slim rail from the header to the composer: the viewport caps it, the
-  // composer stays clear, and nothing scrolls.
+  // A compact rail under the header: it hugs its readings, stays above the
+  // composer, and needs no scrolling on this viewport.
   expect(panelBox!.width).toBeLessThanOrEqual(77);
-  expect(panelBox!.height).toBeGreaterThan(400);
-  expect(panelBox!.height).toBeLessThanOrEqual(viewport!.height - 32);
+  expect(panelBox!.height).toBeGreaterThan(240);
+  expect(panelBox!.height).toBeLessThan(viewport!.height / 2);
   expect(panelBox!.y + panelBox!.height).toBeLessThanOrEqual(composerBox!.y);
   expect(await panel.evaluate((element) => element.scrollHeight <= element.clientHeight)).toBe(true);
   await page.screenshot({
     path: `test-results/host-strip-${test.info().project.name}.png`,
   });
 
+  const handle = page.locator(".kana-host-toggle");
+  const openHandleBox = await handle.boundingBox();
   const served = hostRequests;
   await page.getByRole("button", { name: "Hide host metrics" }).click();
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await page.waitForTimeout(400);
+  // The rail keeps its height while closed, so the tab must not jump upward.
+  const closedHandleBox = await handle.boundingBox();
+  expect(openHandleBox).not.toBeNull();
+  expect(closedHandleBox).not.toBeNull();
+  expect(Math.abs(closedHandleBox!.y - openHandleBox!.y)).toBeLessThanOrEqual(1);
   await page.getByRole("button", { name: "Show host metrics" }).click();
   await expect(strip).toBeVisible();
   await expect(strip).toContainText("CPU");
@@ -2898,6 +2908,67 @@ test("adds another model to one provider without asking for its key again", asyn
   await expect(form).toHaveCount(0);
   await expect(manager.getByLabel("Model ID: beta")).toHaveValue("beta");
   await expect(manager.getByLabel("API key")).toHaveCount(0);
+});
+
+test("restarts a managed Hermes after saving a provider change", async ({ page }) => {
+  test.setTimeout(60_000);
+  const posts: Array<Record<string, unknown>> = [];
+  let providers = [{
+    id: "acme",
+    name: "Acme",
+    baseUrl: "https://api.example.com/v1",
+    models: ["alpha"],
+    hasApiKey: true,
+    discoverModels: false,
+    source: "providers",
+  }];
+  await page.route("**/api/hermes/models**", async (route) => {
+    if (route.request().method() === "POST") {
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      posts.push(body);
+      providers = providers.map((provider) => provider.id === body.providerId
+        ? { ...provider, models: [...new Set([...provider.models, String(body.model)])] }
+        : provider);
+      return route.fulfill({
+        json: { ok: true, provider: providers.find((provider) => provider.id === body.providerId) },
+      });
+    }
+    return route.fulfill({ json: { providers } });
+  });
+  const runtimeStatus = {
+    mode: "local",
+    controlAvailable: true,
+    state: "running",
+    managed: true,
+    port: 9119,
+    websocketUrl: "ws://127.0.0.1:9119/api/ws",
+    tokenAvailable: true,
+    message: "Hermes UI gateway is running under Kana.",
+  };
+  const runtimeActions: string[] = [];
+  await page.route("**/api/local-runtime/hermes*", async (route) => {
+    if (route.request().method() === "POST") {
+      runtimeActions.push(route.request().postDataJSON().action);
+    }
+    await route.fulfill({ json: runtimeStatus });
+  });
+
+  await page.getByRole("button", { name: "Open settings" }).click();
+  const settings = page.getByRole("dialog");
+  await settings.getByRole("button", { name: /^AI model/ }).click();
+  await settings.getByRole("region", { name: "AI model", exact: true })
+    .getByRole("button", { name: /AI providers/ }).click();
+  const manager = settings.getByRole("region", { name: "AI providers" });
+  await manager.getByRole("button", { name: "Acme, 1 model, API key configured" }).click();
+  await manager.getByRole("button", { name: "Add model", exact: true }).click();
+  const form = manager.getByRole("form", { name: "Add a model" });
+  await form.getByLabel("Model ID").fill("beta");
+  await form.getByRole("button", { name: "Save model", exact: true }).click();
+
+  await expect.poll(() => posts).toEqual([{ providerId: "acme", model: "beta" }]);
+  await expect.poll(() => runtimeActions).toEqual(["restart"]);
+  await expect(manager.getByText(/Saved to Hermes\..*Hermes restarted/)).toBeVisible();
+  await expect(manager.getByLabel("Model ID: beta")).toHaveValue("beta");
 });
 
 test("adds a corrected model ID as a new model and warns that rename is unsupported", async ({ page }) => {

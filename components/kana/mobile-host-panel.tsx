@@ -7,9 +7,6 @@ import { ChevronLeftIcon, ChevronRightIcon } from "./icons";
 import { useKanaStore } from "./kana-workspace-context";
 import { useHostSnapshot, type HostReading } from "./use-host-snapshot";
 
-const TICKS = 10;
-/** Matches the dock's slide-out transition before the strip unmounts. */
-const CLOSE_MS = 320;
 /** A reading this recent is reused instead of fetched again on reopen. */
 const CACHE_MS = 15_000;
 
@@ -28,48 +25,28 @@ function HostRow({
   label,
   value,
   secondary,
-  percent,
   detail,
 }: {
   label: string;
   value: string;
   secondary?: string;
-  percent?: number | null;
   detail?: string;
 }) {
-  const filled = percent == null ? 0 : Math.round((percent / 100) * TICKS);
   return (
     <div className="flex flex-1 shrink-0 flex-col justify-center py-3">
       <p className="text-[8px] font-extrabold uppercase leading-[1.2] tracking-[0.08em] text-muted">
         {label}
       </p>
-      <p className="mt-1.5 text-[19px] font-extrabold leading-[0.95] text-ink tabular-nums">
+      <p
+        data-host-value=""
+        className="mt-1.5 text-[22px] font-extrabold leading-[0.95] text-ink tabular-nums"
+      >
         {value}
         {secondary ? (
           <span className="block">{secondary}</span>
         ) : null}
       </p>
-      {percent != null ? (
-        <span
-          data-host-meter=""
-          role="progressbar"
-          aria-label={label}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={Math.round(percent)}
-          className="mt-2 flex h-[60px] flex-col-reverse gap-[2px]"
-        >
-          {Array.from({ length: TICKS }, (_, index) => (
-            <span
-              key={index}
-              aria-hidden="true"
-              className={`min-h-[2px] flex-1 rounded-[2px] transition-colors duration-500 ${
-                index < filled ? "bg-accent" : "bg-line"
-              }`}
-            />
-          ))}
-        </span>
-      ) : detail ? (
+      {detail ? (
         <p className="mt-2 text-[8px] font-bold leading-[1.45] text-faint">{detail}</p>
       ) : null}
     </div>
@@ -88,7 +65,7 @@ function HostStrip({ locale, reading }: { locale: UiLocale; reading: HostReading
   const [uptimeValue, uptimeSecondary] = uptimeLines(snapshot?.uptime ?? 0);
 
   return (
-    <div className="flex min-h-full flex-col px-3 pb-2">
+    <div className="flex flex-col px-2.5 pb-2 text-right">
       <div className="flex flex-1 flex-col divide-y divide-dotted divide-line-strong">
         <div className="shrink-0 pb-2.5 pt-3">
           <p className="text-[8px] font-extrabold uppercase leading-[1.2] tracking-[0.1em] text-muted">
@@ -108,17 +85,14 @@ function HostStrip({ locale, reading }: { locale: UiLocale; reading: HostReading
             <HostRow
               label={settings.hostCpu}
               value={cpu === null ? "—" : `${Math.round(cpu)}%`}
-              percent={cpu}
             />
             <HostRow
               label={settings.hostMemory}
               value={memory === null ? "—" : `${Math.round(memory)}%`}
-              percent={memory}
             />
             <HostRow
               label={settings.hostDisk}
               value={disk === null ? "—" : `${Math.round(disk)}%`}
-              percent={disk}
             />
             <HostRow
               label={settings.hostUptime}
@@ -156,11 +130,9 @@ function HostStrip({ locale, reading }: { locale: UiLocale; reading: HostReading
 
 /**
  * Phones tuck the host rail behind a right-edge tab, shaped like the chat
- * dock's handle. The rail runs from the header down to the composer, and each
- * metric owns an equal slice of it so the gauge column reads top to bottom.
- * The last reading stays cached while the rail is closed, so reopening it
- * shows metrics at once; a fresh sample is reused instead of asking the host
- * again.
+ * dock's handle. The rail stays mounted while closed, so its compact height
+ * keeps the tab in place instead of letting it jump to the top; the strip is
+ * inert and off-screen until opened.
  */
 export function MobileHostPanel() {
   const locale = useKanaStore("preferences", (state) => state.preferences.uiLocale);
@@ -168,17 +140,10 @@ export function MobileHostPanel() {
   const avatarLayoutOpen = useKanaStore("workspace", (state) => state.avatarLayoutOpen);
   const greeting = useKanaStore("workspace", (state) => state.greeting);
   const [open, setOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
   const text = getCopy(locale).workspace;
   const settings = getCopy(locale).settings;
   const active = open && usesMobileChat && !greeting && !avatarLayoutOpen;
   const reading = useHostSnapshot({ active, freshForMs: CACHE_MS });
-
-  useEffect(() => {
-    if (open) return;
-    const timer = window.setTimeout(() => setMounted(false), CLOSE_MS);
-    return () => window.clearTimeout(timer);
-  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -199,10 +164,7 @@ export function MobileHostPanel() {
         aria-controls="kana-host-panel"
         aria-expanded={open}
         aria-label={open ? text.hideHost : text.showHost}
-        onClick={() => {
-          setMounted(true);
-          setOpen((value) => !value);
-        }}
+        onClick={() => setOpen((value) => !value)}
       >
         <svg
           className="absolute inset-0 h-full w-full"
@@ -226,7 +188,7 @@ export function MobileHostPanel() {
         inert={open ? undefined : true}
         className="kana-host-panel"
       >
-        {mounted ? <HostStrip locale={locale} reading={reading} /> : null}
+        <HostStrip locale={locale} reading={reading} />
       </section>
     </div>
   );
