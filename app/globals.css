@@ -1122,7 +1122,7 @@ details[open] > .kana-plus-summary::before {
   top: 50%;
   right: 0;
   z-index: 30;
-  width: min(32vw, 100px);
+  width: min(22vw, 72px);
   transform: translate(0, -50%);
   transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1);
 }

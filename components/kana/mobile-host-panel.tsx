@@ -7,7 +7,7 @@ import { ChevronLeftIcon, ChevronRightIcon } from "./icons";
 import { useKanaStore } from "./kana-workspace-context";
 import { useHostSnapshot, type HostReading } from "./use-host-snapshot";
 
-const TICKS = 16;
+const TICKS = 5;
 /** Matches the dock's slide-out transition before the strip unmounts. */
 const CLOSE_MS = 320;
 /** A reading this recent is reused instead of fetched again on reopen. */
@@ -39,39 +39,39 @@ function HostRow({
 }) {
   const filled = percent == null ? 0 : Math.round((percent / 100) * TICKS);
   return (
-    <div className="flex items-center justify-between gap-2 py-2">
-      <div className="min-w-0 flex-1">
-        <span className="block text-[9px] font-extrabold uppercase tracking-[0.08em] text-muted">
+    <div className="flex justify-end py-2 text-right">
+      <span className="flex flex-col items-end">
+        <span className="text-[8px] font-extrabold uppercase tracking-[0.08em] text-muted">
           {label}
         </span>
-        <span className="mt-1 block text-[18px] font-extrabold leading-none text-ink tabular-nums">
+        <span className="mt-0.5 text-[15px] font-extrabold leading-none text-ink tabular-nums">
           {value}
         </span>
+        {percent != null ? (
+          <span
+            aria-hidden="true"
+            data-host-ticks=""
+            className="mt-1 flex w-full flex-col-reverse gap-[2px] self-stretch"
+          >
+            {Array.from({ length: TICKS }, (_, index) => (
+              <span
+                key={index}
+                className={`h-1.5 w-full rounded-[1px] transition-colors duration-500 ${
+                  index < filled ? "bg-accent" : "bg-line"
+                }`}
+              />
+            ))}
+          </span>
+        ) : null}
         {secondary ? (
-          <span className="mt-1 block text-[15px] font-extrabold leading-none text-ink-dim tabular-nums">
+          <span className="mt-0.5 text-[12px] font-extrabold leading-none text-ink-dim tabular-nums">
             {secondary}
           </span>
         ) : null}
         {detail ? (
-          <p className="mt-1 text-[9px] font-bold leading-snug text-faint">{detail}</p>
+          <p className="mt-0.5 text-[8px] font-bold leading-snug text-faint">{detail}</p>
         ) : null}
-      </div>
-      {percent != null ? (
-        <span
-          aria-hidden="true"
-          data-host-ticks=""
-          className="flex shrink-0 flex-col-reverse gap-[2px]"
-        >
-          {Array.from({ length: TICKS }, (_, index) => (
-            <span
-              key={index}
-              className={`h-1 w-2 rounded-[1px] transition-colors duration-500 ${
-                index < filled ? "bg-accent" : "bg-line"
-              }`}
-            />
-          ))}
-        </span>
-      ) : null}
+      </span>
     </div>
   );
 }
@@ -89,16 +89,16 @@ function HostStrip({ locale, reading }: { locale: UiLocale; reading: HostReading
 
   return (
     <>
-      <div className="px-3.5 pb-2 pt-3">
-        <p className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-muted">
+      <div className="px-3 pb-2 pt-3 text-right">
+        <p className="text-[9px] font-extrabold uppercase tracking-[0.08em] text-muted">
           {settings.hostTitle}
         </p>
         {snapshot?.hostname ? (
-          <p className="mt-0.5 truncate text-[10.5px] font-bold text-faint">{snapshot.hostname}</p>
+          <p className="mt-0.5 truncate text-[9px] font-bold text-faint">{snapshot.hostname}</p>
         ) : null}
       </div>
       {snapshot ? (
-        <div className="px-3.5 pb-3">
+        <div className="px-3 pb-3">
           <div className="divide-y-2 divide-dotted divide-line-strong">
             <HostRow
               label={settings.hostCpu}
@@ -131,12 +131,12 @@ function HostStrip({ locale, reading }: { locale: UiLocale; reading: HostReading
             />
           </div>
           {error ? (
-            <p className="pt-2 text-[9.5px] font-bold text-danger">{settings.hostFailed}</p>
+            <p className="pt-2 text-right text-[8.5px] font-bold text-danger">{settings.hostFailed}</p>
           ) : null}
         </div>
       ) : (
         <p
-          className={`px-3.5 pb-4 pt-2 text-center text-[11px] font-bold ${
+          className={`px-3 pb-4 pt-2 text-center text-[10px] font-bold ${
             error ? "text-danger" : "animate-kana-pulse text-muted"
           }`}
         >

@@ -180,12 +180,13 @@ clock CENTER, date RIGHT. The cards never cover the conversation name chip or
 the tool tray, take no input beyond their drags, poll the host only while
 mounted, and are absent on phones. On phones the same CPU, memory, disk, and
 uptime readings live behind a right-edge tab shaped like the chat dock's
-handle: opening it slides in a narrow vertical strip whose metrics carry a
-segmented vertical gauge beside the label and value, uptime stacks its hours
-and minutes on two lines, and the clock and date stay desktop-only. The strip
-keeps one fixed height in its loading and loaded states, and the last reading
-stays cached while it is closed: a sample younger than 15 seconds is reused
-instead of requesting the host again. It polls only while open.
+handle: opening it slides in a right-aligned, narrow vertical strip of small
+text where each metric sets its label and percentage above a short vertical
+gauge that spans the text width, uptime stacks its hours and minutes, and the
+clock and date stay desktop-only. The strip takes its height from its content
+with a viewport-height cap, and the last reading stays cached while it is
+closed: a sample younger than 15 seconds is reused instead of requesting the
+host again. It polls only while open.
 
 ## Conversation history
 

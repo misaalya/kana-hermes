@@ -2078,15 +2078,15 @@ test("opens the phone host strip from its edge tab", async ({ page }) => {
   await expect(strip).toContainText("Uptime");
   await expect(strip).toContainText("Kana");
   await expect(strip.locator("[data-host-ticks]")).toHaveCount(3);
-  await expect(strip.locator("[data-host-ticks] > span")).toHaveCount(48);
+  await expect(strip.locator("[data-host-ticks] > span")).toHaveCount(15);
   const panel = page.locator("#kana-host-panel");
   const panelBox = await panel.boundingBox();
   const viewport = page.viewportSize();
   expect(panelBox).not.toBeNull();
   expect(viewport).not.toBeNull();
   // Content sets the height, the viewport caps it, and nothing scrolls.
-  expect(panelBox!.width).toBeLessThanOrEqual(101);
-  expect(panelBox!.height).toBeGreaterThan(420);
+  expect(panelBox!.width).toBeLessThanOrEqual(73);
+  expect(panelBox!.height).toBeGreaterThan(320);
   expect(panelBox!.height).toBeLessThanOrEqual(viewport!.height - 32);
   expect(await panel.evaluate((element) => element.scrollHeight <= element.clientHeight)).toBe(true);
   await page.screenshot({
