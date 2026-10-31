@@ -25,8 +25,8 @@ export const style = {
   green: paint("32", "39"),
   yellow: paint("33", "39"),
   cyan: paint("36", "39"),
-  // Kana's accent: a soft pink that stays readable on dark and light themes.
-  accent: paint("38;5;211", "39"),
+  // Kana's accent blue (#599dc6), matching --accent in the web UI.
+  accent: paint("38;2;89;157;198", "39"),
 };
 
 export const symbols = unicode
