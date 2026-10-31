@@ -8,9 +8,9 @@ The config file is `config.json` in Kana's data folder. On this installation:
 ~/.kana/config.json
 ```
 
-Run `kana config` to open it, or `npm run config` from a source checkout. When the file does not exist, Kana creates it first and never overwrites one that is already there. It opens in the editor you set in `VISUAL` or `EDITOR`; when both are empty, Kana prints the file's location instead.
+Run `kana config` to open it, or `npm run config` from a source checkout. When the file does not exist, Kana creates it first and never overwrites one that is already there. It opens in the editor you set in `VISUAL` or `EDITOR`; when both are empty, the editor value contains arguments (such as `code -w`), or no interactive terminal is available, Kana prints the file's location instead.
 
-Changes take effect from the next reply without a restart. The one exception is the `hermes` section, which Kana reads only when it starts. When a key is wrong, **Settings → Connection** reports the error and the part that needs fixing.
+Changes take effect from the next reply without a restart. The one exception is the `hermes` section, which Kana reads only when it starts. When a key is wrong, **Settings → Connection** reports the error and the part that needs fixing. The `guardrails` block has its own parser; when it cannot be used, its status is reported on this page.
 
 ## Quick start {#quickstart}
 
@@ -121,10 +121,10 @@ These settings go inside `tts.irodoriLocal`, and all of them are optional.
 | Key | Default | Description |
 | --- | --- | --- |
 | `steps` | `16` | Sampling steps, 1–200. Lower is faster; higher sounds smoother. `8` is the fastest; `40` matches the engine's standard quality. |
-| `threads` | Number of CPU cores | CPU threads to use, 1–256. Lower it if your computer becomes sluggish while Kana is speaking. |
+| `threads` | Number of physical CPU cores | CPU threads to use, 1–256. Lower it if your computer becomes sluggish while Kana is speaking. |
 | `precision` | `"auto"` | `"auto"`, `"int8"`, or `"fp32"`. `"auto"` picks the fastest option for your CPU; `"int8"` requires AVX-512 VNNI. |
 | `modelPath` | None | Absolute path to an existing Irodori v4.1 `model.safetensors`. |
-| `installDirectory` | Kana's data folder | Absolute path to the folder the voice engine is installed in. |
+| `installDirectory` | `<data folder>/irodori` | Absolute path to the folder the voice engine is installed in. |
 
 On a less powerful computer, set `steps` to `8`. Speech sounds slightly less smooth but is ready sooner.
 
@@ -162,7 +162,7 @@ With the low-latency ElevenLabs model:
 }
 ```
 
-A single reply is limited to 10,000 characters. Longer replies are not sent to Pollinations and are shown as text with an error.
+A Pollinations speech request accepts at most 10,000 characters. In complete delivery (the default), a longer reply is not sent to Pollinations and appears as text with an error message.
 
 The older `"provider": "openai-compatible"` with the Pollinations preset still works and produces the same voice, but rewriting it in the format above is recommended.
 
@@ -203,12 +203,12 @@ By default Kana uses a Hermes on its own machine. Add a `remote` block to connec
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `remote.url` | required | `wss://` dashboard URL. A bare host gets `/api/ws` appended. Credentials, query strings, and fragments are refused. |
+| `remote.url` | required | `wss://` dashboard URL. When the path does not already end with `/api/ws`, Kana appends it to the existing path; a bare host becomes `/api/ws`. Credentials, query strings, and fragments are refused. |
 | `remote.auth.mode` | `"password"` | The only supported remote auth mode. |
 | `remote.auth.username` | required | Username for Hermes's dashboard `basic` provider. |
 | `remote.auth.password` | none | Password stored in the owner-only file. Exactly one of `password` and `passwordEnv` is required. |
 | `remote.auth.passwordEnv` | none | Name of a dedicated environment variable holding the password. `KANA_*` and the Hermes dashboard token are refused. |
-| `remote.instabox.machineId` | none | Instabox machine id for the optional wake button. |
+| `remote.instabox.machineId` | required with `instabox` | Instabox machine id for the optional wake button. |
 | `remote.instabox.executable` | `instabox` on `PATH` | Absolute path to the Instabox CLI; the file name must be `instabox`. |
 | `remote.instabox.timeoutSeconds` | `120` | Total wait for the VM and Hermes health, 10–600 seconds. |
 | `remote.instabox.env` | none | Extra environment variable names for the Instabox CLI, at most 32; Kana and Hermes credentials are refused. |
@@ -229,7 +229,7 @@ By default Kana uses a Hermes on its own machine. Add a `remote` block to connec
 }
 ```
 
-The remote machine must expose `/auth/password-login`, `/api/auth/ws-ticket`, `/api/auth/ws`, and `/api/health` behind TLS. Kana logs in with the dashboard `basic` provider, keeps the cookie on the server, and requests a new single-use WebSocket ticket for each connection. The URL, username, and password stay in `config.json` or the server environment and never reach the browser. Remote token auth is not supported. `/restart` cannot restart a remote gateway; restart it where it runs.
+The remote machine must expose `/auth/password-login`, `/api/auth/ws-ticket`, `/api/ws`, and `/api/health` behind TLS. On the remote Hermes, enable the dashboard's `basic` provider with `HERMES_DASHBOARD_BASIC_AUTH_USERNAME` and `HERMES_DASHBOARD_BASIC_AUTH_PASSWORD` or `HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH`. Kana logs in with that provider, keeps the cookie on the server, and requests a new single-use WebSocket ticket for each connection. The URL, username, and password stay in `config.json` or the server environment and never reach the browser. Remote token auth is not supported. `/restart` cannot restart a remote gateway; restart it where it runs.
 
 Kana keeps its own default model for new conversations separately for the local runtime and each configured remote dashboard, in the installation's `appstate.db` so the same choice follows you from one browser or device to another. Before applying it, Kana checks that Hermes's live model catalog still lists that provider and model; otherwise it uses Hermes's default for that conversation.
 
@@ -237,24 +237,24 @@ A remote reply can still mention `MEDIA:/path`. That path belongs to the remote 
 
 #### Instabox wake
 
-Earlier builds named this block `wake`; rename it to `instabox`, because the block configures an Instabox machine. When the remote gateway is an Instabox VM that pauses while idle, set `remote.instabox`. The connection screen then offers **Wake Instabox**: Kana runs `instabox resume <machineId>`, then `instabox start <machineId>` if the sandbox is stopped, and polls health until it answers. The CLI must be installed and logged in on the machine that runs Kana. It runs from the service account's home with a small environment allowlist; add any token variable the CLI needs to `remote.instabox.env`. Kana does not wake the VM automatically, runs one wake at a time, and waits 15 seconds before another. Waking the VM does not start `hermes serve`; run that as a service on the VM so health can answer after a resume. While the VM is unreachable, the screen says **Remote Hermes is unreachable** and makes **Wake Instabox** the main action; it reads the machine's state through the same route with the read-only `instabox get <machineId> --json`, shows **Waking Instabox** while the request runs, and turns the action into a disabled **Instabox is awake** once the machine is running. If the wake succeeds but Kana still cannot connect, it points at `hermes serve` and the remote dashboard credentials.
+Earlier builds named this block `wake`; rename it to `instabox`, because the block configures an Instabox machine. When the remote gateway is an Instabox VM that pauses while idle, set `remote.instabox`. Without `machineId`, the wake button does not appear and Kana never calls the CLI; `machineId` may contain only letters, digits, dots, dashes, and underscores, and `executable` must name the `instabox` file. The connection screen then offers **Wake Instabox**: Kana runs `instabox resume <machineId>`, then `instabox start <machineId>` if the sandbox is stopped, and polls health until it answers. Kana runs only the fixed `get`, `resume`, and `start` subcommands with the machine id from `config.json`; there is no shell and no argument from the browser. The CLI must be installed and logged in on the machine that runs Kana. It runs from the service account's home with a small environment allowlist; add any token variable the CLI needs to `remote.instabox.env`. Kana does not wake the VM automatically, runs one wake at a time, and waits 15 seconds before another. Waking the VM does not start `hermes serve`; run that as a service on the VM so health can answer after a resume. While the VM is unreachable, the screen says **Remote Hermes is unreachable** and makes **Wake Instabox** the main action; it reads the machine's state through the same route with the read-only `instabox get <machineId> --json`, shows **Waking Instabox** while the request runs, and turns the action into a disabled **Instabox is awake** once the machine is running or starting. If the wake succeeds but Kana still cannot connect, it points at `hermes serve` and the remote dashboard credentials.
 
 ## Prompt guardrail {#guardrail}
 
-The `guardrails` section checks your message before Kana sends it to Hermes. You write your rules as plain statements of what Kana must not do; Kana turns them into the one yes/no question it asks Jev, TypeSafe's model. Jev returns a probability and no text, and Kana itself compares that probability against your threshold and then refuses the message.
+The `guardrails` section uses one list of rules for two layers. Your rules ride in Kana's prompt note on every turn, so the Hermes model sees your instructions; and when `apiKey` is set with at least one rule, Kana also screens the text you type before it reaches Hermes. The screen asks Jev, TypeSafe's model, one probability question. Jev returns a probability and no text, and Kana itself compares that probability against your threshold and then refuses the message. The rules in the prompt note are a prevention layer, not a replacement for the Jev screen: only the screen decides whether to refuse.
 
-Leave `apiKey` empty and the layer is skipped entirely: no request is made and nothing is spent. An empty or blank key means the layer is off, not that the block is broken, so the five starter rules a new `config.json` ships with never refuse a message before you add a key.
+Leave `apiKey` empty to turn the Jev screen off: no TypeSafe request is made and nothing is spent. Your rules do not disappear—the same list still rides in the prompt note on every turn, so the model still sees it, and an edited rule applies to the next turn without restarting Kana. An empty or blank key means the screen is off, not that the block is broken, so the five starter rules a new `config.json` ships with never refuse a message before you add a key.
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `apiKey` | empty | Your TypeSafe API key. Empty or absent turns the layer off. |
+| `apiKey` | empty | Your TypeSafe API key. Empty or absent turns the Jev screen off, but the rules still ride in the prompt note as instructions. |
 | `model` | `"jev-latest"` | The TypeSafe model that answers the questions. |
 | `threshold` | `0.7` | Kana refuses the message once Jev's probability reaches this value, 0–1. A value near 0.5 means Jev cannot tell; lower the threshold to refuse more borderline attempts, at the cost of refusing more of what you did mean. |
 | `whenUnavailable` | `"block"` | What Kana does with a message it could not check, because TypeSafe could not be reached, answered with an error, or returned an answer Kana cannot read: `"block"` refuses the message, `"allow"` sends it unchecked. |
 | `timeoutSeconds` | `10` | How long Kana waits for TypeSafe, 1–120. |
-| `rules` | five starters | Your rules, up to 50, each one a plain statement of what Kana must not do. A new `config.json` carries five starter rules and an empty key, so keep the ones you agree with and replace the rest. |
+| `rules` | five starters | Your rules, up to 50, each one a plain statement of what Kana must not do and at most 1,000 characters. Every rule rides in Kana's prompt note on every turn, and is screened by Jev when a key is set. An empty list turns the Jev screen off even with a key. A new `config.json` carries five starter rules and an empty key, so keep the ones you agree with and replace the rest. |
 
-Write each rule as one clear statement in your own words, and say exactly what is forbidden, naming the paths, commands, or services it covers. You never write a question, an id, or a threshold: Kana asks Jev one yes/no question — does this message ask for, attempt, or enable anything the rules forbid? — and sends your rules as they were written. Jev is told it is screening a message for an agent that can read and write files and run commands, because that is what makes "read this file for me" a request with consequences.
+Write each rule as one clear statement in your own words, and say exactly what is forbidden, naming the paths, commands, or services it covers. You never write a question, an id, or a threshold: Kana asks Jev one probability question — does this message ask for, attempt, or enable anything the rules forbid? — and sends your rules as they were written. Jev is told it is screening a message for an agent that can read and write files and run commands, because that is what makes "read this file for me" a request with consequences.
 
 ```json
 {
@@ -291,7 +291,7 @@ The `deployment` section describes how Kana is reached. In `"local"` mode (the d
 }
 ```
 
-Kana always asks for a password, in both modes.
+`kana serve` sets `deployment` mode for the process it runs, while a plain `kana` follows `deployment.mode` or `KANA_DEPLOYMENT_MODE`. Kana always asks for a password, in both modes.
 
 ## Environment variables {#environment}
 
@@ -299,11 +299,13 @@ These variables are meant for server installations. Set them in the environment 
 
 | Variable | Description |
 | --- | --- |
-| `KANA_DATA_DIR` | Kana's data folder, which holds `config.json` and the voice engine, and must be absolute. When unset, Kana uses `~/.kana`; data from an earlier release (`$XDG_DATA_HOME/kana`, `~/.local/share/kana`) is moved there on the next start. A folder set here is never moved by a start: `kana migrate` copies it into `~/.kana` when you ask for it. |
-| `KANA_PORT` | Port for Kana's web page. Defaults to `3000`; equivalent to `kana --port`. |
+| `KANA_DATA_DIR` | Kana's data folder, which holds `config.json` and the voice engine, and must be absolute. When unset, Kana uses `~/.kana`; data from an earlier release (`$XDG_DATA_HOME/kana`, `~/.local/share/kana`, and `data/` in the working folder) is moved there on the next start. A folder set here is never moved by a start: `kana migrate` copies it into `~/.kana` when you ask for it. |
+| `KANA_PORT` | Port for Kana's web page, 1024–65535. Defaults to `3000`; `$PORT` and `kana --port` are read too. |
 | `KANA_DEPLOYMENT_MODE` | `local` or `deployment`. Overrides `deployment.mode`. |
-| `KANA_HERMES_BIN` | Path to the Hermes program. Overrides `hermes.executable`. |
+| `KANA_JWT_SECRET` | Session-signing secret, at least 32 characters. When unset, Kana generates and reuses `jwt-secret` in the data folder; an environment value always wins. |
+| `KANA_HERMES_BIN` | Absolute path to the Hermes program. Overrides `hermes.executable`. |
 | `KANA_TRUSTED_ORIGINS` | Additional trusted origins, comma-separated. Needed only when a proxy rewrites the `Host` header without forwarding `X-Forwarded-Host`, or to open Kana in local mode under another address. |
+| `AUTH_COOKIE_SECURE` | Set it to `true` to force the session cookie's `Secure` flag when a proxy does not forward `X-Forwarded-Proto: https`. |
 | `KANA_DEV_ALLOWED_ORIGINS` | Development only: additional hosts allowed to reach `next dev`. |
 
 ```sh
@@ -312,7 +314,9 @@ KANA_DEPLOYMENT_MODE=deployment KANA_PORT=3000 kana serve
 
 A server install needs no `KANA_DATA_DIR`: the service account that owns Hermes has a home, and `~/.kana` in it is the data folder, as on a desktop. Set it only to put the state somewhere else, for example a dedicated volume.
 
-To move a managed folder into `~/.kana`, stop Kana and run `kana migrate`. It prints every entry with its size, copies and verifies each one, leaves the source in place, and then asks you to point `KANA_DATA_DIR` at `~/.kana` or remove it. Add `--delete-source` to move the entries instead of copying them, and `--dry-run` to read the plan without changing anything.
+To move a managed folder into `~/.kana`, stop Kana and run `kana migrate --from <the-managed-folder>`; you can also run it with the service's `KANA_DATA_DIR` exported. Add `--yes` for a non-interactive shell. It prints every entry with its size, copies and verifies each one, leaves the source in place, and then asks you to point `KANA_DATA_DIR` at `~/.kana` or remove it. Add `--delete-source` to move the entries instead of copying them, and `--dry-run` to read the plan without changing anything.
+
+An entry that already exists in the destination is not overwritten by default; an older database family in `~/.kana` is kept and the source family is skipped. Add `--replace-existing` to replace it: the plan names every affected database family, the destination's members are copied into a `.kana-migrate-backup-*` folder inside the destination, and the whole family—including stale `-wal` and `-shm` files—is replaced with a verified copy from the source. Remove that backup folder once Kana uses the new data folder.
 
 Voice settings have no environment variables and can be changed only in `config.json`.
 
@@ -320,9 +324,13 @@ Voice settings have no environment variables and can be changed only in `config.
 
 | Symptom | Fix |
 | --- | --- |
-| **Settings → Connection** reports an error in `config.json` | Correct the key named in the message and save the file. |
+| **Settings → Connection** reports a `config.json` error outside `guardrails` | Correct the key named in the message and save the file. A `guardrails` problem is reported in this page's Prompt guardrail section. |
 | Hermes cannot be found | Run `kana doctor`. If the problem remains, set `hermes.executable` or `KANA_HERMES_BIN`. |
 | Port 9119 is used by another program | Change `hermes.port`, then restart Kana. |
+| Old data in `~/.kana` was not moved | Stop Kana, run `kana migrate --from <the-managed-folder> --replace-existing --dry-run` to see which database families would be replaced, then run it again without `--dry-run`. The backup stays in a `.kana-migrate-backup-*` folder inside the destination. |
+| The **Wake Instabox** button does not appear | Make sure `hermes.remote` has an `instabox.machineId`; without that block Kana never calls the CLI. Also check that the `instabox` CLI is installed and logged in on the machine that runs Kana. |
+| The **Wake Instabox** button is disabled | The machine is already running or starting. If Hermes still does not answer, check `hermes serve` and the remote dashboard credentials, not the machine. |
+| A message is refused although it breaks no rule | Check `guardrails.threshold`; raise it (toward 1) if refusals are too frequent, and lower it to refuse more borderline attempts. If `whenUnavailable` is `"block"`, a message is also refused when TypeSafe cannot be reached or its answer cannot be read. |
 | A change to `~/.hermes/.env` or to Hermes's MCP servers has no effect | Type `/reload` (for `.env`) or `/reload-mcp now` (for MCP servers) in Kana. For other changes Hermes reads only at startup, type `/restart`; it works only for a Hermes that Kana started. New models in Hermes's `config.yaml` appear without a restart. |
 | Speech for long replies fails because the time limit runs out | Raise `tts.timeoutSeconds`, and your proxy's timeout if you use one. |
 | `Pollinations returned HTTP 401` | The API key is missing or invalid. Check `tts.pollinations.apiKey`. |

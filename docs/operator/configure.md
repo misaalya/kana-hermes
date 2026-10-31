@@ -119,8 +119,8 @@ password hash, then expose it over TLS. Kana logs in at
 connection. The password and cookie never reach the browser. Remote token auth
 is not supported; `hermes.remote.token` is refused.
 
-The remote host must expose `/auth/password-login`, `/api/auth/ws-ticket`, and
-`/api/health`. Use HTTPS; basic auth over plain HTTP is not suitable for a
+The remote host must expose `/auth/password-login`, `/api/auth/ws-ticket`,
+`/api/ws`, and `/api/health`. Use HTTPS; basic auth over plain HTTP is not suitable for a
 public host. The connection screen and Settings report remote mode without
 exposing the URL, username, password, or a process control that cannot work.
 `/restart` explains that the remote gateway must be restarted where it runs.

@@ -8,9 +8,9 @@ File konfigurasinya adalah `config.json` di folder data Kana. Pada instalasi ini
 ~/.kana/config.json
 ```
 
-Jalankan `kana config` untuk membukanya, atau `npm run config` dari kode sumber. Apabila file belum ada, Kana membuatnya lebih dulu dan tidak pernah menimpa file yang sudah ada. File dibuka dengan editor yang Anda tetapkan pada `VISUAL` atau `EDITOR`; apabila keduanya kosong, Kana hanya menampilkan lokasinya.
+Jalankan `kana config` untuk membukanya, atau `npm run config` dari kode sumber. Apabila file belum ada, Kana membuatnya lebih dulu dan tidak pernah menimpa file yang sudah ada. File dibuka dengan editor yang Anda tetapkan pada `VISUAL` atau `EDITOR`; apabila keduanya kosong, nilai editor mengandung argumen (misalnya `code -w`), atau tidak ada terminal interaktif, Kana hanya menampilkan lokasinya.
 
-Perubahan berlaku pada balasan berikutnya tanpa memulai ulang Kana. Satu-satunya pengecualian adalah bagian `hermes`, yang baru dibaca saat Kana dimulai. Apabila ada kunci yang salah, **Pengaturan → Koneksi** menampilkan kesalahannya beserta bagian yang perlu diperbaiki.
+Perubahan berlaku pada balasan berikutnya tanpa memulai ulang Kana. Satu-satunya pengecualian adalah bagian `hermes`, yang baru dibaca saat Kana dimulai. Apabila ada kunci yang salah, **Pengaturan → Koneksi** menampilkan kesalahannya beserta bagian yang perlu diperbaiki. Blok `guardrails` memiliki pemeriksa sendiri; bila tidak dapat dipakai, statusnya dilaporkan di halaman ini.
 
 ## Mulai cepat {#quickstart}
 
@@ -121,10 +121,10 @@ Pengaturan berikut ditulis di dalam `tts.irodoriLocal` dan semuanya opsional.
 | Kunci | Nilai bawaan | Keterangan |
 | --- | --- | --- |
 | `steps` | `16` | Jumlah langkah sampling, 1–200. Nilai kecil lebih cepat, nilai besar lebih halus. `8` adalah yang tercepat; `40` setara dengan kualitas standar mesin. |
-| `threads` | Jumlah core CPU | Jumlah thread CPU, 1–256. Kurangi apabila komputer menjadi lambat saat Kana berbicara. |
+| `threads` | Jumlah inti fisik CPU | Jumlah thread CPU, 1–256. Kurangi apabila komputer menjadi lambat saat Kana berbicara. |
 | `precision` | `"auto"` | `"auto"`, `"int8"`, atau `"fp32"`. `"auto"` memilih yang tercepat untuk CPU Anda; `"int8"` memerlukan AVX-512 VNNI. |
 | `modelPath` | Tidak ada | Path absolut ke `model.safetensors` Irodori v4.1 yang sudah Anda miliki. |
-| `installDirectory` | Folder data Kana | Path absolut folder pemasangan mesin suara. |
+| `installDirectory` | `<folder data>/irodori` | Path absolut folder pemasangan mesin suara. |
 
 Pada komputer berspesifikasi rendah, gunakan `steps` bernilai `8`. Suaranya sedikit kurang halus, tetapi selesai lebih cepat.
 
@@ -162,7 +162,7 @@ Contoh dengan model ElevenLabs berlatensi rendah:
 }
 ```
 
-Satu balasan maksimal 10.000 karakter. Balasan yang lebih panjang tidak dikirim ke Pollinations dan ditampilkan sebagai teks disertai pesan kesalahan.
+Satu permintaan suara ke Pollinations maksimal 10.000 karakter. Pada pengiriman utuh (bawaan), balasan yang lebih panjang tidak dikirim ke Pollinations dan ditampilkan sebagai teks disertai pesan kesalahan.
 
 Konfigurasi lama `"provider": "openai-compatible"` dengan preset Pollinations masih berfungsi dan menghasilkan suara yang sama, tetapi sebaiknya ditulis ulang ke format di atas.
 
@@ -203,12 +203,12 @@ Secara bawaan Kana memakai Hermes di mesinnya sendiri. Tambahkan blok `remote` u
 
 | Kunci | Nilai bawaan | Keterangan |
 | --- | --- | --- |
-| `remote.url` | wajib | URL dashboard `wss://`. Host tanpa path akan ditambahi `/api/ws`. Kredensial, query string, dan fragmen ditolak. |
+| `remote.url` | wajib | URL dashboard `wss://`. Bila path-nya belum berakhir dengan `/api/ws`, Kana menambahkannya di belakang path yang ada; host dasar menjadi `/api/ws`. Kredensial, query string, dan fragmen ditolak. |
 | `remote.auth.mode` | `"password"` | Satu-satunya mode auth remote yang didukung. |
 | `remote.auth.username` | wajib | Username untuk provider `basic` dashboard Hermes. |
 | `remote.auth.password` | kosong | Password yang tersimpan di berkas khusus pemilik. Tepat satu dari `password` dan `passwordEnv` wajib diisi. |
 | `remote.auth.passwordEnv` | kosong | Nama variabel lingkungan khusus yang menyimpan password. `KANA_*` dan token dashboard Hermes ditolak. |
-| `remote.instabox.machineId` | kosong | ID mesin Instabox untuk tombol bangunkan opsional. |
+| `remote.instabox.machineId` | wajib bila `instabox` diisi | ID mesin Instabox untuk tombol bangunkan opsional. |
 | `remote.instabox.executable` | `instabox` di `PATH` | Path absolut CLI Instabox; nama berkasnya harus `instabox`. |
 | `remote.instabox.timeoutSeconds` | `120` | Total tunggu untuk mesin dan kesehatan Hermes, 10–600 detik. |
 | `remote.instabox.env` | kosong | Nama variabel lingkungan tambahan untuk CLI Instabox, maksimal 32; kredensial Kana dan Hermes ditolak. |
@@ -229,7 +229,7 @@ Secara bawaan Kana memakai Hermes di mesinnya sendiri. Tambahkan blok `remote` u
 }
 ```
 
-Mesin remote harus menyediakan `/auth/password-login`, `/api/auth/ws-ticket`, `/api/auth/ws`, dan `/api/health` di belakang TLS. Kana login dengan provider `basic` dashboard, menyimpan cookie di server, dan meminta ticket WebSocket sekali pakai baru untuk setiap koneksi. URL, username, dan password tetap di `config.json` atau lingkungan server dan tidak pernah mencapai browser. Auth token remote tidak didukung. `/restart` tidak dapat memulai ulang gateway remote; mulai ulang di mesin tempat ia berjalan.
+Mesin remote harus menyediakan `/auth/password-login`, `/api/auth/ws-ticket`, `/api/ws`, dan `/api/health` di belakang TLS. Di Hermes remote, aktifkan provider `basic` dashboard dengan `HERMES_DASHBOARD_BASIC_AUTH_USERNAME` serta `HERMES_DASHBOARD_BASIC_AUTH_PASSWORD` atau `HERMES_DASHBOARD_BASIC_AUTH_PASSWORD_HASH`. Kana login dengan provider itu, menyimpan cookie di server, dan meminta ticket WebSocket sekali pakai baru untuk setiap koneksi. URL, username, dan password tetap di `config.json` atau lingkungan server dan tidak pernah mencapai browser. Auth token remote tidak didukung. `/restart` tidak dapat memulai ulang gateway remote; mulai ulang di mesin tempat ia berjalan.
 
 Kana menyimpan model default-nya sendiri untuk percakapan baru secara terpisah untuk runtime lokal dan setiap dashboard remote yang dikonfigurasi, di `appstate.db` instalasi sehingga pilihan yang sama mengikuti Anda dari satu browser atau perangkat ke perangkat lain. Sebelum menerapkannya, Kana memeriksa bahwa katalog model langsung di Hermes tersebut masih memuat provider dan model itu; jika tidak, Kana memakai default Hermes untuk percakapan tersebut.
 
@@ -237,24 +237,24 @@ Balasan remote dapat menyebut `MEDIA:/path`. Path itu milik mesin remote, sehing
 
 #### Bangunkan Instabox
 
-Build lama menamai blok ini `wake`; ganti namanya menjadi `instabox`, karena blok ini mengatur mesin Instabox. Apabila gateway remote adalah mesin Instabox yang berhenti saat menganggur, atur `remote.instabox`. Layar koneksi kemudian menampilkan **Bangunkan Instabox**: Kana menjalankan `instabox resume <machineId>`, lalu `instabox start <machineId>` bila sandbox berhenti, dan memeriksa kesehatan sampai menjawab. CLI harus terpasang dan sudah login di mesin yang menjalankan Kana. CLI berjalan dari home akun layanan dengan allowlist environment kecil; tambahkan variabel token yang dibutuhkan CLI ke `remote.instabox.env`. Kana tidak membangunkan mesin secara otomatis, menjalankan satu wake dalam satu waktu, dan menunggu 15 detik sebelum wake berikutnya. Membangunkan mesin tidak menjalankan `hermes serve`; jalankan sebagai service di mesin remote agar health menjawab setelah resume. Saat mesin tidak terjangkau, layar menampilkan **Hermes remote tidak terjangkau** dan menjadikan **Bangunkan Instabox** tindakan utama; layar membaca status mesin lewat rute yang sama dengan `instabox get <machineId> --json` (hanya baca), menampilkan **Membangunkan Instabox** selama permintaan berjalan, dan mengubah tindakan menjadi **Instabox sudah bangun** yang nonaktif setelah mesin berjalan. Bila wake berhasil tetapi Kana tetap tidak bisa terhubung, layar menunjuk `hermes serve` dan kredensial dashboard remote.
+Build lama menamai blok ini `wake`; ganti namanya menjadi `instabox`, karena blok ini mengatur mesin Instabox. Apabila gateway remote adalah mesin Instabox yang berhenti saat menganggur, atur `remote.instabox`. Tanpa `machineId`, tombol bangunkan tidak muncul dan Kana tidak memanggil CLI sama sekali; `machineId` hanya boleh berisi huruf, angka, titik, tanda hubung, dan garis bawah, sedangkan `executable` harus menunjuk berkas bernama `instabox`. Layar koneksi kemudian menampilkan **Bangunkan Instabox**: Kana menjalankan `instabox resume <machineId>`, lalu `instabox start <machineId>` bila sandbox berhenti, dan memeriksa kesehatan sampai menjawab. Kana hanya menjalankan subperintah tetap `get`, `resume`, dan `start` dengan ID mesin dari `config.json`; tidak ada shell dan tidak ada argumen dari browser. CLI harus terpasang dan sudah login di mesin yang menjalankan Kana. CLI berjalan dari home akun layanan dengan allowlist environment kecil; tambahkan variabel token yang dibutuhkan CLI ke `remote.instabox.env`. Kana tidak membangunkan mesin secara otomatis, menjalankan satu wake dalam satu waktu, dan menunggu 15 detik sebelum wake berikutnya. Membangunkan mesin tidak menjalankan `hermes serve`; jalankan sebagai service di mesin remote agar health menjawab setelah resume. Saat mesin tidak terjangkau, layar menampilkan **Hermes remote tidak terjangkau** dan menjadikan **Bangunkan Instabox** tindakan utama; layar membaca status mesin lewat rute yang sama dengan `instabox get <machineId> --json` (hanya baca), menampilkan **Membangunkan Instabox** selama permintaan berjalan, dan mengubah tindakan menjadi **Instabox sudah bangun** yang nonaktif setelah mesin berjalan atau sedang dinyalakan. Bila wake berhasil tetapi Kana tetap tidak bisa terhubung, layar menunjuk `hermes serve` dan kredensial dashboard remote.
 
 ## Guardrail prompt {#guardrail}
 
-Bagian `guardrails` memeriksa pesan Anda sebelum Kana mengirimkannya ke Hermes. Anda menulis aturan sebagai pernyataan biasa tentang apa yang tidak boleh dilakukan Kana; Kana mengubahnya menjadi satu pertanyaan ya/tidak yang diajukan kepada Jev, model TypeSafe. Jev mengembalikan probabilitas, bukan teks, dan Kana sendiri yang membandingkan probabilitas itu dengan ambang batas Anda lalu menolak pesannya.
+Bagian `guardrails` memakai satu daftar aturan untuk dua lapisan. Setiap aturan Anda ikut dikirim di catatan prompt Kana pada setiap giliran, sehingga model Hermes melihat instruksi Anda; dan bila `apiKey` diisi serta ada setidaknya satu aturan, Kana juga memeriksa teks yang Anda ketik sebelum dikirim ke Hermes. Pemeriksaan itu mengajukan satu pertanyaan berprobabilitas kepada Jev, model TypeSafe. Jev mengembalikan probabilitas, bukan teks, dan Kana sendiri yang membandingkannya dengan ambang batas Anda lalu menolak pesannya. Aturan di catatan prompt adalah lapisan pencegahan, bukan pengganti pemeriksaan Jev: hanya pemeriksaan yang memutuskan menolak atau tidak.
 
-Biarkan `apiKey` kosong dan lapisan ini dilewatkan sepenuhnya: tidak ada permintaan yang dikirim maupun biaya yang keluar. Kunci yang kosong atau berisi spasi berarti lapisan ini mati, bukan blok yang rusak, sehingga lima aturan bawaan pada `config.json` baru tidak pernah menolak pesan sebelum Anda menambahkan kunci.
+Biarkan `apiKey` kosong untuk mematikan pemeriksaan Jev: tidak ada permintaan TypeSafe yang dikirim dan tidak ada biaya yang keluar. Aturan Anda tidak hilang—daftar yang sama tetap dikirim sebagai instruksi di catatan prompt setiap giliran, jadi model tetap melihatnya, dan perubahan aturan berlaku pada giliran berikutnya tanpa memulai ulang Kana. Kunci yang kosong atau berisi spasi berarti pemeriksaan mati, bukan blok yang rusak, sehingga lima aturan bawaan pada `config.json` baru tidak pernah menolak pesan sebelum Anda menambahkan kunci.
 
 | Kunci | Nilai bawaan | Keterangan |
 | --- | --- | --- |
-| `apiKey` | kosong | Kunci API TypeSafe Anda. Kosong atau tidak ada mematikan lapisan ini. |
+| `apiKey` | kosong | Kunci API TypeSafe Anda. Kosong atau tidak ada mematikan pemeriksaan Jev, tetapi aturan tetap dikirim sebagai instruksi di catatan prompt. |
 | `model` | `"jev-latest"` | Model TypeSafe yang menjawab pertanyaan. |
 | `threshold` | `0.7` | Kana menolak pesan begitu probabilitas dari Jev mencapai nilai ini, 0–1. Nilai di sekitar 0.5 berarti Jev tidak dapat memastikan; turunkan ambang batas untuk menolak lebih banyak percobaan yang berada di batas, dengan konsekuensi lebih banyak penolakan atas hal yang sebenarnya Anda maksud. |
 | `whenUnavailable` | `"block"` | Yang dilakukan Kana terhadap pesan yang tidak dapat diperiksanya, karena TypeSafe tidak dapat dijangkau, menjawab dengan galat, atau memberi jawaban yang tidak dapat dibaca Kana: `"block"` menolak pesan, `"allow"` mengirimkannya tanpa pemeriksaan. |
 | `timeoutSeconds` | `10` | Lama Kana menunggu TypeSafe, 1–120. |
-| `rules` | lima aturan awal | Aturan Anda, maksimal 50, masing-masing satu pernyataan biasa tentang apa yang tidak boleh dilakukan Kana. `config.json` baru membawa lima aturan awal dan kunci kosong, jadi simpan yang Anda setujui dan ganti sisanya. |
+| `rules` | lima aturan awal | Aturan Anda, maksimal 50, masing-masing satu pernyataan biasa tentang apa yang tidak boleh dilakukan Kana dan maksimal 1.000 karakter. Setiap aturan ikut dikirim di catatan prompt Kana pada setiap giliran, dan diperiksa Jev bila kunci diisi. Bila daftar ini kosong, pemeriksaan Jev tidak berjalan meskipun kunci diisi. `config.json` baru membawa lima aturan awal dan kunci kosong, jadi simpan yang Anda setujui dan ganti sisanya. |
 
-Tulis setiap aturan sebagai satu pernyataan jelas dengan kata-kata Anda sendiri, dan sebutkan dengan tepat apa yang dilarang, termasuk jalur, perintah, atau layanan yang dicakupnya. Anda tidak pernah menulis pertanyaan, id, atau ambang batas per aturan: Kana mengajukan satu pertanyaan ya/tidak kepada Jev — apakah pesan ini meminta, mencoba, atau memungkinkan sesuatu yang dilarang aturan? — dan mengirim aturan Anda apa adanya. Jev diberi tahu bahwa ia menyaring pesan untuk agen yang dapat membaca dan menulis berkas serta menjalankan perintah, karena itulah yang membuat "bacakan berkas ini untukku" menjadi permintaan yang berdampak.
+Tulis setiap aturan sebagai satu pernyataan jelas dengan kata-kata Anda sendiri, dan sebutkan dengan tepat apa yang dilarang, termasuk jalur, perintah, atau layanan yang dicakupnya. Anda tidak pernah menulis pertanyaan, id, atau ambang batas per aturan: Kana mengajukan satu pertanyaan kepada Jev — apakah pesan ini meminta, mencoba, atau memungkinkan sesuatu yang dilarang aturan? — dan mengirim aturan Anda apa adanya. Jev diberi tahu bahwa ia menyaring pesan untuk agen yang dapat membaca dan menulis berkas serta menjalankan perintah, karena itulah yang membuat "bacakan berkas ini untukku" menjadi permintaan yang berdampak.
 
 ```json
 {
@@ -291,7 +291,7 @@ Bagian `deployment` menyatakan cara Kana diakses. Dalam mode `"local"` (bawaan),
 }
 ```
 
-Kana selalu meminta kata sandi pada kedua mode.
+`kana serve` menetapkan mode `deployment` untuk proses yang dijalankannya, sedangkan `kana` biasa mengikuti `deployment.mode` atau `KANA_DEPLOYMENT_MODE`. Kana selalu meminta kata sandi pada kedua mode.
 
 ## Variabel lingkungan {#environment}
 
@@ -299,11 +299,13 @@ Variabel berikut ditujukan untuk pemasangan di server. Tetapkan pada lingkungan 
 
 | Variabel | Keterangan |
 | --- | --- |
-| `KANA_DATA_DIR` | Folder data Kana, termasuk `config.json` dan mesin suara; harus berupa path absolut. Apabila kosong, Kana menggunakan `~/.kana`; data dari rilis sebelumnya (`$XDG_DATA_HOME/kana`, `~/.local/share/kana`) dipindahkan ke sana pada start berikutnya. Folder yang ditetapkan di sini tidak pernah dipindahkan oleh proses start: `kana migrate` menyalinnya ke `~/.kana` saat Anda memintanya. |
-| `KANA_PORT` | Port halaman web Kana. Nilai bawaannya `3000`, setara dengan opsi `kana --port`. |
+| `KANA_DATA_DIR` | Folder data Kana, termasuk `config.json` dan mesin suara; harus berupa path absolut. Apabila kosong, Kana menggunakan `~/.kana`; data dari rilis sebelumnya (`$XDG_DATA_HOME/kana`, `~/.local/share/kana`, dan `data/` di folder kerja) dipindahkan ke sana pada start berikutnya. Folder yang ditetapkan di sini tidak pernah dipindahkan oleh proses start: `kana migrate` menyalinnya ke `~/.kana` saat Anda memintanya. |
+| `KANA_PORT` | Port halaman web Kana, 1024–65535. Nilai bawaannya `3000`; `$PORT` dan opsi `kana --port` juga membacanya. |
 | `KANA_DEPLOYMENT_MODE` | `local` atau `deployment`; menggantikan `deployment.mode`. |
-| `KANA_HERMES_BIN` | Path program Hermes; menggantikan `hermes.executable`. |
+| `KANA_JWT_SECRET` | Rahasia penanda tangan sesi, minimal 32 karakter. Bila kosong, Kana membuat dan memakai ulang `jwt-secret` di folder data; nilai dari lingkungan selalu diutamakan. |
+| `KANA_HERMES_BIN` | Path absolut program Hermes; menggantikan `hermes.executable`. |
 | `KANA_TRUSTED_ORIGINS` | Alamat tambahan yang dipercaya, dipisahkan dengan koma. Diperlukan hanya apabila proxy mengubah header `Host` tanpa meneruskan `X-Forwarded-Host`, atau untuk membuka Kana dalam mode local melalui alamat lain. |
+| `AUTH_COOKIE_SECURE` | Isi `true` untuk memaksa cookie sesi bertanda `Secure` ketika proxy tidak meneruskan `X-Forwarded-Proto: https`. |
 | `KANA_DEV_ALLOWED_ORIGINS` | Khusus pengembangan: alamat tambahan yang diizinkan mengakses `next dev`. |
 
 ```sh
@@ -312,7 +314,9 @@ KANA_DEPLOYMENT_MODE=deployment KANA_PORT=3000 kana serve
 
 Pemasangan di server tidak memerlukan `KANA_DATA_DIR`: akun layanan yang memiliki Hermes punya direktori home, dan `~/.kana` di dalamnya adalah folder datanya, sama seperti di desktop. Tetapkan variabel ini hanya untuk menaruh data di tempat lain, misalnya volume khusus.
 
-Untuk memindahkan folder terkelola ke `~/.kana`, hentikan Kana lalu jalankan `kana migrate`. Perintah itu menampilkan setiap entri beserta ukurannya, menyalin dan memverifikasi setiap berkas, membiarkan folder asal tetap utuh, lalu meminta Anda mengarahkan `KANA_DATA_DIR` ke `~/.kana` atau menghapusnya. Tambahkan `--delete-source` untuk memindahkan entri alih-alih menyalinnya, dan `--dry-run` untuk membaca rencananya tanpa mengubah apa pun.
+Untuk memindahkan folder terkelola ke `~/.kana`, hentikan Kana lalu jalankan `kana migrate --from <folder-terkelola>`; Anda juga dapat menjalankannya dengan `KANA_DATA_DIR` milik service yang diekspor. Tambahkan `--yes` untuk shell noninteraktif. Perintah itu menampilkan setiap entri beserta ukurannya, menyalin dan memverifikasi setiap berkas, membiarkan folder asal tetap utuh, lalu meminta Anda mengarahkan `KANA_DATA_DIR` ke `~/.kana` atau menghapusnya. Tambahkan `--delete-source` untuk memindahkan entri alih-alih menyalinnya, dan `--dry-run` untuk membaca rencananya tanpa mengubah apa pun.
+
+Entri yang sudah ada di tujuan tidak ditimpa secara bawaan; keluarga database lama di `~/.kana` tetap dipakai dan data sumber dilewati. Tambahkan `--replace-existing` untuk menggantinya: rencana akan menyebut setiap keluarga database yang terpengaruh, isi tujuan disalin lebih dulu ke folder cadangan `.kana-migrate-backup-*` di dalam tujuan, lalu seluruh keluarga—termasuk berkas `-wal` dan `-shm` lama—diganti dengan salinan dari sumber yang sudah diverifikasi. Hapus folder cadangan itu setelah Kana memakai folder data yang baru.
 
 Pengaturan suara tidak memiliki variabel lingkungan dan hanya dapat diubah melalui `config.json`.
 
@@ -320,9 +324,13 @@ Pengaturan suara tidak memiliki variabel lingkungan dan hanya dapat diubah melal
 
 | Gejala | Penyelesaian |
 | --- | --- |
-| **Pengaturan → Koneksi** melaporkan kesalahan pada `config.json` | Perbaiki kunci yang disebutkan dalam pesan, lalu simpan file. |
+| **Pengaturan → Koneksi** melaporkan kesalahan pada `config.json` selain `guardrails` | Perbaiki kunci yang disebutkan dalam pesan, lalu simpan file. Blok `guardrails` dilaporkan di bagian Guardrail prompt halaman ini. |
 | Hermes tidak ditemukan | Jalankan `kana doctor`. Apabila masalah berlanjut, isi `hermes.executable` atau `KANA_HERMES_BIN`. |
 | Port 9119 sudah dipakai program lain | Ubah `hermes.port`, lalu mulai ulang Kana. |
+| Data lama di `~/.kana` tidak ikut pindah | Hentikan Kana, lalu jalankan `kana migrate --from <folder-terkelola> --replace-existing --dry-run` untuk melihat keluarga database yang akan diganti, kemudian ulangi tanpa `--dry-run`. Backup tersimpan di folder `.kana-migrate-backup-*` di dalam tujuan. |
+| Tombol **Bangunkan Instabox** tidak muncul | Pastikan `hermes.remote` berisi `instabox.machineId`; tanpa blok itu Kana tidak memanggil CLI. Periksa juga bahwa CLI `instabox` terpasang dan sudah login di mesin yang menjalankan Kana. |
+| Tombol **Bangunkan Instabox** nonaktif | Mesin sudah berjalan atau sedang dinyalakan. Jika Hermes tetap tidak menjawab, periksa `hermes serve` dan kredensial dashboard remote, bukan mesinnya. |
+| Pesan ditolak padahal tidak melanggar aturan | Periksa `guardrails.threshold`; naikkan nilainya (mendekati 1) jika penolakan terlalu sering, dan turunkan untuk menolak lebih banyak percobaan yang berada di batas. Jika `whenUnavailable` bernilai `"block"`, pesan juga ditolak saat TypeSafe tidak dapat dijangkau atau jawabannya tidak terbaca. |
 | Perubahan pada `~/.hermes/.env` atau server MCP Hermes belum berlaku | Ketik `/reload` (untuk `.env`) atau `/reload-mcp now` (untuk server MCP) di Kana. Untuk perubahan lain yang hanya dibaca Hermes saat dijalankan, ketik `/restart`; perintah ini hanya berlaku untuk Hermes yang dijalankan Kana. Model baru di `config.yaml` Hermes langsung muncul tanpa memulai ulang. |
 | Suara untuk balasan panjang gagal karena batas waktu habis | Naikkan `tts.timeoutSeconds` serta batas waktu proxy, apabila ada. |
 | Pesan `Pollinations returned HTTP 401` | API key kosong atau tidak valid. Periksa `tts.pollinations.apiKey`. |

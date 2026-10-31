@@ -131,7 +131,7 @@ and password supplied in the owner-only file or through
 `hermes.remote.auth.passwordEnv`; neither reaches the browser. Kana logs in,
 keeps the cookie in server memory, and requests a fresh WebSocket ticket for
 each connection. The remote machine must expose `/auth/password-login`,
-`/api/auth/ws-ticket`, `/api/auth/ws`, and `/api/health` behind TLS, and the Kana
+`/api/auth/ws-ticket`, `/api/ws`, and `/api/health` behind TLS, and the Kana
 host must be able to reach it. Conversation transcripts stay on that Hermes;
 Kana's data root still holds authentication, SQLite state, preferences, and the
 activity log.
