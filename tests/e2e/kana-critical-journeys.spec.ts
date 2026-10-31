@@ -2077,17 +2077,24 @@ test("opens the phone host strip from its edge tab", async ({ page }) => {
   await expect(strip).toContainText("Disk");
   await expect(strip).toContainText("Uptime");
   await expect(strip).toContainText("Kana");
-  await expect(strip.locator("[data-host-ticks]")).toHaveCount(3);
-  await expect(strip.locator("[data-host-ticks] > span")).toHaveCount(30);
+  await expect(strip.locator("[data-host-meter]")).toHaveCount(3);
+  await expect(strip.locator("[data-host-meter] > span")).toHaveCount(30);
+  for (const metric of ["CPU", "Memory", "Disk"]) {
+    await expect(strip.getByRole("progressbar", { name: metric, exact: true })).toBeVisible();
+  }
   const panel = page.locator("#kana-host-panel");
   const panelBox = await panel.boundingBox();
+  const composerBox = await page.locator(".kana-composer-shell").boundingBox();
   const viewport = page.viewportSize();
   expect(panelBox).not.toBeNull();
+  expect(composerBox).not.toBeNull();
   expect(viewport).not.toBeNull();
-  // Content sets the height, the viewport caps it, and nothing scrolls.
-  expect(panelBox!.width).toBeLessThanOrEqual(109);
-  expect(panelBox!.height).toBeGreaterThan(280);
+  // A slim rail from the header to the composer: the viewport caps it, the
+  // composer stays clear, and nothing scrolls.
+  expect(panelBox!.width).toBeLessThanOrEqual(77);
+  expect(panelBox!.height).toBeGreaterThan(400);
   expect(panelBox!.height).toBeLessThanOrEqual(viewport!.height - 32);
+  expect(panelBox!.y + panelBox!.height).toBeLessThanOrEqual(composerBox!.y);
   expect(await panel.evaluate((element) => element.scrollHeight <= element.clientHeight)).toBe(true);
   await page.screenshot({
     path: `test-results/host-strip-${test.info().project.name}.png`,

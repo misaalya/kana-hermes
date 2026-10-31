@@ -1114,26 +1114,28 @@ details[open] > .kana-plus-summary::before {
   vector-effect: non-scaling-stroke;
 }
 
-/* Phones tuck the host strip behind a right-edge tab shaped like the chat
-   dock's handle. The tab travels with the panel; when closed, the panel is
-   fully off-screen and only the tab remains. */
+/* Phones tuck the host rail behind a right-edge tab shaped like the chat
+   dock's handle. The rail is a slim spine that runs from under the header to
+   the composer; when closed, the rail is fully off-screen and only the tab
+   remains. */
 .kana-host-dock {
   position: fixed;
-  top: 50%;
+  top: calc(var(--kana-header-clear) + 6px);
   right: 0;
+  bottom: calc(12rem + env(safe-area-inset-bottom, 0px));
   z-index: 30;
-  width: min(28vw, 108px);
-  transform: translate(0, -50%);
+  width: min(22vw, 76px);
+  transform: translateX(0);
   transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .kana-host-dock.is-closed {
-  transform: translate(100%, -50%);
+  transform: translateX(100%);
 }
 
 .kana-host-panel {
   display: flex;
-  max-height: calc(100dvh - 2rem);
+  height: 100%;
   flex-direction: column;
   overflow-y: auto;
   border: 2px solid var(--line);

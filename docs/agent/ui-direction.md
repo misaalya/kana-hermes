@@ -6,7 +6,7 @@ dashboard. This is a product direction, not a temporary theme.
 
 **Read when:** you are changing any component, `app/globals.css`, the composer, Settings, the avatar library, the chat feed, a stage pattern, or the fatal error pages.
 
-**Truth in code:** `app/globals.css`, `app/error.tsx`, `app/global-error.tsx`, `components/kana/chat-composer.tsx`, `components/kana/chat-dock.tsx`, `components/kana/focus-rail.tsx`, `components/kana/conversation-sidebar.tsx`, `components/kana/live-chat-feed.tsx`, `components/kana/header-host-monitor.tsx`, `components/kana/workspace-header.tsx`, `components/kana/settings-avatar-cards.tsx`, `components/kana/kana-select.tsx`, `components/kana/config-guide.tsx`, `app/docs/page.tsx`, `lib/ui/copy.ts`, `lib/presentation/markdown.ts`, `lib/presentation/json-highlight.ts`, `scripts/generate-stage-patterns.py`
+**Truth in code:** `app/globals.css`, `app/error.tsx`, `app/global-error.tsx`, `components/kana/chat-composer.tsx`, `components/kana/chat-dock.tsx`, `components/kana/focus-rail.tsx`, `components/kana/conversation-sidebar.tsx`, `components/kana/live-chat-feed.tsx`, `components/kana/header-host-monitor.tsx`, `components/kana/mobile-host-panel.tsx`, `components/kana/workspace-header.tsx`, `components/kana/settings-avatar-cards.tsx`, `components/kana/kana-select.tsx`, `components/kana/config-guide.tsx`, `app/docs/page.tsx`, `lib/ui/copy.ts`, `lib/presentation/markdown.ts`, `lib/presentation/json-highlight.ts`, `scripts/generate-stage-patterns.py`
 
 ## Colours
 
@@ -180,13 +180,15 @@ clock CENTER, date RIGHT. The cards never cover the conversation name chip or
 the tool tray, take no input beyond their drags, poll the host only while
 mounted, and are absent on phones. On phones the same CPU, memory, disk, and
 uptime readings live behind a right-edge tab shaped like the chat dock's
-handle: opening it slides in a narrow vertical strip of small text where each
-metric sets its label above a large percentage over a ten-tick gauge that spans
-the text width, uptime reads as one duration line over Kana's own uptime and
-RSS, and the clock and date stay desktop-only. The strip takes its height from
-its content with a viewport-height cap, and the last reading stays cached while
-it is closed: a sample younger than 15 seconds is reused instead of requesting
-the host again. It polls only while open.
+handle: opening it slides in a slim rail that runs from under the header to
+just above the composer, its four readings spread down equal slices of the rail
+with a dotted rule between them. Each metric sets its label above a large
+reading and a ten-tick gauge that spans the rail; uptime stacks its hours and
+minutes over Kana's own uptime and RSS, and the clock and date stay
+desktop-only. The rail takes its height from the viewport between the header
+and the composer, and the last reading stays cached while it is closed: a
+sample younger than 15 seconds is reused instead of requesting the host again.
+It polls only while open.
 
 ## Conversation history
 
