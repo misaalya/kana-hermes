@@ -547,6 +547,19 @@ export function SettingsDialog({
                     />
                   </SettingsRow>
                   <SettingsRow
+                    label={settingsCopy.autoScrollTitle}
+                    description={settingsCopy.autoScrollDescription}
+                    inline
+                  >
+                    <Toggle
+                      checked={draft.autoScroll}
+                      label={settingsCopy.autoScrollTitle}
+                      onChange={() =>
+                        setDraft((current) => ({ ...current, autoScroll: !current.autoScroll }))
+                      }
+                    />
+                  </SettingsRow>
+                  <SettingsRow
                     label={settingsCopy.composerDelayTitle}
                     description={settingsCopy.composerDelayDescription}
                     stacked

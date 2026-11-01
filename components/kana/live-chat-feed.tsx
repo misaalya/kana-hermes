@@ -7,7 +7,6 @@ import { ActivityStack } from "./activity-stack";
 import { ChatMarkdown } from "./chat-markdown";
 import { MediaAttachments } from "./media-attachments";
 import { CheckIcon, CopyIcon, RedirectIcon, StopIcon } from "./icons";
-import { Toggle } from "./ui";
 import { extractMediaAttachments } from "@/lib/presentation/media";
 import { getCopy, type Copy, type UiLocale } from "@/lib/ui/copy";
 import {
@@ -27,9 +26,8 @@ type LiveChatFeedProps = {
   locale: UiLocale;
   /** Stop the running turn, or release a reply whose voice is still coming. */
   onStop?: () => void;
-  /** Follow new entries; the feed's own switch writes it, not Settings. */
+  /** Follow new entries; Settings → Experience writes it. */
   autoScroll?: boolean;
-  onToggleAutoScroll?: () => void;
 };
 
 /** Hermes's reply: its Markdown, then any files it delivered. */
@@ -143,7 +141,6 @@ export const LiveChatFeed = memo(function LiveChatFeed({
   locale,
   onStop,
   autoScroll = true,
-  onToggleAutoScroll,
 }: LiveChatFeedProps) {
   const auto = autoScroll !== false;
   const copy = getCopy(locale);
@@ -368,28 +365,18 @@ export const LiveChatFeed = memo(function LiveChatFeed({
         <div aria-hidden="true" />
       </div>
 
-      {!pinnedToBottom || !auto ? (
-        <div className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2">
-          {!pinnedToBottom ? (
-            <button
-              type="button"
-              onClick={() => {
-                setPinnedToBottom(true);
-                scrollToBottom();
-              }}
-              className="kana-focus kana-pill kana-pill-accent shrink-0 whitespace-nowrap px-4 py-1.5 text-[11px]"
-              aria-label={copy.chat.latestAria}
-            >
-              {copy.chat.latest}
-            </button>
-          ) : null}
-          {onToggleAutoScroll ? (
-            <div className="kana-pill shrink-0 gap-2 whitespace-nowrap border border-line bg-surface px-3 py-1 text-[11px] text-ink">
-              <span>{copy.chat.autoScroll}</span>
-              <Toggle checked={auto} label={copy.chat.autoScroll} onChange={onToggleAutoScroll} />
-            </div>
-          ) : null}
-        </div>
+      {!pinnedToBottom ? (
+        <button
+          type="button"
+          onClick={() => {
+            setPinnedToBottom(true);
+            scrollToBottom();
+          }}
+          className="kana-focus kana-pill kana-pill-accent absolute bottom-3 left-1/2 -translate-x-1/2 px-4 py-1.5 text-[11px]"
+          aria-label={copy.chat.latestAria}
+        >
+          {copy.chat.latest}
+        </button>
       ) : null}
     </div>
   );

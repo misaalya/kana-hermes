@@ -256,7 +256,6 @@ export type Copy = {
     copiedCode: string;
     latestAria: string;
     latest: string;
-    autoScroll: string;
     download: string;
     downloadAria(name: string): string;
     openImage(name: string): string;
@@ -393,6 +392,8 @@ export type Copy = {
     savingChanges: string;
     close: string;
     interfaceTitle: string;
+    autoScrollTitle: string;
+    autoScrollDescription: string;
     composerDelayTitle: string;
     composerDelayDescription: string;
     composerDelayOff: string;
@@ -891,7 +892,6 @@ const id: Copy = {
     copiedCode: "Kode disalin",
     latestAria: "Lompat ke pesan terbaru",
     latest: "Terbaru",
-    autoScroll: "Gulir otomatis",
     download: "Unduh",
     downloadAria: (name) => `Unduh ${name}`,
     openImage: (name) => `Buka ${name} di tab baru`,
@@ -1031,6 +1031,9 @@ const id: Copy = {
     savingChanges: "Menyimpan…",
     close: "Tutup pengaturan",
     interfaceTitle: "Bahasa antarmuka",
+    autoScrollTitle: "Gulir otomatis",
+    autoScrollDescription:
+      "Ikuti pesan baru di percakapan; matikan untuk tetap di posisi baca saat ini.",
     composerDelayTitle: "Jeda chatbar",
     composerDelayDescription:
       "Berapa lama chatbar tetap lebar setelah draft dan lampiran hilang.",
@@ -1580,7 +1583,6 @@ const en: Copy = {
     copiedCode: "Code copied",
     latestAria: "Jump to latest message",
     latest: "Latest",
-    autoScroll: "Auto scroll",
     download: "Download",
     downloadAria: (name) => `Download ${name}`,
     openImage: (name) => `Open ${name} in a new tab`,
@@ -1720,6 +1722,9 @@ const en: Copy = {
     savingChanges: "Saving…",
     close: "Close settings",
     interfaceTitle: "Interface language",
+    autoScrollTitle: "Auto scroll",
+    autoScrollDescription:
+      "Follow new messages in the conversation; turn it off to stay at your current reading position.",
     composerDelayTitle: "Chatbar delay",
     composerDelayDescription:
       "How long the chatbar stays wide after the draft and attachments are gone.",

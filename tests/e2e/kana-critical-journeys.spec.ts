@@ -4449,13 +4449,27 @@ test("returns the transcript to the latest entry after sending from above", asyn
   await submitDraft(page, composer);
   await expect.poll(gap).toBeLessThan(32);
 
-  // The feed's own switch pauses following; sending no longer pulls the view.
+  // Experience's Auto scroll switch pauses following; sending stays put.
+  const openAutoScroll = async () => {
+    await page.getByRole("button", { name: "Open settings" }).click();
+    const settings = page.getByRole("dialog");
+    await settings.getByRole("button", { name: /^Experience/ }).click();
+    return { settings, toggle: settings.getByRole("switch", { name: "Auto scroll" }) };
+  };
+  let panel = await openAutoScroll();
+  await expect(panel.toggle).toHaveAttribute("aria-checked", "true");
+  await page.screenshot({ path: `test-results/auto-scroll-setting-${test.info().project.name}.png` });
+  await panel.toggle.click();
+  await expect(panel.toggle).toHaveAttribute("aria-checked", "false");
+  await panel.settings.getByRole("button", { name: "Close settings" }).click();
+  await expect(panel.settings).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => {
+    const raw = localStorage.getItem("kana.preferences.v6");
+    return raw ? (JSON.parse(raw) as { autoScroll?: boolean }).autoScroll : undefined;
+  })).toBe(false);
+
   await feed.evaluate((node) => { node.scrollTop = 0; });
-  const autoScroll = page.getByRole("switch", { name: "Auto scroll" });
-  await expect(autoScroll).toBeVisible();
-  await page.screenshot({ path: `test-results/auto-scroll-toggle-${test.info().project.name}.png` });
-  await autoScroll.click();
-  await expect(autoScroll).toHaveAttribute("aria-checked", "false");
+  await expect(page.getByRole("button", { name: /latest/i })).toBeVisible();
   expect(await gap()).toBeGreaterThan(32);
   await composer.fill("Stay where I am");
   await submitDraft(page, composer);
@@ -4463,7 +4477,10 @@ test("returns the transcript to the latest entry after sending from above", asyn
   expect(await gap()).toBeGreaterThan(32);
   await expect(page.getByRole("button", { name: /latest/i })).toBeVisible();
 
-  await autoScroll.click();
+  panel = await openAutoScroll();
+  await panel.toggle.click();
+  await expect(panel.toggle).toHaveAttribute("aria-checked", "true");
+  await panel.settings.getByRole("button", { name: "Close settings" }).click();
   await expect.poll(gap).toBeLessThan(32);
 });
 

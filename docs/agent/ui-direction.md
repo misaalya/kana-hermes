@@ -483,9 +483,8 @@ side gutters or the composer moves the transcript, while the feed itself and
 any nested scroller (a code card, a model list, a long draft) keep their own
 wheel. Sending a message returns the transcript to the latest entry, even when
 the reader had scrolled up; a reply that arrives while the reader is above does
-not pull the view. A small **Auto scroll** switch in the feed, beside **Latest**,
-pauses that following; it is a chat control and is not offered in Experience
-settings.
+not pull the view. Settings → Experience carries an **Auto scroll** switch that
+pauses that following; the feed keeps only the **Latest** button.
 
 A fenced code block renders as a dark code card (`.kana-chat-code` on the
 guide's `.kana-code-surface`) with a monospace language label and a Copy action;

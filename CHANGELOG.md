@@ -30,8 +30,8 @@
   command menu opens; a draft with text above the slash is left alone.
 - Sending a message returns the transcript to the latest entry even when the
   reader had scrolled up; a reply that arrives while reading above does not pull
-  the view. A small **Auto scroll** switch in the feed, beside **Latest**, pauses
-  that following; it is a chat control, not an Experience setting. The typing
+  the view. Settings → Experience carries an **Auto scroll** switch that pauses
+  that following; the feed keeps only the **Latest** button. The typing
   indicator shows no visible status text: the status stays screen-reader-only
   while the dots and Stop carry the state.
 - Slash commands stop their suggestion list at the ends, block a command whose
