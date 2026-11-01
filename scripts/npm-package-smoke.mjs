@@ -33,7 +33,9 @@ try {
     "--pack-destination",
     packRoot,
   ], path.join(root, "cli"));
-  const packResult = JSON.parse(packed.stdout)[0];
+  const parsedPack = JSON.parse(packed.stdout);
+  // npm 10 returns an array; npm 12 returns an object keyed by package name.
+  const packResult = Array.isArray(parsedPack) ? parsedPack[0] : Object.values(parsedPack)[0];
   if (!packResult?.filename || !Array.isArray(packResult.files)) {
     throw new Error("npm pack did not return a file manifest.");
   }
