@@ -154,7 +154,7 @@ that owns Hermes, then run Kana behind HTTPS:
 
 ```bash
 kana password                       # in the same account that runs Hermes
-kana serve --port 3000
+kana serve --port 3077
 ```
 
 Kana keeps its files in `~/.kana` in that account, exactly as it does on a

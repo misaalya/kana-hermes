@@ -277,7 +277,7 @@ When a setting is available in several places, the order is the CLI flag, then t
 | Variable | Description |
 | --- | --- |
 | `KANA_DATA_DIR` | Kana's data folder, which holds `config.json` and the voice engine, and must be absolute. When unset, Kana uses `~/.kana`; data from an earlier release is moved there on the next start. A folder set here is never moved by a start. |
-| `KANA_PORT` | Port for Kana's web page, 1024–65535. Defaults to `3000`; `$PORT` and `kana --port` are read too. |
+| `KANA_PORT` | Port for Kana's web page, 1024–65535. Defaults to `3077`; `$PORT` and `kana --port` are read too. |
 | `KANA_DEPLOYMENT_MODE` | `local` or `deployment`. Overrides `deployment.mode`. |
 | `KANA_JWT_SECRET` | Session-signing secret, at least 32 characters. When unset, Kana generates and reuses `jwt-secret` in the data folder; an environment value always wins. |
 | `KANA_HERMES_BIN` | Absolute path to the Hermes program. Overrides `hermes.executable`. |
@@ -286,7 +286,7 @@ When a setting is available in several places, the order is the CLI flag, then t
 | `KANA_DEV_ALLOWED_ORIGINS` | Development only: additional hosts allowed to reach `next dev`. |
 
 ```sh
-KANA_DEPLOYMENT_MODE=deployment KANA_PORT=3000 kana serve
+KANA_DEPLOYMENT_MODE=deployment KANA_PORT=3077 kana serve
 ```
 
 A server install needs no `KANA_DATA_DIR`: the service account that owns Hermes has a home, and `~/.kana` in it is the data folder, as on a desktop. Set it only to put the state somewhere else, for example a dedicated volume. To move data from an older folder, see **Upgrading from older builds**.

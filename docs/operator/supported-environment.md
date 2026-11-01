@@ -196,7 +196,7 @@ then be an absolute path the service account can write.
    Group=your-user
    WorkingDirectory=/opt/kana
    Environment=AUTH_COOKIE_SECURE=true
-   ExecStart=/usr/bin/node /opt/kana/bin/kana.mjs serve --port 3000
+   ExecStart=/usr/bin/node /opt/kana/bin/kana.mjs serve --port 3077
    Restart=on-failure
 
    [Install]
@@ -205,7 +205,7 @@ then be an absolute path the service account can write.
 
    `kana serve` forces deployment mode, binds `127.0.0.1`, and passes the Hermes
    executable it found to the server. If Kana came from npm, replace `ExecStart`
-   with the absolute installed `kana` path followed by `serve --port 3000`. Run
+   with the absolute installed `kana` path followed by `serve --port 3077`. Run
    one process per data root.
 
 4. Nginx must preserve the public request metadata and allow long requests. The
@@ -219,7 +219,7 @@ then be an absolute path the service account can write.
        client_max_body_size 14m;
        proxy_read_timeout 200s;
        proxy_send_timeout 200s;
-       proxy_pass http://127.0.0.1:3000;
+       proxy_pass http://127.0.0.1:3077;
        proxy_http_version 1.1;
        proxy_set_header Host $http_host;
        proxy_set_header X-Forwarded-Proto $scheme;

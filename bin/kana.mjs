@@ -9,7 +9,7 @@ import { LauncherError } from "./lib/errors.mjs";
 import { runServer } from "./lib/server.mjs";
 import { print, printError, PromptCancelledError, style, symbols } from "./lib/ui.mjs";
 
-const DEFAULT_PORT = 3000;
+const DEFAULT_PORT = 3077;
 const DEFAULT_HOST = "127.0.0.1";
 
 const COMMANDS = {

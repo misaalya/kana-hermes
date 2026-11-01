@@ -277,7 +277,7 @@ Bila sebuah pengaturan tersedia di beberapa tempat, urutan prioritasnya adalah o
 | Variabel | Keterangan |
 | --- | --- |
 | `KANA_DATA_DIR` | Folder data Kana, termasuk `config.json` dan mesin suara; harus berupa path absolut. Apabila kosong, Kana menggunakan `~/.kana`; data dari rilis sebelumnya dipindahkan ke sana pada start berikutnya. Folder yang ditetapkan di sini tidak pernah dipindahkan oleh proses start. |
-| `KANA_PORT` | Port halaman web Kana, 1024–65535. Nilai bawaannya `3000`; `$PORT` dan opsi `kana --port` juga membacanya. |
+| `KANA_PORT` | Port halaman web Kana, 1024–65535. Nilai bawaannya `3077`; `$PORT` dan opsi `kana --port` juga membacanya. |
 | `KANA_DEPLOYMENT_MODE` | `local` atau `deployment`; menggantikan `deployment.mode`. |
 | `KANA_JWT_SECRET` | Rahasia penanda tangan sesi, minimal 32 karakter. Bila kosong, Kana membuat dan memakai ulang `jwt-secret` di folder data; nilai dari lingkungan selalu diutamakan. |
 | `KANA_HERMES_BIN` | Path absolut program Hermes; menggantikan `hermes.executable`. |
@@ -286,7 +286,7 @@ Bila sebuah pengaturan tersedia di beberapa tempat, urutan prioritasnya adalah o
 | `KANA_DEV_ALLOWED_ORIGINS` | Khusus pengembangan: alamat tambahan yang diizinkan mengakses `next dev`. |
 
 ```sh
-KANA_DEPLOYMENT_MODE=deployment KANA_PORT=3000 kana serve
+KANA_DEPLOYMENT_MODE=deployment KANA_PORT=3077 kana serve
 ```
 
 Pemasangan di server tidak memerlukan `KANA_DATA_DIR`: akun layanan yang memiliki Hermes punya direktori home, dan `~/.kana` di dalamnya adalah folder datanya, sama seperti di desktop. Tetapkan variabel ini hanya untuk menaruh data di tempat lain, misalnya volume khusus. Untuk memindahkan data dari folder lama, lihat bagian **Dari versi lama**.

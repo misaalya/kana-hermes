@@ -56,6 +56,6 @@ process.stdout.write(
     `  ${standalone}`,
     "Set the access password once, then start it:",
     "  node bin/kana.mjs password",
-    "  node bin/kana.mjs serve --port 3000",
+    "  node bin/kana.mjs serve --port 3077",
   ].join("\n") + "\n",
 );

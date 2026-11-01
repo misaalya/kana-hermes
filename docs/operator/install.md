@@ -20,7 +20,7 @@ The package has no runtime dependencies: it bundles the built Next.js runtime,
 the launcher, and the starter configuration, and never installs Hermes or a voice model.
 
 `kana`, or the explicitly spelled `kana start`, starts the server on
-`127.0.0.1:3000` and opens the default browser at it. `kana serve` runs the same
+`127.0.0.1:3077` and opens the default browser at it. `kana serve` runs the same
 server in the foreground without a browser, for a VPS or a systemd service, and
 forces deployment mode for the life of that process.
 
@@ -34,7 +34,7 @@ forces deployment mode for the life of that process.
 | `kana migrate` | Copies or moves a `KANA_DATA_DIR` root into the default `~/.kana` root, showing every entry and verifying what it writes. |
 | `kana doctor` | Reports Node.js, the web runtime, the password, the config file, Hermes, running Hermes gateways, voice, and the resolved data paths. |
 
-`--port` (default `3000`, then `$KANA_PORT`, then `$PORT`, and 1024–65535) sets
+`--port` (default `3077`, then `$KANA_PORT`, then `$PORT`, and 1024–65535) sets
 the web port. `--host` sets the bind address of `kana serve`, whose default is
 `127.0.0.1`; a plain `kana` always listens on this computer only. `--no-open` skips the browser.
 
@@ -146,7 +146,7 @@ assets, and keep the data root outside it. The launcher sits next to
 
 ```bash
 node /opt/kana/bin/kana.mjs password
-node /opt/kana/bin/kana.mjs serve --port 3000
+node /opt/kana/bin/kana.mjs serve --port 3077
 ```
 
 The service account's data root is `~/.kana`, as in a desktop install. Set
