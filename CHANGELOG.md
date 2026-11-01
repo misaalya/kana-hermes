@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.2 — 2026-11-01
+
+### Fixed
+
+- Rebuild the npm package from the tagged source. The initial
+  `kana-alya@0.7.1` publication shipped stale generated CLI files from an older
+  build; that version is unpublished, and `0.7.2` is the first npm build that
+  carries the 0.7.1 source fixes.
+
 ## 0.7.1 — 2026-11-01
 
 ### Added
