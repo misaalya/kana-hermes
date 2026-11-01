@@ -40,6 +40,10 @@
 
 ### Fixed
 
+- A partial slash-command argument now resolves to the nearest option Hermes
+  offers instead of being sent as typed: `/reasoning hi` completes to
+  `/reasoning high` with Tab and runs as `/reasoning high` on Enter, while
+  free-form arguments and later tokens stay untouched.
 - Avatar-mode replies sit on the tray's own depth fill instead of a separate
   blue plate; focus mode already used plain text, and the avatar composer keeps
   its blue band.

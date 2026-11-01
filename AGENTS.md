@@ -207,9 +207,15 @@ detail.
   has: a name that is itself one of the suggestions is never rewritten, so a
   destructive confirmation always names the command that runs; an unknown name
   takes the nearest suggestion's name, shortest first, keeping typed arguments;
-  no suggestion goes to Hermes as typed; only the name is substituted, never a
-  completion's argument fallback. The rewritten command is what the transcript
-  shows. Tab on a name-only draft fills that same nearest name; Enter sends it.
+  no suggestion goes to Hermes as typed; a completion's argument fallback is
+  never pasted over the command. `resolveTypedArguments` then resolves the first
+  typed argument token to the nearest option Hermes offered for that command
+  (`/reasoning hi` becomes `/reasoning high`), preferring the menu's order and
+  leaving free-form arguments, later tokens, and unknown commands exactly as
+  typed. The rewritten command is what the transcript shows. Tab on a name-only
+  draft fills that same nearest name; Tab on an argument keeps an explicitly
+  highlighted menu option and otherwise fills the nearest one. Enter applies
+  both rules before confirmation and sending.
 - Commands execute through `slash.exec`, falling back to `command.dispatch`
   where Hermes requires it. Quick commands, aliases, plugins, bundles, and
   skills must honor the structured result Hermes returns (`output`, `alias`,

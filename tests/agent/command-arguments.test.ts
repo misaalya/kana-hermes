@@ -4,7 +4,83 @@ import {
   commandArgumentHint,
   commandArgumentPolicy,
   commandRequiresArgument,
+  hasOfferedArgument,
+  resolveTypedArguments,
+  suggestionArgumentMatches,
 } from "@/lib/agent/command-arguments";
+import type { AgentCommandSuggestion } from "@/lib/agent/types";
+
+function option(text: string): AgentCommandSuggestion {
+  return { text, display: text, kind: "command" };
+}
+
+describe("nearest command argument", () => {
+  const reasoning = [
+    option("/reasoning none"),
+    option("/reasoning minimal"),
+    option("/reasoning low"),
+    option("/reasoning medium"),
+    option("/reasoning high"),
+    option("/reasoning xhigh"),
+    option("/reasoning max"),
+    option("/reasoning ultra"),
+    option("/reasoning show"),
+    option("/reasoning hide"),
+    option("/reasoning full"),
+    option("/reasoning clamp"),
+    option("/reasoning --global"),
+  ];
+
+  it("resolves a partial first argument to the first offered option", () => {
+    assert.equal(resolveTypedArguments("/reasoning hi", reasoning), "/reasoning high");
+    assert.equal(resolveTypedArguments("/reasoning h", reasoning), "/reasoning high");
+    assert.equal(resolveTypedArguments("/reasoning hig", reasoning), "/reasoning high");
+    // Hermes lists minimal before max; the menu order is the ranking.
+    assert.equal(resolveTypedArguments("/reasoning m", reasoning), "/reasoning minimal");
+  });
+
+  it("keeps later arguments and an exact option untouched", () => {
+    assert.equal(
+      resolveTypedArguments("/reasoning hi --global", reasoning),
+      "/reasoning high --global",
+    );
+    assert.equal(resolveTypedArguments("/reasoning high", reasoning), "/reasoning high");
+    assert.equal(resolveTypedArguments("/reasoning --glo", reasoning), "/reasoning --global");
+  });
+
+  it("only substitutes a token that the offered options match", () => {
+    assert.equal(resolveTypedArguments("/reasoning hihg", reasoning), "/reasoning hihg");
+    assert.equal(resolveTypedArguments("/reasoning ", reasoning), "/reasoning");
+    assert.equal(
+      resolveTypedArguments("/model hi", reasoning),
+      "/model hi",
+    );
+  });
+
+  it("leaves a free-form argument alone when no option was offered", () => {
+    assert.equal(resolveTypedArguments("/steer hello", [option("/steer")]), "/steer hello");
+    assert.equal(resolveTypedArguments("/steer hello", []), "/steer hello");
+  });
+
+  it("resolves only the first token of a multi-token argument", () => {
+    const suggestions = [option("/mcp add foo")];
+    assert.equal(resolveTypedArguments("/mcp ad foo", suggestions), "/mcp add foo");
+  });
+
+  it("matches a suggestion to the typed command and token", () => {
+    assert.equal(suggestionArgumentMatches("/reasoning hi", "/reasoning high"), true);
+    assert.equal(suggestionArgumentMatches("/reasoning hi", "/reasoning hide"), true);
+    assert.equal(suggestionArgumentMatches("/reasoning hi", "/reasoning low"), false);
+    assert.equal(suggestionArgumentMatches("/reasoning hi", "/fast normal"), false);
+    assert.equal(suggestionArgumentMatches("/reasoning hi", "/reasoning"), false);
+  });
+
+  it("knows whether the menu reached the argument stage", () => {
+    assert.equal(hasOfferedArgument("/reasoning hi", reasoning), true);
+    assert.equal(hasOfferedArgument("/reasoning hi", [option("/reasoning")]), false);
+    assert.equal(hasOfferedArgument("/reasoning", reasoning), false);
+  });
+});
 
 describe("Hermes command argument hints", () => {
   it("reads the usage hint from a catalog description", () => {

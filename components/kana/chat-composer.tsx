@@ -18,6 +18,12 @@ import {
 } from "@/lib/conversation/prompt-history";
 import { findConversation } from "@/lib/store/conversation-store";
 import { isVoiceActive } from "@/lib/store/voice-store";
+import {
+  hasOfferedArgument,
+  kanaRequiredArgumentHint,
+  resolveTypedArguments,
+  suggestionArgumentMatches,
+} from "@/lib/agent/command-arguments";
 import { resolveTypedCommand, missingCommandArgument } from "@/lib/services/send-message";
 import { getCopy, type Copy } from "@/lib/ui/copy";
 import { ComposerDictation } from "./composer-dictation";
@@ -223,9 +229,10 @@ export function ChatComposer() {
     // arrives too late to unlock autoplay on stricter mobile browsers.
     if (workspace.preferences.current().voiceEnabled) actions.unlockVoice();
     // Confirm the command that will actually run: Enter sends the nearest name
-    // for an unknown command, so `/updat` must be confirmed as /update.
-    // Validate the resolved name: Enter would send /reasoning for /reaso.
-    const resolved = resolveTypedCommand(draft, suggestions);
+    // and the nearest first argument Hermes already offered, so `/updat` must
+    // be confirmed as /update and `/reasoning hi` must run as /reasoning high.
+    let resolved = resolveTypedCommand(draft, suggestions);
+    resolved = resolveTypedArguments(resolved, suggestions);
     const missingArgument = missingCommandArgument(resolved, requiredArguments);
     if (missingArgument) {
       actions.clearCommandSuggestions();
@@ -234,6 +241,20 @@ export function ChatComposer() {
       inputRef.current?.focus();
       shakeDraft();
       return;
+    }
+    // Enter can land before the menu has fetched the options. When the usage
+    // hint enumerates choices, ask once and resolve again instead of sending
+    // a partial token.
+    const resolvedName = /^\/([^\s/]+)/.exec(resolved)?.[1]?.toLowerCase().replaceAll("_", "-");
+    const hint = resolvedName
+      ? requiredArguments?.[`/${resolvedName}`] ?? kanaRequiredArgumentHint(`/${resolvedName}`)
+      : undefined;
+    if (hint?.includes("|") && /\s/.test(resolved) && !hasOfferedArgument(resolved, suggestions)) {
+      await actions.completeCommands(resolved);
+      resolved = resolveTypedArguments(
+        resolved,
+        workspace.stores.commands.getState().suggestions,
+      );
     }
     const confirmation = destructiveCommandPrompt(resolved, text);
     if (confirmation && !window.confirm(confirmation)) return;
@@ -346,6 +367,41 @@ export function ChatComposer() {
               setArgumentNotice("");
             }}
             onKeyDown={(event) => {
+              if (
+                event.key === "Tab" &&
+                !event.shiftKey &&
+                /^\/[^\s/]+\s+\S/.test(message)
+              ) {
+                event.preventDefault();
+                setRecall(NO_PROMPT_RECALL);
+                const typed = message.trim();
+                const highlighted = suggestions[activeCommandIndex]?.text;
+                // An explicit menu selection wins over the nearest option.
+                if (suggestions.length > 0 && highlighted && suggestionArgumentMatches(message, highlighted)) {
+                  setMessage(highlighted.trimEnd());
+                  return;
+                }
+                const resolved = resolveTypedArguments(message, suggestions);
+                if (resolved !== typed) {
+                  setMessage(resolved);
+                  return;
+                }
+                // The menu can still be on the command-name stage; ask once,
+                // then complete the nearest option if the draft has not moved.
+                const conversationId = activeConversationId;
+                void actions.completeCommands(message).then(() => {
+                  if (!conversationId) return;
+                  const next = resolveTypedArguments(
+                    typed,
+                    workspace.stores.commands.getState().suggestions,
+                  );
+                  const current = workspace.stores.workspace.getState().drafts[conversationId]?.trim();
+                  if (current === typed && next !== typed) {
+                    workspace.stores.workspace.getState().setDraft(conversationId, next);
+                  }
+                });
+                return;
+              }
               if (suggestions.length > 0) {
                 if (event.key === "ArrowDown") {
                   event.preventDefault();
@@ -360,13 +416,8 @@ export function ChatComposer() {
                 if (event.key === "Tab") {
                   event.preventDefault();
                   setRecall(NO_PROMPT_RECALL);
-                  // Name completion uses the same nearest-command rule as
-                  // Enter; argument completion still takes the highlighted row.
-                  if (!/\s/.test(message.trim())) {
-                    setMessage(resolveTypedCommand(message, suggestions).trimEnd());
-                  } else {
-                    setMessage(suggestions[activeCommandIndex]?.text ?? message);
-                  }
+                  // A name-only draft uses the same nearest-command rule as Enter.
+                  setMessage(resolveTypedCommand(message, suggestions).trimEnd());
                   return;
                 }
                 if (event.key === "Escape") {

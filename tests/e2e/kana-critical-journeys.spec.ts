@@ -354,9 +354,24 @@ async function installFakeHermes(page: Page): Promise<FakeHermes> {
         };
         break;
       case "complete.slash": {
-        // Like Hermes: name-prefix matches, so a partial command arrives with
-        // its nearest real name on screen.
-        const typed = String(body.params?.text ?? "").trim().split(/\s+/, 1)[0].toLowerCase();
+        // Like Hermes: name-prefix matches, and a known command's first
+        // argument completes from its finite option list.
+        const text = String(body.params?.text ?? "");
+        const [typedName, argument] = text.trim().split(/\s+/, 2);
+        if (typedName?.toLowerCase() === "/reasoning" && /\s/.test(text)) {
+          const options = [
+            "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra",
+            "show", "hide", "on", "off", "full", "clamp", "--global",
+          ];
+          result = {
+            replace_from: text.lastIndexOf(" ") + 1,
+            items: options
+              .filter((value) => !argument || value.startsWith(argument.toLowerCase()))
+              .map((value) => ({ text: value, display: value, meta: "Option" })),
+          };
+          break;
+        }
+        const typed = text.trim().split(/\s+/, 1)[0].toLowerCase();
         const names = ["/status", "/new", "/codex-runtime", "/steer", "/reasoning"];
         // Long enough to overflow the menu, for the keyboard-scroll journey.
         const bulk =
@@ -406,6 +421,14 @@ async function installFakeHermes(page: Page): Promise<FakeHermes> {
         };
         break;
       case "config.set": {
+        if (body.params?.key === "reasoning") {
+          result = {
+            key: "reasoning",
+            value: String(body.params?.value ?? ""),
+            scope: "session",
+          };
+          break;
+        }
         const target = modelSwitch(String(body.params?.value ?? ""));
         if (body.params?.key === "model" && target.provider === "openrouter") {
           activeProvider = "openrouter";
@@ -4328,6 +4351,28 @@ test("keeps a command with a required argument from being sent bare", async ({ p
   // Adding the argument clears the warning and keeps the draft sendable.
   await composer.fill("/steer hello");
   await expect(page.getByRole("alert").filter({ hasText: "/steer needs an argument" })).toHaveCount(0);
+});
+
+test("completes a partial command argument to the nearest option with Tab", async ({ page }) => {
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
+  await composer.click();
+  await composer.fill("/reasoning hi");
+  await page.getByRole("option", { name: /^high/ }).first().waitFor();
+  await expect(composer).toBeFocused();
+  await composer.press("Tab");
+  await expect(composer).toHaveValue("/reasoning high");
+});
+
+test("resolves a partial command argument to the nearest option on Enter", async ({ page }) => {
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
+  await composer.click();
+  await composer.fill("/reasoning hi");
+  await page.getByRole("option", { name: /^high/ }).first().waitFor();
+  await submitDraft(page, composer);
+  await openHistory(page);
+  await expect(
+    page.getByText("Reasoning effort set to 'high' for this conversation.").last(),
+  ).toBeVisible();
 });
 
 test("resolves a truncated command before checking its required argument", async ({ page }) => {

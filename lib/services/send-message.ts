@@ -1,5 +1,5 @@
 import { AttachmentUploadError, type AgentAttachment } from "@/lib/agent/attachments";
-import { kanaRequiredArgumentHint } from "@/lib/agent/command-arguments";
+import { kanaRequiredArgumentHint, nearestCommandToken } from "@/lib/agent/command-arguments";
 import type { AgentCommandSuggestion } from "@/lib/agent/types";
 import { PromptGuardrailError } from "@/lib/guardrails/protocol";
 import {
@@ -91,12 +91,10 @@ export function resolveTypedCommand(text: string, suggestions: AgentCommandSugge
   // Hermes resolves an ambiguous prefix by the shortest name (/qui is /quit,
   // not /quint-pipeline), so the same rule picks the nearest here instead of
   // depending on the menu's order.
-  let nearest: string | null = null;
-  for (const item of suggestions) {
-    const candidate = asCommand(item).replace(/\s.*$/, "");
-    if (!candidate.startsWith(`/${name}`) && !`/${name}`.startsWith(candidate)) continue;
-    if (nearest === null || candidate.length < nearest.length) nearest = candidate;
-  }
+  const nearest = nearestCommandToken(
+    `/${name}`,
+    suggestions.map((item) => asCommand(item).replace(/\s.*$/, "")),
+  );
   // A completion that fell back to an argument would paste its hint over the
   // command: /config answering `/config ` is not what /conf meant. Only the
   // name is used, and the typed arguments are kept.
