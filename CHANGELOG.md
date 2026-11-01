@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.7.3 — 2026-11-01
+
+### Changed
+
+- The `kana` launcher now defaults to web port 3077 instead of 3000.
+  `--port`, `KANA_PORT`, and `PORT` still override it.
+
+### Added
+
+- npm releases publish through GitHub Actions Trusted Publishing
+  (`.github/workflows/publish.yml`), so a publish no longer needs a stored npm
+  token or a manual 2FA challenge.
+
 ## 0.7.2 — 2026-11-01
 
 ### Fixed

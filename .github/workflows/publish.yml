@@ -1,0 +1,51 @@
+name: publish
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  npm:
+    runs-on: ubuntu-latest
+    environment: kana
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Use a Trusted Publishing capable npm
+        run: npm install -g npm@latest
+
+      - run: npm ci
+
+      - name: Check release version
+        if: github.event_name == 'release'
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          test "v$version" = "$RELEASE_TAG"
+
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run test:package:npm
+      - run: node scripts/assert-npm-release.mjs
+
+      - name: Publish
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if npm view "kana-alya@$version" version >/dev/null 2>&1; then
+            echo "kana-alya@$version is already published; skipping."
+            exit 0
+          fi
+          npm publish ./cli --ignore-scripts --provenance --access public
