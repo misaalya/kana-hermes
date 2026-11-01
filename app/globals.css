@@ -2630,7 +2630,8 @@ video.kana-media-preview {
   }
 
   .kana-chat-dock.is-sole .kana-composer-shell > .kana-composer-body,
-  .kana-chat-dock.is-sole .kana-composer-shell > [role="alert"] {
+  .kana-chat-dock.is-sole .kana-composer-shell > [role="alert"],
+  .kana-chat-dock.is-sole .kana-composer-body > [role="alert"] {
     max-width: min(var(--kana-focus-composer), 100%);
     margin-inline: auto;
   }

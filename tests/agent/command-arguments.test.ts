@@ -5,6 +5,7 @@ import {
   commandArgumentPolicy,
   commandRequiresArgument,
   hasOfferedArgument,
+  lineUpCommandDraft,
   resolveTypedArguments,
   suggestionArgumentMatches,
 } from "@/lib/agent/command-arguments";
@@ -13,6 +14,22 @@ import type { AgentCommandSuggestion } from "@/lib/agent/types";
 function option(text: string): AgentCommandSuggestion {
   return { text, display: text, kind: "command" };
 }
+
+describe("lineUpCommandDraft", () => {
+  it("moves a slash command after blank lines to the first line", () => {
+    assert.equal(lineUpCommandDraft("\n\n/reas"), "/reas");
+    assert.equal(lineUpCommandDraft(" \n \n  /reas hi"), "/reas hi");
+    assert.equal(lineUpCommandDraft("\n/reasoning high --global"), "/reasoning high --global");
+  });
+
+  it("keeps content above the slash and a same-line space untouched", () => {
+    assert.equal(lineUpCommandDraft("hello\n/reas"), "hello\n/reas");
+    assert.equal(lineUpCommandDraft(" /reas"), " /reas");
+    assert.equal(lineUpCommandDraft("/reas"), "/reas");
+    assert.equal(lineUpCommandDraft("\n\nhello"), "\n\nhello");
+    assert.equal(lineUpCommandDraft("\n\n"), "\n\n");
+  });
+});
 
 describe("nearest command argument", () => {
   const reasoning = [

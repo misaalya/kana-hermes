@@ -21,6 +21,7 @@ import { isVoiceActive } from "@/lib/store/voice-store";
 import {
   hasOfferedArgument,
   kanaRequiredArgumentHint,
+  lineUpCommandDraft,
   resolveTypedArguments,
   suggestionArgumentMatches,
 } from "@/lib/agent/command-arguments";
@@ -217,7 +218,9 @@ export function ChatComposer() {
   );
 
   const submitMessage = async () => {
-    const draft = message.trim() || (files.length ? copy.composer.reviewAttachments : "");
+    const normalized = lineUpCommandDraft(message);
+    if (normalized !== message) setMessage(normalized);
+    const draft = normalized.trim() || (files.length ? copy.composer.reviewAttachments : "");
     const state = workspace.stores.workspace.getState();
     if (!draft || state.submitting || state.dictating) return;
     setArgumentNotice("");
@@ -293,29 +296,6 @@ export function ChatComposer() {
 
   return (
     <div className="kana-composer-shell shrink-0 border-t px-4 pb-3 pt-2.5 max-sm:px-3 max-sm:pb-[max(12px,env(safe-area-inset-bottom))]">
-      {error ? (
-        <div role="alert" className="mb-2 flex items-start gap-2 rounded-[20px] border-2 border-[#ca2a30] bg-[#ca2a30] px-3.5 py-2 text-xs font-semibold text-white">
-          <p className="min-w-0 flex-1 break-words">{error}</p>
-          <button type="button" onClick={actions.clearError} className="kana-focus min-h-8 shrink-0 rounded-full px-2"
-            aria-label={copy.composer.dismissError}>
-            ×
-          </button>
-        </div>
-      ) : null}
-      {attachmentError ? (
-        <div role="alert" className="mb-2 flex items-start gap-2 rounded-[20px] border-2 border-[#ca2a30] bg-[#ca2a30] px-3.5 py-2 text-xs font-semibold text-white">
-          <p className="min-w-0 flex-1 break-words">{attachmentError}</p>
-          <button type="button" onClick={() => setAttachmentError(null)} className="kana-focus min-h-8 shrink-0 rounded-full px-2"
-            aria-label={copy.composer.dismissError}>
-            ×
-          </button>
-        </div>
-      ) : null}
-      {argumentNotice ? (
-        <div role="alert" className="mb-2 flex items-start gap-2 rounded-[20px] border-2 border-[#ca2a30] bg-[#ca2a30] px-3.5 py-2 text-xs font-semibold text-white">
-          <p className="min-w-0 flex-1 break-words">{argumentNotice}</p>
-        </div>
-      ) : null}
       <div className="kana-composer-body relative">
         <SlashCommandMenu
           suggestions={suggestions}
@@ -325,6 +305,29 @@ export function ChatComposer() {
           onSelect={selectCommand}
           locale={locale}
         />
+        {error ? (
+          <div role="alert" className="mb-2 flex items-start gap-2 rounded-[20px] border-2 border-[#ca2a30] bg-[#ca2a30] px-3.5 py-2 text-xs font-semibold text-white">
+            <p className="min-w-0 flex-1 break-words">{error}</p>
+            <button type="button" onClick={actions.clearError} className="kana-focus min-h-8 shrink-0 rounded-full px-2"
+              aria-label={copy.composer.dismissError}>
+              ×
+            </button>
+          </div>
+        ) : null}
+        {attachmentError ? (
+          <div role="alert" className="mb-2 flex items-start gap-2 rounded-[20px] border-2 border-[#ca2a30] bg-[#ca2a30] px-3.5 py-2 text-xs font-semibold text-white">
+            <p className="min-w-0 flex-1 break-words">{attachmentError}</p>
+            <button type="button" onClick={() => setAttachmentError(null)} className="kana-focus min-h-8 shrink-0 rounded-full px-2"
+              aria-label={copy.composer.dismissError}>
+              ×
+            </button>
+          </div>
+        ) : null}
+        {argumentNotice ? (
+          <div role="alert" className="mb-2 flex items-start gap-2 rounded-[20px] border-2 border-[#ca2a30] bg-[#ca2a30] px-3.5 py-2 text-xs font-semibold text-white">
+            <p className="min-w-0 flex-1 break-words">{argumentNotice}</p>
+          </div>
+        ) : null}
         <div
           className={`kana-composer flex flex-col${multiline ? " is-multiline" : ""}${dictating ? " is-dictating" : ""}`}
           style={{ "--kana-composer-collapse-delay": `${collapseDelaySeconds}s` } as CSSProperties}
@@ -363,7 +366,7 @@ export function ChatComposer() {
               // Typing is the reader's own draft again: the walk ends here so an
               // older prompt is never restored over what they just wrote.
               setRecall(NO_PROMPT_RECALL);
-              setMessage(event.target.value);
+              setMessage(lineUpCommandDraft(event.target.value));
               setArgumentNotice("");
             }}
             onKeyDown={(event) => {

@@ -410,7 +410,11 @@ and a neutral dimmed selected row with no accent fill or accent ink. Kana's own
 commands and Hermes's plain commands share one Command group, and the list
 scrolls the selected row into view as the user navigates. It is anchored to the
 composer's left
-edge, never centred. A bare command
+edge, never centred. A command typed after blank lines is pulled up to the
+first line, so the menu opens as soon as the slash is typed; non-blank text
+above the slash keeps the draft untouched. The red alerts sit in the composer
+body above the blue tray, and the menu stacks above them, so an open list never
+hides an error. A bare command
 whose live usage hint marks a required placeholder is not sent: the composer
 shakes and shows the command and its usage in the red alert above the bar,
 keeping the draft. Settings → AI model adds a
@@ -456,7 +460,9 @@ one that is stopped); a failed restart is shown in the danger colour. The key
 field is a password input and is discarded when its form closes.
 While Hermes works, or while the reply's voice is still being generated, the
 transcript shows a chat-app typing indicator (`kana-typing`, three hopping dots)
-with the status beside it, and Stop is a small icon-and-label pill next to that
+with a status beside it once Hermes is answering, a message is queued, or the
+turn needs attention; the initial thinking label is screen-reader-only because
+the dots already show it. Stop is a small icon-and-label pill next to that
 status rather than a replacement for Send. A message Hermes takes into the
 running turn is a right-aligned icon line (`RedirectIcon`) under the user bubble
 that opened the turn, never a second bubble. Voice generation has no short time

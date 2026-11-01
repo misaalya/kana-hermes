@@ -497,7 +497,10 @@ async function installFakeHermes(page: Page): Promise<FakeHermes> {
           session.running = true;
           heldTurn = { session, runtimeId };
           result = { accepted: true };
-          setTimeout(() => void runTool("web_search", "Kupang weather today").catch(() => undefined), 30);
+          // "no tool" holds the turn at thinking, for the initial status test.
+          if (!/no tool/i.test(userMessage)) {
+            setTimeout(() => void runTool("web_search", "Kupang weather today").catch(() => undefined), 30);
+          }
           break;
         }
         // Asked for files, Hermes delivers two; Kana's server has already
@@ -4373,6 +4376,56 @@ test("resolves a partial command argument to the nearest option on Enter", async
   await expect(
     page.getByText("Reasoning effort set to 'high' for this conversation.").last(),
   ).toBeVisible();
+});
+
+test("lines a slash command up to the first line after blank lines", async ({ page }) => {
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
+  await composer.click();
+  await composer.fill("\n\n/reas");
+  await expect(composer).toHaveValue("/reas");
+  await page.getByRole("option", { name: /\/reasoning/ }).first().waitFor();
+
+  // Content on an earlier line is not a command draft and stays untouched.
+  await composer.fill("hello\n/reas");
+  await expect(composer).toHaveValue("hello\n/reas");
+  await expect(page.getByRole("option", { name: /\/reasoning/ })).toHaveCount(0);
+});
+
+test("keeps a composer alert above the blue tray and below the command menu", async ({ page }) => {
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
+  const fileInput = page.locator('input[type="file"]');
+  const sixFiles = Array.from({ length: 6 }, (_, index) => ({
+    name: `file-${index}.txt`,
+    mimeType: "text/plain",
+    buffer: Buffer.from("x"),
+  }));
+  await fileInput.setInputFiles(sixFiles);
+  const alert = page.getByRole("alert").filter({ hasText: "Up to 5 non-empty files" });
+  await expect(alert).toBeVisible();
+
+  await composer.fill("/re");
+  await page.getByRole("option", { name: /\/reasoning/ }).first().waitFor();
+  const alertBox = await alert.boundingBox();
+  const menuBox = await page.locator("#kana-command-menu").boundingBox();
+  const trayBox = await page.locator(".kana-composer").boundingBox();
+  expect(alertBox).not.toBeNull();
+  expect(menuBox).not.toBeNull();
+  expect(trayBox).not.toBeNull();
+  expect(menuBox!.y + menuBox!.height).toBeLessThanOrEqual(alertBox!.y + 1);
+  expect(alertBox!.y + alertBox!.height).toBeLessThanOrEqual(trayBox!.y + 1);
+  await page.screenshot({ path: `test-results/composer-alert-stack-${test.info().project.name}.png` });
+});
+
+test("keeps the initial thinking label screen-reader only", async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 0) < 1024, "The live chat feed is desktop layout.");
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
+  await composer.fill("Research the hidden status with no tool");
+  await submitDraft(page, composer);
+  const thinking = page.getByText("Kana is thinking", { exact: true });
+  await expect(thinking).toHaveCount(1);
+  await expect(thinking).toHaveClass(/sr-only/);
+  await expect(page.locator(".kana-typing").first()).toBeVisible();
+  await hermes.finishHeldTurn();
 });
 
 test("resolves a truncated command before checking its required argument", async ({ page }) => {

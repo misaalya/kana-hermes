@@ -215,7 +215,9 @@ detail.
   typed. The rewritten command is what the transcript shows. Tab on a name-only
   draft fills that same nearest name; Tab on an argument keeps an explicitly
   highlighted menu option and otherwise fills the nearest one. Enter applies
-  both rules before confirmation and sending.
+  both rules before confirmation and sending. A slash command typed after blank
+  lines is moved to the first line so the catalog opens; non-blank text above
+  the slash prevents that rewrite.
 - Commands execute through `slash.exec`, falling back to `command.dispatch`
   where Hermes requires it. Quick commands, aliases, plugins, bundles, and
   skills must honor the structured result Hermes returns (`output`, `alias`,

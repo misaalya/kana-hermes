@@ -316,7 +316,9 @@ export const LiveChatFeed = memo(function LiveChatFeed({
               <span />
             </span>
             <div className="flex items-center gap-2 pl-1">
-              <span className="text-[10px] font-bold text-muted">{status}</span>
+              <span className={status === copy.status.thinking ? "sr-only" : "text-[10px] font-bold text-muted"}>
+                {status}
+              </span>
               {onStop ? (
                 <button
                   type="button"

@@ -26,6 +26,10 @@
   uppercase label above a large right-aligned reading, no gauge, a dotted rule
   between readings, and a height that hugs its content. It stays mounted while
   closed, so its tab keeps its place instead of jumping to the top.
+- A slash command typed after blank lines is pulled up to the first line so the
+  command menu opens; a draft with text above the slash is left alone. The
+  initial "Kana is thinking" label is screen-reader-only because the typing dots
+  already show it; answering and queued statuses stay visible.
 - Slash commands stop their suggestion list at the ends, block a command whose
   required argument is missing with a shake and its usage hint, and keep a
   destructive confirmation naming the command that will actually run. Tool
@@ -40,6 +44,9 @@
 
 ### Fixed
 
+- A composer alert (connection error, rejected attachment, or a command's usage
+  warning) now sits inside the composer body above the blue tray, and the
+  command menu stacks above it, so an open menu never hides the error.
 - A partial slash-command argument now resolves to the nearest option Hermes
   offers instead of being sent as typed: `/reasoning hi` completes to
   `/reasoning high` with Tab and runs as `/reasoning high` on Enter, while

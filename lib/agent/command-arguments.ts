@@ -63,6 +63,18 @@ export function hasOfferedArgument(input: string, suggestions: AgentCommandSugge
 }
 
 /**
+ * A leading slash command typed after blank lines belongs on the first line:
+ * the slash menu only follows a draft that starts with `/`. Whitespace before
+ * the slash is dropped only when it contains a newline and nothing else, so
+ * text on an earlier line keeps the draft untouched.
+ */
+export function lineUpCommandDraft(input: string): string {
+  const first = input.search(/\S/);
+  if (first <= 0 || input[first] !== "/") return input;
+  return input.slice(0, first).includes("\n") ? input.slice(first) : input;
+}
+
+/**
  * The first argument token resolved to the nearest option Hermes offered for
  * this command. Free-form arguments, later tokens, and unknown commands stay
  * exactly as typed; only a token with a prefix match is substituted.
