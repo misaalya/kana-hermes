@@ -1456,8 +1456,10 @@ test("resizes the avatar-mode chat panel and remembers the width", async ({ page
   // End and Home are the viewport-safe maximum and the standard minimum.
   await page.locator(".kana-chat-resize").focus();
   await page.keyboard.press("End");
-  // The width transition must settle before the maximum is measured.
-  await expect.poll(async () => (await dock.boundingBox())?.width ?? 0).toBeGreaterThan(1100);
+  // Wait for the 280ms transition to reach the settled 70% maximum, not the
+  // first frame above 1100, or a later snap-back can land a few pixels past
+  // the snapshot and fail the comparison below.
+  await expect.poll(async () => (await dock.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(1119);
   const maximum = (await dock.boundingBox())?.width ?? 0;
   expect(maximum).toBeLessThanOrEqual(1121);
 
