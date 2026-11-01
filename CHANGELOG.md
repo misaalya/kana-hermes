@@ -27,9 +27,13 @@
   between readings, and a height that hugs its content. It stays mounted while
   closed, so its tab keeps its place instead of jumping to the top.
 - A slash command typed after blank lines is pulled up to the first line so the
-  command menu opens; a draft with text above the slash is left alone. The
-  initial "Kana is thinking" label is screen-reader-only because the typing dots
-  already show it; answering and queued statuses stay visible.
+  command menu opens; a draft with text above the slash is left alone.
+- Sending a message returns the transcript to the latest entry even when the
+  reader had scrolled up; a reply that arrives while reading above does not pull
+  the view. A small **Auto scroll** switch in the feed, beside **Latest**, pauses
+  that following; it is a chat control, not an Experience setting. The typing
+  indicator shows no visible status text: the status stays screen-reader-only
+  while the dots and Stop carry the state.
 - Slash commands stop their suggestion list at the ends, block a command whose
   required argument is missing with a shake and its usage hint, and keep a
   destructive confirmation naming the command that will actually run. Tool

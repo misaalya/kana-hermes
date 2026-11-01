@@ -358,6 +358,21 @@ describe("LocalPreferencesStore", () => {
     assert.equal(persisted.includes("arbitrary.js"), false);
   });
 
+  it("keeps auto scroll on unless the user turned it off", () => {
+    const persistent = new MemoryStorage();
+    persistent.setItem("kana.preferences.v6", JSON.stringify({ uiLocale: "en" }));
+    assert.equal(new LocalPreferencesStore(persistent).load().autoScroll, true);
+    persistent.setItem(
+      "kana.preferences.v6",
+      JSON.stringify({ uiLocale: "en", autoScroll: "no" }),
+    );
+    assert.equal(new LocalPreferencesStore(persistent).load().autoScroll, true);
+
+    const store = new LocalPreferencesStore(persistent);
+    store.save({ ...DEFAULT_PREFERENCES, autoScroll: false });
+    assert.equal(store.load().autoScroll, false);
+  });
+
   it("keeps the stage on unless the user switched it off", () => {
     const persistent = new MemoryStorage();
     // A record from a build without the setting, and a tampered value, both

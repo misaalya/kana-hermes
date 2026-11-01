@@ -154,6 +154,7 @@ export const DEFAULT_PREFERENCES: KanaPreferences = {
   voiceMode: "configured",
   avatarMode: "live2d",
   avatarVisible: true,
+  autoScroll: true,
   agentModelDefaults: {},
   composerCollapseDelaySeconds: DEFAULT_COMPOSER_COLLAPSE_DELAY_SECONDS,
   chatPanelWidth: 0,
@@ -210,6 +211,7 @@ export function normalizeKanaPreferences(
     // Anything but an explicit false keeps the stage: stored records from
     // builds without the setting, and restored values, stay chat-and-avatar.
     avatarVisible: preferences.avatarVisible !== false,
+    autoScroll: preferences.autoScroll !== false,
     agentModelDefaults: normalizeAgentModelDefaults(preferences.agentModelDefaults),
     composerCollapseDelaySeconds: normalizeComposerCollapseDelay(
       preferences.composerCollapseDelaySeconds,

@@ -256,6 +256,7 @@ export type Copy = {
     copiedCode: string;
     latestAria: string;
     latest: string;
+    autoScroll: string;
     download: string;
     downloadAria(name: string): string;
     openImage(name: string): string;
@@ -890,6 +891,7 @@ const id: Copy = {
     copiedCode: "Kode disalin",
     latestAria: "Lompat ke pesan terbaru",
     latest: "Terbaru",
+    autoScroll: "Gulir otomatis",
     download: "Unduh",
     downloadAria: (name) => `Unduh ${name}`,
     openImage: (name) => `Buka ${name} di tab baru`,
@@ -1578,6 +1580,7 @@ const en: Copy = {
     copiedCode: "Code copied",
     latestAria: "Jump to latest message",
     latest: "Latest",
+    autoScroll: "Auto scroll",
     download: "Download",
     downloadAria: (name) => `Download ${name}`,
     openImage: (name) => `Open ${name} in a new tab`,

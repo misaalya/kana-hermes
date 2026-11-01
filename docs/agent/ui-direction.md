@@ -460,10 +460,9 @@ one that is stopped); a failed restart is shown in the danger colour. The key
 field is a password input and is discarded when its form closes.
 While Hermes works, or while the reply's voice is still being generated, the
 transcript shows a chat-app typing indicator (`kana-typing`, three hopping dots)
-with a status beside it once Hermes is answering, a message is queued, or the
-turn needs attention; the initial thinking label is screen-reader-only because
-the dots already show it. Stop is a small icon-and-label pill next to that
-status rather than a replacement for Send. A message Hermes takes into the
+with no visible status text; the status stays screen-reader-only while the dots
+and Stop carry the state. Stop is a small icon-and-label pill rather than a
+replacement for Send. A message Hermes takes into the
 running turn is a right-aligned icon line (`RedirectIcon`) under the user bubble
 that opened the turn, never a second bubble. Voice generation has no short time
 limit on the client; slow machines keep the indicator up longer.
@@ -482,7 +481,11 @@ unbroken string cannot widen it past the panel. In focus mode the transcript is
 a centred reading measure, so the panel owns a wheel listener: a wheel over the
 side gutters or the composer moves the transcript, while the feed itself and
 any nested scroller (a code card, a model list, a long draft) keep their own
-wheel.
+wheel. Sending a message returns the transcript to the latest entry, even when
+the reader had scrolled up; a reply that arrives while the reader is above does
+not pull the view. A small **Auto scroll** switch in the feed, beside **Latest**,
+pauses that following; it is a chat control and is not offered in Experience
+settings.
 
 A fenced code block renders as a dark code card (`.kana-chat-code` on the
 guide's `.kana-code-surface`) with a monospace language label and a Copy action;

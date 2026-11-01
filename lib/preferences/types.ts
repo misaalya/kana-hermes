@@ -58,6 +58,8 @@ export type KanaPreferences = {
   avatarMode: AvatarMode;
   /** Off means a plain chat workspace: the stage, its pattern, and its canvas stay unmounted. */
   avatarVisible: boolean;
+  /** Follow new chat entries; the feed's own switch writes it, not Settings. */
+  autoScroll: boolean;
   /**
    * Kana's own default for new conversations, applied as a per-session Hermes
    * override at session.create. A runtime with no entry follows Hermes's

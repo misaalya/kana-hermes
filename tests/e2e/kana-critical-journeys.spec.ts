@@ -4425,7 +4425,46 @@ test("keeps the initial thinking label screen-reader only", async ({ page }) => 
   await expect(thinking).toHaveCount(1);
   await expect(thinking).toHaveClass(/sr-only/);
   await expect(page.locator(".kana-typing").first()).toBeVisible();
+  await page.screenshot({ path: `test-results/typing-status-${test.info().project.name}.png` });
   await hermes.finishHeldTurn();
+});
+
+test("returns the transcript to the latest entry after sending from above", async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 0) < 1024, "The live chat feed is desktop layout.");
+  await page.setViewportSize({ width: 1280, height: 520 });
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
+  const chat = page.getByRole("log", { name: "Live chat" });
+  for (let index = 0; index < 10; index += 1) {
+    await composer.fill(`Message ${index + 1}`);
+    await submitDraft(page, composer);
+    await expect(chat.locator("article[data-role='assistant']")).toHaveCount(index + 1);
+  }
+  const feed = page.locator(".kana-chat-scroll");
+  await feed.evaluate((node) => { node.scrollTop = 0; });
+  await expect(page.getByRole("button", { name: /latest/i })).toBeVisible();
+  const gap = () => feed.evaluate((node) => node.scrollHeight - node.scrollTop - node.clientHeight);
+  expect(await gap()).toBeGreaterThan(32);
+
+  await composer.fill("Back to the bottom");
+  await submitDraft(page, composer);
+  await expect.poll(gap).toBeLessThan(32);
+
+  // The feed's own switch pauses following; sending no longer pulls the view.
+  await feed.evaluate((node) => { node.scrollTop = 0; });
+  const autoScroll = page.getByRole("switch", { name: "Auto scroll" });
+  await expect(autoScroll).toBeVisible();
+  await page.screenshot({ path: `test-results/auto-scroll-toggle-${test.info().project.name}.png` });
+  await autoScroll.click();
+  await expect(autoScroll).toHaveAttribute("aria-checked", "false");
+  expect(await gap()).toBeGreaterThan(32);
+  await composer.fill("Stay where I am");
+  await submitDraft(page, composer);
+  await page.waitForTimeout(250);
+  expect(await gap()).toBeGreaterThan(32);
+  await expect(page.getByRole("button", { name: /latest/i })).toBeVisible();
+
+  await autoScroll.click();
+  await expect.poll(gap).toBeLessThan(32);
 });
 
 test("resolves a truncated command before checking its required argument", async ({ page }) => {

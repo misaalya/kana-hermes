@@ -64,6 +64,11 @@ function ChatFeed() {
   // while on slower machines: keep the typing bubble up until it plays.
   const synthesizing = useKanaStore("voice", (state) => state.runtimeState === "synthesizing");
   const locale = useKanaStore("preferences", (state) => state.preferences.uiLocale);
+  const autoScroll = useKanaStore("preferences", (state) => state.preferences.autoScroll);
+  const toggleAutoScroll = useCallback(() => {
+    const current = workspace.stores.preferences.getState().preferences;
+    void workspace.actions.savePreferences({ ...current, autoScroll: !current.autoScroll });
+  }, [workspace]);
   const stop = useCallback(() => void workspace.actions.abort(), [workspace.actions]);
   return (
     <LiveChatFeed
@@ -75,6 +80,8 @@ function ChatFeed() {
       streamingReply={streamingReply}
       locale={locale}
       onStop={stop}
+      autoScroll={autoScroll}
+      onToggleAutoScroll={toggleAutoScroll}
     />
   );
 }

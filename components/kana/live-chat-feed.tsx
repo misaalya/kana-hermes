@@ -7,6 +7,7 @@ import { ActivityStack } from "./activity-stack";
 import { ChatMarkdown } from "./chat-markdown";
 import { MediaAttachments } from "./media-attachments";
 import { CheckIcon, CopyIcon, RedirectIcon, StopIcon } from "./icons";
+import { Toggle } from "./ui";
 import { extractMediaAttachments } from "@/lib/presentation/media";
 import { getCopy, type Copy, type UiLocale } from "@/lib/ui/copy";
 import {
@@ -26,6 +27,9 @@ type LiveChatFeedProps = {
   locale: UiLocale;
   /** Stop the running turn, or release a reply whose voice is still coming. */
   onStop?: () => void;
+  /** Follow new entries; the feed's own switch writes it, not Settings. */
+  autoScroll?: boolean;
+  onToggleAutoScroll?: () => void;
 };
 
 /** Hermes's reply: its Markdown, then any files it delivered. */
@@ -138,7 +142,10 @@ export const LiveChatFeed = memo(function LiveChatFeed({
   streamingReply = null,
   locale,
   onStop,
+  autoScroll = true,
+  onToggleAutoScroll,
 }: LiveChatFeedProps) {
+  const auto = autoScroll !== false;
   const copy = getCopy(locale);
   const dateFormatter = new Intl.DateTimeFormat(copy.dateLocale, {
     hour: "2-digit", minute: "2-digit",
@@ -158,8 +165,33 @@ export const LiveChatFeed = memo(function LiveChatFeed({
 
   // New tools grow the open activity block without adding an entry.
   useEffect(() => {
-    if (pinnedToBottom) scrollToBottom();
-  }, [entries.length, activities.length, typing, streamingReply, pinnedToBottom, scrollToBottom]);
+    if (auto && pinnedToBottom) scrollToBottom();
+  }, [entries.length, activities.length, typing, streamingReply, pinnedToBottom, auto, scrollToBottom]);
+
+  // Turning auto-scroll back on returns to the latest entry at once.
+  useEffect(() => {
+    if (!auto) return;
+    scrollToBottom();
+  }, [auto, scrollToBottom]);
+
+  // Sending a message returns to the latest entry, even when the reader had
+  // scrolled up; a reply that arrives while reading above does not pull the
+  // view. With auto-scroll off, the reader stays where they are.
+  const lastUserKey = useMemo(() => {
+    for (let index = entries.length - 1; index >= 0; index -= 1) {
+      const entry = entries[index];
+      if (entry.kind === "message" && entry.message.role === "user") return entry.message.id;
+    }
+    return null;
+  }, [entries]);
+  const lastUserRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!lastUserKey || lastUserRef.current === lastUserKey) return;
+    const first = lastUserRef.current === null;
+    lastUserRef.current = lastUserKey;
+    if (first || !auto) return;
+    scrollToBottom();
+  }, [lastUserKey, auto, scrollToBottom]);
 
   // A delivered picture or video takes its height only once it loads, after
   // the reply already scrolled into view: follow it while pinned.
@@ -316,9 +348,9 @@ export const LiveChatFeed = memo(function LiveChatFeed({
               <span />
             </span>
             <div className="flex items-center gap-2 pl-1">
-              <span className={status === copy.status.thinking ? "sr-only" : "text-[10px] font-bold text-muted"}>
-                {status}
-              </span>
+              {/* The dots and Stop carry the state visually; keep the status
+                  text available to screen readers without a visible label. */}
+              <span className="sr-only">{status}</span>
               {onStop ? (
                 <button
                   type="button"
@@ -336,18 +368,28 @@ export const LiveChatFeed = memo(function LiveChatFeed({
         <div aria-hidden="true" />
       </div>
 
-      {!pinnedToBottom ? (
-        <button
-          type="button"
-          onClick={() => {
-            setPinnedToBottom(true);
-            scrollToBottom();
-          }}
-          className="kana-focus kana-pill kana-pill-accent absolute bottom-3 left-1/2 -translate-x-1/2 px-4 py-1.5 text-[11px]"
-          aria-label={copy.chat.latestAria}
-        >
-          {copy.chat.latest}
-        </button>
+      {!pinnedToBottom || !auto ? (
+        <div className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2">
+          {!pinnedToBottom ? (
+            <button
+              type="button"
+              onClick={() => {
+                setPinnedToBottom(true);
+                scrollToBottom();
+              }}
+              className="kana-focus kana-pill kana-pill-accent shrink-0 whitespace-nowrap px-4 py-1.5 text-[11px]"
+              aria-label={copy.chat.latestAria}
+            >
+              {copy.chat.latest}
+            </button>
+          ) : null}
+          {onToggleAutoScroll ? (
+            <div className="kana-pill shrink-0 gap-2 whitespace-nowrap border border-line bg-surface px-3 py-1 text-[11px] text-ink">
+              <span>{copy.chat.autoScroll}</span>
+              <Toggle checked={auto} label={copy.chat.autoScroll} onChange={onToggleAutoScroll} />
+            </div>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );
