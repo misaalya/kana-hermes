@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.8.1 — 2026-11-02
+
+### Fixed
+
+- Settings → Connection's Installation mode reports only Kana's deployment
+  mode, Local or Deployment. A remote Hermes changes where the agent runs, not
+  how Kana is installed, so the row no longer reads Remote.
+- The settled settings footer shows the running Kana version, such as
+  `Kana v0.8.1`, instead of "Saved automatically". Saving and failure hints
+  still appear while they are relevant.
+
 ## 0.8.0 — 2026-11-02
 
 ### Added
