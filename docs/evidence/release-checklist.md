@@ -42,6 +42,18 @@ safe. After it finishes, verify both `npm view kana-alya@<version> version` and
 `npm view kana-alya dist-tags.latest`, then record the workflow URL in the
 GitHub release notes.
 
+Creating the GitHub release only triggers the workflow. Publication is complete
+only when the workflow succeeds, including its final registry verification, and
+`npm view kana-alya@<version> version` and `npm view kana-alya dist-tags.latest`
+both report it. The release page, the tag, and a green publish step are not
+evidence by themselves.
+
+The Trusted Publisher binding lives in the npm package settings, not in this
+repository. A fork or a clone without that binding cannot publish `kana-alya`;
+never rename the package, change the registry, or add a token to work around a
+refusal. Only the npm package owner can add another repository, workflow, or
+environment to the binding.
+
 The GitHub runner builds outside every maintainer home, so this path also
 satisfies the local build rule below. Use the manual flow only when the
 workflow is unavailable or when a local package verification is required.

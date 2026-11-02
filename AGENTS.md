@@ -308,6 +308,17 @@ constant: Kana keeps reading the live registry.
   `misaalya/kana-hermes`, workflow `publish.yml`, and environment `kana`, and
   the workflow must keep `id-token: write`. No npm token, secret, or local 2FA
   challenge belongs in the repository or the workflow.
+- Creating a GitHub release is only the trigger; it is not evidence that npm
+  published. Treat a release as published only after the workflow completes and
+  the registry reports the exact `version` and `dist-tags.latest`; the release
+  page or the tag alone is never enough. Never report publication from the
+  release page, and never work around a failed or skipped workflow with a token
+  or a manual publish from a clone.
+- The Trusted Publisher binding lives in the npm package settings, not in this
+  repository. A fork or a clone without that binding cannot publish
+  `kana-alya`; do not rename the package, change the registry, or add a token to
+  make it publish. Only the npm package owner can add another repository,
+  workflow, or environment to the binding.
 - Manual publishing is a fallback, not the release path. If the workflow is
   unavailable, npm uses the owner's interactive 2FA. A page that offers **Use
   security key** is a valid WebAuthn/passkey challenge; TOTP and WebAuthn are

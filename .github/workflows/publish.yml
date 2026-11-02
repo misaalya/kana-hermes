@@ -49,3 +49,21 @@ jobs:
             exit 0
           fi
           npm publish ./cli --ignore-scripts --provenance --access public
+
+      # A GitHub release is only the trigger. This step is the evidence that
+      # npm actually carries the version and points latest at it.
+      - name: Verify the published version
+        run: |
+          version=$(node -p "require('./package.json').version")
+          for attempt in $(seq 1 36); do
+            published=$(npm view "kana-alya@$version" version 2>/dev/null || true)
+            latest=$(npm view kana-alya dist-tags.latest 2>/dev/null || true)
+            if [ "$published" = "$version" ] && [ "$latest" = "$version" ]; then
+              echo "kana-alya@$version is published and tagged latest."
+              exit 0
+            fi
+            echo "npm has not reported kana-alya@$version as latest yet (attempt $attempt)."
+            sleep 5
+          done
+          echo "::error::kana-alya@$version is not published as latest."
+          exit 1
