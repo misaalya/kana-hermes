@@ -190,7 +190,19 @@ down to the composer, capped by the space above the composer so overflow
 scrolls inside it. It keeps its height while closed, so the tab stays put
 instead of jumping to the top, and the last reading stays cached: a sample
 younger than 15 seconds is reused instead of requesting the host again. It
-polls only while open.
+polls only while open. Before the first sample arrives the rail draws the same
+title block, hostname slot, four rows, and uptime detail with pulsing dashes,
+so opening it never grows the panel or moves its tab.
+
+With the avatar off on a phone, the edge tab steps aside for a minimised
+readout inside the header row itself: CPU, memory, disk, and uptime as four
+compact label-over-value columns on the free left side, vertically centred with
+the action tray on the right. There is no hostname, frame, fill, or extra band
+in this mode; the readings keep their place while loading (pulsing dashes) or
+failing (dashes in the danger colour), and the conversation starts at the
+header again. Below 360 px the uptime column steps out so the three utilisation
+readings stay legible beside the tray. The header keeps the history button
+beside the tray, and the desktop focus rail is unaffected.
 
 ## Conversation history
 

@@ -231,6 +231,11 @@ Each utterance runs one short-lived engine process, serialized because it needs
 1.4–2 GB of RAM. Long speech is split at sentence boundaries to fit the engine's
 256-token/30-second limit and joined into one WAV. Kana's emotion picks a
 Japanese speaking-style caption, and a library voice becomes the reference audio.
+A slow engine run can outlast a tunnel's deadline for the first response
+headers, so the relay sends the 44-byte WAV head as soon as the install and
+platform checks pass and streams the speech when it is ready; the browser
+restores the head's sizes before playback. A failure after that point is logged
+by the Kana server, because the HTTP status has already been sent.
 
 ### Pollinations
 

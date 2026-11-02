@@ -8,6 +8,7 @@ import { POST as speech } from "@/app/api/voice/tts/speech/route";
 import { createSessionToken } from "@/lib/server/auth/session";
 import { changeAccessPassword } from "@/lib/server/auth/password-store";
 import { __setIrodoriPlatformForTests } from "@/lib/server/irodori/platform";
+import { parsePcmWav } from "@/lib/server/irodori/wav";
 import { installFakeEngine, useSupportedPlatform } from "./irodori-fixtures";
 
 const root = mkdtempSync(path.join(tmpdir(), "kana-tts-routing-"));
@@ -38,10 +39,13 @@ const authorized = (url: string, init: RequestInit = {}) =>
   new Request(url, { ...init, headers: { Cookie: `kana_session=${token}`, "Content-Type": "application/json", ...init.headers } });
 
 const speak = (id: string, voice?: string) =>
+  speakText(id, "こんにちは。", voice);
+
+const speakText = (id: string, text: string, voice?: string) =>
   speech(authorized("http://kana.test/api/voice/tts/speech", {
     method: "POST",
     headers: { "X-Kana-Request-Id": id },
-    body: JSON.stringify({ text: "こんにちは。", voice_id: voice, language: "ja", emotion: "happy" }),
+    body: JSON.stringify({ text, voice_id: voice, language: "ja", emotion: "happy" }),
   }));
 
 it("answers honestly and quickly before the local engine is downloaded, without downloading it", async () => {
@@ -99,4 +103,23 @@ it("routes each provider choice from server config despite a stale browser voice
   const [run] = readFileSync(log, "utf8").trim().split("\n").map((line) => JSON.parse(line) as { args: string[] });
   // An unknown voice id falls back to the bundled Kana reference.
   assert.match(run.args[run.args.indexOf("--ref") + 1], /kana-default\.wav$/);
+});
+
+it("announces the WAV head before a slow engine finishes so a proxy cannot time out", async () => {
+  const started = Date.now();
+  const response = await speakText("slow-engine", "SLOW");
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-type"), "audio/wav");
+  assert.equal(response.headers.get("x-kana-wav-repair"), "1");
+  assert.ok(Date.now() - started < 1_500, `the relay waited ${Date.now() - started} ms for headers`);
+
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  // The browser restores the sizes the open head could not know.
+  view.setUint32(4, bytes.byteLength - 8, true);
+  view.setUint32(40, bytes.byteLength - 44, true);
+  const audio = parsePcmWav(bytes);
+  assert.equal(audio.sampleRate, 48_000);
+  assert.equal(audio.channels, 1);
+  assert.ok(audio.data.byteLength > 0);
 });

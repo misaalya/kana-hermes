@@ -792,6 +792,77 @@ describe("HermesSessionManager models", () => {
     assert.equal((await harness.models.list()).model, "m1", "the model chip shows Hermes's default, not the old pick");
   });
 
+  it("reopens a blank conversation on the default chosen after it opened", async () => {
+    const harness = createHarness({
+      setupAgent: (agent) => {
+        agent.models = {
+          provider: "openrouter",
+          model: "deepseek/deepseek-v4",
+          providers: [{
+            slug: "openrouter",
+            name: "OpenRouter",
+            models: ["deepseek/deepseek-v4"],
+            current: true,
+            authenticated: true,
+          }],
+        };
+      },
+    });
+    harness.conversations.initialize();
+    await harness.sessions.ensure(harness.active());
+    assert.equal(harness.agent.opened.length, 1);
+    assert.equal(harness.agent.opened[0].model, undefined);
+    harness.preferences.update({
+      agentModelDefaults: {
+        local: { provider: "openrouter", model: "deepseek/deepseek-v4" },
+      },
+    });
+    await harness.sessions.createConversation();
+    assert.equal(harness.agent.opened.length, 2, "New reopens the blank session");
+    assert.equal(harness.agent.opened[1].model, "deepseek/deepseek-v4");
+    assert.equal(harness.agent.opened[1].provider, "openrouter");
+  });
+
+  it("keeps the blank session when New finds no changed default", async () => {
+    const harness = createHarness();
+    harness.conversations.initialize();
+    await harness.sessions.ensure(harness.active());
+    assert.equal(harness.agent.opened.length, 1);
+    await harness.sessions.createConversation();
+    assert.equal(harness.agent.opened.length, 1, "New keeps the open blank session");
+    await harness.send("/new");
+    assert.equal(harness.agent.opened.length, 1, "/new keeps it too");
+  });
+
+  it("applies the default when /new reuses a blank conversation", async () => {
+    const harness = createHarness({
+      setupAgent: (agent) => {
+        agent.models = {
+          provider: "openrouter",
+          model: "deepseek/deepseek-v4",
+          providers: [{
+            slug: "openrouter",
+            name: "OpenRouter",
+            models: ["deepseek/deepseek-v4"],
+            current: true,
+            authenticated: true,
+          }],
+        };
+      },
+    });
+    harness.conversations.initialize();
+    await harness.sessions.ensure(harness.active());
+    harness.preferences.update({
+      agentModelDefaults: {
+        local: { provider: "openrouter", model: "deepseek/deepseek-v4" },
+      },
+    });
+    await harness.send("/new");
+    assert.equal(harness.agent.opened.length, 2);
+    assert.equal(harness.agent.opened[1].model, "deepseek/deepseek-v4");
+    assert.equal(harness.agent.opened[1].provider, "openrouter");
+  });
+
   it("applies a model pick to the active conversation's session, never the previous one", async () => {
     const harness = await switchedHarness();
     const previous = harness.stores.agentSession.getState().openSessionId;

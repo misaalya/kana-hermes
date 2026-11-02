@@ -26,7 +26,7 @@ import {
   suggestionArgumentMatches,
 } from "@/lib/agent/command-arguments";
 import { resolveTypedCommand, missingCommandArgument } from "@/lib/services/send-message";
-import { getCopy, type Copy } from "@/lib/ui/copy";
+import { getCopy } from "@/lib/ui/copy";
 import { ComposerDictation } from "./composer-dictation";
 import { ComposerModelChoice } from "./composer-model-choice";
 import { PlusIcon, SendIcon } from "./icons";
@@ -40,15 +40,6 @@ const COMPOSER_MAX_HEIGHT = 112;
 /** Commands Hermes accepts while a turn is still running. */
 const BUSY_COMMANDS = ["approve", "deny", "queue", "steer", "status", "agents", "goal", "heartbeat", "background"];
 
-function destructiveCommandPrompt(input: string, copy: Copy["workspace"]): string | null {
-  const normalized = input.trim().toLowerCase().replace(/^\/+/, "");
-  if (normalized === "new" || normalized.startsWith("new ")) return copy.confirmNew;
-  if (normalized === "undo" || normalized.startsWith("undo ")) return copy.confirmUndo;
-  if (normalized === "restart" || normalized.startsWith("restart ")) return copy.confirmRestart;
-  if (normalized === "update" || normalized.startsWith("update ")) return copy.confirmUpdate;
-  if (/^rollback\s+(restore|rewind)\b/.test(normalized)) return copy.confirmRollback;
-  return null;
-}
 
 export function ChatComposer() {
   const workspace = useKanaWorkspace();
@@ -259,8 +250,6 @@ export function ChatComposer() {
         workspace.stores.commands.getState().suggestions,
       );
     }
-    const confirmation = destructiveCommandPrompt(resolved, text);
-    if (confirmation && !window.confirm(confirmation)) return;
     setWorkspace({ submitting: true, composerNotice: "" });
     try {
       let attachments: AgentAttachment[];

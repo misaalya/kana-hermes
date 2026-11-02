@@ -110,7 +110,11 @@ read only through `GET/PUT /api/kana/model-defaults` (`lib/server/model-defaults
 so a phone and a laptop talking to the same Kana server open new conversations
 on the same model; a runtime's entry is still never sent to another Hermes. A
 browser that still carries the old localStorage map seeds the server once on
-start and then drops its copy.
+start and then drops its copy. A new conversation applies the current default
+through its own session: a blank conversation reopens only when that default
+differs from the model its already-open session was created with, so pressing
+New again keeps the same session instead of leaving an empty one in Hermes's
+directory.
 
 `activities.db` (`lib/server/activity-store.ts`, schema v2) is keyed by the
 Hermes durable session key plus a zero-based assistant-reply ordinal

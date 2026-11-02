@@ -6,7 +6,7 @@ deferred, 2026-08-22.
 **Read when:** you are changing how speech is delivered, or considering streaming TTS.
 **Truth in code:** `lib/voice/tts-relay-provider.ts`,
 `lib/presentation/spoken-reply-queue.ts`, `lib/server/tts-provider/`,
-`lib/server/irodori/synthesis.ts`.
+`lib/server/irodori/synthesis.ts`, `app/api/voice/tts/speech/route.ts`.
 
 Kana's speech relay uses one cancellable HTTP synthesis request and direct WAV
 playback. The generated audio can be replayed in memory without another Hermes
@@ -30,6 +30,16 @@ Streaming remains unadopted. It may proceed only if a bounded target-hardware
 spike shows a meaningful improvement over both complete WAV and sentence
 chunks while retaining deterministic ordering, idempotent Stop, replay, and
 one Hermes response.
+
+The relay still announces the local provider's 44-byte WAV head as soon as the
+engine has passed its install and platform checks, before synthesis finishes,
+and the browser restores the RIFF and data sizes once the body has arrived.
+This is transport, not streaming playback: Node sends response headers only
+with the first body byte, and a tunnel in front of Kana can fail a request that
+has produced no headers in about twenty seconds, which would make every local
+engine run unreachable through that tunnel. Fast failures keep their real HTTP
+status; only a still-running engine takes the open-head path, and a late
+failure is logged by the server because the status has already been sent.
 
 The bounded source spike found no honest stream in the pinned stack: service
 v1 waits for `generate_custom_voice` to return a complete waveform, writes the

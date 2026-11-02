@@ -205,7 +205,7 @@ detail.
   matching and never keep a second command list.
 - `resolveTypedCommand` only decides when to use the suggestion Kana already
   has: a name that is itself one of the suggestions is never rewritten, so a
-  destructive confirmation always names the command that runs; an unknown name
+  destructive command runs exactly the name that was typed; an unknown name
   takes the nearest suggestion's name, shortest first, keeping typed arguments;
   no suggestion goes to Hermes as typed; a completion's argument fallback is
   never pasted over the command. `resolveTypedArguments` then resolves the first
@@ -215,7 +215,7 @@ detail.
   typed. The rewritten command is what the transcript shows. Tab on a name-only
   draft fills that same nearest name; Tab on an argument keeps an explicitly
   highlighted menu option and otherwise fills the nearest one. Enter applies
-  both rules before confirmation and sending. A slash command typed after blank
+  both rules before sending. A slash command typed after blank
   lines is moved to the first line so the catalog opens; non-blank text above
   the slash prevents that rewrite.
 - Commands execute through `slash.exec`, falling back to `command.dispatch`

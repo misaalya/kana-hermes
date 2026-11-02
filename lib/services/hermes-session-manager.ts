@@ -26,6 +26,11 @@ import { isFreshConversation, type ConversationService } from "./conversation-se
 import type { PreferencesAccess } from "./preferences-service";
 import type { VoiceService } from "./voice-service";
 
+function sameModelChoice(a: AgentModelChoice | null, b: AgentModelChoice | null): boolean {
+  if (!a || !b) return a === b;
+  return a.provider === b.provider && a.model === b.model;
+}
+
 export type HermesSessionManagerDependencies = {
   stores: KanaStores;
   conversations: ConversationService;
@@ -52,6 +57,8 @@ export class HermesSessionManager {
   private agent: AgentClient | null = null;
   /** A session open under way, so concurrent callers join it instead of creating another. */
   private opening: { conversationId: string; promise: Promise<unknown> } | null = null;
+  /** The Kana default the open fresh session was created with; null means Hermes's own. */
+  private openedDefault: AgentModelChoice | null = null;
   private unsubscribe: (() => void) | null = null;
   private readonly eventContext: AgentEventContext;
 
@@ -89,6 +96,7 @@ export class HermesSessionManager {
       const agent = this.deps.createAgent();
       this.agent = agent;
       this.tracking.openedId = null;
+      this.openedDefault = null;
       this.unsubscribe = agent.subscribe((event) => handleAgentEvent(this.eventContext, event));
     }
     const agent = this.agent;
@@ -129,6 +137,7 @@ export class HermesSessionManager {
     const defaultModel = persistentSessionId
       ? null
       : await this.runtimeDefaultModel(agent, preferences);
+    this.openedDefault = defaultModel;
     if (!defaultModel) return agent.openSession(openOptions);
     try {
       return await agent.openSession({
@@ -141,6 +150,7 @@ export class HermesSessionManager {
       // block the conversation: open with Hermes's own default and say what
       // happened.
       const opened = await agent.openSession(openOptions);
+      this.openedDefault = null;
       this.reportDefaultFallback(preferences.uiLocale, defaultModel.model);
       return opened;
     }
@@ -184,6 +194,7 @@ export class HermesSessionManager {
    */
   forgetOpenedSession(): void {
     this.tracking.openedId = null;
+    this.openedDefault = null;
     if (this.session.getState().openSessionId) this.session.setState({ openSessionId: null });
   }
 
@@ -197,6 +208,27 @@ export class HermesSessionManager {
     const active = this.deps.conversations.active();
     if (!active || this.agent?.connectionState !== "connected" || this.session.getState().busy) return;
     await this.ensure(active).catch(() => undefined);
+  }
+
+  /**
+   * Apply the current Kana default to a blank conversation. An already-open
+   * session is reopened only when the default changed after it opened:
+   * pressing New again must not create a second Hermes session, whose empty
+   * predecessor would return from the directory after a refresh as a
+   * duplicate Untitled conversation.
+   */
+  async syncFreshConversationDefault(): Promise<void> {
+    const active = this.deps.conversations.active();
+    const agent = this.agent;
+    if (!active || !agent || agent.connectionState !== "connected" || this.session.getState().busy) return;
+    if (this.tracking.openedId !== active.id) {
+      await this.openActiveSession();
+      return;
+    }
+    const desired = await this.runtimeDefaultModel(agent, this.deps.preferences.current());
+    if (sameModelChoice(desired, this.openedDefault)) return;
+    this.forgetOpenedSession();
+    await this.openActiveSession();
   }
 
   /**
@@ -280,6 +312,7 @@ export class HermesSessionManager {
         }
         conversations.activate(conversation);
         this.tracking.openedId = null;
+        this.openedDefault = null;
       }
 
       await this.ensure(conversation);
@@ -371,6 +404,10 @@ export class HermesSessionManager {
       stores.activity.getState().reset();
       this.status((copy) => copy.alreadyNew);
       stores.errors.getState().dismiss();
+      // The blank conversation may have opened before the user chose a
+      // default, so New applies the current one; an unchanged default keeps
+      // the open session instead of opening a second one.
+      await this.syncFreshConversationDefault();
       return;
     }
     const conversation = conversations.persist(conversations.create(), false);
@@ -390,6 +427,7 @@ export class HermesSessionManager {
       conversations.persist(conversationFromHermesEntry(entry, createId("conversation")), false);
     conversations.activate(conversation);
     this.tracking.openedId = null;
+    this.openedDefault = null;
     await this.ensure(conversation);
   }
 
@@ -440,6 +478,7 @@ export class HermesSessionManager {
     this.agent = null;
     this.opening = null;
     this.tracking.openedId = null;
+    this.openedDefault = null;
     this.tracking.openingId = null;
     this.tracking.turnId = null;
     this.session.setState({ openSessionId: null });

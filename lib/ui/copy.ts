@@ -231,11 +231,6 @@ export type Copy = {
     conversationHistory: string;
     gatewayAria: string;
     gatewayTitle: string;
-    confirmNew: string;
-    confirmUndo: string;
-    confirmRestart: string;
-    confirmUpdate: string;
-    confirmRollback: string;
   };
   /**
    * Kana's own words for a turn its prompt guardrail refused. Fixed wording,
@@ -280,7 +275,6 @@ export type Copy = {
     rename: string;
     delete: string;
     renamePrompt: string;
-    deleteConfirm(title: string): string;
     noMatches: string;
     noMatchesHint: string;
     availableFromHermes: string;
@@ -534,8 +528,12 @@ export type Copy = {
     hostFailed: string;
     hostCpu: string;
     hostMemory: string;
+    /** A short memory label for the header readout. */
+    hostMemoryShort: string;
     hostDisk: string;
     hostUptime: string;
+    /** A short uptime label for the header readout. */
+    hostUptimeShort: string;
     hostLocalTime: string;
     hostServerTime: string;
     hostDate: string;
@@ -545,8 +543,6 @@ export type Copy = {
     hostHermesDetail(uptime: string, rss: string): string;
     accessTitle: string;
     avatarNamePrompt: string;
-    removeAvatarConfirm(name: string): string;
-    removeBackgroundConfirm(name: string): string;
     advancedTitle: string;
     configGuide: string;
     advancedMode: string;
@@ -626,7 +622,6 @@ export type Copy = {
     resume: string;
     cancel: string;
     remove: string;
-    confirmRemove: string;
     refresh: string;
     failedCheck: string;
   };
@@ -869,11 +864,6 @@ const id: Copy = {
     conversationHistory: "Riwayat percakapan",
     gatewayAria: "Koneksi Hermes",
     gatewayTitle: "Hermes tidak terhubung",
-    confirmNew: "Mulai percakapan Kana dan Hermes yang baru?",
-    confirmUndo: "Batalkan giliran Hermes terbaru dan hapus dari riwayat Kana ini?",
-    confirmRestart: "Mulai ulang gateway Hermes? Kana akan terputus sementara.",
-    confirmUpdate: "Izinkan Hermes memperbarui instalasinya sendiri?",
-    confirmRollback: "Pulihkan checkpoint sistem berkas Hermes? Ini dapat menimpa berkas saat ini.",
   },
   guardrail: {
     blocked:
@@ -916,7 +906,6 @@ const id: Copy = {
     rename: "Ganti nama",
     delete: "Hapus",
     renamePrompt: "Ganti nama percakapan",
-    deleteConfirm: (title) => `Hapus “${title}” dari riwayat Kana?`,
     noMatches: "Tidak ada percakapan yang cocok.",
     noMatchesHint: "Coba kata lain atau mulai percakapan baru.",
     availableFromHermes: "Tersedia dari Hermes",
@@ -1192,8 +1181,10 @@ const id: Copy = {
     hostFailed: "Metrik mesin tidak tersedia.",
     hostCpu: "CPU",
     hostMemory: "Memori",
+    hostMemoryShort: "Mem",
     hostDisk: "Disk",
     hostUptime: "Waktu aktif",
+    hostUptimeShort: "Aktif",
     hostLocalTime: "Lokal",
     hostServerTime: "Server",
     hostDate: "Tanggal",
@@ -1203,8 +1194,6 @@ const id: Copy = {
     hostHermesDetail: (uptime, rss) => `Hermes ${uptime} · ${rss}`,
     accessTitle: "Perlindungan akses",
     avatarNamePrompt: "Nama avatar",
-    removeAvatarConfirm: (name) => `Hapus “${name}” dari browser ini?`,
-    removeBackgroundConfirm: (name) => `Hapus ${name} dari perangkat ini?`,
     advancedTitle: "Konfigurasi lanjutan",
     configGuide: "Panduan",
     advancedMode: "Mode instalasi",
@@ -1291,7 +1280,6 @@ const id: Copy = {
     resume: "Lanjutkan unduhan",
     cancel: "Jeda unduhan",
     remove: "Hapus",
-    confirmRemove: "Hapus mesin suara dan modelnya dari disk ini?",
     refresh: "Perbarui",
     failedCheck: "Status mesin suara tidak dapat diperiksa.",
   },
@@ -1560,11 +1548,6 @@ const en: Copy = {
     conversationHistory: "Conversation history",
     gatewayAria: "Hermes connection",
     gatewayTitle: "Hermes is not connected",
-    confirmNew: "Start a fresh Kana and Hermes conversation?",
-    confirmUndo: "Undo the latest Hermes turn and remove it from this Kana history?",
-    confirmRestart: "Restart the Hermes gateway? Kana will disconnect temporarily.",
-    confirmUpdate: "Allow Hermes to update its own installation?",
-    confirmRollback: "Restore a Hermes filesystem checkpoint? This can overwrite current files.",
   },
   guardrail: {
     blocked:
@@ -1607,7 +1590,6 @@ const en: Copy = {
     rename: "Rename",
     delete: "Delete",
     renamePrompt: "Rename conversation",
-    deleteConfirm: (title) => `Delete “${title}” from Kana history?`,
     noMatches: "No matching conversations.",
     noMatchesHint: "Try a different word or start something new.",
     availableFromHermes: "Available from Hermes",
@@ -1883,8 +1865,10 @@ const en: Copy = {
     hostFailed: "Host metrics are unavailable.",
     hostCpu: "CPU",
     hostMemory: "Memory",
+    hostMemoryShort: "Mem",
     hostDisk: "Disk",
     hostUptime: "Uptime",
+    hostUptimeShort: "Up",
     hostLocalTime: "Local",
     hostServerTime: "Server",
     hostDate: "Date",
@@ -1894,8 +1878,6 @@ const en: Copy = {
     hostHermesDetail: (uptime, rss) => `Hermes ${uptime} · ${rss}`,
     accessTitle: "Access protection",
     avatarNamePrompt: "Avatar name",
-    removeAvatarConfirm: (name) => `Remove “${name}” from this browser?`,
-    removeBackgroundConfirm: (name) => `Remove ${name} from this device?`,
     advancedTitle: "Advanced configuration",
     configGuide: "Guide",
     advancedMode: "Installation mode",
@@ -1982,7 +1964,6 @@ const en: Copy = {
     resume: "Resume download",
     cancel: "Pause download",
     remove: "Remove",
-    confirmRemove: "Remove the voice engine and its model from this disk?",
     refresh: "Refresh",
     failedCheck: "Could not check the voice engine.",
   },

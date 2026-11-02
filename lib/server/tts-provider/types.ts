@@ -38,6 +38,15 @@ export class TtsProviderError extends Error {
 
 export interface ServerTtsProvider {
   readonly descriptor: TtsProviderDescriptor;
+  /**
+   * A WAV header the relay may send before synthesis finishes. Tunnels and
+   * reverse proxies fail a request that has produced no response headers within
+   * their own deadline (about 20 seconds on a published Instabox URL), while a
+   * local engine run takes longer than that on small CPUs. The relay streams
+   * `head` first, then the audio without its first `stripBytes`, and marks the
+   * response so the browser restores the real RIFF/data sizes before decoding.
+   */
+  readonly earlyWavHead?: { head: Uint8Array; stripBytes: number };
   inspect(): Promise<VoiceProviderStatus>;
   synthesize(
     input: TtsSynthesisInput,
