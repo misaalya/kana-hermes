@@ -1,6 +1,6 @@
 # Release checklist
 
-The order Kana is released in, the scripts that enforce each step, and the rules around building outside the home directory and publishing with the owner's interactive 2FA.
+The order Kana is released in, the scripts that enforce each step, and the rules around building outside the home directory, publishing through Trusted Publishing, and the manual owner-2FA fallback.
 
 **Read when:** you are preparing, building, publishing, or documenting a Kana release.
 **Truth in code:** `scripts/assert-npm-release.mjs`, `scripts/prepare-npm-package.mjs`, `scripts/npm-package-smoke.mjs`, `cli/package.json`, `package.json`
@@ -77,4 +77,4 @@ When `xdg-open` is unavailable, use npm's manual-URL mode instead of pressing En
 npm publish ./cli --ignore-scripts --auth-type=web --browser=false
 ```
 
-Open the printed `https://www.npmjs.com/auth/cli/...` URL in a browser already signed in as the package owner and leave the final WebAuthn or TOTP interaction to the owner. Keep the publish process running while authorization completes, and require both the successful `+ kana-alya@<version>` output and registry verification of `version` and `dist-tags.latest` before updating the GitHub release notes. For unattended releases, prefer npm Trusted Publishing from the repository's GitHub Actions workflow rather than weakening 2FA.
+Open the printed `https://www.npmjs.com/auth/cli/...` URL in a browser already signed in as the package owner and leave the final WebAuthn or TOTP interaction to the owner. Keep the publish process running while authorization completes, and require both the successful `+ kana-alya@<version>` output and registry verification of `version` and `dist-tags.latest` before updating the GitHub release notes. For a normal unattended release, use the Trusted Publishing path above instead of weakening 2FA.
