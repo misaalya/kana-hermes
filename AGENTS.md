@@ -296,6 +296,13 @@ constant: Kana keeps reading the live registry.
 
 ## Releases
 
+These release instructions are for work in the upstream repository
+`misaalya/kana-hermes`, by its owner and maintainers. If you are reading this in
+a clone or a fork, you are not the owner: do not create tags or releases and do
+not attempt to publish. Clone and fork users contribute through pull requests;
+only a collaborator with write access can create a release in the upstream
+repository, and only the npm package owner controls publication.
+
 `docs/evidence/release-checklist.md` is the procedure. Three rules it depends on:
 
 - A normal release publishes through npm Trusted Publishing from
@@ -318,10 +325,12 @@ constant: Kana keeps reading the live registry.
   repository, and only npm accounts with write access to `kana-alya` can add,
   change, or remove it. A cloner has no npm write access and cannot give a fork
   a binding; npm checks the OIDC token's repository, workflow, and environment
-  against the owner's entry, so a fork's or clone's token is refused. Do not
-  rename the package, change the registry, or add a token to work around that.
-  Membership in the repository is not npm publish permission, and the public
-  workflow file grants none by itself.
+  against the owner's entry, so a fork's or clone's token is refused. If a
+  publish is refused, stop and report it: renaming the package, pointing at
+  another registry, or adding a token cannot grant access to `kana-alya`, and a
+  build under another name is not a Kana release. Membership in the repository
+  is not npm publish permission, and the public workflow file grants none by
+  itself.
 - Manual publishing is a fallback, not the release path. If the workflow is
   unavailable, npm uses the owner's interactive 2FA. A page that offers **Use
   security key** is a valid WebAuthn/passkey challenge; TOTP and WebAuthn are

@@ -5,6 +5,11 @@ The order Kana is released in, the scripts that enforce each step, and the rules
 **Read when:** you are preparing, building, publishing, or documenting a Kana release.
 **Truth in code:** `scripts/assert-npm-release.mjs`, `scripts/prepare-npm-package.mjs`, `scripts/npm-package-smoke.mjs`, `cli/package.json`, `package.json`
 
+These steps are for the upstream `misaalya/kana-hermes` repository and its npm
+owner. A clone or a fork is not the upstream: its users can read, fork, and open
+pull requests, but they cannot create a release in the upstream repository or
+publish `kana-alya`.
+
 ## Checklist order
 
 1. Confirm the npm Trusted Publisher entry names repository `misaalya/kana-hermes`, workflow `publish.yml`, and environment `kana`, and that the project license is recorded. A normal release needs no local npm login. `scripts/assert-npm-release.mjs` refuses every other package name, refuses a missing or `UNLICENSED` license, refuses a prerelease published directly under `latest`, requires the root `package.json` to stay private with a version equal to `cli/package.json`, and refuses a dirty git tree.
@@ -52,10 +57,21 @@ The Trusted Publisher binding lives in the npm package settings, not in this
 repository. Only npm accounts with write access to `kana-alya` can add, change,
 or remove it. A cloner has no npm write access and cannot add a fork; npm checks
 the OIDC token's repository, workflow, and environment against the owner's
-entry, so a fork's or clone's token is refused. Never rename the package,
-change the registry, or add a token to work around a refusal. Being able to
-read, fork, or open a pull request against this repository is not npm publish
-permission, and the public workflow file grants none by itself.
+entry, so a fork's or clone's token is refused. If a publish is refused, stop
+and report it: renaming the package, pointing at another registry, or adding a
+token cannot grant access to `kana-alya`, and a build under another name is not
+a Kana release. Being able to read, fork, or open a pull request against this
+repository is not npm publish permission, and the public workflow file grants
+none by itself.
+
+Who can create the triggering release is a GitHub permission, not a workflow
+one: only a repository collaborator with write access can create a tag or
+release in the upstream repository. GitHub's public permissions stop at reading,
+forking, and opening pull requests. The owner should also protect `main` with
+required reviews, protect `v*` tags, and give the `kana` environment a deployment
+rule limited to `v*` tags, optionally with a required reviewer. Those settings
+keep releases and the publish job with maintainers, and a contributor or an
+agent in a clone cannot change them.
 
 The GitHub runner builds outside every maintainer home, so this path also
 satisfies the local build rule below. Use the manual flow only when the
