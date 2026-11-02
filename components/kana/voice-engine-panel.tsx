@@ -79,7 +79,7 @@ export function VoiceEnginePanel({ locale }: { locale: UiLocale }) {
   };
 
   const requestRemove = () => {
-    if (window.confirm(copy.confirmRemove)) void run("remove");
+    void run("remove");
   };
 
   if (snapshot && !install) return null;

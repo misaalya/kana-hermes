@@ -42,6 +42,8 @@ type FakeHermes = {
   serverResponses: Array<Record<string, unknown>>;
   /** Slash commands Hermes received, in order, as `slash.exec` saw them (no leading slash). */
   commands: string[];
+  /** Every JSON-RPC method Kana relayed, in order. */
+  methods: string[];
 };
 
 let hermes: FakeHermes;
@@ -78,6 +80,7 @@ async function installFakeHermes(page: Page): Promise<FakeHermes> {
   const runtimeToPersistent = new Map<string, string>();
   // Slash commands as Hermes received them, so a journey can prove what ran.
   const receivedCommands: string[] = [];
+  const receivedMethods: string[] = [];
   let nextSession = 1;
   let activeRuntimeId = "e2e-hermes-runtime-0";
   let activeProvider = "fireworks_ai";
@@ -289,6 +292,7 @@ async function installFakeHermes(page: Page): Promise<FakeHermes> {
       method?: string;
       params?: Record<string, unknown>;
     };
+    if (typeof body.method === "string") receivedMethods.push(body.method);
     let result: unknown = {};
     let error: string | null = null;
     let completedResponse: string | null = null;
@@ -553,6 +557,7 @@ async function installFakeHermes(page: Page): Promise<FakeHermes> {
 
   return {
     commands: receivedCommands,
+    methods: receivedMethods,
     runtimeId: () => activeRuntimeId,
     serverResponses,
     advanceHeldTurn: () => runTool("web_extract", "bmkg.go.id"),
@@ -1729,6 +1734,45 @@ test("a refresh during a new conversation's first turn resumes it without a dupl
   await expect(chat.getByText("Kupang weather")).toBeVisible();
 });
 
+test("reattaches a refresh to a server snapshot without resuming Hermes", async ({ page }) => {
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
+  await composer.fill("Attach check");
+  await submitDraft(page, composer);
+  await expect(page.getByText("Hello! I am here.", { exact: true }).first()).toBeVisible();
+
+  const opens = () =>
+    hermes.methods.filter((method) => method === "session.create" || method === "session.resume").length;
+  const before = opens();
+  const stored = "20260824_052417_fe475b";
+  await page.route("**/api/hermes/session/attach", (route) =>
+    route.fulfill({
+      json: {
+        attached: true,
+        session: {
+          session_id: hermes.runtimeId(),
+          stored_session_id: stored,
+          resumed: stored,
+          messages: [
+            { role: "user", text: "Attach check" },
+            {
+              role: "assistant",
+              text: JSON.stringify({
+                speech_ja: "接続しました。",
+                subtitle: { text: "Attached reply", language: "en" },
+                emotion: "neutral",
+              }),
+            },
+          ],
+          running: false,
+        },
+      },
+    }),
+  );
+  await page.reload();
+  await expect(page.getByText("Attached reply", { exact: true })).toBeVisible();
+  expect(opens()).toBe(before);
+});
+
 test("persists the selected stage background across refreshes", async ({ page }) => {
   await page.getByRole("button", { name: "Open settings" }).click();
   await page.getByRole("button", {
@@ -2150,6 +2194,157 @@ test("opens the phone host strip from its edge tab", async ({ page }) => {
   await page.getByRole("button", { name: "Hide host metrics" }).click();
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
   await expect(page.locator("#kana-host-panel")).toHaveAttribute("aria-hidden", "true");
+});
+
+test("keeps the phone host strip's size while the first reading loads", async ({ page }) => {
+  test.skip(
+    (page.viewportSize()?.width ?? 0) >= 1024,
+    "The host strip is a phone layout.",
+  );
+  let first = true;
+  await page.route("**/api/kana/host", async (route) => {
+    if (first) {
+      first = false;
+      await new Promise((resolve) => setTimeout(resolve, 800));
+    }
+    await route.continue();
+  });
+  await page.getByRole("button", { name: "Show host metrics" }).click();
+  const panel = page.locator("#kana-host-panel");
+  const values = panel.locator("[data-host-value]");
+  await expect(values).toHaveCount(4);
+  // The skeleton draws the same rows, hostname slot, and uptime detail.
+  await expect(values.first()).toHaveText("—");
+  const loadingPanel = await panel.boundingBox();
+  const loadingHandle = await page.locator(".kana-host-toggle").boundingBox();
+  await page.screenshot({
+    path: `test-results/host-strip-loading-${test.info().project.name}.png`,
+  });
+  await expect(values.first()).not.toHaveText("—", { timeout: 5_000 });
+  const loadedPanel = await panel.boundingBox();
+  const loadedHandle = await page.locator(".kana-host-toggle").boundingBox();
+  expect(loadingPanel && loadedPanel && loadingHandle && loadedHandle).toBeTruthy();
+  expect(Math.abs(loadingPanel!.height - loadedPanel!.height)).toBeLessThanOrEqual(1);
+  // The tab sits at the panel's centre, so a size change would move it too.
+  expect(Math.abs(loadingHandle!.y - loadedHandle!.y)).toBeLessThanOrEqual(1);
+});
+
+test("keeps focus-mode host readings in the header with the action tray", async ({ page }) => {
+  test.skip(
+    (page.viewportSize()?.width ?? 0) >= 1024,
+    "The host readout is a phone layout.",
+  );
+  await page.getByRole("button", { name: "Open settings" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: /^Avatar(?: Avatar and stage)?$/ }).click();
+  await dialog.getByRole("switch", { name: "Show avatar" }).click();
+  await dialog.getByRole("button", { name: "Close settings" }).click();
+  await expect(page.locator(".kana-chat-dock")).toHaveClass(/is-sole/);
+
+  const readout = page.locator(".kana-focus-host");
+  await expect(readout).toBeVisible();
+  // The edge tab belonged to the avatar layout; this readout replaces it.
+  await expect(page.getByRole("button", { name: "Show host metrics" })).toHaveCount(0);
+  await expect(readout).toHaveCSS("border-top-width", "0px");
+  await expect(readout).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  const values = readout.locator("[data-host-value]");
+  await expect(values).toHaveCount(4);
+  for (const label of ["CPU", "Mem", "Disk", "Up"]) {
+    await expect(readout).toContainText(label);
+  }
+  // Minimised: the hostname itself stays out of this mode.
+  await expect(readout).not.toContainText("pop-os");
+
+  // The three clusters share one row with the action tray.
+  const nav = page.getByRole("navigation", { name: "Workspace actions" });
+  const readoutBox = await readout.boundingBox();
+  const navBox = await nav.boundingBox();
+  expect(readoutBox && navBox).toBeTruthy();
+  const readoutCenter = readoutBox!.y + readoutBox!.height / 2;
+  const navCenter = navBox!.y + navBox!.height / 2;
+  expect(Math.abs(readoutCenter - navCenter)).toBeLessThanOrEqual(1);
+  expect(readoutBox!.x + readoutBox!.width).toBeLessThanOrEqual(navBox!.x);
+  expect(readoutBox!.x).toBeGreaterThanOrEqual(11);
+  const baselines = await Promise.all(
+    [0, 1, 2, 3].map(async (index) => {
+      const box = await values.nth(index).boundingBox();
+      return box ? box.y + box.height : null;
+    }),
+  );
+  expect(baselines.every((line) => line !== null)).toBe(true);
+  for (const line of baselines) {
+    expect(Math.abs(line! - baselines[0]!)).toBeLessThanOrEqual(1);
+  }
+
+  // With the readout in the header there is no extra host band: the
+  // conversation starts at the header again.
+  const dock = await page.locator(".kana-chat-dock").boundingBox();
+  expect(dock).not.toBeNull();
+  expect(dock!.y).toBeLessThanOrEqual(84 + 1);
+  await expect(page.getByRole("textbox", { name: "Message Kana" })).toBeVisible();
+  await page.screenshot({
+    path: `test-results/host-focus-${test.info().project.name}.png`,
+  });
+
+  // Tablets keep the same header row and alignment.
+  await page.setViewportSize({ width: 768, height: 900 });
+  const tabletBox = await readout.boundingBox();
+  const tabletNav = await nav.boundingBox();
+  const tabletDock = await page.locator(".kana-chat-dock").boundingBox();
+  expect(tabletBox && tabletNav && tabletDock).toBeTruthy();
+  expect(
+    Math.abs(
+      (tabletBox!.y + tabletBox!.height / 2) - (tabletNav!.y + tabletNav!.height / 2),
+    ),
+  ).toBeLessThanOrEqual(1);
+  expect(tabletDock!.y).toBeLessThanOrEqual(84 + 1);
+  await page.screenshot({
+    path: `test-results/host-focus-tablet-${test.info().project.name}.png`,
+  });
+});
+
+test("reserves the focus host columns before the first reading", async ({ page }) => {
+  test.skip(
+    (page.viewportSize()?.width ?? 0) >= 1024,
+    "The host readout is a phone layout.",
+  );
+  await page.route("**/api/kana/host", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    await route.continue();
+  });
+  await page.addInitScript(() => {
+    const raw = localStorage.getItem("kana.preferences.v6");
+    const value = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+    value.avatarVisible = false;
+    localStorage.setItem("kana.preferences.v6", JSON.stringify(value));
+  });
+  await page.reload();
+  const readout = page.locator(".kana-focus-host");
+  await expect(readout).toBeVisible();
+  const columns = readout.locator("[data-host-metric]");
+  const values = readout.locator("[data-host-value]");
+  await expect(columns).toHaveCount(4);
+  await expect(values.first()).toHaveText("—");
+  const readBoxes = () =>
+    columns.evaluateAll((nodes) =>
+      nodes.map((node) => {
+        const box = node.getBoundingClientRect();
+        return { left: box.left, width: box.width };
+      }),
+    );
+  const before = await readBoxes();
+  const readoutBefore = await readout.boundingBox();
+  await expect.poll(async () => (await values.first().textContent()) ?? "").not.toBe("—");
+  const after = await readBoxes();
+  const readoutAfter = await readout.boundingBox();
+  expect(readoutBefore && readoutAfter).toBeTruthy();
+  expect(Math.abs(readoutBefore!.width - readoutAfter!.width)).toBeLessThanOrEqual(1);
+  for (let index = 0; index < before.length; index += 1) {
+    expect(Math.abs(before[index].left - after[index].left)).toBeLessThanOrEqual(1);
+    expect(Math.abs(before[index].width - after[index].width)).toBeLessThanOrEqual(1);
+  }
+  // The uptime keeps two zero-padded groups, each with its unit, in its slot.
+  await expect(values.last()).toHaveText(/^\d{2}[dhms] \d{2}[dhms]$/);
 });
 
 test("centers the host widget's unavailable state", async ({ page }) => {
@@ -4516,7 +4711,13 @@ test("never rewrites a command that is already real", async ({ page }) => {
   // a name that is already real is still not rewritten.
   await expect.poll(() => hermes.commands).not.toContain("new");
   expect(hermes.commands).not.toContain("codex-runtime");
-  await expect(page.getByText("Deal with the report").first()).toBeVisible();
+  await openHistory(page);
+  // The header's title chip is hidden on phones; the listed row is the proof.
+  await expect(
+    page
+      .getByRole("dialog", { name: "Conversation history", exact: true })
+      .getByText("Deal with the report"),
+  ).toBeVisible();
 });
 
 test("guides a new browser profile through onboarding onto the workspace", async ({

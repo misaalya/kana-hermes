@@ -127,6 +127,13 @@ detail. The invariants:
 - Transcript authority is Hermes. Restoring a conversation parses what
   `session.resume` returns and emits it as `history.restored`; `session.history`
   accepts only the RUNTIME session id and is a fallback only.
+- A browser refresh must not resume the same Hermes session again while the
+  server still holds it. The in-memory session registry mirrors each session
+  the gateway opened, and `/api/hermes/session/attach` serves that snapshot to
+  an authenticated browser; a miss, a gateway reset, compression, a bounded
+  transcript, or an idle expiry makes the client fall back to
+  `session.resume`. The registry is never persisted and clears on every
+  gateway reset.
 - Per-turn activity logs are Kana's own and live in `activities.db`, keyed by
   the durable Hermes session plus a zero-based assistant-reply ordinal.
 - Files Hermes delivers with `MEDIA:/local/path` reach the browser as signed
@@ -205,7 +212,7 @@ detail.
   matching and never keep a second command list.
 - `resolveTypedCommand` only decides when to use the suggestion Kana already
   has: a name that is itself one of the suggestions is never rewritten, so a
-  destructive confirmation always names the command that runs; an unknown name
+  destructive command runs exactly the name that was typed; an unknown name
   takes the nearest suggestion's name, shortest first, keeping typed arguments;
   no suggestion goes to Hermes as typed; a completion's argument fallback is
   never pasted over the command. `resolveTypedArguments` then resolves the first
@@ -215,7 +222,7 @@ detail.
   typed. The rewritten command is what the transcript shows. Tab on a name-only
   draft fills that same nearest name; Tab on an argument keeps an explicitly
   highlighted menu option and otherwise fills the nearest one. Enter applies
-  both rules before confirmation and sending. A slash command typed after blank
+  both rules before sending. A slash command typed after blank
   lines is moved to the first line so the catalog opens; non-blank text above
   the slash prevents that rewrite.
 - Commands execute through `slash.exec`, falling back to `command.dispatch`

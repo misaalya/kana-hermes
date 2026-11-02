@@ -1,6 +1,7 @@
 import { jsonError, NO_STORE, withSession } from "@/lib/server/api-response";
 import { readJsonObject } from "@/lib/server/request-body";
 import { hermesRpc } from "@/lib/server/hermes-bridge";
+import { noteHermesRpcResult } from "@/lib/server/hermes-session-registry";
 import { LONG_HERMES_RPC_TIMEOUT_MS } from "@/lib/limits";
 import { rewriteMediaInResult } from "@/lib/server/media-links";
 import {
@@ -186,8 +187,16 @@ export const POST = withSession(async (request) => {
     if (rules.length) params = { ...params, text: withKanaRules(params.text, rules) };
   }
   try {
+    const raw = await hermesRpc(method, params, timeoutMs);
+    // The mirror keeps raw rows; attach rewrites media links per response.
+    // It is best-effort and must never fail the relayed request.
+    try {
+      noteHermesRpcResult(method, params, raw);
+    } catch {
+      // A missed mirror only means the next refresh resumes normally.
+    }
     // Restored transcripts carry the same signed media links as live events.
-    const result = rewriteMediaInResult(await hermesRpc(method, params, timeoutMs));
+    const result = rewriteMediaInResult(raw);
     return Response.json({ result }, { headers: NO_STORE });
   } catch (error) {
     return jsonError(error, 502);

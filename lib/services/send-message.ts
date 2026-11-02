@@ -208,6 +208,8 @@ export async function sendMessage(
       // Reuse the blank conversation; an explicit title still applies to it.
       if (commandArg) conversations.save({ ...conversation, title: commandArg, titleChosen: true });
       stores.activity.getState().reset();
+      // Apply the current Kana default; an unchanged one keeps the open session.
+      await sessions.syncFreshConversationDefault();
       setStatus(status().alreadyNew);
       clearSuggestions();
       return;

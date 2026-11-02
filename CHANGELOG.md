@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- A browser refresh reattaches to a server-held snapshot of its Hermes
+  session, so Hermes no longer resumes the same session on every load. The
+  snapshot lives only in the server process, is cleared when the gateway
+  socket drops, and falls back to a real resume on compression, eviction, or
+  any doubt.
+- Phone focus mode puts CPU, memory, disk, and uptime readings in the header
+  row beside the action tray, with fixed-width slots so changing values never
+  move the layout.
+
+### Fixed
+
+- The local speech relay announces the WAV head before a slow engine run
+  finishes, so a tunnel that limits time to the first response header can no
+  longer fail voice with HTTP 502.
+- New applies the current Kana default model only when it changed, instead of
+  opening a second empty Hermes session that returned as a duplicate after a
+  refresh.
+- The phone host rail keeps its full size while the first reading loads, and
+  the remaining native browser confirmation dialogs are gone.
+
 ## 0.7.3 — 2026-11-01
 
 ### Changed

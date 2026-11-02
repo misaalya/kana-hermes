@@ -116,9 +116,7 @@ export const ConversationSidebar = memo(function ConversationSidebar({
 
   const remove = (conversation: Conversation) => {
     setMenuId(null);
-    if (window.confirm(copy.deleteConfirm(conversation.title))) {
-      onDelete(conversation.id);
-    }
+    onDelete(conversation.id);
   };
 
   const rowClass = (active: boolean) =>

@@ -232,7 +232,13 @@ then be an absolute path the service account can write.
    `proxy_set_header Host $http_host;` line, and a longer
    `proxy_read_timeout`: 1h for events, above `tts.timeoutSeconds` for speech,
    and at least the configured Instabox wake timeout (default 120s) for
-   `/api/hermes/wake`.
+   `/api/hermes/wake`. The local speech relay answers with the WAV head before
+   the engine run finishes, so a proxy that caps time to the first response
+   header (the published Instabox URL does, at about twenty seconds) still
+   accepts the request; the audio body may follow minutes later, and the
+   browser repairs the sizes of that open head. A proxy that blocks or buffers
+   the body until it is complete must still allow at least
+   `tts.timeoutSeconds`.
 
    Keep those timeouts above `tts.timeoutSeconds`. `Host $http_host` keeps a
    non-default port, unlike `$host`, and the cross-site request guard requires

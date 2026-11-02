@@ -33,7 +33,7 @@ const finish = () => {
   header.write("data", 36); header.writeUInt32LE(samples.length, 40);
   fs.writeFileSync(value("--out"), Buffer.concat([header, samples]));
 };
-if (text.includes("SLOW")) setTimeout(finish, 30000); else setTimeout(finish, 40);
+if (text.includes("SLOW")) setTimeout(finish, 2000); else setTimeout(finish, 40);
 `;
 
 export function useSupportedPlatform(int8 = true): void {

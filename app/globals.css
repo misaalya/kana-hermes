@@ -1096,12 +1096,11 @@ details[open] > .kana-plus-summary::before {
     transition: opacity 0s linear 0s, visibility 0s linear 0s;
   }
 
-  /* Phones keep the full-bleed chat; only the band the avatar tile reserved
-     goes away, so the wallpaper reaches the header. */
+  /* The focus host readout sits inside the header row, so the chat starts at
+     the header again instead of below a host band. */
   .kana-chat-dock.is-sole {
     top: var(--kana-header-clear);
   }
-
 }
 
 .kana-chat-toggle:focus-visible {

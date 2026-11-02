@@ -8,6 +8,7 @@ import { getCopy } from "@/lib/ui/copy";
 import { AvatarLayoutControl } from "./avatar-layout-control";
 import { HeaderHostMonitor } from "./header-host-monitor";
 import { HistoryIcon, MoonIcon, SettingsIcon, SunIcon } from "./icons";
+import { HeaderFocusHost } from "./mobile-host-panel";
 import { useKanaStore, useKanaWorkspace } from "./kana-workspace-context";
 import { useUpdateAvatarLayout } from "./workspace-stage";
 
@@ -53,6 +54,8 @@ export function WorkspaceHeader({ connectionDown = false }: { connectionDown?: b
           }}
         />
       ) : null}
+
+      {usesMobileChat && !avatarVisible && !connectionDown ? <HeaderFocusHost /> : null}
 
       <nav className="kana-bar pointer-events-auto ml-auto shrink-0 lg:ml-0" aria-label={text.actions}>
         <button

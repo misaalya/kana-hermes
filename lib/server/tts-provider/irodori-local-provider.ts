@@ -1,6 +1,7 @@
 import { inspectIrodoriInstall } from "@/lib/server/irodori/install";
 import { IRODORI_MODEL_NAME } from "@/lib/server/irodori/release";
 import { IrodoriSynthesisError, synthesizeWithIrodori } from "@/lib/server/irodori/synthesis";
+import { encodePcmWav } from "@/lib/server/irodori/wav";
 import { referenceForVoice } from "@/lib/server/voice-library";
 import type { VoiceProviderStatus } from "@/lib/voice/types";
 import {
@@ -18,6 +19,15 @@ import {
  * instead of starting a multi-gigabyte download behind the user's back.
  */
 export class IrodoriLocalTtsProvider implements ServerTtsProvider {
+  // The engine writes 48 kHz mono PCM16 (lib/server/irodori/wav.ts).
+  readonly earlyWavHead = {
+    head: new Uint8Array(encodePcmWav(
+      { channels: 1, sampleRate: 48_000, bitsPerSample: 16 },
+      new Uint8Array(),
+    )),
+    stripBytes: 44,
+  };
+
   readonly descriptor: TtsProviderDescriptor = {
     id: "irodori-local",
     type: "irodori-local",

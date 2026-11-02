@@ -25,12 +25,14 @@ class FakeRelay {
   static requests: RpcRequest[] = [];
   static streams: FakeEventSource[] = [];
   static serverResponses: Array<Record<string, unknown>> = [];
+  static attach: (body: Record<string, unknown>) => unknown | null = () => null;
 
   static reset(): void {
     FakeRelay.handler = () => ({});
     FakeRelay.requests = [];
     FakeRelay.streams = [];
     FakeRelay.serverResponses = [];
+    FakeRelay.attach = () => null;
   }
 
   static rpcResponse(result: unknown): Response {
@@ -113,6 +115,14 @@ function installBrowserGlobals(): void {
           status: 200,
           headers: { "Content-Type": "application/json" },
         });
+      }
+      if (url === "/api/hermes/session/attach") {
+        const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+        const session = FakeRelay.attach(body);
+        return new Response(
+          JSON.stringify(session ? { attached: true, session } : { attached: false }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
       }
       if (url !== "/api/hermes/rpc" && url !== "/api/hermes/attachments") {
         return new Response("not found", { status: 404 });
@@ -426,6 +436,38 @@ describe("HermesAgentClient (relay transport)", () => {
     assert.ok(sent[0].startsWith("Halo\n\n<kana>\n") && /response protocol 3/.test(sent[0]));
     assert.ok(sent[1].startsWith("Lagi\n\n<kana>\n") && !/response protocol 3/.test(sent[1]));
     assert.match(sent[3], /response protocol 3/, "a resumed session and a failed submit both get the full contract");
+  });
+
+  it("attaches to a live server snapshot instead of resuming the session", async () => {
+    const client = await connectedClient(() => {
+      throw new Error("No RPC should reach Hermes for an attach.");
+    });
+    FakeRelay.attach = () => ({
+      session_id: "runtime-cached",
+      stored_session_id: "20260824_052417_fe475b",
+      resumed: "20260824_052417_fe475b",
+      messages: [
+        { role: "user", text: "Hello" },
+        { role: "assistant", text: responseText() },
+      ],
+      running: false,
+    });
+    const events: AgentEvent[] = [];
+    client.subscribe((event) => events.push(event));
+    const session = await client.openSession({
+      persistentSessionId: "20260824_052417_fe475b",
+    });
+    assert.equal(session.sessionId, "runtime-cached");
+    assert.equal(session.persistentSessionId, "20260824_052417_fe475b");
+    assert.equal(FakeRelay.requests.length, 0, "attach issues no session RPC");
+    const restored = events.find(
+      (event): event is Extract<AgentEvent, { type: "history.restored" }> =>
+        event.type === "history.restored",
+    );
+    assert.ok(restored);
+    assert.equal(restored.messages.length, 2);
+    assert.ok(events.some((event) => event.type === "session.opened"));
+    assert.ok(!events.some((event) => event.type === "session.updated"));
   });
 
   it("asks for plain chat in focus mode with the voice off and resends on a mode change", async () => {

@@ -336,7 +336,6 @@ export function SettingsDialog({
   };
 
   const deleteStageBackground = async (background: StageBackgroundSummary) => {
-    if (!window.confirm(settingsCopy.removeBackgroundConfirm(background.name))) return;
     setBackgroundBusy(true);
     setBackgroundNotice(null);
     try {
@@ -428,7 +427,6 @@ export function SettingsDialog({
   };
 
   const deleteImported = async (model: AvatarModelSummary) => {
-    if (!window.confirm(settingsCopy.removeAvatarConfirm(model.name))) return;
     try {
       await onDeleteAvatarModel(model.id);
       setAvatarModels((current) => current.filter((item) => item.id !== model.id));

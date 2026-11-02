@@ -9,6 +9,7 @@ import {
   splitJapaneseSpeech,
   type VoiceDeliveryMode,
 } from "./speech-chunks";
+import { repairOpenWavSizes } from "./wav-repair";
 import type {
   VoiceProvider,
   VoiceRuntimeSnapshot,
@@ -341,6 +342,7 @@ export class TtsRelayProvider implements VoiceProvider {
 
       if (!response.ok) {
         let detail = "";
+        let fromKana = false;
         try {
           const body = (await response.json()) as { detail?: unknown; error?: unknown };
           const message = typeof body.detail === "string"
@@ -348,9 +350,17 @@ export class TtsRelayProvider implements VoiceProvider {
             : typeof body.error === "string"
               ? body.error
               : "";
-          if (message) detail = ` ${message}`;
+          if (message) {
+            detail = ` ${message}`;
+            fromKana = true;
+          }
         } catch {
-          // The status code remains enough when an intermediary returned HTML.
+          // An HTML or empty reply did not come from Kana's voice route.
+        }
+        if (!fromKana) {
+          throw new Error(
+            `Voice provider request failed with HTTP ${response.status}. The reply did not come from Kana; a proxy or tunnel in front of the server may have closed the request.`,
+          );
         }
         throw new Error(
           `Voice provider request failed with HTTP ${response.status}.${detail}`,
@@ -367,7 +377,21 @@ export class TtsRelayProvider implements VoiceProvider {
         throw new Error("The voice provider returned an audio response that is too large.");
       }
 
-      const audio = await response.arrayBuffer();
+      let audio: ArrayBuffer;
+      try {
+        audio = await response.arrayBuffer();
+      } catch {
+        if (controller.signal.aborted) throw aborted();
+        throw new Error(
+          "The voice connection closed before the speech finished. A proxy or tunnel in front of the server may have cut it off.",
+        );
+      }
+      if (response.headers.get("x-kana-wav-repair") === "1") {
+        if (audio.byteLength <= 44) {
+          throw new Error("The voice provider closed the audio stream before any speech arrived.");
+        }
+        audio = repairOpenWavSizes(audio);
+      }
       if (audio.byteLength === 0) {
         throw new Error("The voice provider returned an empty audio response.");
       }
