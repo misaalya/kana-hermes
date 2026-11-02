@@ -127,6 +127,13 @@ detail. The invariants:
 - Transcript authority is Hermes. Restoring a conversation parses what
   `session.resume` returns and emits it as `history.restored`; `session.history`
   accepts only the RUNTIME session id and is a fallback only.
+- A browser refresh must not resume the same Hermes session again while the
+  server still holds it. The in-memory session registry mirrors each session
+  the gateway opened, and `/api/hermes/session/attach` serves that snapshot to
+  an authenticated browser; a miss, a gateway reset, compression, a bounded
+  transcript, or an idle expiry makes the client fall back to
+  `session.resume`. The registry is never persisted and clears on every
+  gateway reset.
 - Per-turn activity logs are Kana's own and live in `activities.db`, keyed by
   the durable Hermes session plus a zero-based assistant-reply ordinal.
 - Files Hermes delivers with `MEDIA:/local/path` reach the browser as signed

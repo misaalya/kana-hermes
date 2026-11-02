@@ -42,6 +42,8 @@ type FakeHermes = {
   serverResponses: Array<Record<string, unknown>>;
   /** Slash commands Hermes received, in order, as `slash.exec` saw them (no leading slash). */
   commands: string[];
+  /** Every JSON-RPC method Kana relayed, in order. */
+  methods: string[];
 };
 
 let hermes: FakeHermes;
@@ -78,6 +80,7 @@ async function installFakeHermes(page: Page): Promise<FakeHermes> {
   const runtimeToPersistent = new Map<string, string>();
   // Slash commands as Hermes received them, so a journey can prove what ran.
   const receivedCommands: string[] = [];
+  const receivedMethods: string[] = [];
   let nextSession = 1;
   let activeRuntimeId = "e2e-hermes-runtime-0";
   let activeProvider = "fireworks_ai";
@@ -289,6 +292,7 @@ async function installFakeHermes(page: Page): Promise<FakeHermes> {
       method?: string;
       params?: Record<string, unknown>;
     };
+    if (typeof body.method === "string") receivedMethods.push(body.method);
     let result: unknown = {};
     let error: string | null = null;
     let completedResponse: string | null = null;
@@ -553,6 +557,7 @@ async function installFakeHermes(page: Page): Promise<FakeHermes> {
 
   return {
     commands: receivedCommands,
+    methods: receivedMethods,
     runtimeId: () => activeRuntimeId,
     serverResponses,
     advanceHeldTurn: () => runTool("web_extract", "bmkg.go.id"),
@@ -1727,6 +1732,45 @@ test("a refresh during a new conversation's first turn resumes it without a dupl
 
   await hermes.finishHeldTurn();
   await expect(chat.getByText("Kupang weather")).toBeVisible();
+});
+
+test("reattaches a refresh to a server snapshot without resuming Hermes", async ({ page }) => {
+  const composer = page.getByRole("textbox", { name: "Message Kana" });
+  await composer.fill("Attach check");
+  await submitDraft(page, composer);
+  await expect(page.getByText("Hello! I am here.", { exact: true }).first()).toBeVisible();
+
+  const opens = () =>
+    hermes.methods.filter((method) => method === "session.create" || method === "session.resume").length;
+  const before = opens();
+  const stored = "20260824_052417_fe475b";
+  await page.route("**/api/hermes/session/attach", (route) =>
+    route.fulfill({
+      json: {
+        attached: true,
+        session: {
+          session_id: hermes.runtimeId(),
+          stored_session_id: stored,
+          resumed: stored,
+          messages: [
+            { role: "user", text: "Attach check" },
+            {
+              role: "assistant",
+              text: JSON.stringify({
+                speech_ja: "接続しました。",
+                subtitle: { text: "Attached reply", language: "en" },
+                emotion: "neutral",
+              }),
+            },
+          ],
+          running: false,
+        },
+      },
+    }),
+  );
+  await page.reload();
+  await expect(page.getByText("Attached reply", { exact: true })).toBeVisible();
+  expect(opens()).toBe(before);
 });
 
 test("persists the selected stage background across refreshes", async ({ page }) => {

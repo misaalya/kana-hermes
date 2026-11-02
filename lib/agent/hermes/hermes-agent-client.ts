@@ -517,27 +517,66 @@ export class HermesAgentClient implements AgentClient {
     }
   }
 
+  /**
+   * The server-held snapshot of a session Hermes already opened. A miss, a
+   * wrapped gateway, or any doubt returns null so the caller resumes normally.
+   */
+  private async attachSession(persistentSessionId: string): Promise<HermesSessionResponse | null> {
+    try {
+      const response = await fetch("/api/hermes/session/attach", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ persistentSessionId }),
+        cache: "no-store",
+        credentials: "same-origin",
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!response.ok) return null;
+      const value = (await response.json()) as {
+        attached?: boolean;
+        session?: HermesSessionResponse;
+      };
+      if (
+        value.attached !== true
+        || !value.session
+        || typeof value.session.session_id !== "string"
+      ) {
+        return null;
+      }
+      return value.session;
+    } catch {
+      return null;
+    }
+  }
+
   private async openSessionOnce(options: AgentSessionOptions): Promise<AgentSession> {
     this.attachmentUpload?.abort();
     if (this.state !== "connected") {
       await this.connect();
     }
     let response: HermesSessionResponse;
+    let attached = false;
     if (options.persistentSessionId) {
-      try {
-        response = await this.request<HermesSessionResponse>("session.resume", {
-          session_id: options.persistentSessionId,
-          source: "kana",
-          close_on_disconnect: false,
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        if (/session not found/i.test(message)) {
-          throw new Error(
-            "This Kana conversation points to a Hermes session that no longer exists. Start /new to create a fresh Hermes session; Kana will not silently replace the missing history.",
-          );
+      const cached = await this.attachSession(options.persistentSessionId);
+      if (cached) {
+        response = cached;
+        attached = true;
+      } else {
+        try {
+          response = await this.request<HermesSessionResponse>("session.resume", {
+            session_id: options.persistentSessionId,
+            source: "kana",
+            close_on_disconnect: false,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          if (/session not found/i.test(message)) {
+            throw new Error(
+              "This Kana conversation points to a Hermes session that no longer exists. Start /new to create a fresh Hermes session; Kana will not silently replace the missing history.",
+            );
+          }
+          throw error;
         }
-        throw error;
       }
     } else {
       response = await this.request<HermesSessionResponse>("session.create", {
@@ -576,8 +615,8 @@ export class HermesAgentClient implements AgentClient {
     this.sessionStored = Boolean(options.persistentSessionId);
     this.emit({ type: "session.opened", ...this.session });
     if (options.persistentSessionId) {
-      // session.resume already carries the full display transcript — no
-      // second RPC is needed to restore it (verified in methods_session.py).
+      // The resume response or the server's live snapshot already carries
+      // the full display transcript; no second RPC restores it.
       this.emit({
         type: "history.restored",
         sessionId: this.session.sessionId,
@@ -588,20 +627,22 @@ export class HermesAgentClient implements AgentClient {
         })),
         running: response.running === true,
       });
-      try {
-        const title = await this.request<{ title?: string }>("session.title", {
-          session_id: this.session.sessionId,
-        });
-        if (title.title) {
-          this.emit({
-            type: "session.updated",
-            title: title.title,
-            persistentSessionId,
+      if (!attached) {
+        try {
+          const title = await this.request<{ title?: string }>("session.title", {
+            session_id: this.session.sessionId,
           });
+          if (title.title) {
+            this.emit({
+              type: "session.updated",
+              title: title.title,
+              persistentSessionId,
+            });
+          }
+        } catch {
+          // Title synchronization is non-critical; the resumed session itself is
+          // already usable and future session.title events still update Kana.
         }
-      } catch {
-        // Title synchronization is non-critical; the resumed session itself is
-        // already usable and future session.title events still update Kana.
       }
     }
     this.recoverResumedTurn(response);

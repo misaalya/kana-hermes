@@ -44,6 +44,8 @@ type BridgeState = {
   lostListeners: Set<() => void>;
   pending: Map<string, { resolve: (value: unknown) => void; reject: (reason: Error) => void; timer: ReturnType<typeof setTimeout> }>;
   requestId: number;
+  /** Incremented for every lost gateway socket; cached sessions from an older epoch are dead. */
+  epoch: number;
 };
 
 export type HermesServerRequest = {
@@ -73,6 +75,7 @@ function bridge(): BridgeState {
     lostListeners: new Set(),
     pending: new Map(),
     requestId: 0,
+    epoch: 0,
   };
   // A bridge created by an older build (dev hot reload) lacks newer fields.
   shared[bridgeKey].lostListeners ??= new Set();
@@ -80,6 +83,7 @@ function bridge(): BridgeState {
   shared[bridgeKey].runtimeId ??= null;
   shared[bridgeKey].serverRequests ??= new Map();
   shared[bridgeKey].serverRequestListeners ??= new Set();
+  shared[bridgeKey].epoch ??= 0;
   return shared[bridgeKey];
 }
 
@@ -167,6 +171,7 @@ function resetSocket(state: BridgeState): void {
   state.socket = null;
   state.target = null;
   state.runtimeId = null;
+  state.epoch += 1;
   state.serverRequests.clear();
   const error = new Error("Hermes gateway disconnected.");
   for (const [, pending] of state.pending) {
@@ -185,6 +190,16 @@ export function onHermesConnectionLost(listener: () => void): () => void {
   const state = bridge();
   state.lostListeners.add(listener);
   return () => state.lostListeners.delete(listener);
+}
+
+/** The gateway generation; a new socket starts a new epoch with no live sessions. */
+export function hermesGatewayEpoch(): number {
+  return bridge().epoch;
+}
+
+/** Test hook: advance the gateway generation without a real socket. */
+export function __bumpHermesGatewayEpochForTests(): void {
+  bridge().epoch += 1;
 }
 
 export function subscribeHermesEvents(listener: (frame: unknown) => void): () => void {
@@ -355,8 +370,16 @@ async function connectWithDiscovery(state: BridgeState): Promise<WebSocket> {
   }
 }
 
+let connectedForTests: boolean | null = null;
+
+/** Test hook: pretend the shared socket is open (or closed without an epoch bump). */
+export function __setHermesGatewayConnectedForTests(value: boolean | null): void {
+  connectedForTests = value;
+}
+
 /** Whether the shared upstream socket is open, optionally to one target kind. */
 export function hermesGatewayConnected(target?: "local" | "remote"): boolean {
+  if (connectedForTests !== null) return connectedForTests;
   const state = bridge();
   if (target && state.target !== target) return false;
   return state.socket?.readyState === WebSocket.OPEN;

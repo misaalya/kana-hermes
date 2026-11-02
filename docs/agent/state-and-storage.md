@@ -140,11 +140,13 @@ widget's zone and order, a presentation preference in the local preference
 record (`hostWidgetLayout`).
 
 Process-held state is deliberately not persisted: the Hermes session token and
-the shared gateway socket (`lib/server/hermes-bridge.ts`), the managed runtime
-(`lib/server/local-hermes-runtime.ts`), the login lockout buckets
-(`lib/server/auth/login-limiter.ts`), and TTS cancellation tracking. Logout
-revocation is the exception and is stored in `appstate.db` so a copied token
-stays revoked across a restart.
+the shared gateway socket (`lib/server/hermes-bridge.ts`), the in-memory
+session registry that lets a refreshed browser reattach without resuming Hermes
+(`lib/server/hermes-session-registry.ts`, bounded and cleared on every gateway
+reset), the managed runtime (`lib/server/local-hermes-runtime.ts`), the login
+lockout buckets (`lib/server/auth/login-limiter.ts`), and TTS cancellation
+tracking. Logout revocation is the exception and is stored in `appstate.db` so
+a copied token stays revoked across a restart.
 
 ## Media links
 
