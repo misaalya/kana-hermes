@@ -113,8 +113,9 @@ so a selected section is never left half cut at an edge.
 
 On phones, a Settings row with a short control — the Show avatar switch and
 Installation mode — keeps its label and control on one line; rows with wide
-controls stack. Installation mode reads Remote when `hermes.remote` is
-configured, otherwise Deployment or Local from `deployment.mode`.
+controls stack. Installation mode reports only the Kana deployment mode,
+Deployment or Local from `deployment.mode`; a remote Hermes changes which agent
+Kana talks to, not how Kana is installed, so this row never reads Remote.
 
 Settings → Connection ends with the Host card: the hostname and OS line, then
 a 2×2 grid of flat tiles for CPU/load, memory, root disk, and uptime. CPU,

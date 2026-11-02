@@ -20,6 +20,7 @@ import type {
   StageBackgroundSummary,
 } from "@/lib/background/indexed-db-stage-background-store";
 import type { HermesRuntimeStatus } from "@/lib/runtime/hermes-control-client";
+import { readUpdateStatus } from "@/lib/runtime/update-client";
 import type { AgentModelCatalog, AgentModelSwitchResult } from "@/lib/agent/types";
 import type { Emotion } from "@/lib/presentation/types";
 import { OFFICIAL_LIVE2D_SAMPLES } from "@/lib/avatar/defaults";
@@ -44,7 +45,6 @@ import {
 } from "./settings-stage-background";
 import {
   AvatarIcon,
-  CheckIcon,
   BotIcon,
   ChevronRightIcon,
   CloseIcon,
@@ -172,6 +172,7 @@ export function SettingsDialog({
     });
   }, [section]);
   const [saveState, setSaveState] = useState<"saved" | "saving" | "error">("saved");
+  const [appVersion, setAppVersion] = useState<string | null>(null);
   const [avatarModels, setAvatarModels] = useState<AvatarModelSummary[]>([]);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [avatarNotice, setAvatarNotice] = useState<string | null>(null);
@@ -194,6 +195,20 @@ export function SettingsDialog({
   useEffect(() => {
     onSaveRef.current = onSave;
   }, [onSave]);
+
+  // The footer names the running version once settings settle. The update
+  // endpoint is server-cached, so opening Settings does not re-ask npm.
+  useEffect(() => {
+    let active = true;
+    readUpdateStatus()
+      .then((status) => {
+        if (active) setAppVersion(status.currentVersion);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (initialDraftRef.current) {
@@ -463,18 +478,16 @@ export function SettingsDialog({
     });
   };
 
-  const saveStatus = saveState === "error"
-    ? <span className="text-[11px] font-semibold text-danger" role="status">{settingsCopy.saveError}</span>
-    : (
-      <span className="flex items-center gap-1.5 text-[11px] text-faint" role="status" aria-live="polite">
-        {saveState === "saving" ? (
-          <span className="size-1.5 animate-kana-pulse rounded-full bg-accent" aria-hidden="true" />
-        ) : (
-          <CheckIcon className="size-3" />
-        )}
-        {saveState === "saving" ? settingsCopy.savingChanges : settingsCopy.saved}
-      </span>
-    );
+  const saveStatus = saveState === "error" ? (
+    <span className="text-[11px] font-semibold text-danger" role="status">{settingsCopy.saveError}</span>
+  ) : saveState === "saving" ? (
+    <span className="flex items-center gap-1.5 text-[11px] text-faint" role="status" aria-live="polite">
+      <span className="size-1.5 animate-kana-pulse rounded-full bg-accent" aria-hidden="true" />
+      {settingsCopy.savingChanges}
+    </span>
+  ) : appVersion ? (
+    <span className="text-[11px] text-faint">{settingsCopy.version(appVersion)}</span>
+  ) : null;
   const closeButton = (
     <button
       type="button"

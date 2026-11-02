@@ -113,7 +113,6 @@ export function AdvancedConfigCard({ locale }: { locale: UiLocale }) {
   const copy = getCopy(locale).settings;
   const [configPath, setConfigPath] = useState("$KANA_DATA_DIR/config.json");
   const [deploymentMode, setDeploymentMode] = useState<"local" | "deployment">("local");
-  const [hermesMode, setHermesMode] = useState<"local" | "remote">("local");
   const [configError, setConfigError] = useState<string | null>(null);
   const [configLoaded, setConfigLoaded] = useState(false);
   useEffect(() => {
@@ -123,13 +122,11 @@ export function AdvancedConfigCard({ locale }: { locale: UiLocale }) {
       .then((value: {
         path?: string;
         deploymentMode?: "local" | "deployment";
-        hermesMode?: "local" | "remote";
         configError?: string | null;
       } | null) => {
         if (active) setConfigError(value?.configError ?? null);
         if (active && value?.path) setConfigPath(value.path);
         if (active && value?.deploymentMode) setDeploymentMode(value.deploymentMode);
-        if (active && value?.hermesMode) setHermesMode(value.hermesMode);
       })
       .catch(() => undefined)
       .finally(() => {
@@ -175,11 +172,9 @@ export function AdvancedConfigCard({ locale }: { locale: UiLocale }) {
           <SettingsRow label={copy.advancedMode} inline>
             {configLoaded ? (
               <span className="text-xs font-semibold text-ink-dim">
-                {hermesMode === "remote"
-                  ? copy.advancedModeRemote
-                  : deploymentMode === "deployment"
-                    ? copy.advancedModeDeployment
-                    : copy.advancedModeLocal}
+                {deploymentMode === "deployment"
+                  ? copy.advancedModeDeployment
+                  : copy.advancedModeLocal}
               </span>
             ) : (
               <Skeleton className="h-3.5 w-24" />

@@ -603,8 +603,8 @@ export async function openAvatarSettings(page: Page): Promise<void> {
     dialog.getByRole("radio", { name: "Seigaiha" }),
   ).toHaveAttribute("aria-checked", "true");
   // Each click queues a preference save; a frame taken mid-save would show the
-  // "Saving…" hint instead of the settled state a reader sees.
-  await expect(dialog.getByText("Saved automatically")).toBeVisible({
+  // "Saving…" hint instead of the settled version a reader sees.
+  await expect(dialog.getByText(/^Kana v\d+\.\d+\.\d+$/)).toBeVisible({
     timeout: 30_000,
   });
   // The dialog's entrance animation settles before the frame is taken.

@@ -382,7 +382,8 @@ export type Copy = {
     sections: Record<string, { label: string }>;
     sectionsAria: string;
     saveError: string;
-    saved: string;
+    /** The settled sidebar footer: the running Kana version, not a save hint. */
+    version(version: string): string;
     savingChanges: string;
     close: string;
     interfaceTitle: string;
@@ -548,7 +549,6 @@ export type Copy = {
     advancedMode: string;
     advancedModeLocal: string;
     advancedModeDeployment: string;
-    advancedModeRemote: string;
     advancedConfigError: string;
     checkingAccess: string;
     currentPassword: string;
@@ -1016,7 +1016,7 @@ const id: Copy = {
     },
     sectionsAria: "Bagian pengaturan",
     saveError: "Tidak dapat menyimpan",
-    saved: "Tersimpan otomatis",
+    version: (version) => `Kana v${version}`,
     savingChanges: "Menyimpan…",
     close: "Tutup pengaturan",
     interfaceTitle: "Bahasa antarmuka",
@@ -1199,7 +1199,6 @@ const id: Copy = {
     advancedMode: "Mode instalasi",
     advancedModeLocal: "Lokal",
     advancedModeDeployment: "Deployment",
-    advancedModeRemote: "Remote",
     advancedConfigError: "File ini tidak valid, jadi Kana memakai pengaturan bawaan:",
     checkingAccess: "Memeriksa perlindungan akses…",
     currentPassword: "Kata sandi saat ini",
@@ -1700,7 +1699,7 @@ const en: Copy = {
     },
     sectionsAria: "Settings sections",
     saveError: "Could not save",
-    saved: "Saved automatically",
+    version: (version) => `Kana v${version}`,
     savingChanges: "Saving…",
     close: "Close settings",
     interfaceTitle: "Interface language",
@@ -1883,7 +1882,6 @@ const en: Copy = {
     advancedMode: "Installation mode",
     advancedModeLocal: "Local",
     advancedModeDeployment: "Deployment",
-    advancedModeRemote: "Remote",
     advancedConfigError: "This file is invalid, so Kana is using defaults:",
     checkingAccess: "Checking access protection…",
     currentPassword: "Current password",

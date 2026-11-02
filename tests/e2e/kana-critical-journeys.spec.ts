@@ -2606,7 +2606,21 @@ test("keeps short settings rows on one line on phones", async ({ page }) => {
   expect(valueBox?.x ?? 0).toBeGreaterThan(modeBox?.x ?? 0);
 });
 
-test("shows Remote installation mode when Hermes is remote", async ({ page }) => {
+test("shows the Kana version where the old saved hint was", async ({ page }) => {
+  test.skip(
+    (page.viewportSize()?.width ?? 0) < 1024,
+    "The settled footer is the desktop settings layout.",
+  );
+  await page.route("**/api/update", (route) =>
+    route.fulfill({ json: { currentVersion: "0.8.1", update: null } }),
+  );
+  await page.getByRole("button", { name: "Open settings" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText("Kana v0.8.1", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("Saved automatically", { exact: true })).toHaveCount(0);
+});
+
+test("keeps the installation mode local when Hermes is remote", async ({ page }) => {
   await page.route("**/api/kana/config", (route) =>
     route.fulfill({
       json: {
@@ -2627,7 +2641,8 @@ test("shows Remote installation mode when Hermes is remote", async ({ page }) =>
   const modeLabel = dialog.getByText("Installation mode", { exact: true });
   await modeLabel.scrollIntoViewIfNeeded();
   await expect(modeLabel).toBeVisible();
-  await expect(dialog.getByText("Remote", { exact: true })).toBeVisible();
+  // A remote Hermes changes the agent target, not how Kana is deployed.
+  await expect(dialog.getByText("Local", { exact: true })).toBeVisible();
 });
 
 test("shows the workspace update notice and stops Kana only after Copy & Shutdown", async ({
