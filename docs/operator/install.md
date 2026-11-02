@@ -16,8 +16,10 @@ npm install -g kana-alya
 kana
 ```
 
-The package has no runtime dependencies: it bundles the built Next.js runtime,
-the launcher, and the starter configuration, and never installs Hermes or a voice model.
+Update an npm installation by rerunning `npm install -g kana-alya@latest` and
+restarting Kana. The package has no runtime dependencies: it bundles the built
+Next.js runtime, the launcher, and the starter configuration, and never
+installs Hermes or a voice model.
 
 `kana`, or the explicitly spelled `kana start`, starts the server on
 `127.0.0.1:3077` and opens the default browser at it. `kana serve` runs the same
