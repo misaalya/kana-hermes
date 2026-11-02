@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { formatBytes, formatDuration, percentUsed } from "@/lib/host/host-metrics";
 import { getCopy, type UiLocale } from "@/lib/ui/copy";
 import { ChevronLeftIcon, ChevronRightIcon } from "./icons";
@@ -21,16 +21,18 @@ function uptimeLines(seconds: number): [string, string] {
   return [`${minutes}m`, `${whole % 60}s`];
 }
 
-/** Two zero-padded groups, the fixed-width form the header readout reserves. */
-function uptimeGroups(seconds: number): [string, string] {
+type UptimeGroup = { value: string; unit: "d" | "h" | "m" | "s" };
+
+/** Two zero-padded groups with their units, the fixed-width header form. */
+function uptimeGroups(seconds: number): [UptimeGroup, UptimeGroup] {
   const whole = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
   const days = Math.floor(whole / 86_400);
   const hours = Math.floor((whole % 86_400) / 3_600);
   const minutes = Math.floor((whole % 3_600) / 60);
   const pad = (value: number) => String(value).padStart(2, "0");
-  if (days > 0) return [pad(days), pad(hours)];
-  if (hours > 0) return [pad(hours), pad(minutes)];
-  return [pad(minutes), pad(whole % 60)];
+  if (days > 0) return [{ value: pad(days), unit: "d" }, { value: pad(hours), unit: "h" }];
+  if (hours > 0) return [{ value: pad(hours), unit: "h" }, { value: pad(minutes), unit: "m" }];
+  return [{ value: pad(minutes), unit: "m" }, { value: pad(whole % 60), unit: "s" }];
 }
 
 function statusClass(reading: HostReading): string {
@@ -155,10 +157,20 @@ function HostStrip({ locale, reading }: { locale: UiLocale; reading: HostReading
 
 /**
  * Focus mode on a phone: the free left side of the header row carries CPU,
- * memory, and disk as three compact label-over-value columns, in line with
- * the action tray. There is no hostname, uptime, frame, or extra band; the
+ * memory, disk, and uptime as compact label-over-value columns, in line with
+ * the action tray. There is no hostname, frame, or extra band; the
  * conversation itself reaches the header.
  */
+type FocusMetric = {
+  label: string;
+  value?: string;
+  suffix?: string;
+  groups?: [UptimeGroup, UptimeGroup];
+  width: string;
+  title?: string;
+  className?: string;
+};
+
 export function HeaderFocusHost() {
   const locale = useKanaStore("preferences", (state) => state.preferences.uiLocale);
   const reading = useHostSnapshot({ active: true, freshForMs: CACHE_MS });
@@ -175,7 +187,7 @@ export function HeaderFocusHost() {
   const status = !snapshot ? (error ? settings.hostFailed : settings.hostLoading) : "";
   const percent = (value: number | null) =>
     snapshot && value !== null ? String(Math.round(value)) : "—";
-  const metrics = [
+  const metrics: FocusMetric[] = [
     {
       label: settings.hostCpu,
       value: percent(cpu),
@@ -196,18 +208,18 @@ export function HeaderFocusHost() {
     },
     {
       label: settings.hostUptimeShort,
-      value: snapshot ? uptimeGroups(snapshot.uptime).join(" ") : "—",
-      suffix: "",
-      width: "min-w-[52px] sm:min-w-[64px]",
+      value: snapshot ? undefined : "—",
+      groups: snapshot ? uptimeGroups(snapshot.uptime) : undefined,
+      width: "min-w-[68px] sm:min-w-[80px]",
       title: uptimeTitle,
-      // Below 375 px the three utilisation readings keep the row legible.
-      className: "max-[374px]:hidden",
+      // Below 390 px the three utilisation readings keep the row legible.
+      className: "max-[389px]:hidden",
     },
   ];
 
   return (
     <section
-      className="kana-focus-host flex shrink-0 items-center gap-2.5 sm:gap-3"
+      className="kana-focus-host flex shrink-0 items-center gap-1.5 sm:gap-3"
       aria-label={settings.hostTitle}
       title={snapshot?.hostname ?? status}
     >
@@ -231,10 +243,22 @@ export function HeaderFocusHost() {
               snapshot ? "text-ink" : error ? "text-danger" : "animate-kana-pulse text-faint"
             }`}
           >
-            {metric.value}
-            {metric.suffix ? (
-              <span className="ml-px text-[0.55em]">{metric.suffix}</span>
-            ) : null}
+            {metric.groups ? (
+              metric.groups.map((group, index) => (
+                <Fragment key={`${group.unit}-${index}`}>
+                  {index > 0 ? " " : null}
+                  {group.value}
+                  <span className="ml-px text-[0.5em]">{group.unit}</span>
+                </Fragment>
+              ))
+            ) : (
+              <>
+                {metric.value}
+                {metric.suffix ? (
+                  <span className="ml-px text-[0.55em]">{metric.suffix}</span>
+                ) : null}
+              </>
+            )}
           </span>
         </span>
       ))}

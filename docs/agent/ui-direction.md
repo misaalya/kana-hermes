@@ -200,9 +200,10 @@ compact label-over-value columns on the free left side, vertically centred with
 the action tray on the right. There is no hostname, frame, fill, or extra band
 in this mode; the readings keep their place while loading (pulsing dashes) or
 failing (dashes in the danger colour), and the conversation starts at the
-header again. Below 360 px the uptime column steps out so the three utilisation
-readings stay legible beside the tray. The header keeps the history button
-beside the tray, and the desktop focus rail is unaffected.
+header again. Below 390 px the uptime column steps out so the three utilisation
+readings stay legible beside the tray; its uptime groups keep their units as
+small labels (`03h 55m`). The header keeps the history button beside the tray,
+and the desktop focus rail is unaffected.
 
 ## Conversation history
 

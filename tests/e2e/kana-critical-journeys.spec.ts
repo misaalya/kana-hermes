@@ -2343,8 +2343,8 @@ test("reserves the focus host columns before the first reading", async ({ page }
     expect(Math.abs(before[index].left - after[index].left)).toBeLessThanOrEqual(1);
     expect(Math.abs(before[index].width - after[index].width)).toBeLessThanOrEqual(1);
   }
-  // The uptime keeps two zero-padded groups in its reserved slot.
-  await expect(values.last()).toHaveText(/^\d{2} \d{2}$/);
+  // The uptime keeps two zero-padded groups, each with its unit, in its slot.
+  await expect(values.last()).toHaveText(/^\d{2}[dhms] \d{2}[dhms]$/);
 });
 
 test("centers the host widget's unavailable state", async ({ page }) => {
