@@ -15,6 +15,11 @@ stable version promises, and where compatibility with Hermes ends.
   pointed at `latest`.
 - The guard also refuses an unlicensed package and a dirty working tree, so a
   published artifact matches a committed revision.
+- Stable releases publish through npm Trusted Publishing in
+  `.github/workflows/publish.yml`, which builds in a clean GitHub runner and
+  publishes with provenance from a published `v<version>` tag. The repository
+  stores no npm token and does not require a local 2FA login for a normal
+  release.
 - Versions 0.2.0-alpha.1 through 0.3.2 were removed from npm; install 0.4.0 or
   later.
 - There is no second npm channel. Field validation — the dogfood journal,

@@ -7,7 +7,7 @@ The order Kana is released in, the scripts that enforce each step, and the rules
 
 ## Checklist order
 
-1. Confirm the authenticated npm account may claim or update `kana-alya` and that the project license is recorded. `scripts/assert-npm-release.mjs` refuses every other package name, refuses a missing or `UNLICENSED` license, refuses a prerelease published directly under `latest`, requires the root `package.json` to stay private with a version equal to `cli/package.json`, and refuses a dirty git tree.
+1. Confirm the npm Trusted Publisher entry names repository `misaalya/kana-hermes`, workflow `publish.yml`, and environment `kana`, and that the project license is recorded. A normal release needs no local npm login. `scripts/assert-npm-release.mjs` refuses every other package name, refuses a missing or `UNLICENSED` license, refuses a prerelease published directly under `latest`, requires the root `package.json` to stay private with a version equal to `cli/package.json`, and refuses a dirty git tree.
 2. Confirm no open credential leak, data loss, duplicate prompt, or wrong-session issue.
 3. Bump the version in both `package.json` files and keep them equal; update the changelog, migration notes, supported Hermes version, and known limitations. `scripts/prepare-npm-package.mjs` throws when the two versions differ.
 4. Run `npm audit --omit=dev` and review, rather than blindly auto-fix, every production finding.
@@ -23,6 +23,29 @@ The order Kana is released in, the scripts that enforce each step, and the rules
 
 Every stable release keeps a final semver version and uses the `latest` dist-tag. Extended compatibility still requires one week of dogfood and no unresolved P0/P1 issue.
 
+## Trusted Publishing (default)
+
+A normal release publishes from `.github/workflows/publish.yml`, not from a
+local npm login. Push the release commit to `main`, then publish a GitHub
+release whose tag is `v<version>`, for example `v0.8.0`. The workflow checks
+out that tag, verifies that `v$version` matches the release tag, runs lint,
+typecheck, the unit tests, `test:package:npm`, and `assert-npm-release`, then
+publishes `./cli` with `--provenance` using the workflow's OIDC identity. No
+npm token is stored in the repository or the workflow, and no one answers a 2FA
+challenge for this path.
+
+The `kana-alya` package keeps one Trusted Publisher entry: repository
+`misaalya/kana-hermes`, workflow `publish.yml`, and environment `kana`. The
+workflow keeps `permissions: id-token: write` and `environment: kana`. If the
+version is already published, the workflow skips the publish, so a rerun is
+safe. After it finishes, verify both `npm view kana-alya@<version> version` and
+`npm view kana-alya dist-tags.latest`, then record the workflow URL in the
+GitHub release notes.
+
+The GitHub runner builds outside every maintainer home, so this path also
+satisfies the local build rule below. Use the manual flow only when the
+workflow is unavailable or when a local package verification is required.
+
 ## Build outside the home directory
 
 A release build can never run from this checkout. Next.js records the absolute build folder in its runtime files, so a build under the maintainer's home directory would publish their account name with the package. `scripts/prepare-npm-package.mjs` enforces this: `cli/package.json`'s `prepack` calls it with `--build`, so `npm publish ./cli` and a bare `npm pack ./cli` throw from here, while running it without `--build` only warns. Run the release from a clone outside the home directory whose path names no account:
@@ -37,9 +60,14 @@ npm run test:package:npm      # build, pack, install, and boot the real tarball
 npm run publish:cli           # lint, typecheck, unit tests, guard, publish
 ```
 
-## Publishing with the owner's 2FA
+## Manual publishing fallback (owner 2FA)
 
-npm publishing uses the owner's interactive 2FA. A page that offers **Use security key** is a valid WebAuthn/passkey challenge; it does not mean 2FA was skipped because npm did not ask for a six-digit TOTP code. TOTP and WebAuthn are alternative second factors: never guess, request from an untrusted source, or enter an OTP or passkey response on the owner's behalf.
+Use this only when the Trusted Publishing workflow is unavailable. npm then
+uses the owner's interactive 2FA. A page that offers **Use security key** is a
+valid WebAuthn/passkey challenge; it does not mean that 2FA was skipped because
+npm did not ask for a six-digit TOTP code. TOTP and WebAuthn are alternative
+second factors: never guess, request from an untrusted source, or enter an OTP
+or passkey response on the owner's behalf.
 
 Publishing needs a live owner session, not merely a credential on disk. With a token that is missing, expired, or belongs to an account that is not a maintainer, the registry refuses the write as `E404 ... Not found - PUT ...` for a package that exists; `npm whoami` answering `E401` is the honest signal, and `npm view <name> maintainers` names the account that may publish. Log in again as that account — `npm logout` then `npm login` — and never read the 404 as a reason to change the package name, the registry, or the manifest.
 

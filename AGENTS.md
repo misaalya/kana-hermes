@@ -296,16 +296,25 @@ constant: Kana keeps reading the live registry.
 
 ## Releases
 
-`docs/evidence/release-checklist.md` is the procedure. Two rules it depends on:
+`docs/evidence/release-checklist.md` is the procedure. Three rules it depends on:
 
-- npm publishing uses the owner's interactive 2FA. A page that offers **Use
-  security key** is a valid WebAuthn/passkey challenge; it does not mean that 2FA
-  was skipped merely because npm did not request a six-digit TOTP code. TOTP and
-  WebAuthn are alternative second-factor methods, and the owner must complete
-  whichever challenge npm presents. Never guess, request from an untrusted
-  source, or enter an OTP/passkey response on the owner's behalf. Codex and
-  other non-GUI shells may not have a working `xdg-open`, so use npm's supported
-  manual-URL mode instead of pressing Enter at a browser-opening prompt:
+- A normal release publishes through npm Trusted Publishing from
+  `.github/workflows/publish.yml`, not from a local npm login. The workflow
+  triggers on a published GitHub release whose tag is `v<version>`, checks the
+  tag against both `package.json` files, runs lint, typecheck, tests, the
+  package smoke, and the release guard, then runs
+  `npm publish ./cli --ignore-scripts --provenance` with an OIDC identity. The
+  npm package must keep its Trusted Publisher entry for repository
+  `misaalya/kana-hermes`, workflow `publish.yml`, and environment `kana`, and
+  the workflow must keep `id-token: write`. No npm token, secret, or local 2FA
+  challenge belongs in the repository or the workflow.
+- Manual publishing is a fallback, not the release path. If the workflow is
+  unavailable, npm uses the owner's interactive 2FA. A page that offers **Use
+  security key** is a valid WebAuthn/passkey challenge; TOTP and WebAuthn are
+  alternative second factors, and the owner must complete whichever challenge
+  npm presents. Never guess, request from an untrusted source, or enter an
+  OTP/passkey response on the owner's behalf. Codex and other non-GUI shells may
+  not have a working `xdg-open`, so use npm's supported manual-URL mode:
 
   ```bash
   npm publish ./cli --ignore-scripts --auth-type=web --browser=false
@@ -316,14 +325,13 @@ constant: Kana keeps reading the live registry.
   to the owner. Keep the publish process running while authorization completes,
   and require both the successful `+ kana-alya@<version>` output and registry
   verification of `version` and `dist-tags.latest` before updating GitHub release
-  notes. For unattended releases, prefer npm Trusted Publishing from the
-  repository's GitHub Actions workflow; do not weaken or disable 2FA and do not
-  introduce a bypass-2FA token.
-- A release build can never run from this checkout. Next.js records the absolute
-  build folder in the runtime files, so a build under the maintainer's home
-  directory would publish their account name with the package. Clone the
+  notes. Do not weaken or disable 2FA and do not introduce a bypass-2FA token.
+- A local release build can never run from this checkout. Next.js records the
+  absolute build folder in the runtime files, so a build under the maintainer's
+  home directory would publish their account name with the package. Clone the
   committed revision to a fresh path outside the home directory whose path names
-  no account and run the release there. `scripts/prepare-npm-package.mjs`
+  no account when a manual build is required; the GitHub Actions runner is
+  already outside any maintainer home. `scripts/prepare-npm-package.mjs`
   enforces this with `--build`, which `cli/package.json`'s `prepack` passes, so
   `npm run publish:cli`, `npm publish ./cli`, and a plain `npm pack ./cli` fail
   from here; the paths that pass `--ignore-scripts` only warn. Treat the warning
