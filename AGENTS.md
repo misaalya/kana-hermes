@@ -315,10 +315,13 @@ constant: Kana keeps reading the live registry.
   release page, and never work around a failed or skipped workflow with a token
   or a manual publish from a clone.
 - The Trusted Publisher binding lives in the npm package settings, not in this
-  repository. A fork or a clone without that binding cannot publish
-  `kana-alya`; do not rename the package, change the registry, or add a token to
-  make it publish. Only the npm package owner can add another repository,
-  workflow, or environment to the binding.
+  repository, and only npm accounts with write access to `kana-alya` can add,
+  change, or remove it. A cloner has no npm write access and cannot give a fork
+  a binding; npm checks the OIDC token's repository, workflow, and environment
+  against the owner's entry, so a fork's or clone's token is refused. Do not
+  rename the package, change the registry, or add a token to work around that.
+  Membership in the repository is not npm publish permission, and the public
+  workflow file grants none by itself.
 - Manual publishing is a fallback, not the release path. If the workflow is
   unavailable, npm uses the owner's interactive 2FA. A page that offers **Use
   security key** is a valid WebAuthn/passkey challenge; TOTP and WebAuthn are

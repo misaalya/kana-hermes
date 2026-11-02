@@ -49,10 +49,13 @@ both report it. The release page, the tag, and a green publish step are not
 evidence by themselves.
 
 The Trusted Publisher binding lives in the npm package settings, not in this
-repository. A fork or a clone without that binding cannot publish `kana-alya`;
-never rename the package, change the registry, or add a token to work around a
-refusal. Only the npm package owner can add another repository, workflow, or
-environment to the binding.
+repository. Only npm accounts with write access to `kana-alya` can add, change,
+or remove it. A cloner has no npm write access and cannot add a fork; npm checks
+the OIDC token's repository, workflow, and environment against the owner's
+entry, so a fork's or clone's token is refused. Never rename the package,
+change the registry, or add a token to work around a refusal. Being able to
+read, fork, or open a pull request against this repository is not npm publish
+permission, and the public workflow file grants none by itself.
 
 The GitHub runner builds outside every maintainer home, so this path also
 satisfies the local build rule below. Use the manual flow only when the
