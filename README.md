@@ -72,7 +72,7 @@ into `~/.kana` when you ask for it.
 <table>
   <tr>
     <td width="50%"><img src=".github/readme/workspace-dark-v5.jpg" alt="Kana in the dark theme on the Seigaiha pattern, next to the same conversation in the dark palette"></td>
-    <td width="50%"><img src=".github/readme/focus-mode-v6.jpg" alt="Kana with the avatar hidden: a conversation rail sits beside a wide chat panel whose conversation is centred and whose composer pill widens when in use"></td>
+    <td width="50%"><img src=".github/readme/focus-mode-v6.jpg" alt="Kana with the avatar hidden: a plain conversation panel sits beside a wide chat sheet whose conversation is centred and whose composer pill widens when in use"></td>
   </tr>
   <tr>
     <td align="center"><sub>Dark theme and stage patterns</sub></td>
@@ -108,7 +108,10 @@ into `~/.kana` when you ask for it.
   own appears when you point at that message, and a touch screen always shows it.
 - Composer with file attachments, voice dictation, and a model picker.
   The picker opens with the last Hermes model list at once and refreshes it in
-  the background.
+  the background; when a list cannot load, it says why and offers Try again.
+- Focus mode hides the avatar for a chat-only workspace: your conversations sit
+  in a panel beside the chat on a desktop, and the host readout moves into the
+  header on a phone.
 - On phones and tablets the conversation fills the screen and Kana sits in a
   small call-style tile framed on the face.
 
@@ -128,7 +131,8 @@ into `~/.kana` when you ask for it.
   cards.
 - Emotions, motions, lip sync, and cursor-following gaze.
 - Stage backgrounds (an illustrated room, soft patterns, or your own image), plus
-  light and dark themes.
+  light and dark themes. Switching between the avatar and focus mode plays a
+  liquid wave.
 
 **Voice**
 - Local Japanese speech with Irodori-TTS v4.1 Anime on a CPU engine, with voice cloning from a short, consented sample.
@@ -137,7 +141,8 @@ into `~/.kana` when you ask for it.
 
 **Security and operations**
 - Password sign-in with lockout that never blocks your own known browsers and
-  does not depend on IP addresses (safe behind shared home internet).
+  does not depend on IP addresses (safe behind shared home internet). The sign-in
+  page shows the attempts left and a live countdown while it is paused.
 - An optional prompt guardrail you write in your own `config.json` as plain
   rules ("never read anything under Y"). Kana turns them into one yes/no question
   for TypeSafe's Jev and refuses the turn before Hermes sees it. The rules ship
