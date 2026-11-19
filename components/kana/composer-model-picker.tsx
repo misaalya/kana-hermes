@@ -4,7 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { AgentModelCatalog, AgentModelSwitchResult } from "@/lib/agent/types";
 import type { AgentModelChoice } from "@/lib/preferences/types";
 import { getCopy, type UiLocale } from "@/lib/ui/copy";
+import { describeModelLoadError, type ModelLoadProblem } from "@/lib/ui/model-load-error";
 import { CheckIcon, CloseIcon, ResetIcon, SearchIcon } from "./icons";
+import { ModelLoadErrorCard } from "./model-load-error-card";
 import { btnPrimary, btnSecondary } from "./ui";
 
 type ComposerModelPickerProps = {
@@ -59,6 +61,7 @@ export function ComposerModelPicker({
   const [loading, setLoading] = useState(!catalog);
   const [applying, setApplying] = useState("");
   const [error, setError] = useState("");
+  const [loadProblem, setLoadProblem] = useState<ModelLoadProblem | null>(null);
   const [confirmation, setConfirmation] = useState<{
     provider: string;
     model: string;
@@ -97,7 +100,7 @@ export function ComposerModelPicker({
         if (live) setLoaded(next);
       })
       .catch((reason) => {
-        if (live) setError(reason instanceof Error ? reason.message : copy.modelLoadFailed);
+        if (live) setLoadProblem(describeModelLoadError(locale, reason));
       })
       .finally(() => {
         if (live) setLoading(false);
@@ -105,7 +108,7 @@ export function ComposerModelPicker({
     return () => {
       live = false;
     };
-  }, [copy.modelLoadFailed, data, onList]);
+  }, [data, locale, onList]);
 
   useEffect(() => {
     // Phones keep the keyboard down until the search is tapped; the list
@@ -124,11 +127,12 @@ export function ComposerModelPicker({
 
   const refresh = async () => {
     setError("");
+    setLoadProblem(null);
     setLoading(true);
     try {
       setLoaded(await onList(true));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : copy.modelLoadFailed);
+      setLoadProblem(describeModelLoadError(locale, reason));
     } finally {
       setLoading(false);
     }
@@ -230,6 +234,15 @@ export function ComposerModelPicker({
           {error}
         </p>
       ) : null}
+      {loadProblem ? (
+        <ModelLoadErrorCard
+          locale={locale}
+          problem={loadProblem}
+          retrying={loading}
+          onRetry={() => void refresh()}
+          className="mx-3 mb-2 shrink-0"
+        />
+      ) : null}
       {loading && !data ? (
         <p role="status" className="px-4 pb-6 pt-2 text-[12px] font-bold text-muted">{copy.modelLoading}</p>
       ) : (
@@ -273,7 +286,7 @@ export function ComposerModelPicker({
               {row.current ? <CheckIcon className="mt-0.5 size-4 shrink-0 text-accent-strong" /> : null}
             </button>
           ))}
-          {!visible.length ? (
+          {!visible.length && !(loadProblem && !data) ? (
             <p role="status" className="px-3 py-6 text-center text-[12px] font-bold text-muted">
               {query ? copy.modelSearchEmpty : copy.modelEmpty}
             </p>

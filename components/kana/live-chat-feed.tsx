@@ -231,7 +231,7 @@ export const LiveChatFeed = memo(function LiveChatFeed({
         {!entries.length && !typing ? (
           <div className="m-auto flex max-w-[280px] flex-col items-center py-12 text-center max-sm:hidden">
             <KanaEmptyFace />
-            <p className="sr-only">{copy.chat.emptyBody}</p>
+            <p className="kana-empty-body sr-only">{copy.chat.emptyBody}</p>
           </div>
         ) : null}
 

@@ -287,7 +287,7 @@ export const ConversationSidebar = memo(function ConversationSidebar({
       </div>
 
       {footer ? (
-        <div className="shrink-0 border-t-[3px] border-dotted border-line-strong p-4">
+        <div className="kana-rail-footer shrink-0 border-t-[3px] border-dotted border-line-strong p-4">
           {footer}
         </div>
       ) : null}

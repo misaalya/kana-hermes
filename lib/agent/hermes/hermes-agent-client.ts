@@ -1,4 +1,5 @@
 import { classifyHermesTool } from "@/lib/agent/tool-kind";
+import { isTransientNonJson, readJsonResponse, RequestTimeoutError } from "@/lib/runtime/read-json-response";
 import { isInterruptionNotice } from "@/lib/agent/interruption-notice";
 import { commandArgumentHint, commandArgumentPolicy } from "@/lib/agent/command-arguments";
 import { AttachmentUploadError, MAX_ATTACHMENTS, MAX_ATTACHMENT_TOTAL_BYTES, validateAttachment } from "@/lib/agent/attachments";
@@ -261,10 +262,37 @@ function inputRequest(
   return null;
 }
 
+// Reads that change nothing in Hermes, so a gateway page in place of Kana's
+// answer (a proxy blip, Kana restarting) may be retried once.
+const RETRYABLE_READ_METHODS = new Set(["model.options"]);
+// A proxy that already waited this long timed out; retrying would only wait again.
+const RETRY_FAST_FAILURE_MS = 30_000;
+
 async function relayRpc<T>(
   method: string,
   params: Record<string, unknown> = {},
   timeoutMs = 120_000,
+): Promise<T> {
+  const started = Date.now();
+  try {
+    return await relayRpcOnce<T>(method, params, timeoutMs);
+  } catch (error) {
+    if (
+      !RETRYABLE_READ_METHODS.has(method)
+      || !isTransientNonJson(error)
+      || Date.now() - started > RETRY_FAST_FAILURE_MS
+    ) {
+      throw error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    return relayRpcOnce<T>(method, params, timeoutMs);
+  }
+}
+
+async function relayRpcOnce<T>(
+  method: string,
+  params: Record<string, unknown>,
+  timeoutMs: number,
 ): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -277,7 +305,7 @@ async function relayRpc<T>(
       credentials: "same-origin",
       signal: controller.signal,
     });
-    const value = (await response.json()) as { result?: T; error?: string; code?: string };
+    const value = (await readJsonResponse<{ result?: T; error?: string; code?: string } | null>(response)) ?? {};
     if (!response.ok || value.error) {
       const message = value.error || `Hermes relay failed (${response.status}).`;
       // Kana's own decision, not a relay failure: the caller answers it with
@@ -293,7 +321,7 @@ async function relayRpc<T>(
     return value.result as T;
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
-      throw new Error(`Hermes request timed out: ${method}`);
+      throw new RequestTimeoutError(`Hermes request timed out: ${method}`);
     }
     throw error;
   } finally {

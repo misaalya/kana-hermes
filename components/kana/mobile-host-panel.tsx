@@ -158,7 +158,8 @@ function HostStrip({ locale, reading }: { locale: UiLocale; reading: HostReading
 /**
  * Focus mode on a phone: the free left side of the header row carries CPU,
  * memory, disk, and uptime as compact label-over-value columns, in line with
- * the action tray. There is no hostname, frame, or extra band; the
+ * the action tray, on a card styled like the desktop widgets. There is no
+ * hostname or extra band; the
  * conversation itself reaches the header.
  */
 type FocusMetric = {
@@ -210,7 +211,7 @@ export function HeaderFocusHost() {
       label: settings.hostUptimeShort,
       value: snapshot ? undefined : "—",
       groups: snapshot ? uptimeGroups(snapshot.uptime) : undefined,
-      width: "min-w-[68px] sm:min-w-[80px]",
+      width: "min-w-[60px] sm:min-w-[80px]",
       title: uptimeTitle,
       // Below 390 px the three utilisation readings keep the row legible.
       className: "max-[389px]:hidden",
@@ -219,7 +220,7 @@ export function HeaderFocusHost() {
 
   return (
     <section
-      className="kana-focus-host flex shrink-0 items-center gap-1.5 sm:gap-3"
+      className="kana-focus-host flex h-[54px] shrink-0 items-center gap-1 rounded-[12px] bg-surface-strong px-2 outline outline-1 outline-offset-[-1px] outline-line sm:gap-3 sm:px-3.5"
       aria-label={settings.hostTitle}
       title={snapshot?.hostname ?? status}
     >

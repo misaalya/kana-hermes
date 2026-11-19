@@ -4857,15 +4857,13 @@ test("turns the workspace into a chat-only view for a focused conversation", asy
       Math.abs((railBox?.y ?? 0) + (railBox?.height ?? 0) - (viewportHeight - 16)),
     ).toBeLessThan(2);
 
-    // The panel fills the space right of the rail, edge to edge, while the
-    // conversation inside it keeps its narrow measure.
+    // The panel joins the rail as one window and fills the space to its
+    // right, while the conversation inside it keeps its narrow measure.
     await expect
       .poll(async () => {
         const box = await dock.boundingBox();
         if (!box || !railBox) return Number.NaN;
-        return Math.abs(
-          box.x - (railBox.x + railBox.width + 16),
-        );
+        return Math.abs(box.x - (railBox.x + railBox.width));
       })
       .toBeLessThan(2);
     const solo = await dock.boundingBox();
@@ -4919,7 +4917,6 @@ test("wipes between the avatar and focus mode with a candy wave", async ({ page 
   const avatarLayer = page.locator(".kana-avatar-viewport");
   const rail = page.locator(".kana-focus-rail");
   const wave = page.locator(".kana-wave-wipe");
-  const desktop = (page.viewportSize()?.width ?? 0) >= 1024;
   await expect(avatarLayer).toBeVisible();
 
   // The sheet is removed after the reveal, so count insertions instead of
@@ -4947,43 +4944,23 @@ test("wipes between the avatar and focus mode with a candy wave", async ({ page 
   await dialog.getByRole("switch", { name: "Show avatar" }).click();
   await expect(wave).toHaveCount(1);
   await expect(wave).toHaveAttribute("aria-hidden", "true");
-  const layers = await wave.evaluate((node) => {
+  // One canvas covers the viewport; the painter draws the water on it.
+  const sheet = await wave.evaluate((node) => {
     const computed = getComputedStyle(node);
-    const sheet = node.querySelector(".kana-wave-wipe__sheet");
-    const backs = Array.from(node.querySelectorAll(".kana-wave-wipe__layer"));
-    const sparkle = node.querySelector(".kana-wave-wipe__sparkle");
     return {
+      tag: node.tagName,
       position: computed.position,
       pointerEvents: computed.pointerEvents,
-      sheetMask: sheet ? getComputedStyle(sheet).maskImage : "",
-      sheetMaskRepeat: sheet ? getComputedStyle(sheet).maskRepeat : "",
-      sheetBackground: sheet ? getComputedStyle(sheet).backgroundImage : "",
-      backMasks: backs.map((back) => getComputedStyle(back).maskImage),
-      backColors: backs.map((back) => getComputedStyle(back).backgroundColor),
-      sparkles: node.querySelectorAll(".kana-wave-wipe__sparkle").length,
-      inkSparkles: node.querySelectorAll(".kana-wave-wipe__sparkle--ink").length,
-      whiteSparkles: node.querySelectorAll(".kana-wave-wipe__sparkle--white").length,
-      sparkleClip: sparkle ? getComputedStyle(sparkle).clipPath : "",
+      width: node.getBoundingClientRect().width,
+      height: node.getBoundingClientRect().height,
     };
   });
-  expect(layers.position).toBe("fixed");
-  expect(layers.pointerEvents).toBe("none");
-  expect(layers.sheetMask).toContain("data:image/svg+xml");
-  // Wide screens use one full-width irregular mask; phones keep the smooth
-  // four-crest mask. Neither repeats.
-  expect(layers.sheetMaskRepeat).toBe("no-repeat");
-  expect(layers.sheetMask).toContain(desktop ? "C1.2" : "Q6.25");
-  // The sheet is plain Kana blue; the depth comes from the two wave layers,
-  // not from a pattern.
-  expect(layers.sheetBackground).not.toContain("data:image/svg+xml");
-  expect(layers.backMasks).toHaveLength(2);
-  expect(layers.backMasks.every((mask) => mask.includes("data:image/svg+xml"))).toBe(true);
-  expect(layers.backColors).toEqual(["rgb(201, 237, 251)", "rgb(255, 255, 255)"]);
-  // Kana's four-point sparkles ride both wave bands.
-  expect(layers.sparkles).toBeGreaterThanOrEqual(10);
-  expect(layers.inkSparkles).toBeGreaterThan(0);
-  expect(layers.whiteSparkles).toBeGreaterThan(0);
-  expect(layers.sparkleClip).toContain("polygon");
+  const viewport = page.viewportSize();
+  expect(sheet.tag).toBe("CANVAS");
+  expect(sheet.position).toBe("fixed");
+  expect(sheet.pointerEvents).toBe("none");
+  expect(Math.round(sheet.width)).toBe(viewport?.width);
+  expect(Math.round(sheet.height)).toBe(viewport?.height);
 
   await dialog.getByRole("button", { name: "Close settings" }).click();
   await expect(avatarLayer).toBeHidden();

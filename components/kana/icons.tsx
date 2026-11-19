@@ -392,3 +392,43 @@ export function ResetIcon(props: IconProps) {
 export function StarIcon(props: IconProps) {
   return <Icon {...props}><path d="m12 3.8 2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8Z" /></Icon>;
 }
+
+/** Show the typed password. */
+export function EyeIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
+      <circle cx="12" cy="12" r="3" />
+    </Icon>
+  );
+}
+
+/** Hide the typed password again. */
+export function EyeOffIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M9.9 5.8A9.7 9.7 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a17 17 0 0 1-2.6 3.4M6.6 6.9C3.9 8.6 2.5 12 2.5 12S6 18.5 12 18.5c1.7 0 3.2-.5 4.4-1.2" />
+      <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2M3.5 3.5l17 17" />
+    </Icon>
+  );
+}
+
+/** The access password and a paused sign-in. */
+export function LockIcon(props: IconProps) {
+  return (
+    <DuoIcon {...props}>
+      <path opacity={SOFT} d="M7.5 10V7.6a4.5 4.5 0 0 1 9 0V10h-2.4V7.6a2.1 2.1 0 0 0-4.2 0V10Z" />
+      <rect x="4.5" y="10" width="15" height="11" rx="3.5" />
+    </DuoIcon>
+  );
+}
+
+/** Setting the first access password. */
+export function KeyIcon(props: IconProps) {
+  return (
+    <DuoIcon {...props}>
+      <path opacity={SOFT} d="M11.6 12.6 20.2 4l1.6 1.6-1.9 1.9 1.7 1.7-1.6 1.6-1.7-1.7-1.3 1.3 1.2 1.2-1.6 1.6-1.2-1.2-3.8 3.8Z" />
+      <circle cx="8" cy="15.5" r="5.5" />
+    </DuoIcon>
+  );
+}

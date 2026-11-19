@@ -114,7 +114,8 @@
    dark mode keeps the stronger neutral behind them. */
 [data-theme="light"] .kana-header-host,
 [data-theme="light"] .kana-header-clock,
-[data-theme="light"] .kana-header-date {
+[data-theme="light"] .kana-header-date,
+[data-theme="light"] .kana-focus-host {
   background: var(--surface);
 }
 
@@ -322,112 +323,16 @@ button,
   transform: translateX(calc((var(--kana-chat-panel-width, var(--kana-chat-default-width)) + 1rem) / -2));
 }
 
-/* Switching between the avatar workspace and focus mode sweeps stacked candy
-   waves over the screen: a Kana-blue sheet with two wave layers behind it (an
-   inner white layer and a farther light-blue layer) enters from above, the new
-   layout is written while it covers the viewport, and the whole stack leaves
-   through the bottom. Each layer is masked with its own wave rhythm, so the
-   leading and trailing edges read as several sheets instead of one flat band;
-   small four-point sparkles ride the exposed bands. `avatar-mode-transition.ts`
-   runs the two WAAPI phases. */
+/* Switching between the avatar workspace and focus mode pours Kana's liquid
+   wave over the screen. `mode-wave-painter.ts` paints it on this canvas from
+   the theme's accent; the canvas only sits above everything and lets the
+   pointer through. */
 .kana-wave-wipe {
   position: fixed;
   top: 0;
   left: 0;
   z-index: 2147483647;
-  width: 100vw;
-  height: 120vh;
   pointer-events: none;
-  transform: translateY(-106%);
-  will-change: transform;
-}
-
-.kana-wave-wipe__sheet,
-.kana-wave-wipe__layer {
-  position: absolute;
-  mask-size: 100% 100%;
-  mask-repeat: no-repeat;
-}
-
-.kana-wave-wipe__sheet {
-  inset: 0;
-  background: linear-gradient(180deg, #8fd5f1, #63b4da);
-  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cpath d='M0 3 Q6.25 0.8 12.5 3 T25 3 T37.5 3 T50 3 T62.5 3 T75 3 T87.5 3 T100 3 L100 97 Q93.75 99.2 87.5 97 T75 97 T62.5 97 T50 97 T37.5 97 T25 97 T12.5 97 T0 97 Z' fill='white'/%3E%3C/svg%3E");
-}
-
-.kana-wave-wipe__layer {
-  left: -3vw;
-  width: 106vw;
-}
-
-.kana-wave-wipe__layer--white {
-  top: -12vh;
-  height: 144vh;
-  background: #ffffff;
-  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cpath d='M0 3 Q5 0.8 10 3 T20 3 T30 3 T40 3 T50 3 T60 3 T70 3 T80 3 T90 3 T100 3 L100 97 Q95 99.2 90 97 T80 97 T70 97 T60 97 T50 97 T40 97 T30 97 T20 97 T10 97 T0 97 Z' fill='white'/%3E%3C/svg%3E");
-  animation: kana-wave-drift-left 1200ms cubic-bezier(0.45, 0, 0.55, 1) both;
-}
-
-.kana-wave-wipe__layer--blue {
-  top: -24vh;
-  height: 168vh;
-  background: #c9edfb;
-  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cpath d='M0 3 Q8.333 0.8 16.667 3 T33.333 3 T50 3 T66.667 3 T83.333 3 T100 3 L100 97 Q91.667 99.2 83.333 97 T66.667 97 T50 97 T33.333 97 T16.667 97 T0 97 Z' fill='white'/%3E%3C/svg%3E");
-  animation: kana-wave-drift-right 1200ms cubic-bezier(0.45, 0, 0.55, 1) both;
-}
-
-@keyframes kana-wave-drift-left {
-  from { transform: translateX(0); }
-  to { transform: translateX(-3vw); }
-}
-
-@keyframes kana-wave-drift-right {
-  from { transform: translateX(0); }
-  to { transform: translateX(2vw); }
-}
-
-.kana-wave-wipe__sparkle {
-  position: absolute;
-  width: var(--kana-sparkle-size, 10px);
-  height: var(--kana-sparkle-size, 10px);
-  margin-left: calc(var(--kana-sparkle-size, 10px) / -2);
-  margin-top: calc(var(--kana-sparkle-size, 10px) / -2);
-  background: currentColor;
-  clip-path: polygon(50% 0%, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0% 50%, 39% 39%);
-  animation: kana-wave-sparkle 800ms ease-in-out infinite;
-  will-change: transform, opacity;
-}
-
-.kana-wave-wipe__sparkle--ink {
-  color: #2c6f96;
-  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.65));
-}
-
-.kana-wave-wipe__sparkle--white {
-  color: #ffffff;
-  filter: drop-shadow(0 0 5px rgba(89, 157, 198, 0.7));
-}
-
-@keyframes kana-wave-sparkle {
-  0%, 100% { opacity: 0.5; transform: scale(0.7) rotate(0deg); }
-  50% { opacity: 1; transform: scale(1.2) rotate(45deg); }
-}
-
-/* On wide screens the wave uses one full-width mask with many crests of
-   varied width and height, so the tighter sweep does not read as a repeating
-   pattern. Phones keep the smooth four/five/three-crest masks above. */
-@media (min-width: 768px) {
-  .kana-wave-wipe__sheet {
-    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cpath d='M0 3 C1.2 1.1 3.1 1.1 4.3 3 C5.5 4.6 7.5 4.6 8.7 3 C10.2 0.9 12.5 0.9 13.9 3 C14.7 4.7 16.0 4.7 16.8 3 C18.2 1.1 20.4 1.1 21.8 3 C23.1 5.1 25.0 5.1 26.3 3 C27.3 1.1 28.8 1.1 29.8 3 C30.8 4.4 32.4 4.4 33.3 3 C34.4 0.9 36.0 0.9 37.1 3 C38.2 4.5 39.9 4.5 41.0 3 C42.6 1.4 45.0 1.4 46.6 3 C47.5 4.9 48.9 4.9 49.8 3 C50.6 1.4 51.9 1.4 52.8 3 C53.8 4.5 55.4 4.5 56.4 3 C57.7 1.0 59.7 1.0 61.1 3 C62.6 4.5 64.9 4.5 66.5 3 C67.6 1.2 69.4 1.2 70.5 3 C71.6 4.5 73.3 4.5 74.4 3 C75.5 0.9 77.1 0.9 78.1 3 C79.7 4.7 82.1 4.7 83.7 3 C84.8 1.1 86.7 1.1 87.8 3 C88.9 5.1 90.6 5.1 91.7 3 C93.1 1.4 95.3 1.4 96.7 3 C97.6 4.5 99.1 4.5 100.0 3 L100 97 C98.6 95.2 96.4 95.2 95.0 97 C93.8 98.6 91.7 98.6 90.4 97 C89.0 95.3 86.6 95.3 85.2 97 C84.3 99.1 83.1 99.1 82.3 97 C81.0 95.0 79.1 95.0 77.8 97 C76.4 98.7 74.3 98.7 72.9 97 C71.4 95.0 69.1 95.0 67.6 97 C66.7 98.5 65.2 98.5 64.3 97 C63.1 95.5 61.3 95.5 60.1 97 C59.2 98.5 57.8 98.5 56.9 97 C55.7 95.3 53.9 95.3 52.8 97 C51.4 99.0 49.2 99.0 47.8 97 C46.9 95.3 45.4 95.3 44.5 97 C43.3 98.7 41.4 98.7 40.2 97 C38.8 94.9 36.6 94.9 35.2 97 C34.2 99.2 32.6 99.2 31.7 97 C30.7 95.0 29.3 95.0 28.4 97 C27.4 98.7 25.9 98.7 25.0 97 C23.9 95.0 22.2 95.0 21.1 97 C20.3 99.1 19.0 99.1 18.2 97 C16.7 95.6 14.3 95.6 12.8 97 C12.0 99.1 10.7 99.1 9.9 97 C8.4 95.5 6.2 95.5 4.7 97 C3.4 98.8 1.3 98.8 0.0 97 Z' fill='white'/%3E%3C/svg%3E");
-  }
-
-  .kana-wave-wipe__layer--white {
-    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cpath d='M0 3 C1.3 1.0 3.3 1.0 4.6 3 C5.8 5.1 7.8 5.1 9.0 3 C10.1 1.4 11.9 1.4 13.1 3 C14.4 4.9 16.3 4.9 17.6 3 C18.4 1.4 19.7 1.4 20.5 3 C21.2 5.0 22.4 5.0 23.2 3 C24.0 0.9 25.4 0.9 26.3 3 C26.9 4.6 28.0 4.6 28.6 3 C29.5 0.9 30.8 0.9 31.6 3 C32.9 5.1 34.9 5.1 36.2 3 C37.5 1.1 39.5 1.1 40.8 3 C42.0 4.5 44.0 4.5 45.2 3 C45.9 1.4 47.1 1.4 47.8 3 C48.5 4.5 49.6 4.5 50.4 3 C51.1 0.9 52.2 0.9 53.0 3 C53.7 4.9 54.9 4.9 55.7 3 C56.3 0.9 57.4 0.9 58.0 3 C58.7 4.5 59.7 4.5 60.4 3 C61.4 1.4 63.0 1.4 63.9 3 C64.8 5.1 66.1 5.1 66.9 3 C67.6 1.4 68.7 1.4 69.4 3 C70.6 4.4 72.4 4.4 73.5 3 C74.7 1.1 76.7 1.1 77.9 3 C78.6 4.8 79.7 4.8 80.4 3 C81.4 1.3 83.1 1.3 84.1 3 C85.2 4.7 86.8 4.7 87.9 3 C88.6 1.0 89.7 1.0 90.4 3 C91.4 4.5 93.0 4.5 94.0 3 C94.8 1.0 96.0 1.0 96.8 3 C97.7 5.2 99.1 5.2 100.0 3 L100 97 C99.0 95.6 97.4 95.6 96.4 97 C95.6 99.1 94.3 99.1 93.4 97 C92.3 95.3 90.5 95.3 89.4 97 C88.2 99.0 86.3 99.0 85.1 97 C84.2 95.3 82.8 95.3 81.9 97 C80.9 98.4 79.4 98.4 78.4 97 C77.5 95.5 76.0 95.5 75.0 97 C74.2 99.1 73.0 99.1 72.2 97 C71.1 95.2 69.3 95.2 68.2 97 C67.1 99.1 65.4 99.1 64.4 97 C63.3 95.1 61.5 95.1 60.4 97 C59.3 99.0 57.5 99.0 56.3 97 C55.2 95.2 53.6 95.2 52.5 97 C51.4 98.7 49.5 98.7 48.3 97 C47.3 95.2 45.6 95.2 44.5 97 C43.6 98.8 42.2 98.8 41.3 97 C40.5 95.2 39.2 95.2 38.5 97 C37.8 98.9 36.8 98.9 36.2 97 C35.6 95.6 34.6 95.6 34.0 97 C33.3 98.6 32.3 98.6 31.7 97 C30.6 95.5 28.8 95.5 27.7 97 C27.0 99.2 25.9 99.2 25.2 97 C24.6 94.8 23.6 94.8 23.0 97 C22.4 99.1 21.4 99.1 20.8 97 C19.7 95.0 17.9 95.0 16.8 97 C15.8 99.1 14.1 99.1 13.1 97 C11.9 95.0 10.0 95.0 8.8 97 C8.1 98.5 7.0 98.5 6.3 97 C5.5 95.4 4.3 95.4 3.4 97 C2.5 98.5 1.0 98.5 0.0 97 Z' fill='white'/%3E%3C/svg%3E");
-  }
-
-  .kana-wave-wipe__layer--blue {
-    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cpath d='M0 3 C1.9 0.9 5.0 0.9 7.0 3 C8.6 5.2 11.2 5.2 12.9 3 C14.4 0.8 16.7 0.8 18.1 3 C19.9 5.2 22.7 5.2 24.5 3 C26.2 1.0 28.9 1.0 30.6 3 C31.8 4.6 33.7 4.6 34.9 3 C36.1 0.9 38.1 0.9 39.3 3 C40.5 4.7 42.4 4.7 43.6 3 C45.5 0.8 48.3 0.8 50.2 3 C51.5 5.1 53.6 5.1 54.9 3 C56.1 1.3 58.0 1.3 59.2 3 C61.2 5.2 64.3 5.2 66.2 3 C68.0 1.3 70.8 1.3 72.6 3 C74.2 4.9 76.7 4.9 78.3 3 C80.0 1.2 82.7 1.2 84.4 3 C85.9 4.6 88.4 4.6 89.9 3 C91.4 0.8 93.8 0.8 95.2 3 C96.6 5.0 98.7 5.0 100.0 3 L100 97 C98.1 95.6 95.2 95.6 93.3 97 C91.5 98.8 88.7 98.8 86.9 97 C85.2 95.0 82.4 95.0 80.7 97 C79.2 99.0 76.9 99.0 75.4 97 C73.6 95.1 70.7 95.1 68.9 97 C67.1 98.8 64.2 98.8 62.4 97 C61.3 95.0 59.6 95.0 58.5 97 C56.7 98.7 53.7 98.7 51.8 97 C50.0 95.3 47.2 95.3 45.4 97 C43.9 98.9 41.5 98.9 40.0 97 C38.3 95.6 35.6 95.6 34.0 97 C32.2 98.5 29.4 98.5 27.6 97 C25.7 95.4 22.8 95.4 20.9 97 C19.7 99.1 17.9 99.1 16.8 97 C15.6 95.2 13.6 95.2 12.4 97 C11.4 99.0 9.8 99.0 8.8 97 C7.4 95.0 5.2 95.0 3.8 97 C2.8 99.1 1.1 99.1 0.0 97 Z' fill='white'/%3E%3C/svg%3E");
-  }
 }
 
 [data-theme="light"] .kana-stage-pattern[data-background="room"] .kana-stage-backdrop {
@@ -960,7 +865,7 @@ details[open] > .kana-plus-summary::before {
   /* The standard width is also the floor; a stored drag can grow the dock up
      to a viewport-safe ceiling. */
   --kana-chat-min: clamp(390px, 34vw, 480px);
-  --kana-focus-panel-w: calc(100vw - 3rem - var(--kana-focus-rail-w));
+  --kana-focus-panel-w: calc(100vw - 2rem - var(--kana-focus-rail-w));
   /* The settled ceiling; a drag may overshoot it and spring back, but never
      past the width the panel has in focus mode. */
   --kana-chat-max: min(70vw, var(--kana-focus-panel-w));
@@ -1040,7 +945,7 @@ details[open] > .kana-plus-summary::before {
        neither is the panel's width. */
     --kana-focus-measure: clamp(760px, 66vw, 900px);
     --kana-focus-composer: var(--kana-focus-measure);
-    left: calc(2rem + var(--kana-focus-rail-w));
+    left: calc(1rem + var(--kana-focus-rail-w));
     right: 1rem;
     width: auto;
     transform: none;
@@ -2851,16 +2756,28 @@ video.kana-media-preview {
   background: transparent;
 }
 
-/* Chatbar delay: a tick ruler under a Kana-blue fill. The visible track is
-   inset by half the thumb so the fill, ticks, and native thumb centre travel
-   agree; the native thumb itself stays invisible and only supplies input. */
+/* Chatbar delay: preset chips (the shared segmented control) over a thin
+   pill track with a round thumb. The track is inset by half the thumb so the
+   fill, the visible thumb, and the native thumb centre travel together; the
+   native thumb itself stays invisible and only supplies input. */
 .kana-delay-frame {
-  --kana-delay-thumb: 56px;
+  --kana-delay-thumb: 24px;
+}
+
+.kana-delay-value {
+  min-width: 4.5em;
+  border-radius: 999px;
+  background: var(--surface-strong);
+  padding: 5px 12px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+  text-align: center;
 }
 
 .kana-delay-slider {
   position: relative;
-  height: 44px;
+  height: 32px;
   user-select: none;
 }
 
@@ -2868,39 +2785,25 @@ video.kana-media-preview {
   padding-inline: calc(var(--kana-delay-thumb) / 2);
 }
 
-.kana-delay-fill {
-  position: absolute;
-  top: 50%;
-  left: calc(var(--kana-delay-thumb) / 2);
-  width: calc((100% - var(--kana-delay-thumb)) * var(--kana-delay-progress, 0) / 100);
-  height: 26px;
-  transform: translateY(-50%);
-  border-radius: 999px;
-  background: linear-gradient(90deg, var(--accent), var(--accent-hover));
-  pointer-events: none;
-}
-
-.kana-delay-ticks {
+.kana-delay-track {
   position: absolute;
   top: 50%;
   left: calc(var(--kana-delay-thumb) / 2);
   right: calc(var(--kana-delay-thumb) / 2);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  height: 8px;
   transform: translateY(-50%);
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-strong);
   pointer-events: none;
 }
 
-.kana-delay-tick {
-  width: 2px;
-  height: 14px;
+.kana-delay-fill {
+  display: block;
+  width: calc(100% * var(--kana-delay-progress, 0));
+  height: 100%;
   border-radius: 999px;
-  background: var(--line-strong);
-}
-
-.kana-delay-tick.is-past {
-  background: rgba(255, 255, 255, 0.82);
+  background: var(--accent);
 }
 
 .kana-delay-range {
@@ -2931,7 +2834,7 @@ video.kana-media-preview {
 }
 
 .kana-delay-range::-webkit-slider-thumb {
-  width: 0;
+  width: var(--kana-delay-thumb);
   height: 100%;
   appearance: none;
   border: 0;
@@ -2939,8 +2842,8 @@ video.kana-media-preview {
 }
 
 .kana-delay-range::-moz-range-thumb {
-  width: 0;
-  height: 0;
+  width: var(--kana-delay-thumb);
+  height: 100%;
   border: 0;
   background: transparent;
 }
@@ -2949,8 +2852,8 @@ video.kana-media-preview {
   cursor: grabbing;
 }
 
-/* Focus belongs to the handle, not the whole ruler: an outline around the
-   full-width ruler reads as a second border. */
+/* Focus belongs to the thumb, not the whole track: an outline around the
+   full-width track reads as a second border. */
 .kana-delay-range:focus-visible ~ .kana-delay-thumb {
   outline: 3px solid var(--accent);
   outline-offset: 3px;
@@ -2959,44 +2862,25 @@ video.kana-media-preview {
 .kana-delay-thumb {
   position: absolute;
   top: 50%;
-  left: calc((100% - var(--kana-delay-thumb)) * var(--kana-delay-progress, 0) / 100);
+  left: calc((100% - var(--kana-delay-thumb)) * var(--kana-delay-progress, 0));
   width: var(--kana-delay-thumb);
-  height: 30px;
+  height: var(--kana-delay-thumb);
   transform: translateY(-50%);
-  border: 2px solid var(--accent);
-  border-radius: 11px;
+  border: 5px solid var(--accent);
+  border-radius: 999px;
   background: var(--raised);
   pointer-events: none;
+  transition: transform 250ms var(--spring), border-color 150ms ease;
 }
 
-.kana-delay-thumb::before,
-.kana-delay-thumb::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  width: 2px;
-  height: 10px;
-  border-radius: 999px;
-  background: var(--accent);
-  transform: translateY(-50%);
-}
-
-.kana-delay-thumb::before {
-  left: calc(50% - 4px);
-}
-
-.kana-delay-thumb::after {
-  left: calc(50% + 2px);
+.kana-delay-range:active ~ .kana-delay-thumb {
+  transform: translateY(-50%) scale(1.15);
 }
 
 @media (hover: hover) {
   .kana-delay-slider:hover .kana-delay-thumb {
     border-color: var(--accent-hover);
-  }
-
-  .kana-delay-slider:hover .kana-delay-thumb::before,
-  .kana-delay-slider:hover .kana-delay-thumb::after {
-    background: var(--accent-hover);
+    transform: translateY(-50%) scale(1.08);
   }
 }
 
@@ -3173,3 +3057,531 @@ video.kana-media-preview {
   background: var(--surface-strong);
 }
 
+
+/* ---- Sign-in (/login) ----
+   The sign-in page is a small scene: Kana's sparkle pattern drifting on a
+   faint blue wash, her sea along the bottom (three flowing crests in accent
+   mixes of the page colour), and one square-cornered card. The same card
+   holds the first-password steps until a password exists. */
+.kana-login {
+  position: fixed;
+  inset: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.kana-login-backdrop {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 9%, var(--bg)) 0%,
+    var(--bg) 72%
+  );
+  pointer-events: none;
+}
+
+.kana-login-top {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 2;
+}
+
+.kana-login-theme {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+}
+
+.kana-login-stage {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  min-height: 100%;
+  place-items: center;
+  padding: 104px 16px clamp(96px, 18vh, 170px);
+}
+
+.kana-login-card {
+  position: relative;
+  width: min(420px, 100%);
+  border: 2px solid var(--line);
+  background: var(--raised);
+  padding: 30px 28px 22px;
+  animation: kana-in 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@media (min-width: 640px) {
+  .kana-login-card {
+    padding-inline: 36px;
+  }
+}
+
+.kana-login-title {
+  color: var(--ink);
+  font-size: 21px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.kana-login-field {
+  position: relative;
+}
+
+.kana-login-field-icon {
+  position: absolute;
+  top: 50%;
+  left: 15px;
+  width: 18px;
+  height: 18px;
+  transform: translateY(-50%);
+  color: var(--faint);
+  pointer-events: none;
+  transition: color 150ms ease;
+}
+
+.kana-login-field:focus-within .kana-login-field-icon {
+  color: var(--accent);
+}
+
+.kana-login-input {
+  display: block;
+  width: 100%;
+  min-height: 50px;
+  border-radius: 999px;
+  padding: 0 52px 0 44px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.kana-login-input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.kana-login-reveal {
+  position: absolute;
+  top: 50%;
+  right: 7px;
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--muted);
+  transform: translateY(-50%);
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+@media (hover: hover) {
+  .kana-login-reveal:not(:disabled):hover {
+    background: var(--surface-strong);
+    color: var(--ink);
+  }
+}
+
+.kana-login-reveal[aria-pressed="true"] {
+  color: var(--accent);
+}
+
+.kana-login-reveal:disabled {
+  opacity: 0.5;
+}
+
+.kana-login-caps {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  background: var(--chat-bubble);
+  padding: 4px 11px;
+  color: var(--chat-text);
+  font-size: 11.5px;
+  font-weight: 800;
+  animation: kana-in 200ms ease-out both;
+}
+
+.kana-login-submit {
+  width: 100%;
+  min-height: 50px;
+  font-size: 14.5px;
+}
+
+.kana-login-submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.kana-login-submit.is-success,
+.kana-login-submit.is-success:disabled {
+  background: var(--success);
+  color: #ffffff;
+  opacity: 1;
+}
+
+.kana-login-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2.5px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 999px;
+  animation: kana-login-spin 700ms linear infinite;
+}
+
+@keyframes kana-login-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* A sign-in note: what happened, in the interface language, and what next. */
+.kana-login-note {
+  display: flex;
+  gap: 12px;
+  border-radius: 20px;
+  padding: 12px 14px;
+  animation: kana-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.kana-login-note-icon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 999px;
+}
+
+.kana-login-note-title {
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.kana-login-note-body {
+  margin-top: 2px;
+  color: var(--ink-dim);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.kana-login-note--danger {
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+
+.kana-login-note--danger .kana-login-note-icon {
+  background: var(--danger);
+  color: #ffffff;
+}
+
+.kana-login-note--danger .kana-login-note-title {
+  color: var(--danger);
+}
+
+.kana-login-note--info {
+  background: var(--chat-bubble);
+}
+
+.kana-login-note--info .kana-login-note-icon,
+.kana-login-note--locked .kana-login-note-icon {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.kana-login-note--locked {
+  background: var(--surface-strong);
+}
+
+.kana-login-pips {
+  display: flex;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.kana-login-pips span {
+  width: 18px;
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--danger) 22%, transparent);
+}
+
+.kana-login-pips span.is-left {
+  background: var(--danger);
+}
+
+.kana-login-countdown {
+  margin-top: 8px;
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.kana-login-countdown-track {
+  display: block;
+  height: 8px;
+  margin-top: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--line);
+}
+
+.kana-login-countdown-track span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 250ms linear;
+}
+
+/* First-password steps: numbered discs down a dotted guide line. */
+.kana-login-steps {
+  position: relative;
+  display: grid;
+  gap: 16px;
+}
+
+.kana-login-steps::before {
+  position: absolute;
+  top: 14px;
+  bottom: 14px;
+  left: 13px;
+  border-left: 2px dotted var(--line-strong);
+  content: "";
+}
+
+.kana-login-steps li {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  color: var(--ink-dim);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+.kana-login-steps li > p {
+  padding-top: 4px;
+}
+
+.kana-login-steps li > div > p {
+  padding-top: 4px;
+}
+
+.kana-login-step-number {
+  position: relative;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.kana-login-waiting {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  background: var(--chat-bubble);
+  padding: 5px 12px;
+  color: var(--chat-text);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.kana-login-waiting-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  animation: kana-pulse 1.4s ease-in-out infinite;
+}
+
+.kana-login-footnote {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+/* Kana's sea: three crests in accent mixes of the page colour, each flowing
+   its own way, so the page sits in both themes without a pale band. */
+.kana-login-sea {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: clamp(84px, 15vh, 150px);
+  pointer-events: none;
+}
+
+.kana-login-sea-layer {
+  --kana-sea-tile: 260px;
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  mask-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 40' preserveAspectRatio='none'%3E%3Cpath d='M0 20 Q50 2 100 20 T200 20 V40 H0 Z' fill='white'/%3E%3C/svg%3E"),
+    linear-gradient(#000, #000);
+  mask-repeat: repeat-x, no-repeat;
+  mask-size: var(--kana-sea-tile) 30px, 100% 100%;
+  mask-position: 0 0, 0 29px;
+  animation:
+    kana-login-sea-flow var(--kana-sea-flow, 9s) linear infinite,
+    kana-login-bob var(--kana-sea-bob, 5s) ease-in-out infinite;
+}
+
+.kana-login-sea-layer--back {
+  --kana-sea-tile: 340px;
+  --kana-sea-flow: 13s;
+  --kana-sea-bob: 6.2s;
+  height: 100%;
+  background: color-mix(in srgb, var(--accent) 22%, var(--bg));
+  animation-direction: reverse, normal;
+}
+
+.kana-login-sea-layer--mid {
+  --kana-sea-tile: 280px;
+  --kana-sea-flow: 10s;
+  --kana-sea-bob: 5.1s;
+  height: 74%;
+  background: color-mix(in srgb, var(--accent) 45%, var(--bg));
+}
+
+.kana-login-sea-layer--front {
+  --kana-sea-tile: 230px;
+  --kana-sea-flow: 7.5s;
+  --kana-sea-bob: 4.3s;
+  height: 48%;
+  background: color-mix(in srgb, var(--accent) 72%, var(--bg));
+  animation-direction: reverse, normal;
+}
+
+@keyframes kana-login-bob {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -4px; }
+}
+
+@keyframes kana-login-sea-flow {
+  from { mask-position: 0 0, 0 29px; }
+  to { mask-position: var(--kana-sea-tile) 0, 0 29px; }
+}
+
+/* Desktop focus mode is one square window: a white conversation panel and the
+   white reading sheet edge to edge in one neutral frame. The open
+   conversation keeps the plain dimmed block, the heading stays plain text, and
+   no divider sits above the footer. Nothing moves and nothing glows. */
+@media (min-width: 1024px) {
+  .kana-focus-rail {
+    border-right: 0;
+    background: var(--surface);
+  }
+
+  .kana-focus-rail .kana-rail-footer {
+    border-top: 0;
+  }
+
+  .kana-rail-avatar {
+    display: flex;
+    width: 100%;
+    min-height: 44px;
+    align-items: center;
+    gap: 10px;
+    border-radius: 999px;
+    background: var(--surface-strong);
+    padding: 0 8px 0 14px;
+    color: var(--ink);
+    font-size: 12.5px;
+    font-weight: 800;
+    transition: transform 250ms var(--spring);
+  }
+
+  .kana-rail-avatar:hover {
+    transform: translateY(-2px);
+  }
+
+  .kana-rail-avatar > svg {
+    color: var(--accent);
+  }
+
+  .kana-rail-switch {
+    position: relative;
+    margin-left: auto;
+    width: 36px;
+    height: 22px;
+    flex-shrink: 0;
+    border-radius: 999px;
+    background: var(--surface);
+  }
+
+  .kana-rail-switch::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 16px;
+    height: 16px;
+    border-radius: 999px;
+    background: var(--faint);
+    transition: transform 200ms var(--spring), background-color 150ms ease;
+  }
+
+  .kana-rail-avatar:hover .kana-rail-switch::after {
+    transform: translateX(6px);
+    background: var(--accent);
+  }
+
+  .kana-chat-dock.is-sole .kana-chat-panel {
+    border-color: var(--line);
+  }
+
+  .kana-chat-dock.is-sole .kana-message-user {
+    background: var(--chat-bubble);
+  }
+
+  .kana-chat-dock.is-sole .kana-message-text {
+    font-size: 14.5px;
+    line-height: 1.75;
+  }
+
+  .kana-chat-dock.is-sole .kana-chat-scroll {
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 1.5rem);
+    mask-image: linear-gradient(to bottom, transparent 0, #000 1.5rem);
+  }
+
+  .kana-chat-dock.is-sole .kana-empty-face {
+    font-size: 34px;
+  }
+
+  .kana-chat-dock.is-sole .kana-chat-scroll > div:has(> .kana-empty-face) {
+    max-width: 340px;
+  }
+
+  .kana-chat-dock.is-sole .kana-empty-body {
+    position: static;
+    width: auto;
+    height: auto;
+    margin: 14px 0 0;
+    overflow: visible;
+    clip: auto;
+    clip-path: none;
+    white-space: normal;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.6;
+  }
+}

@@ -3,6 +3,7 @@
 import { getCopy } from "@/lib/ui/copy";
 import { wipeAvatarModeChange } from "./avatar-mode-transition";
 import { ConversationSidebar } from "./conversation-sidebar";
+import { AvatarIcon } from "./icons";
 import { useKanaStore, useKanaWorkspace } from "./kana-workspace-context";
 
 /**
@@ -48,7 +49,7 @@ export function FocusRail() {
         footer={
           <button
             type="button"
-            className="kana-focus kana-pill kana-pill-soft min-h-10 w-full text-[12.5px]"
+            className="kana-focus kana-rail-avatar"
             onClick={() =>
               wipeAvatarModeChange(() => {
                 void actions.savePreferences({
@@ -58,7 +59,9 @@ export function FocusRail() {
               })
             }
           >
-            {copy.settings.avatarVisible}
+            <AvatarIcon className="size-[18px] shrink-0" aria-hidden="true" />
+            <span>{copy.settings.avatarVisible}</span>
+            <span className="kana-rail-switch" aria-hidden="true" />
           </button>
         }
       />

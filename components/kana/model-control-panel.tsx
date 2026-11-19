@@ -4,10 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { AgentModelCatalog, AgentModelSwitchResult } from "@/lib/agent/types";
 import type { AgentModelChoice } from "@/lib/preferences/types";
 import { getCopy, type UiLocale } from "@/lib/ui/copy";
+import { describeModelLoadError, type ModelLoadProblem } from "@/lib/ui/model-load-error";
 import { useShiftIntoViewport } from "@/lib/ui/use-shift-into-viewport";
 import { KanaSelect, type KanaSelectOption } from "./kana-select";
 import { btnSecondary, fieldLabel } from "./ui";
 import { MoreIcon, ResetIcon, StarIcon } from "./icons";
+import { ModelLoadErrorCard } from "./model-load-error-card";
 
 const MODEL_ACTION_PRIMARY =
   "kana-focus kana-pill kana-pill-accent min-h-10 whitespace-nowrap px-4 text-[13px] disabled:cursor-not-allowed disabled:opacity-60";
@@ -54,6 +56,7 @@ export function ModelControlPanel({
   const [model, setModel] = useState("");
   const [state, setState] = useState<"loading" | "ready" | "saving" | "error">("loading");
   const [notice, setNotice] = useState("");
+  const [loadProblem, setLoadProblem] = useState<ModelLoadProblem | null>(null);
   const [confirmationPending, setConfirmationPending] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -72,6 +75,7 @@ export function ModelControlPanel({
   const load = async (refresh = false) => {
     setState("loading");
     setNotice("");
+    setLoadProblem(null);
     setConfirmationPending(false);
     try {
       const next = await onList(refresh);
@@ -82,7 +86,7 @@ export function ModelControlPanel({
       setState("ready");
     } catch (error) {
       setState("error");
-      setNotice(error instanceof Error ? error.message : copy.modelLoadFailed);
+      setLoadProblem(describeModelLoadError(locale, error));
     }
   };
 
@@ -186,7 +190,12 @@ export function ModelControlPanel({
     return <p className="text-[11px] text-muted">{copy.modelLoading}</p>;
   }
 
+  const loadErrorCard = loadProblem ? (
+    <ModelLoadErrorCard locale={locale} problem={loadProblem} onRetry={() => void load(true)} />
+  ) : null;
+
   if (!catalog?.providers.length) {
+    if (loadErrorCard) return <div className="@container">{loadErrorCard}</div>;
     return (
       <div className="@container space-y-3">
         <p className="text-[11px] leading-relaxed text-muted">
@@ -203,6 +212,7 @@ export function ModelControlPanel({
 
   return (
     <div className="@container space-y-4">
+      {loadErrorCard}
       <div className="grid gap-3 @lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <div className="min-w-0 space-y-1.5">
           <span className={fieldLabel} aria-hidden="true">{copy.modelProvider}</span>

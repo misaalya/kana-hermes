@@ -6,7 +6,7 @@ dashboard. This is a product direction, not a temporary theme.
 
 **Read when:** you are changing any component, `app/globals.css`, the composer, Settings, the avatar library, the chat feed, a stage pattern, or the fatal error pages.
 
-**Truth in code:** `app/globals.css`, `app/error.tsx`, `app/global-error.tsx`, `components/kana/chat-composer.tsx`, `components/kana/chat-dock.tsx`, `components/kana/focus-rail.tsx`, `components/kana/conversation-sidebar.tsx`, `components/kana/live-chat-feed.tsx`, `components/kana/header-host-monitor.tsx`, `components/kana/mobile-host-panel.tsx`, `components/kana/workspace-header.tsx`, `components/kana/settings-avatar-cards.tsx`, `components/kana/kana-select.tsx`, `components/kana/config-guide.tsx`, `app/docs/page.tsx`, `lib/ui/copy.ts`, `lib/presentation/markdown.ts`, `lib/presentation/json-highlight.ts`, `scripts/generate-stage-patterns.py`
+**Truth in code:** `app/globals.css`, `app/error.tsx`, `app/global-error.tsx`, `app/login/page.tsx`, `components/kana/avatar-mode-transition.ts`, `components/kana/mode-wave-painter.ts`, `components/kana/chat-composer.tsx`, `components/kana/chat-dock.tsx`, `components/kana/focus-rail.tsx`, `components/kana/conversation-sidebar.tsx`, `components/kana/live-chat-feed.tsx`, `components/kana/header-host-monitor.tsx`, `components/kana/mobile-host-panel.tsx`, `components/kana/workspace-header.tsx`, `components/kana/settings-avatar-cards.tsx`, `components/kana/kana-select.tsx`, `components/kana/config-guide.tsx`, `app/docs/page.tsx`, `lib/ui/copy.ts`, `lib/presentation/markdown.ts`, `lib/presentation/json-highlight.ts`, `scripts/generate-stage-patterns.py`
 
 ## Colours
 
@@ -84,6 +84,9 @@ Components share a small vocabulary (shared classes in `app/globals.css`):
 | Star | Kana's default model |
 | Server | Deployment and server settings |
 | Shield | Security settings |
+| Lock | The access password and a paused sign-in |
+| Key | A newly set or changed access password |
+| Eye | Show or hide a typed password |
 
 ## Fields
 
@@ -197,9 +200,10 @@ so opening it never grows the panel or moves its tab.
 
 With the avatar off on a phone, the edge tab steps aside for a minimised
 readout inside the header row itself: CPU, memory, disk, and uptime as four
-compact label-over-value columns on the free left side, vertically centred with
-the action tray on the right. There is no hostname, frame, fill, or extra band
-in this mode; the readings keep their place while loading (pulsing dashes) or
+compact label-over-value columns on the free left side, on a card as tall as
+the action tray on the right, styled like the desktop widget cards (white in
+light mode, the stronger neutral in dark, 12 px radius, thin dim stroke).
+There is no hostname or extra band in this mode; the readings keep their place while loading (pulsing dashes) or
 failing (dashes in the danger colour), and the conversation starts at the
 header again. Below 390 px the uptime column steps out so the three utilisation
 readings stay legible beside the tray; its uptime groups keep their units as
@@ -233,14 +237,20 @@ The Avatar section opens with one row, "Show avatar"
 restored record). Off is a chat-only workspace: the avatar layer goes
 `visibility: hidden` so the canvas keeps its box and the WebGL runtime stops its
 ticker, while the room's pattern stays as the wallpaper. On a desktop the
-workspace becomes two surfaces (`components/kana/focus-rail.tsx`): a persistent
-conversation rail on the left, holding the same list, search, and New action as
-the History dialog, and a chat panel that fills the space to its right
-(`is-sole`), from 16 px past the rail to 16 px from the window edge, while the
-transcript keeps a wider, centred measure inside it. The rail
+workspace becomes one square window (`components/kana/focus-rail.tsx`): a
+white conversation panel on the left, holding the same list, search, and New
+action as the History dialog, and the white chat sheet joined to its right
+edge (`is-sole`), reaching 16 px from the window edge, while the transcript
+keeps a wider, centred measure inside it. One neutral 2 px frame surrounds
+both. The panel stays plain: the heading is ordinary text, the open
+conversation is the dimmed neutral block, and no divider sits above its
+footer. The panel
 spans from the header down to 16 px above the bottom, is 264–288 px wide, and
-its footer holds "Show avatar", which turns the stage back on; notices start to
-the right of the rail. The History dialog still works. Below 1024 px the chat
+its footer holds "Show avatar" (the avatar figure, the label, and an off
+switch), which turns the stage back on; notices start 16 px into the chat
+sheet. In the sheet the reader's bubbles use the soft blue chat bubble,
+replies scroll away under a soft top edge, and an empty conversation shows
+the kaomoji over one muted line of its description. The History dialog still works. Below 1024 px the chat
 keeps the full viewport and history stays in the dialog. The phone tile and the
 hide-chat tab disappear, and the "Scale" header tab is not rendered. Kana's
 first-run greeting always keeps the stage and hides the rail, because it
@@ -330,6 +340,29 @@ tag. No blur, no icon, no step bar. The greeting is always English
 the setup screens that follow use the UI language and are numbered in the kicker
 text only ("Step 1 of 3").
 
+## The sign-in page
+
+`/login` (`app/login/page.tsx`) is quiet on purpose: a faint accent wash fading
+into the page colour, Kana's sea along the bottom (three CSS-masked crests in
+accent mixes of the page colour, flowing in alternate directions), a round
+sun/moon theme button in the top-right corner, and one square-cornered card
+holding only the form. There is no portrait, greeting, name chip, sparkle, or
+bubble on this page. The password field has a lock at its start and
+a show/hide eye at its end, and a Caps Lock bubble appears under it while
+Caps Lock is on. The login route's answers become notes in the interface
+language: a wrong password shakes the card, rings the field in the danger
+colour, and shows the attempts left (as pips once five or fewer remain); a
+pause shows a live countdown with a draining bar and disables the form until
+it ends; a password changed mid-sign-in and an unreachable server each get
+their own note. The built-in stage patterns are not used here, because the
+proxy serves `/backgrounds/` only to a signed-in browser.
+
+Until a password exists the same card shows numbered steps down a dotted
+guide line: open a terminal, run this install's command (in the shared code
+block), and wait, with a pulsing "waiting" bubble because the page polls and
+moves on by itself. It states that Kana has no default password and never sets
+one from the web, and keeps the manual "Check again" button.
+
 ## The fatal error pages
 
 `app/error.tsx` is the workspace boundary. It keeps the root layout, so the
@@ -395,11 +428,14 @@ the single-row height; a real draft wraps normally. Writing in the text area, a 
 or a live dictation opens it to the transcript's measure (up to 900 px) with a
 width transition; focusing the model chooser or the microphone is not enough.
 Once all of those are gone the bar keeps its wide state for the configured
-delay before it narrows, and its hint stays with it until then. The delay is a
-tick-ruler slider in Settings → Experience: one tick per step, a Kana-blue fill,
-and a flat grip thumb, from Off to 2 minutes in 5-second steps (30 s by default;
+delay before it narrows, and its hint stays with it until then. The delay is set
+in Settings → Experience (`composer-delay-slider.tsx`): a segmented control of
+presets (Off, 5 s, 15 s, 30 s, 1 min, 2 min) for one-tap choices, the chosen
+value in a small pill beside it, and under them a thin pill track with a
+Kana-blue fill and a round thumb for any other 5-second step from Off to
+2 minutes (30 s by default; a value between presets selects no chip;
 `composerCollapseDelaySeconds` still stores the number of seconds, so an older
-custom value keeps its own ruler up to the stored bound). A draft with a line
+custom value keeps its own track up to the stored bound). A draft with a line
 break turns the bar into a rounded card, with the
 words on top and the controls on a row underneath. Image attachments appear as
 thumbnail cards above the words, with a borderless image and a remove button
@@ -560,18 +596,23 @@ uses.
 Motion is springy (`--spring`): lift on hover, small press on click, a pop for
 check badges. Global reduced-motion rules must keep working.
 
-Switching between the avatar workspace and focus mode is a candy wave wipe,
+Switching between the avatar workspace and focus mode is a liquid wave wipe,
 not a page fade: `wipeAvatarModeChange` (`components/kana/avatar-mode-transition.ts`)
-appends a fixed `.kana-wave-wipe` sheet, sweeps it down over the viewport,
-writes the preference while the screen is covered, then lets the sheet leave
-through the bottom. The sheet is Kana blue with two wave layers behind it, one
-white and one light blue, each masked into its own wavy top and bottom, so
-both the leading and trailing edges read as several stacked waves; small
-four-point sparkles in Kana blue and white ride the exposed bands. Wide
-screens swap in one full-width mask with many crests of varied width and
-height, so the tighter sweep does not repeat like wallpaper; phones keep the
-smooth four/five/three-crest masks.
-`app/globals.css` owns the art and the two WAAPI phases own the timing.
+appends a fixed `.kana-wave-wipe` canvas, pours the wave down over the
+viewport, writes the preference on the first fully covered frame, waits two
+frames for the new layout to paint, then drains the water away.
+`components/kana/mode-wave-painter.ts` paints it from the theme's accent: four
+flat sheets, from a pale accent-and-white mix at the back to the accent in
+front, arrive back to front and drain front first, so both the pour and the
+drain read as stacked waves. Each edge is three drifting harmonics that swell
+while the edge moves and let its middle lead like poured liquid; neighbouring
+sheets flow in opposite directions. Dashed foam rides the two nearest crests,
+droplets spray ahead of the pour and drip behind the drain, bubbles rise
+through the front sheet, which carries a faint seigaiha texture. Nothing is
+drawn at the centre of the covered screen. Everything is a flat shape with no shadow or glow. The
+painter owns the art and the timeline constants; the transition file owns the hand-off to React
+and the fallbacks (no canvas, a hidden tab, or a stalled frame loop still apply
+the change).
 Reduced motion changes immediately. A second toggle
 during a wipe applies at once, and the running wipe reveals the latest layout
 instead of replaying its own older update.

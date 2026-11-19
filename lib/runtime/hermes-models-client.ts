@@ -1,3 +1,5 @@
+import { NonJsonResponseError, readJsonResponse } from "./read-json-response";
+
 // Browser client for Kana's server-side Hermes model-management bridge.
 // Provider keys are sent once to the authenticated route and are never stored
 // in this client or returned by it.
@@ -31,8 +33,10 @@ function errorMessage(value: unknown): string {
 
 async function readJson(response: Response): Promise<unknown> {
   try {
-    return await response.json();
-  } catch {
+    return await readJsonResponse<unknown>(response);
+  } catch (error) {
+    // A page instead of Kana's JSON: say so rather than show a bare status.
+    if (error instanceof NonJsonResponseError) throw error;
     return null;
   }
 }

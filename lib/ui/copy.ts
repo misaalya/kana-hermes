@@ -362,17 +362,32 @@ export type Copy = {
     placeholder: string;
     submit: string;
     submitting: string;
-    footer: string;
     failed: string;
     unreachable: string;
     setupTitle: string;
-    setupBody: string;
     setupRefresh: string;
     setupChecking: string;
     copy: string;
     copied: string;
     themeToggle(nextTheme: "dark" | "light"): string;
     themeLabel(nextTheme: "dark" | "light"): string;
+    showPassword: string;
+    hidePassword: string;
+    capsLock: string;
+    signedIn: string;
+    invalidTitle: string;
+    invalidRemaining(attempts: number): string;
+    lockedTitle: string;
+    lockedBody: string;
+    lockedCountdown(time: string): string;
+    changedTitle: string;
+    changedBody: string;
+    unreachableHint: string;
+    setupStepTerminal: string;
+    setupStepRun: string;
+    setupStepWait: string;
+    setupWaiting: string;
+    setupNoDefault: string;
   };
   settings: {
     title: string;
@@ -449,6 +464,17 @@ export type Copy = {
     modelActions: string;
     modelLoading: string;
     modelLoadFailed: string;
+    modelLoadRetry: string;
+    modelLoadTimeout: string;
+    modelLoadTimeoutHint: string;
+    modelLoadUnreachable: string;
+    modelLoadUnreachableHint: string;
+    modelLoadPage: string;
+    modelLoadPageHint: string;
+    modelLoadSlow: string;
+    modelLoadSlowHint: string;
+    modelLoadOffline: string;
+    modelLoadOfflineHint: string;
     modelEmpty: string;
     modelRefresh: string;
     modelActive: string;
@@ -988,17 +1014,32 @@ const id: Copy = {
     placeholder: "Masukkan kata sandi",
     submit: "Masuk ke Kana",
     submitting: "Masuk…",
-    footer: "Kata sandimu hanya tersimpan di instalasi Kana ini.",
     failed: "Gagal masuk.",
     unreachable: "Server login tidak dapat dihubungi.",
     setupTitle: "Buat kata sandi dulu",
-    setupBody: "Jalankan perintah ini di terminal komputer yang menjalankan Kana.",
     setupRefresh: "Periksa lagi",
     setupChecking: "Memeriksa…",
     copy: "Salin",
     copied: "Tersalin",
     themeToggle: (next) => `Ganti ke tema ${next === "dark" ? "gelap" : "terang"}`,
     themeLabel: (next) => (next === "dark" ? "Gelap" : "Terang"),
+    showPassword: "Tampilkan kata sandi",
+    hidePassword: "Sembunyikan kata sandi",
+    capsLock: "Caps Lock aktif",
+    signedIn: "Berhasil masuk",
+    invalidTitle: "Kata sandi salah",
+    invalidRemaining: (attempts) => `Sisa ${attempts} percobaan sebelum masuk dijeda sebentar.`,
+    lockedTitle: "Masuk dijeda sebentar",
+    lockedBody: "Terlalu banyak percobaan yang salah, jadi Kana menjeda masuk untuk menjaga instalasi ini.",
+    lockedCountdown: (time) => `Coba lagi dalam ${time}`,
+    changedTitle: "Kata sandi baru saja diganti",
+    changedBody: "Masuk lagi dengan kata sandi yang baru.",
+    unreachableHint: "Pastikan server Kana masih berjalan, lalu coba lagi.",
+    setupStepTerminal: "Buka terminal di komputer yang menjalankan Kana.",
+    setupStepRun: "Jalankan perintah ini, lalu ketik kata sandi barumu.",
+    setupStepWait: "Halaman ini lanjut sendiri begitu kata sandi tersimpan.",
+    setupWaiting: "Menunggu kata sandi…",
+    setupNoDefault: "Kana tidak punya kata sandi bawaan dan tidak pernah membuatnya lewat web.",
   },
   settings: {
     title: "Pengaturan",
@@ -1101,6 +1142,17 @@ const id: Copy = {
     modelActions: "Aksi model",
     modelLoading: "Memuat model dari Hermes…",
     modelLoadFailed: "Model tidak dapat dimuat.",
+    modelLoadRetry: "Coba lagi",
+    modelLoadTimeout: "Proxy atau tunnel di depan Kana memutus permintaan sebelum Hermes selesai menyusun daftar model.",
+    modelLoadTimeoutHint: "Coba lagi. Kalau sering terjadi, naikkan batas waktu proxy (misalnya proxy_read_timeout 200s di Nginx); Cloudflare memutus setelah 100 detik.",
+    modelLoadUnreachable: "Server Kana sedang tidak terjangkau, mungkin karena baru dimulai ulang.",
+    modelLoadUnreachableHint: "Tunggu sebentar, lalu coba lagi.",
+    modelLoadPage: "Kana menerima halaman web, bukan data model. Biasanya sesi login berakhir atau halaman ini sudah usang.",
+    modelLoadPageHint: "Muat ulang halaman, lalu masuk lagi bila diminta.",
+    modelLoadSlow: "Hermes terlalu lama menyusun daftar model.",
+    modelLoadSlowHint: "Coba lagi. Provider yang lambat atau tidak menjawab bisa menahan daftar ini.",
+    modelLoadOffline: "Browser tidak bisa menghubungi server Kana.",
+    modelLoadOfflineHint: "Periksa koneksi internet, lalu coba lagi.",
     modelEmpty: "Hermes belum melaporkan provider dengan model yang siap digunakan.",
     modelRefresh: "Muat ulang model",
     modelActive: "Aktif",
@@ -1671,17 +1723,32 @@ const en: Copy = {
     placeholder: "Enter your password",
     submit: "Enter Kana",
     submitting: "Entering…",
-    footer: "Your password stays on this Kana installation.",
     failed: "Login failed.",
     unreachable: "Could not reach the login server.",
     setupTitle: "Set a password first",
-    setupBody: "Run this in a terminal on the computer running Kana.",
     setupRefresh: "Check again",
     setupChecking: "Checking…",
     copy: "Copy",
     copied: "Copied",
     themeToggle: (next) => `Switch to ${next} theme`,
     themeLabel: (next) => (next === "dark" ? "Dark" : "Light"),
+    showPassword: "Show password",
+    hidePassword: "Hide password",
+    capsLock: "Caps Lock is on",
+    signedIn: "Signed in",
+    invalidTitle: "Wrong password",
+    invalidRemaining: (attempts) => `${attempts} ${attempts === 1 ? "attempt" : "attempts"} left before sign-in pauses for a moment.`,
+    lockedTitle: "Sign-in is paused",
+    lockedBody: "Too many wrong attempts, so Kana paused sign-in to keep this installation safe.",
+    lockedCountdown: (time) => `Try again in ${time}`,
+    changedTitle: "The password just changed",
+    changedBody: "Sign in again with the new password.",
+    unreachableHint: "Make sure the Kana server is still running, then try again.",
+    setupStepTerminal: "Open a terminal on the computer running Kana.",
+    setupStepRun: "Run this command, then type your new password.",
+    setupStepWait: "This page moves on by itself once the password is saved.",
+    setupWaiting: "Waiting for the password…",
+    setupNoDefault: "Kana has no default password and never sets one from the web.",
   },
   settings: {
     title: "Settings",
@@ -1784,6 +1851,17 @@ const en: Copy = {
     modelActions: "Model actions",
     modelLoading: "Loading models from Hermes…",
     modelLoadFailed: "Could not load models.",
+    modelLoadRetry: "Try again",
+    modelLoadTimeout: "A proxy or tunnel in front of Kana cut the request off before Hermes finished listing the models.",
+    modelLoadTimeoutHint: "Try again. If it keeps happening, raise the proxy timeout (for example proxy_read_timeout 200s in Nginx); Cloudflare cuts requests off after 100 seconds.",
+    modelLoadUnreachable: "The Kana server is not reachable right now, possibly because it is restarting.",
+    modelLoadUnreachableHint: "Wait a moment, then try again.",
+    modelLoadPage: "Kana received a web page instead of model data. Usually the login session ended or this page is out of date.",
+    modelLoadPageHint: "Reload the page and sign in again if asked.",
+    modelLoadSlow: "Hermes took too long to list the models.",
+    modelLoadSlowHint: "Try again. A slow or unresponsive provider can hold this list up.",
+    modelLoadOffline: "The browser could not reach the Kana server.",
+    modelLoadOfflineHint: "Check the network connection, then try again.",
     modelEmpty: "Hermes did not report any configured provider with usable models.",
     modelRefresh: "Refresh models",
     modelActive: "Active",

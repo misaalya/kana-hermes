@@ -26,8 +26,8 @@ const CHAT_MIN_WIDTH = 390;
 const CHAT_MAX_SHARE = 0.7;
 const FOCUS_RAIL_MIN = 264;
 const FOCUS_RAIL_MAX = 288;
-/** 2rem left + 1rem right, matching the focus dock's insets. */
-const FOCUS_INSET = 48;
+/** 1rem on each side of the focus window, matching the CSS insets. */
+const FOCUS_INSET = 32;
 /** Past this width the transcript keeps a focus-mode reading measure. */
 const CHAT_WIDE_WIDTH = 900;
 /** Holding the frame at the drag stop for this long enters focus mode. */

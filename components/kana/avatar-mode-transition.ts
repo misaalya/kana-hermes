@@ -1,133 +1,140 @@
-// Kana's mode change is a full-screen candy wave: an opaque sheet with wavy
-// accent edges enters from above, the new layout is written while the screen is
-// covered, and the sheet leaves through the bottom. It is Kana's own DOM
-// transition, so it does not depend on View Transitions.
+// Kana's mode change is a liquid wave: layered sheets of water pour down over
+// the screen, the new layout is written while it is covered, and the water
+// drains away front first. `mode-wave-painter.ts` paints it on one canvas; this
+// file owns the timeline, the hand-off to React, and every fallback. It is
+// Kana's own DOM transition, so it does not depend on View Transitions.
 
 import { flushSync } from "react-dom";
+import {
+  MODE_WAVE_COVER_END_MS,
+  MODE_WAVE_REVEAL_SPAN_MS,
+  MODE_WAVE_TIMING,
+  ModeWavePainter,
+  type Rgb,
+} from "./mode-wave-painter";
 
-const COVER_MS = 500;
-const REVEAL_MS = 600;
-const COVER_EASING = "cubic-bezier(0.45, 0, 0.55, 1)";
-const REVEAL_EASING = "cubic-bezier(0.22, 0.8, 0.28, 1)";
 const WAVE_CLASS = "kana-wave-wipe";
+/** Backing pixels are capped so a large or dense screen stays smooth. */
+const MAX_BACKING_PIXELS = 5_000_000;
+const FALLBACK_ACCENT: Rgb = [89, 157, 198];
+/** A stalled frame loop (a hidden tab) still applies the change and clears the screen. */
+const SAFETY_MS = MODE_WAVE_COVER_END_MS + MODE_WAVE_TIMING.holdMs + MODE_WAVE_REVEAL_SPAN_MS + 2_000;
 
-/**
- * Kana's four-point sparkles ride the wave bands: deeper Kana blue on the
- * white sheet, white on the pale-blue one. Positions are outside the main
- * sheet (above its top, below its bottom), so each star sits on the layered
- * edge that is visible during that phase.
- */
-const SPARKLES: ReadonlyArray<{
-  left: string;
-  top: string;
-  size: number;
-  delay: number;
-  tone: "ink" | "white";
-}> = [
-  { left: "6%", top: "calc(100% + 4.5vh)", size: 12, delay: 0, tone: "ink" },
-  { left: "16%", top: "calc(100% + 15vh)", size: 18, delay: 180, tone: "white" },
-  { left: "28%", top: "calc(100% + 6vh)", size: 10, delay: 340, tone: "ink" },
-  { left: "40%", top: "calc(100% + 17vh)", size: 15, delay: 60, tone: "white" },
-  { left: "52%", top: "calc(100% + 4vh)", size: 20, delay: 260, tone: "ink" },
-  { left: "64%", top: "calc(100% + 14.5vh)", size: 12, delay: 420, tone: "white" },
-  { left: "76%", top: "calc(100% + 6.5vh)", size: 14, delay: 120, tone: "ink" },
-  { left: "88%", top: "calc(100% + 16vh)", size: 16, delay: 300, tone: "white" },
-  { left: "95%", top: "calc(100% + 5vh)", size: 12, delay: 480, tone: "ink" },
-  { left: "11%", top: "calc(-5vh)", size: 15, delay: 150, tone: "ink" },
-  { left: "34%", top: "calc(-16vh)", size: 12, delay: 330, tone: "white" },
-  { left: "58%", top: "calc(-5.5vh)", size: 10, delay: 90, tone: "ink" },
-  { left: "82%", top: "calc(-15vh)", size: 18, delay: 240, tone: "white" },
-  { left: "22%", top: "calc(100% - 4vh)", size: 12, delay: 240, tone: "white" },
-  { left: "49%", top: "calc(100% - 6vh)", size: 8, delay: 60, tone: "white" },
-  { left: "79%", top: "calc(100% - 3.5vh)", size: 14, delay: 380, tone: "white" },
-  { left: "31%", top: "4vh", size: 9, delay: 180, tone: "white" },
-  { left: "68%", top: "3vh", size: 12, delay: 320, tone: "white" },
-];
-
-/** Distinguishes a running wipe from one whose mode change was superseded. */
+/** Distinguishes a running wave from one whose mode change was superseded. */
 let generation = 0;
 
-function prefersReducedMotion(): boolean {
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+function canAnimate(): boolean {
+  return (
+    typeof document !== "undefined"
+    && typeof window !== "undefined"
+    && typeof requestAnimationFrame === "function"
+    && document.visibilityState !== "hidden"
+    && !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
 }
 
-/** Two frames: one commits the covered layout, the next paints it. */
-function nextFrame(): Promise<void> {
-  return new Promise((resolve) => {
-    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-  });
+/** The theme's accent as RGB; the canvas cannot read a CSS variable itself. */
+function readAccent(): Rgb {
+  const probe = document.createElement("span");
+  probe.style.color = "var(--accent)";
+  probe.style.display = "none";
+  document.body.append(probe);
+  const value = getComputedStyle(probe).color;
+  probe.remove();
+  if (!value.startsWith("rgb")) return FALLBACK_ACCENT;
+  const channels = value.match(/[\d.]+/g)?.slice(0, 3).map(Number) ?? [];
+  return channels.length === 3 && channels.every((channel) => Number.isFinite(channel))
+    ? (channels as unknown as Rgb)
+    : FALLBACK_ACCENT;
 }
 
 function runWave(update: () => void, token: number): void {
-  const wave = document.createElement("div");
-  wave.className = WAVE_CLASS;
-  wave.setAttribute("aria-hidden", "true");
-  // Two back layers extend past the main sheet's leading and trailing edges,
-  // so the sweep reads as stacked waves: light blue, white, then Kana blue.
-  const far = document.createElement("div");
-  far.className = `${WAVE_CLASS}__layer ${WAVE_CLASS}__layer--blue`;
-  const near = document.createElement("div");
-  near.className = `${WAVE_CLASS}__layer ${WAVE_CLASS}__layer--white`;
-  const sheet = document.createElement("div");
-  sheet.className = `${WAVE_CLASS}__sheet`;
-  wave.append(far, near, sheet);
-  for (const sparkle of SPARKLES) {
-    const node = document.createElement("span");
-    node.className = `${WAVE_CLASS}__sparkle ${WAVE_CLASS}__sparkle--${sparkle.tone}`;
-    node.style.left = sparkle.left;
-    node.style.top = sparkle.top;
-    node.style.setProperty("--kana-sparkle-size", `${sparkle.size}px`);
-    node.style.animationDelay = `${sparkle.delay}ms`;
-    wave.append(node);
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  let dpr = Math.min(window.devicePixelRatio || 1, 2);
+  if (width * height * dpr * dpr > MAX_BACKING_PIXELS) {
+    dpr = Math.max(1, Math.sqrt(MAX_BACKING_PIXELS / (width * height)));
   }
-  document.body.append(wave);
+  const canvas = document.createElement("canvas");
+  canvas.className = WAVE_CLASS;
+  canvas.setAttribute("aria-hidden", "true");
+  canvas.width = Math.round(width * dpr);
+  canvas.height = Math.round(height * dpr);
+  canvas.style.width = `${width}px`;
+  canvas.style.height = `${height}px`;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    update();
+    return;
+  }
 
-  const applyIfCurrent = () => {
+  let applied = false;
+  const apply = () => {
+    if (applied) return;
+    applied = true;
     if (token === generation) flushSync(update);
   };
 
-  void (async () => {
+  let painter: ModeWavePainter;
+  try {
+    painter = new ModeWavePainter(ctx, { width, height, dpr, accent: readAccent() });
+  } catch {
+    apply();
+    return;
+  }
+  document.body.append(canvas);
+
+  let frame = 0;
+  let done = false;
+  let revealAt: number | null = null;
+  let framesSinceApplied = 0;
+  const started = performance.now();
+
+  const finish = () => {
+    if (done) return;
+    done = true;
+    cancelAnimationFrame(frame);
+    window.clearTimeout(safety);
+    canvas.remove();
+    // An interrupted wave must not lose the mode change.
+    apply();
+  };
+  const safety = window.setTimeout(finish, SAFETY_MS);
+
+  const tick = (now: number) => {
+    if (done) return;
+    const elapsed = now - started;
     try {
-      const cover = wave.animate(
-        [
-          { transform: "translateY(-106%)" },
-          { transform: "translateY(-6%)" },
-        ],
-        { duration: COVER_MS, easing: COVER_EASING, fill: "forwards" },
-      );
-      await cover.finished;
-      applyIfCurrent();
-      // The sheet covers the viewport; let the new layout paint before the
-      // trailing wave uncovers it.
-      await nextFrame();
-      const reveal = wave.animate(
-        [
-          { transform: "translateY(-6%)" },
-          { transform: "translateY(100%)" },
-        ],
-        { duration: REVEAL_MS, easing: REVEAL_EASING, fill: "forwards" },
-      );
-      await reveal.finished;
+      painter.draw(elapsed, revealAt);
+      if (!applied && elapsed >= MODE_WAVE_COVER_END_MS) {
+        // This frame covers the whole screen, so the new layout lands unseen.
+        apply();
+      } else if (applied && revealAt === null) {
+        // Let the new layout paint under the water before it drains.
+        framesSinceApplied += 1;
+        if (framesSinceApplied >= 2 && elapsed >= MODE_WAVE_COVER_END_MS + MODE_WAVE_TIMING.holdMs) {
+          revealAt = elapsed;
+        }
+      } else if (revealAt !== null && elapsed >= revealAt + MODE_WAVE_REVEAL_SPAN_MS) {
+        finish();
+        return;
+      }
     } catch {
-      // An interrupted animation must not lose the mode change.
-      applyIfCurrent();
-    } finally {
-      wave.remove();
+      finish();
+      return;
     }
-  })();
+    frame = requestAnimationFrame(tick);
+  };
+  frame = requestAnimationFrame(tick);
 }
 
 /**
- * Switch between the avatar workspace and focus mode with a candy wave wipe.
- * A second call during a wipe applies immediately: the running wipe then
+ * Switch between the avatar workspace and focus mode with the liquid wave.
+ * A second call during a wave applies immediately: the running wave then
  * reveals the latest layout instead of replaying its own, older update.
  */
 export function wipeAvatarModeChange(update: () => void): void {
-  if (
-    typeof document === "undefined"
-    || typeof window === "undefined"
-    || prefersReducedMotion()
-  ) {
+  if (!canAnimate()) {
     update();
     return;
   }

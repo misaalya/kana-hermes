@@ -1819,6 +1819,47 @@ describe("HermesAgentClient (relay transport)", () => {
     assert.equal(FakeRelay.requests.filter((request) => request.method === "slash.exec").length, 0);
   });
 
+  it("retries a model listing once when a proxy answers with a page instead of JSON", async () => {
+    const htmlPage = (status: number) =>
+      new Response("<!DOCTYPE html><html><body>Bad gateway</body></html>", {
+        status,
+        headers: { "Content-Type": "text/html" },
+      });
+    let modelCalls = 0;
+    let historyCalls = 0;
+    const client = await connectedClient((request) => {
+      if (request.method === "session.create") {
+        return { session_id: "runtime-1", stored_session_id: "stored-1" };
+      }
+      if (request.method === "model.options") {
+        modelCalls += 1;
+        if (modelCalls === 1) return htmlPage(502);
+        return { provider: "openrouter", model: "m", providers: [] };
+      }
+      if (request.method === "session.history") {
+        historyCalls += 1;
+        return htmlPage(502);
+      }
+      return {};
+    });
+    await openSession(client);
+
+    const catalog = await client.listModels();
+    assert.equal(catalog.provider, "openrouter");
+    assert.equal(modelCalls, 2);
+
+    // A request that is not a safe read is never repeated, and the page is
+    // reported honestly rather than as a JSON SyntaxError.
+    await assert.rejects(
+      () => client.fetchHistory(),
+      (error: unknown) =>
+        error instanceof Error
+        && /HTTP 502/.test(error.message)
+        && !/Unexpected token/.test(error.message),
+    );
+    assert.equal(historyCalls, 1);
+  });
+
   it("lists provider-scoped models and switches the open session with an explicit provider", async () => {
     const client = await connectedClient((request) => {
       if (request.method === "session.create") {

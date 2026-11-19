@@ -2,14 +2,17 @@
 
 import { useState, type CSSProperties } from "react";
 import { getCopy, type UiLocale } from "@/lib/ui/copy";
+import { SettingsSegmented } from "./settings-layout";
 
 const STEP_SECONDS = 5;
-/** The old preset ceiling: real delays are short, so the ruler stays readable. */
+/** The old preset ceiling: real delays are short, so the track stays readable. */
 const DEFAULT_MAX_SECONDS = 120;
-const TICK_COUNT = 41;
+/** One tap for the delays people actually pick; the track covers the rest. */
+const PRESETS = [0, 5, 15, 30, 60, 120] as const;
 
-/** The chatbar delay as a tick ruler. A native range input keeps keyboard and
- * screen-reader behaviour; the visible thumb mirrors its position. */
+/** The chatbar delay: preset chips for the common values, and a thin track
+ * with a round thumb for any other 5-second step. A native range input keeps
+ * keyboard and screen-reader behaviour; the visible thumb mirrors it. */
 export function ComposerDelaySlider({
   locale,
   value,
@@ -34,27 +37,26 @@ export function ComposerDelaySlider({
         : `${duration} ${copy.composerDelaySecondsShort}`;
   const label = format(seconds);
   const progress = Math.min(1, seconds / maximum);
-  const passedTicks = progress * (TICK_COUNT - 1);
 
   return (
     <div className="kana-delay-frame w-full">
-      <div className="flex min-h-6 items-center justify-end">
-        <output aria-hidden="true" className="text-[15px] font-extrabold tabular-nums text-ink">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <SettingsSegmented
+          label={copy.composerDelayTitle}
+          value={String(seconds)}
+          options={PRESETS.map((preset) => ({ value: String(preset), label: format(preset) }))}
+          onChange={(next) => onChange(Number(next))}
+        />
+        <output aria-hidden="true" className="kana-delay-value tabular-nums">
           {label}
         </output>
       </div>
       <div
-        className="kana-delay-slider mt-1.5"
-        style={{ "--kana-delay-progress": progress * 100 } as CSSProperties}
+        className="kana-delay-slider mt-3"
+        style={{ "--kana-delay-progress": progress } as CSSProperties}
       >
-        <span className="kana-delay-fill" aria-hidden="true" />
-        <span className="kana-delay-ticks" aria-hidden="true">
-          {Array.from({ length: TICK_COUNT }, (_, index) => (
-            <span
-              key={index}
-              className={`kana-delay-tick${index <= passedTicks + 0.001 ? " is-past" : ""}`}
-            />
-          ))}
+        <span className="kana-delay-track" aria-hidden="true">
+          <span className="kana-delay-fill" />
         </span>
         <input
           type="range"
