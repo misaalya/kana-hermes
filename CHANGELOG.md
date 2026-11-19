@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.9.0 — 2026-11-19
+
+### Fixed
+
+- A model list that fails behind a proxy or tunnel no longer shows
+  `Unexpected token '<', "<!DOCTYPE"... is not valid JSON`. Every relay read
+  now treats a page instead of JSON as what it is: Kana says the server did not
+  answer, with the HTTP status. `model.options`, which is safe to repeat, is
+  retried once after a fast gateway failure.
+
+### Added
+
+- The model picker and Settings → AI model explain a failed listing: what went
+  wrong (a timeout, an unreachable server, a stale page, a slow answer, or no
+  connection), what to do about it, and a Try again button.
+
+### Changed
+
+- The wave between the avatar workspace and focus mode is painted on a canvas:
+  four sheets of water in the theme's blue with moving crests, foam, spray,
+  drips, rising bubbles, and a faint seigaiha texture. Reduced motion still
+  switches at once.
+- The composer delay setting is a row of preset chips (Off, 5, 15, 30 seconds,
+  1 and 2 minutes) beside a slider with a value pill.
+- The sign-in page is a quiet card with the password field, a show/hide eye, a
+  Caps Lock hint, the attempts left after a wrong password, a live countdown
+  while sign-in is paused, and numbered first-password steps. Its background is
+  a soft wash with Kana's sea along the bottom.
+- Desktop focus mode is one window: a plain white conversation panel joined to
+  the chat sheet inside a single frame, the open conversation as a dimmed
+  block, a "Show avatar" button with a switch, and a calmer empty
+  conversation.
+- On phones in focus mode, the CPU, memory, disk, and uptime readout sits on a
+  card like the desktop widgets.
+- The README screenshots are retaken from the new interface, with synthetic
+  host readings.
+
 ## 0.8.1 — 2026-11-02
 
 ### Fixed
